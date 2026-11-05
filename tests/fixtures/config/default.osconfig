@@ -367,6 +367,9 @@ extractors = []
 [custom_js]
 snippets = []
 
+[link_positions]
+store = true
+
 [[link_positions.rules]]
 position = "Navigation"
 contains = [

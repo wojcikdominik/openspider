@@ -1875,6 +1875,11 @@
             "$ref": "#/$defs/LinkPositionRule"
           },
           "type": "array"
+        },
+        "store": {
+          "default": true,
+          "description": "„Link-Positionen speichern“ (INTEG-083, Standard: an). Aus: Linkzeilen erhalten weder `Link Path` noch\n`Link Position`; das spart Platz in der Crawl-Datei, eine spätere Neuzuordnung (INTEG-082) hat dann keine\ngespeicherten Pfade.",
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -3881,7 +3886,8 @@
             "contains": [],
             "position": "Content"
           }
-        ]
+        ],
+        "store": true
       },
       "description": "Link-Positionen (ab v2)."
     },

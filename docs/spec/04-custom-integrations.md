@@ -1042,8 +1042,9 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
 ### INTEG-083 Funktion abschaltbar
 - **Priorität:** P2
 - **Beschreibung:** Die Speicherung der Link-Pfade und die Positionsermittlung können abgeschaltet werden, um Speicher zu sparen und den Crawl zu beschleunigen.
-- **Eingaben/Konfiguration:** Checkbox „Link-Positionen speichern" (Standard: an).
+- **Eingaben/Konfiguration:** Checkbox „Link-Positionen speichern" (Standard: an). Konfigurationsschlüssel `link_positions.store` (bool, Standard `true`; CLI `--set link_positions.store=false`) **(OS-Festlegung)**.
 - **Ausgabe:** Spalten `Link Path`/`Link Position` leer.
+- **Umfang (OS-Festlegung):** betrifft die Linkzeilen (Inlinks/Outlinks und Link-Exporte), nicht die Bild-Instanzen (ONPAGE-172). Für einen ohne Pfade gespeicherten Crawl hat die Neuzuordnung nach INTEG-082 keine Pfade und ändert nichts; Einschalten nach dem Crawl erfordert einen Neucrawl.
 - **Akzeptanzkriterien:**
   - [ ] Bei deaktivierter Option sind beide Spalten leer und der Speicherumfang der Crawl-Datei kleiner als mit Option (Messung auf Fixture mit 1.000 Links).
   - [ ] Filter, die von Link-Positionen abhängen (z. B. „nur Content-Links"), zeigen einen Hinweis.
