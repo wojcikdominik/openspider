@@ -154,6 +154,7 @@ fn a_stopped_crawl_is_never_resumable_whatever_its_queue_holds() {
     assert!(!registry::read_listing(&stopped_path)
         .unwrap()
         .can_resume(now()));
+}
 
 // Sperren schreibt in die Datei; ein laufender Crawl gehört seinem Besitzer wie bei Umbenennen und Löschen.
 // spec: OUT-228
