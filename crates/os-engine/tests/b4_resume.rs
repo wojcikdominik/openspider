@@ -295,8 +295,10 @@ async fn a_start_url_that_answers_is_completed_even_with_an_error_or_a_robots_bl
 async fn an_unreachable_url_of_a_list_crawl_is_no_failed_crawl() {
     let work = tempfile::tempdir().unwrap();
     let path = crawl_file_in(&work, "crawl.ospider");
-    let mut cfg = CrawlConfig::default();
-    cfg.mode = os_model::CrawlMode::List;
+    let mut cfg = CrawlConfig {
+        mode: os_model::CrawlMode::List,
+        ..CrawlConfig::default()
+    };
     cfg.network.resolve = vec![format!("*.test=127.0.0.1:{}", closed_port())];
     cfg.robots.retries = 0;
     let d = deps();
