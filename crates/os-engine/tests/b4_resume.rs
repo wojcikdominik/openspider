@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use os_engine::lifecycle::{add_urls_to_file, stop_unowned, STOPPED_IS_FINAL};
 use os_engine::{resume_crawl, CrawlHandle, EngineDeps};
-use os_model::{CrawlState, EndReason};
+use os_model::{CrawlConfig, CrawlState, EndReason};
 use support::*;
 
 fn queue_len(path: &std::path::Path) -> i64 {
@@ -208,4 +208,113 @@ async fn stopping_a_paused_crawl_without_an_engine_ends_it_for_good_and_runs_the
         Err(e) => e.to_string(),
     };
     assert!(err.contains(STOPPED_IS_FINAL), "{err}");
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Nicht erreichbare Start-URL (CRAWL-128, OUT-182; Befund 2 der Abnahmetests)
+
+fn closed_port() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.local_addr().unwrap().port()
+}
+
+fn site_with(scenario: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("scenario.toml"), scenario).unwrap();
+    dir
+}
+
+// spec: CRAWL-128
+// spec: OUT-182
+#[tokio::test]
+async fn an_unreachable_start_url_fails_keeps_its_row_and_cannot_be_resumed() {
+    let work = tempfile::tempdir().unwrap();
+    let path = crawl_file_in(&work, "crawl.ospider");
+    let mut cfg = CrawlConfig::default();
+    cfg.network.resolve = vec![format!("*.test=127.0.0.1:{}", closed_port())];
+    cfg.robots.retries = 0;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&calls);
+    let deps = EngineDeps {
+        on_finished: Some(Arc::new(move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+        })),
+        ..deps()
+    };
+    let handle = start(cfg.clone(), &path, deps.clone()).await;
+    let summary = run_to_end(handle).await;
+    assert_eq!(summary.state, CrawlState::Failed);
+    assert_eq!(summary.end_reason, None);
+    assert_eq!(summary.crawled, 1, "gültiges Ergebnis mit einer Zeile");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "Analyse und Exporte wie am regulären Ende"
+    );
+    let file = open_ro(&path);
+    let meta = file.meta().unwrap();
+    assert_eq!(meta.state, CrawlState::Failed);
+    assert_eq!(meta.end_reason, None);
+    assert!(meta.ended_at.is_some());
+    assert_eq!(file.get_meta("owner_pid").unwrap().as_deref(), Some(""));
+    drop(file);
+    let err = match resume_crawl(http_fetcher(&cfg, &deps), path.clone(), None, deps).await {
+        Ok(_) => panic!("„Fehlgeschlagen“ lässt sich nicht fortsetzen"),
+        Err(e) => e.to_string(),
+    };
+    assert!(err.contains("fehlgeschlagen"), "{err}");
+}
+
+// Der Server antwortet oder es gibt weitere Ergebnisse: Das ist kein Fehlschlag.
+// spec: CRAWL-128
+#[tokio::test]
+async fn a_start_url_that_answers_is_completed_even_with_an_error_or_a_robots_block() {
+    for (label, scenario) in [
+        (
+            "Server-Fehler",
+            "[[route]]\npath = \"/\"\nstatus = 500\nbody = \"kaputt\"\n",
+        ),
+        (
+            "robots.txt sperrt",
+            "[[route]]\npath = \"/robots.txt\"\ncontent_type = \"text/plain\"\nbody = \"User-agent: *\\nDisallow: /\\n\"\n\n[[route]]\npath = \"/\"\nbody = \"x\"\n",
+        ),
+    ] {
+        let dir = site_with(scenario);
+        let site = start_site(dir.path()).await;
+        let work = tempfile::tempdir().unwrap();
+        let path = crawl_file_in(&work, "crawl.ospider");
+        let summary = run_to_end(start(config_for(&site, 1), &path, deps()).await).await;
+        assert_eq!(summary.state, CrawlState::Completed, "{label}");
+        assert_eq!(summary.end_reason, Some(EndReason::QueueEmpty), "{label}");
+    }
+}
+
+// Listenmodus: eine nicht erreichbare Zeile ist ein Ergebnis, keine Start-URL.
+// spec: CRAWL-128
+#[tokio::test]
+async fn an_unreachable_url_of_a_list_crawl_is_no_failed_crawl() {
+    let work = tempfile::tempdir().unwrap();
+    let path = crawl_file_in(&work, "crawl.ospider");
+    let mut cfg = CrawlConfig::default();
+    cfg.mode = os_model::CrawlMode::List;
+    cfg.network.resolve = vec![format!("*.test=127.0.0.1:{}", closed_port())];
+    cfg.robots.retries = 0;
+    let d = deps();
+    let handle = os_engine::start_crawl(
+        http_fetcher(&cfg, &d),
+        os_engine::CrawlRequest {
+            config: cfg.clone(),
+            source: os_engine::CrawlSource::List {
+                items: vec![url("/")],
+                label: "Liste".into(),
+            },
+            file: path.clone(),
+            project: String::new(),
+            name: "Liste".into(),
+        },
+        d,
+    )
+    .await
+    .unwrap();
+    assert_eq!(run_to_end(handle).await.state, CrawlState::Completed);
 }

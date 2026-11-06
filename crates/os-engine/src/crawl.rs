@@ -1068,8 +1068,22 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     // Die Hintergrundarbeit hält einen Verweis auf den gemeinsamen Zustand und damit den Writer offen: abwarten.
     while maint.join_next().await.is_some() {}
 
+    // CRAWL-128: Die Start-URL war nicht erreichbar, weiter wurde nichts abgerufen. OUT-182: Das bleibt ein gültiges Ergebnis
+    // mit einer Zeile (kein Fehler des Laufs), der Crawl gilt aber als fehlgeschlagen.
+    let only_one_page = sh
+        .progress
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .crawled()
+        == 1;
+    let start_unreachable = end == End::QueueEmpty
+        && only_one_page
+        && !sh.start_url.is_empty()
+        && start_url_unreachable(&writer, &file, &sh.start_url).await;
+
     // Endzustand
     let (state, reason) = match end {
+        End::QueueEmpty if start_unreachable => (CrawlState::Failed, None),
         End::QueueEmpty => (CrawlState::Completed, Some(EndReason::QueueEmpty)),
         End::LimitReached => (CrawlState::Completed, Some(EndReason::LimitReached)),
         End::Stopped => (CrawlState::Completed, Some(EndReason::Stopped)),
@@ -1192,8 +1206,8 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         }
     }
     // CRAWL-141: Hook nach regulärem Ende, Limit oder Stopp – nach dem Checkpoint, vor der Auflösung von
-    // `wait()`; nie bei Pause oder Fehler.
-    if state == CrawlState::Completed {
+    // `wait()`; nie bei Pause oder Fehler. Die nicht erreichbare Start-URL endet regulär (OUT-182) und liefert Exporte.
+    if state == CrawlState::Completed || start_unreachable {
         if let Some(hook) = hook {
             let s = summary.clone();
             tokio::task::spawn_blocking(move || hook(&s))
@@ -1202,6 +1216,38 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         }
     }
     Ok(summary)
+}
+
+/// Ob die einzige abgerufene Seite die Start-URL ohne Antwort ist (Netzfehler, auch eine deshalb nicht erreichbare robots.txt).
+/// Eine Sperre per robots.txt, zu viele Weiterleitungen und der Zielschutz sind keine Nichterreichbarkeit: Dort hat der Server
+/// geantwortet oder es gab keinen Versuch.
+async fn start_url_unreachable(writer: &WriterThread, file: &Path, start_url: &str) -> bool {
+    if writer.flush().await.is_err() {
+        return false;
+    }
+    let (file, start_url) = (file.to_path_buf(), start_url.to_owned());
+    tokio::task::spawn_blocking(move || {
+        let reason: Option<String> = CrawlFile::open(&file, os_store::OpenMode::ReadOnly)
+            .ok()?
+            .conn()
+            .query_row(
+                "SELECT no_response_reason FROM urls WHERE url = ?1 AND state = 'done' AND status_code = 0",
+                [&start_url],
+                |r| r.get(0),
+            )
+            .ok()?;
+        reason?.parse::<os_model::NoResponseReason>().ok()
+    })
+    .await
+    .ok()
+    .flatten()
+    .is_some_and(|reason| {
+        use os_model::NoResponseReason as R;
+        !matches!(
+            reason,
+            R::BlockedByRobots | R::TooManyRedirects | R::BlockedPrivateTarget
+        )
+    })
 }
 
 // K2-61: API work runs off the asynchronous worker threads; SQLite connections stay on that thread.

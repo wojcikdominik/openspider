@@ -447,6 +447,50 @@ async fn an_unreachable_start_url_is_a_valid_result_unless_fail_on_start_error()
     assert!(fail.last_line().ends_with("(Exit-Code 3)"));
 }
 
+// CRAWL-128 ohne `--fail-on-start-error`: weiterhin Exit 0 mit Exporten (OUT-182), aber in der Verwaltung `Failed`.
+// spec: CRAWL-128
+// spec: OUT-182
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_unreachable_start_url_is_listed_as_failed_and_stays_a_valid_result() {
+    let closed = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    let env = Env::new();
+    let run = env
+        .run_async(vec![
+            "--crawl".to_string(),
+            format!("http://127.0.0.1:{closed}/"),
+            "--set".into(),
+            "robots.retries=0".into(),
+            "--export-tabs".into(),
+            "Internal:All".into(),
+            "--output-folder".into(),
+            env.out().to_string_lossy().into_owned(),
+        ])
+        .await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    assert!(env.out().join("internal_all.csv").is_file());
+    let list = env.run(&["--list-crawls", "--json"]);
+    let rows: serde_json::Value = serde_json::from_str(&list.stdout).unwrap();
+    assert_eq!(rows[0]["status"], "Failed", "{rows}");
+    let file =
+        os_store::CrawlFile::open(&env.crawl_files()[0], os_store::OpenMode::ReadOnly).unwrap();
+    let completeness: String = file
+        .conn()
+        .query_row(
+            "SELECT value FROM q_manifest WHERE key = 'completeness'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(completeness, "failed");
+    // „Fortsetzen“ ist für „Fehlgeschlagen“ ausgeschlossen (CRAWL-128).
+    let id = rows[0]["id"].as_str().unwrap();
+    let resume = env.run(&["--load-crawl", id, "--resume"]);
+    assert_eq!(resume.code, 1, "{}", resume.dump());
+}
+
 // spec: OUT-204
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exit_code_4_when_an_export_fails_but_the_crawl_succeeded() {
