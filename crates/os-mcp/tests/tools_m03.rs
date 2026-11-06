@@ -573,6 +573,7 @@ fn registered_tools_expose_no_code_execution_or_free_filesystem_access() {
             "list_catalog",
             "list_crawls",
             "list_issues",
+            "pause_crawl",
             "query_urls",
             "resume_crawl",
             "sql_query",

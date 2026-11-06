@@ -114,8 +114,9 @@ impl Tool for CrawlTool {
         match self.0 {
             "start_crawl" => "Start a spider crawl with url (or start_url), or a list crawl with url_list (or urls). config_profile selects profiles/<name>.osconfig. overrides uses dotted keys: limits.*, scope.include/exclude, speed.threads/max_urls_per_sec, user_agent.preset/http/robots_token, rendering.mode/ajax_timeout_s/viewport.width/height. The exact allowlist is in input_schema. Private targets are blocked at every connection unless enabled in mcp.toml. JavaScript requires an available rendering engine. Returns crawl_id immediately.",
             "crawl_status" => "Read crawl progress, URLs/s and error counts by crawl_id (or id).",
-            "stop_crawl" => "Stop a crawl owned by this MCP process; keep the queue for resume_crawl.",
-            _ => "Resume a paused, interrupted or stopped crawl by crawl_id (or id); a live foreign process cannot be controlled.",
+            "pause_crawl" => "Pause a running crawl by crawl_id (or id) so that resume_crawl can continue it later; returns at once with pausing=true, poll crawl_status until the state is Paused. A crawl run by another process cannot be controlled. Error code busy (retryable) while a pause or stop is still in progress.",
+            "stop_crawl" => "Stop a running or paused crawl for good by crawl_id (or id): end reason stopped, the data stays saved, and it can never be resumed (use pause_crawl to halt resumably). Error code busy (retryable) while a pause or stop is still in progress.",
+            _ => "Resume a paused, interrupted or limit-ended crawl by crawl_id (or id). Stopped crawls are final and are rejected; a crawl run by another process cannot be controlled. Error code busy (retryable) while the crawl is still pausing.",
         }
     }
     fn input_schema(&self) -> Value {
@@ -142,19 +143,27 @@ impl Tool for CrawlTool {
                     ToolError::InvalidArguments("crawl_id required (list_crawls)".into())
                 })?;
             match self.0 {
+                "pause_crawl" => {
+                    if let Some(session) = &ctx.session {
+                        session.pause_crawl(id).map_err(session_error)?;
+                    } else {
+                        ctx.crawls.pause(ctx, id)?;
+                    }
+                    json!({"crawl_id":id,"pausing":true})
+                }
                 "stop_crawl" => {
                     if let Some(session) = &ctx.session {
-                        session.stop_crawl(id).map_err(internal)?;
+                        session.stop_crawl(id).map_err(session_error)?;
+                        json!({"crawl_id":id,"stopping":true})
                     } else {
-                        ctx.crawls.stop(id)?;
+                        ctx.crawls.stop(ctx, id)?
                     }
-                    json!({"crawl_id":id,"stopping":true})
                 }
                 "resume_crawl" => {
                     if let Some(session) = &ctx.session {
                         let crawl = session
                             .resume_crawl(id, ctx.target_policy.clone())
-                            .map_err(internal)?;
+                            .map_err(session_error)?;
                         json!({"crawl_id":crawl.crawl_id,"state":crawl.state.as_str()})
                     } else {
                         ctx.crawls.resume(ctx, id)?
@@ -169,6 +178,19 @@ impl Tool for CrawlTool {
             total: None,
             next_cursor: None,
         })
+    }
+}
+
+/// Fehler der App-Sitzung als MCP-Fehler (K-38): `busy` bleibt als wiederholbarer Code erhalten (AGENT-020);
+/// unbekannte Crawls, fremd gesteuerte Crawls und abgewiesene Aufträge kann das Modell selbst korrigieren.
+fn session_error(e: crate::SessionError) -> ToolError {
+    match e {
+        crate::SessionError::Busy(message) => ToolError::Busy(message),
+        crate::SessionError::NotFound(_) => ToolError::NotFound(e.to_string()),
+        crate::SessionError::NotControllable(_) | crate::SessionError::Invalid(_) => {
+            ToolError::InvalidArguments(e.to_string())
+        }
+        crate::SessionError::Internal(_) => internal(e),
     }
 }
 
@@ -245,7 +267,7 @@ fn start(ctx: &ToolContext, args: &Value) -> Result<Value, ToolError> {
                 cfg,
                 ctx.target_policy.clone(),
             )
-            .map_err(internal)?;
+            .map_err(session_error)?;
         Ok(json!({"crawl_id":crawl.crawl_id,"state":crawl.state.as_str()}))
     } else {
         ctx.crawls.start(ctx, source, cfg)

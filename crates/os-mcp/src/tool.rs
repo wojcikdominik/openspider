@@ -114,6 +114,27 @@ pub enum ToolError {
     /// Interner Fehler (Datei, Datenbank).
     #[error("interner Fehler: {0}")]
     Internal(String),
+    /// Vorübergehend belegt (Fehlercode `busy`, wiederholbar, AGENT-020): z. B. ein Crawl hält gerade an oder die App
+    /// führt eine andere Operation aus. Ein späterer Aufruf mit denselben Argumenten kann gelingen.
+    #[error("busy: {0}")]
+    Busy(String),
+}
+
+impl ToolError {
+    /// Maschinenlesbarer Fehlercode (`structuredContent.error.code` der Werkzeugantwort).
+    pub fn code(&self) -> &'static str {
+        match self {
+            ToolError::InvalidArguments(_) => "invalid_arguments",
+            ToolError::NotFound(_) => "not_found",
+            ToolError::Internal(_) => "internal",
+            ToolError::Busy(_) => "busy",
+        }
+    }
+
+    /// Ob ein erneuter Aufruf mit denselben Argumenten sinnvoll ist (nur `busy`).
+    pub fn retryable(&self) -> bool {
+        matches!(self, ToolError::Busy(_))
+    }
 }
 
 /// Ein Werkzeug des MCP-Servers.

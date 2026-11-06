@@ -37,6 +37,7 @@ pub fn all() -> Vec<Box<dyn Tool>> {
         Box::new(sql_query::SqlQuery),
         Box::new(crawl::CrawlTool("start_crawl")),
         Box::new(crawl::CrawlTool("crawl_status")),
+        Box::new(crawl::CrawlTool("pause_crawl")),
         Box::new(crawl::CrawlTool("stop_crawl")),
         Box::new(crawl::CrawlTool("resume_crawl")),
         Box::new(export::Export),
@@ -51,6 +52,7 @@ mod tests {
     use crate::tool::ToolClass;
 
     // spec: AGENT-010, AGENT-011, AGENT-012, AGENT-013
+    // spec: AGENT-020, AGENT-003
     #[test]
     fn m2_tools_are_registered_with_their_permission_classes() {
         let tools = super::all();
@@ -68,6 +70,7 @@ mod tests {
                 "sql_query",
                 "start_crawl",
                 "crawl_status",
+                "pause_crawl",
                 "stop_crawl",
                 "resume_crawl",
                 "export",

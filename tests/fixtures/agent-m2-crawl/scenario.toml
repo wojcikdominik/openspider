@@ -25,3 +25,71 @@ body = '<html><head><title>Slow</title></head><body><a href="/slow/2">Next</a></
 path = "/slow/2"
 delay_ms = 100
 body = '<html><head><title>Slow two</title></head><body>Done</body></html>'
+
+# B4-RESUME (AGENT-020, CRAWL-126): pause_crawl/resume_crawl/stop_crawl. `/held` hält die erste Seiten-Antwort 3 s
+# (die Pause wartet auf sie und bleibt so lange „busy“); danach eine Kette, die bei 2 URLs/s mindestens 6 s braucht
+# und daher vor Pause oder Stopp nicht von selbst enden kann (B3-FLAKES: Fixture ohne natürliches Ende).
+[[route]]
+path = "/held"
+delay_ms = 3000
+body = '<html><head><title>Held</title></head><body><a href="/chain/1">Chain</a></body></html>'
+
+[[route]]
+path = "/chain/1"
+delay_ms = 100
+body = '<html><head><title>Chain 1</title></head><body><a href="/chain/2">Next</a></body></html>'
+
+[[route]]
+path = "/chain/2"
+delay_ms = 100
+body = '<html><head><title>Chain 2</title></head><body><a href="/chain/3">Next</a></body></html>'
+
+[[route]]
+path = "/chain/3"
+delay_ms = 100
+body = '<html><head><title>Chain 3</title></head><body><a href="/chain/4">Next</a></body></html>'
+
+[[route]]
+path = "/chain/4"
+delay_ms = 100
+body = '<html><head><title>Chain 4</title></head><body><a href="/chain/5">Next</a></body></html>'
+
+[[route]]
+path = "/chain/5"
+delay_ms = 100
+body = '<html><head><title>Chain 5</title></head><body><a href="/chain/6">Next</a></body></html>'
+
+[[route]]
+path = "/chain/6"
+delay_ms = 100
+body = '<html><head><title>Chain 6</title></head><body><a href="/chain/7">Next</a></body></html>'
+
+[[route]]
+path = "/chain/7"
+delay_ms = 100
+body = '<html><head><title>Chain 7</title></head><body><a href="/chain/8">Next</a></body></html>'
+
+[[route]]
+path = "/chain/8"
+delay_ms = 100
+body = '<html><head><title>Chain 8</title></head><body><a href="/chain/9">Next</a></body></html>'
+
+[[route]]
+path = "/chain/9"
+delay_ms = 100
+body = '<html><head><title>Chain 9</title></head><body><a href="/chain/10">Next</a></body></html>'
+
+[[route]]
+path = "/chain/10"
+delay_ms = 100
+body = '<html><head><title>Chain 10</title></head><body><a href="/chain/11">Next</a></body></html>'
+
+[[route]]
+path = "/chain/11"
+delay_ms = 100
+body = '<html><head><title>Chain 11</title></head><body><a href="/chain/12">Next</a></body></html>'
+
+[[route]]
+path = "/chain/12"
+delay_ms = 100
+body = '<html><head><title>Chain 12</title></head><body>End</body></html>'

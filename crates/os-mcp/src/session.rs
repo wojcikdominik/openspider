@@ -78,6 +78,9 @@ pub enum SessionError {
     /// Sonstiger Fehler der App.
     #[error("Sitzungsfehler: {0}")]
     Internal(String),
+    /// Die App ist vorübergehend belegt (andere Operation, Crawl hält an); wiederholbar (AGENT-020, Code `busy`).
+    #[error("App belegt: {0}")]
+    Busy(String),
 }
 
 /// Zugriff auf die Sitzung der App. Die Implementierung liefert `os-app` (K-17).
@@ -103,6 +106,11 @@ pub trait SessionAccess: Send + Sync + std::fmt::Debug {
         Err(SessionError::NotControllable(id.into()))
     }
 
+    /// Pausiert einen Crawl der Sitzung fortsetzbar (AGENT-020 `pause_crawl`, CRAWL-126).
+    fn pause_crawl(&self, crawl_id: &str) -> Result<(), SessionError> {
+        Err(SessionError::NotControllable(crawl_id.into()))
+    }
+
     /// Die Crawls der Sitzung.
     fn crawls(&self) -> Vec<SessionCrawl>;
 
@@ -112,6 +120,7 @@ pub trait SessionAccess: Send + Sync + std::fmt::Debug {
     /// Startet einen Crawl im App-Prozess.
     fn start_crawl(&self, start: SessionStart) -> Result<SessionCrawl, SessionError>;
 
-    /// Hält einen laufenden Crawl an (Stopp; die Warteschlange bleibt erhalten).
+    /// Beendet einen laufenden oder pausierten Crawl endgültig (Endgrund `stopped`, UI-003; die Warteschlange bleibt
+    /// gesichert, „Fortsetzen“ ist danach ausgeschlossen, CRAWL-128).
     fn stop_crawl(&self, crawl_id: &str) -> Result<(), SessionError>;
 }

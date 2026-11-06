@@ -371,6 +371,55 @@ async fn exports_match_core_cli_writers_and_obey_path_and_overwrite_protection()
     c.cancel().await.unwrap();
 }
 
+/// Werkzeugaufruf mit `structuredContent` (Fehlercode `busy`, AGENT-020).
+async fn call_raw(
+    client: &rmcp::service::RunningService<rmcp::RoleClient, ()>,
+    name: &str,
+    args: Value,
+) -> (Reply, Option<Value>) {
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new(name.to_owned())
+                .with_arguments(args.as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    (
+        Reply::from_result(&result),
+        result.structured_content.clone(),
+    )
+}
+
+/// Ruft ein Steuerwerkzeug so lange erneut auf, wie es `busy` meldet (der dokumentierte Vertrag, AGENT-020).
+async fn call_retrying_busy(
+    c: &rmcp::service::RunningService<rmcp::RoleClient, ()>,
+    tool: &str,
+    id: &str,
+) -> Reply {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let (reply, structured) = call_raw(c, tool, json!({"crawl_id":id})).await;
+            if structured.is_none_or(|s| s["error"]["code"] != "busy") {
+                return reply;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+
+/// Wartet, bis die Testsite den Request auf `path` angenommen hat (sie protokolliert vor der Verzögerung).
+async fn wait_for_request(site: &os_testsite::TestSite, path: &str) {
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while !site.requests().iter().any(|r| r.path_and_query == path) {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+
 async fn wait_stopped(c: &rmcp::service::RunningService<rmcp::RoleClient, ()>, id: &str) -> Reply {
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
@@ -481,40 +530,147 @@ async fn headless_crawl_start_status_stop_resume_permissions_and_safe_overrides(
             .is_error
         );
     }
-    let start=call(&c,"start_crawl",json!({"url":site.url("/slow"),"overrides":{"speed.threads":1,"speed.max_urls_per_sec":2.0}})).await;
+    // B4-RESUME (AGENT-020, CRAWL-126, CRAWL-128): pause → resume → stop; „Gestoppt ist endgültig“.
+    let slow = json!({"speed.threads":1,"speed.max_urls_per_sec":2.0});
+    let start = call(
+        &c,
+        "start_crawl",
+        json!({"url":site.url("/held"),"overrides":slow}),
+    )
+    .await;
     let id = start.summary()["crawl_id"].as_str().unwrap();
+    let live = call_raw(&c, "resume_crawl", json!({"crawl_id":id})).await;
+    assert!(live.0.is_error, "must reject a live crawl");
     assert!(
-        call(&c, "resume_crawl", json!({"crawl_id":id}))
-            .await
-            .is_error,
-        "must reject a live crawl"
+        live.1.is_none(),
+        "a running crawl is not busy: {:?}",
+        live.0.blocks
     );
     let status = call(&c, "crawl_status", json!({"crawl_id":id})).await;
     assert!(status.summary()["progress"].get("rate").is_some());
-    assert!(
-        !call(&c, "stop_crawl", json!({"crawl_id":id}))
-            .await
-            .is_error
-    );
-    wait_stopped(&c, id).await;
+    // Die Pause wartet auf die laufende Anfrage (`/held`, 3 s): so lange ist der Crawl `busy`.
+    wait_for_request(&site, "/held").await;
+    let paused = call(&c, "pause_crawl", json!({"crawl_id":id})).await;
+    assert!(!paused.is_error, "{:?}", paused.blocks);
+    assert_eq!(paused.summary()["pausing"], true);
+    for tool in ["pause_crawl", "resume_crawl", "stop_crawl"] {
+        let (reply, structured) = call_raw(&c, tool, json!({"crawl_id":id})).await;
+        assert!(reply.is_error, "{tool}");
+        let structured = structured.unwrap_or_else(|| panic!("{tool}: {:?}", reply.blocks));
+        assert_eq!(structured["error"]["code"], "busy", "{tool}");
+        assert_eq!(structured["error"]["retryable"], true, "{tool}");
+        assert!(
+            reply.blocks[0].starts_with("busy:"),
+            "{tool}: {:?}",
+            reply.blocks
+        );
+    }
+    let reported = wait_stopped(&c, id).await;
+    assert_eq!(reported.summary()["progress"]["state"], "Paused");
+    // Der gemeldete Endzustand ist schon dauerhaft, die Besitzer-Metadaten sind freigegeben (kein Warten nötig).
     let file = os_store::CrawlFile::open(
         &os_store::registry::find(&crawls, &id.parse().unwrap()).unwrap(),
         os_store::OpenMode::ReadOnly,
     )
     .unwrap();
+    assert_eq!(file.meta().unwrap().state, os_model::CrawlState::Paused);
     assert_eq!(
         file.get_meta("owner_kind").unwrap().as_deref(),
         Some("mcp-stdio")
     );
     assert_eq!(file.get_meta("owner_pid").unwrap().as_deref(), Some(""));
     drop(file);
-    let resumed = call(&c, "resume_crawl", json!({"crawl_id":id})).await;
+    let again = call_retrying_busy(&c, "pause_crawl", id).await;
+    assert!(again.is_error && again.blocks.join(" ").contains("already paused"));
+    let resumed = call_retrying_busy(&c, "resume_crawl", id).await;
     assert!(!resumed.is_error, "{:?}", resumed.blocks);
-    wait_stopped(&c, id).await;
+    assert_eq!(resumed.summary()["state"], "Running");
+    // Die Kette braucht bei 2 URLs/s mindestens 6 s: der Stopp trifft einen laufenden Crawl.
+    let stop = call(&c, "stop_crawl", json!({"crawl_id":id})).await;
+    assert!(!stop.is_error, "{:?}", stop.blocks);
+    assert_eq!(stop.summary()["stopping"], true);
+    let reported = wait_stopped(&c, id).await;
+    assert_eq!(reported.summary()["progress"]["state"], "Completed");
+    assert_eq!(reported.summary()["progress"]["end_reason"], "stopped");
+    let file = os_store::CrawlFile::open(
+        &os_store::registry::find(&crawls, &id.parse().unwrap()).unwrap(),
+        os_store::OpenMode::ReadOnly,
+    )
+    .unwrap();
+    let meta = file.meta().unwrap();
+    assert_eq!(meta.state, os_model::CrawlState::Completed);
+    assert_eq!(meta.end_reason, Some(os_model::EndReason::Stopped));
+    assert_eq!(file.get_meta("owner_pid").unwrap().as_deref(), Some(""));
+    let queued: i64 = file
+        .conn()
+        .query_row("SELECT COUNT(*) FROM queue", [], |r| r.get(0))
+        .unwrap();
+    assert!(queued > 0, "the stopped crawl keeps its queue");
+    drop(file);
+    // CRAWL-128: trotz Restwarteschlange nicht fortsetzbar, mit dem Hinweis der CLI; kein `busy`.
+    let final_resume = call_retrying_busy(&c, "resume_crawl", id).await;
+    assert!(final_resume.is_error);
+    assert!(
+        final_resume
+            .blocks
+            .join(" ")
+            .contains("gestoppt – endgültig beendet"),
+        "{:?}",
+        final_resume.blocks
+    );
+    let requests = site.total_requests();
+    assert!(
+        call(&c, "resume_crawl", json!({"crawl_id":id}))
+            .await
+            .is_error
+    );
+    assert_eq!(
+        site.total_requests(),
+        requests,
+        "no request after a rejected resume"
+    );
     let listed = call(&c, "list_crawls", json!({})).await;
     assert_eq!(listed.summary()["crawls"][0]["crawl_id"], id);
+
+    // UI-003: „Stoppen“ aus „Pausiert“ beendet einen Crawl ohne laufende Engine endgültig.
+    let second = call(
+        &c,
+        "start_crawl",
+        json!({"url":site.url("/chain/1"),"overrides":slow}),
+    )
+    .await;
+    let second_id = second.summary()["crawl_id"].as_str().unwrap();
+    assert!(
+        !call(&c, "pause_crawl", json!({"crawl_id":second_id}))
+            .await
+            .is_error
+    );
+    assert_eq!(
+        wait_stopped(&c, second_id).await.summary()["progress"]["state"],
+        "Paused"
+    );
+    let stopped = call_retrying_busy(&c, "stop_crawl", second_id).await;
+    assert!(!stopped.is_error, "{:?}", stopped.blocks);
+    assert_eq!(stopped.summary()["end_reason"], "stopped");
+    let status = call(&c, "crawl_status", json!({"crawl_id":second_id})).await;
+    assert_eq!(status.summary()["state"], "Completed");
+    let meta = os_store::CrawlFile::open(
+        &os_store::registry::find(&crawls, &second_id.parse().unwrap()).unwrap(),
+        os_store::OpenMode::ReadOnly,
+    )
+    .unwrap()
+    .meta()
+    .unwrap();
+    assert_eq!(meta.end_reason, Some(os_model::EndReason::Stopped));
+    let resume_second = call(&c, "resume_crawl", json!({"crawl_id":second_id})).await;
+    assert!(resume_second.is_error);
+    assert!(resume_second
+        .blocks
+        .join(" ")
+        .contains("gestoppt – endgültig beendet"));
+
     let unknown = "00000000-0000-0000-0000-000000000001";
-    for tool in ["crawl_status", "stop_crawl", "resume_crawl"] {
+    for tool in ["crawl_status", "pause_crawl", "stop_crawl", "resume_crawl"] {
         assert!(call(&c, tool, json!({"crawl_id":unknown})).await.is_error);
     }
     std::fs::create_dir(home.path().join("profiles")).unwrap();
