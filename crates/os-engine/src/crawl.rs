@@ -115,6 +115,12 @@ impl CrawlHandle {
         self.progress.clone()
     }
 
+    /// Ob der Lauf ganz beendet ist (Checkpoint, Writer und Hook erledigt). Der Fortschritt meldet den Endzustand
+    /// schon nach dem dauerhaften Commit; bis hierher kann die Datei noch zusammengeführt werden (AGENT-020).
+    pub fn is_finished(&self) -> bool {
+        self.task.is_finished()
+    }
+
     /// Pausiert den Crawl: keine neuen Abrufe, laufende werden gespeichert, Zustand `Paused`, die
     /// Warteschlange bleibt in der Datei. `wait()` liefert danach die Zusammenfassung (kein Abschluss-Hook).
     pub fn pause(&self) {
@@ -1076,7 +1082,8 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         tracker.finish(now_mono, state, reason);
         tracker.crawled()
     };
-    publish(&sh, &progress_tx);
+    // Der Endzustand wird erst veröffentlicht, wenn er samt freigegebenem `owner_pid` dauerhaft in der Datei steht
+    // (unten); wer den Zustand aus dem Fortschritt liest, findet die Datei dann schon im selben Stand.
     tracing::info!(%crawl_id, state = state.as_str(), crawled, "Crawl beendet");
     // OUT-240 (K2-61): repeat the summary for independently useful end records.
     tracing::info!(%crawl_id, mode = ?sh.cfg.mode, start_url = %os_fetch::redact::url(&sh.start_url), limits = ?sh.cfg.limits, rendering = ?sh.cfg.rendering.mode, "Crawl-Konfiguration Ende");
@@ -1085,11 +1092,15 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         && sh.cfg.rendering.mode == RenderingMode::Text
         && end != End::Failed
     {
-        sh.writer
-            .flush()
-            .await
-            .map_err(|_| EngineError::Join("Fragment-Basis nicht geschrieben".into()))?;
-        crate::heap(|| crate::fragments::materialize(&file, &sh.writer)).await?;
+        let materialized = match sh.writer.flush().await {
+            Ok(()) => crate::heap(|| crate::fragments::materialize(&file, &sh.writer)).await,
+            Err(_) => Err(EngineError::Join("Fragment-Basis nicht geschrieben".into())),
+        };
+        if let Err(e) = materialized {
+            // Beobachter des Fortschritts erfahren das Ende auch auf diesem Fehlerweg.
+            publish(&sh, &progress_tx);
+            return Err(e);
+        }
     }
 
     let mut last = WriteBatch::default();
@@ -1134,6 +1145,10 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     let mut write_ok = writer.durable().await.is_ok();
     write_ok = write_ok && sh.writer.send(last).await.is_ok();
     write_ok = write_ok && writer.flush().await.is_ok();
+    // AGENT-020, CRAWL-126: Zustand, Endgrund und die Freigabe der Besitzer-Metadaten (`owner_pid`) sind jetzt
+    // dauerhaft; erst danach meldet der Fortschritt den Endzustand (auch bei einem Schreibfehler, damit Beobachter
+    // nicht auf „Running“ stehen bleiben).
+    publish(&sh, &progress_tx);
     write_ok = write_ok && writer.checkpoint().await.is_ok();
 
     let shared_error = sh.error.lock().unwrap_or_else(|p| p.into_inner()).take();
