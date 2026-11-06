@@ -163,6 +163,52 @@ async fn resume_continues_a_crawl_that_stopped_at_the_url_limit() {
     assert!(list.stdout.contains("Completed"), "{}", list.stdout);
 }
 
+// spec: CRAWL-128
+// spec: AGENT-020
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn resume_refuses_a_stopped_crawl_with_exit_1_whatever_its_queue_holds() {
+    let site = site("out-queue").await;
+    let env = Env::new();
+    let run = env.run_async(crawl_args(&site, &["--max-urls", "5"])).await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    let (path, id) = only_crawl(&env);
+    // Derselbe Rest in der Warteschlange wie nach dem Limit, aber Endgrund `stopped` (UI-003 „Stoppen“).
+    let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    let queued: i64 = file
+        .conn()
+        .query_row("SELECT COUNT(*) FROM queue", [], |r| r.get(0))
+        .unwrap();
+    assert!(queued > 0);
+    file.set_meta("end_reason", "stopped").unwrap();
+    drop(file);
+    let requests = site.total_requests();
+
+    let run = env
+        .run_async(vec![
+            "--load-crawl".to_string(),
+            id,
+            "--resume".into(),
+            "--max-urls".into(),
+            "1000".into(),
+            "--resolve".into(),
+            resolve(&site),
+        ])
+        .await;
+    assert_eq!(run.code, 1, "{}", run.dump());
+    assert!(
+        run.stderr.contains("gestoppt – endgültig beendet"),
+        "{}",
+        run.dump()
+    );
+    assert_eq!(site.total_requests(), requests, "kein Abruf");
+    let meta = CrawlFile::open(&path, OpenMode::ReadOnly)
+        .unwrap()
+        .meta()
+        .unwrap();
+    assert_eq!(meta.state, os_model::CrawlState::Completed);
+    assert_eq!(meta.end_reason, Some(os_model::EndReason::Stopped));
+}
+
 // spec: OUT-184
 #[test]
 fn resume_needs_a_loaded_crawl() {

@@ -48,10 +48,18 @@ fn row(listing: &CrawlListing, now_ms: i64) -> Row {
 }
 
 /// Verwaltungsprüfung bei der Initialisierung von `--load-crawl --resume` (CRAWL-128, K2-34).
-/// Nicht fortsetzbare Zustände melden Exit 1 samt Zustand, bevor die Engine gestartet wird.
+/// Nicht fortsetzbare Zustände melden Exit 1 samt Zustand, bevor die Engine gestartet wird; ein Crawl mit Endgrund
+/// `stopped` meldet „gestoppt – endgültig beendet“, unabhängig von seiner Warteschlange (AGENT-020).
 pub fn validate_resume(path: &Path) -> Result<(), CliError> {
     let listing = registry::read_listing(path)
         .map_err(|e| CliError::crawl(format!("Crawl-Datei nicht lesbar: {e}")))?;
+    if listing.meta.end_reason == Some(os_model::EndReason::Stopped) {
+        return Err(CliError::internal(format!(
+            "Crawl {} kann nicht fortgesetzt werden: {}",
+            listing.meta.crawl_id,
+            os_engine::lifecycle::STOPPED_IS_FINAL
+        )));
+    }
     let state = listing.effective_state(SystemClock.now());
     if matches!(
         state,
