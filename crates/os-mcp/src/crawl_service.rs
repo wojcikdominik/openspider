@@ -133,6 +133,12 @@ impl CrawlService {
             .map(|h| json!({"crawl_id":id,"progress":h.progress()}))
     }
 
+    /// Zustand des Laufs, wenn ihn dieser Prozess führt.
+    pub fn state(&self, id: &str) -> Option<os_model::CrawlState> {
+        let handles = self.handles.lock().ok()?;
+        handles.get(id).map(|h| h.progress().state)
+    }
+
     /// Zustand des Engine-Handles dieses Prozesses; räumt erledigte Anforderungen auf.
     fn live(&self, id: &str) -> Result<Live, ToolError> {
         let handles = self.handles.lock().map_err(invalid)?;
@@ -262,23 +268,27 @@ impl CrawlService {
     }
 
     pub fn resume(&self, ctx: &ToolContext, id: &str) -> Result<Value, ToolError> {
-        match self.live(id)? {
+        let live = self.live(id)?;
+        match live {
             Live::Running(Some(pending)) => return Err(busy_text(id, pending)),
             Live::Running(None) => {
                 return Err(ToolError::InvalidArguments(format!(
                     "Crawl {id} is running; only a paused, interrupted or limit-ended crawl can be resumed"
                 )))
             }
-            Live::Closing(_) => return Err(busy_text(id, "still saving its final state")),
-            Live::None => {}
+            Live::Closing(_) | Live::None => {}
         }
         let crawl = super::tools::common::open_crawl(ctx, &json!({"crawl_id":id}))?;
-        // CRAWL-128: „Gestoppt ist endgültig“ – derselbe Hinweis wie in CLI und Engine, vor jedem Abruferaufbau.
+        // CRAWL-128: „Gestoppt ist endgültig“ – derselbe Hinweis wie in CLI und Engine, vor jedem Abruferaufbau. Der gemeldete
+        // Endzustand ist dauerhaft, deshalb gilt das auch, solange der Lauf noch abschließt: Warten hülfe hier nicht.
         if crawl.meta.end_reason == Some(os_model::EndReason::Stopped) {
             return Err(ToolError::InvalidArguments(format!(
                 "Crawl {id} cannot be resumed: {} (stopped crawls are final; start a new crawl)",
                 os_engine::lifecycle::STOPPED_IS_FINAL
             )));
+        }
+        if matches!(live, Live::Closing(_)) {
+            return Err(busy_text(id, "still saving its final state"));
         }
         let mut deps = self.deps(None);
         deps.renderer = Self::renderer(&crawl.cfg, ctx)?;

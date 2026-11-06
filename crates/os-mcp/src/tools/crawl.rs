@@ -294,10 +294,15 @@ fn status(ctx: &ToolContext, id: &str) -> Result<Value, ToolError> {
         .unwrap_or_else(|| json!({"crawl_id":id}));
     let state = match ctx.session.as_ref().and_then(|s| s.status(id)) {
         Some(live) => live.state,
-        None => crawl
-            .file
-            .effective_state(&os_model::SystemClock)
-            .map_err(internal)?,
+        // Der Lauf dieses Prozesses kennt seinen Zustand: Nach `resume_crawl` steht in der Datei noch kurz „Pausiert“, und
+        // einen Endzustand meldet er erst, wenn er dauerhaft ist (CRAWL-130).
+        None => match ctx.crawls.state(id) {
+            Some(live) => live,
+            None => crawl
+                .file
+                .effective_state(&os_model::SystemClock)
+                .map_err(internal)?,
+        },
     };
     status["state"] = json!(state.as_str());
     status["errors"] = json!(errors);

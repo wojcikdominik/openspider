@@ -585,6 +585,9 @@ async fn headless_crawl_start_status_stop_resume_permissions_and_safe_overrides(
     let resumed = call_retrying_busy(&c, "resume_crawl", id).await;
     assert!(!resumed.is_error, "{:?}", resumed.blocks);
     assert_eq!(resumed.summary()["state"], "Running");
+    // Befund 3: `crawl_status` sagt sofort dasselbe, auch wenn in der Datei noch „Pausiert“ steht (CRAWL-130).
+    let status = call(&c, "crawl_status", json!({"crawl_id":id})).await;
+    assert_eq!(status.summary()["state"], "Running");
     // Die Kette braucht bei 2 URLs/s mindestens 6 s: der Stopp trifft einen laufenden Crawl.
     let stop = call(&c, "stop_crawl", json!({"crawl_id":id})).await;
     assert!(!stop.is_error, "{:?}", stop.blocks);
@@ -607,8 +610,9 @@ async fn headless_crawl_start_status_stop_resume_permissions_and_safe_overrides(
         .unwrap();
     assert!(queued > 0, "the stopped crawl keeps its queue");
     drop(file);
-    // CRAWL-128: trotz Restwarteschlange nicht fortsetzbar, mit dem Hinweis der CLI; kein `busy`.
-    let final_resume = call_retrying_busy(&c, "resume_crawl", id).await;
+    // CRAWL-128: trotz Restwarteschlange nicht fortsetzbar, mit dem Hinweis der CLI; kein `busy`, auch nicht, solange die
+    // Crawl-Analyse des Laufs noch arbeitet (Befund 4): Darum hier kein wiederholender Aufruf.
+    let final_resume = call(&c, "resume_crawl", json!({"crawl_id":id})).await;
     assert!(final_resume.is_error);
     assert!(
         final_resume
