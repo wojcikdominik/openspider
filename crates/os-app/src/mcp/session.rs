@@ -25,6 +25,14 @@ impl std::fmt::Debug for Access {
 fn err(e: impl std::fmt::Display) -> SessionError {
     SessionError::Internal(e.to_string())
 }
+/// App command errors keep their retryable `busy` class for MCP clients (AGENT-020).
+fn cmd_err(e: crate::CmdError) -> SessionError {
+    match e.code {
+        crate::ErrorCode::Busy => SessionError::Busy(e.to_string()),
+        crate::ErrorCode::InvalidInput => SessionError::Invalid(e.to_string()),
+        _ => err(e),
+    }
+}
 fn dto(s: SessionInfo) -> SessionCrawl {
     SessionCrawl {
         crawl_id: s.key.0,
@@ -49,7 +57,7 @@ impl Access {
         let service = app.ext::<SessionService>();
         let _guard = service.mutation.lock().await;
         if service.quitting.load(std::sync::atomic::Ordering::SeqCst) || app.ops().running() > 0 {
-            return Err(SessionError::Invalid("App is busy or shutting down".into()));
+            return Err(SessionError::Busy("App is busy or shutting down".into()));
         }
         // Client and TLS-root setup is deep synchronous work: run it on a fresh blocking stack
         // instead of on top of this caller's frames (AGENT-020).
@@ -83,7 +91,7 @@ impl Access {
         }
         let runtime = app.handle();
         if let Some(s) = resume {
-            control::ensure_idle(app, &s).await.map_err(err)?;
+            control::ensure_idle(app, &s).await.map_err(cmd_err)?;
             session::merge::cancel(app, &s.key).await;
             let file = s.path;
             let path = file.clone();
@@ -285,7 +293,27 @@ impl SessionAccess for Access {
         app.handle().block_on(async {
             let service = app.ext::<SessionService>();
             let _guard = service.mutation.lock().await;
-            control::settle(&app, &s, Some(true)).await.map_err(err)
+            control::settle(&app, &s, Some(true)).await.map_err(cmd_err)
+        })
+    }
+    fn pause_crawl(&self, id: &str) -> Result<(), SessionError> {
+        let app = self.app()?;
+        let s = app
+            .sessions()
+            .all()
+            .into_iter()
+            .find(|s| s.key.0 == id)
+            .ok_or_else(|| SessionError::NotFound(id.into()))?;
+        if !s.writable {
+            return Err(SessionError::NotControllable(id.into()));
+        }
+        // Same path as the header's pause (CRAWL-126): returns once the paused state is durable.
+        app.handle().block_on(async {
+            let service = app.ext::<SessionService>();
+            let _guard = service.mutation.lock().await;
+            control::settle(&app, &s, Some(false))
+                .await
+                .map_err(cmd_err)
         })
     }
     fn resume_crawl(&self, id: &str, policy: DomainPolicy) -> Result<SessionCrawl, SessionError> {
@@ -296,6 +324,19 @@ impl SessionAccess for Access {
             .into_iter()
             .find(|s| s.key.0 == id)
             .ok_or_else(|| SessionError::NotFound(id.into()))?;
+        // CRAWL-128, AGENT-020: a stopped crawl is final; same notice as the CLI and the engine.
+        let stopped = app
+            .handle()
+            .block_on(app.read_pool().run(s.key.clone(), |f, _| f.meta()))
+            .map_err(cmd_err)?
+            .end_reason
+            == Some(os_model::EndReason::Stopped);
+        if stopped {
+            return Err(SessionError::Invalid(format!(
+                "Crawl {id} cannot be resumed: {} (stopped crawls are final; start a new crawl)",
+                os_engine::lifecycle::STOPPED_IS_FINAL
+            )));
+        }
         let config = (*s.config).clone();
         app.handle()
             .block_on(heap(|| Self::launch(&app, None, config, policy, Some(s))))

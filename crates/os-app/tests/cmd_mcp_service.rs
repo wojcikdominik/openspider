@@ -208,6 +208,115 @@ async fn http_crawl_fixture() {
     );
 }
 
+// spec: AGENT-020
+// spec: CRAWL-128
+#[test]
+fn http_pause_resume_and_stop_follow_the_app_session_and_stopped_is_final() {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(http_pause_resume_stop_fixture());
+}
+
+async fn http_pause_resume_stop_fixture() {
+    use os_mcp::SessionAccess;
+    let home = tempfile::tempdir().unwrap();
+    let app = App::new(AppConfig::new(home.path())).unwrap();
+    // Kette ohne natürliches Ende vor der Pause (bei 2 URLs/s mindestens 6 s, B3-FLAKES).
+    let site = os_testsite::TestSite::start_dir(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/agent-m2-crawl"),
+        0,
+    )
+    .await
+    .unwrap();
+    let settings = os_mcp::McpSettings {
+        classes: vec![os_mcp::ToolClass::Crawl],
+        allow_private_targets: true,
+        ..Default::default()
+    };
+    os_mcp::settings::save(&home.path().join("mcp.toml"), &settings).unwrap();
+    let server = os_app::mcp::server(&app, settings).unwrap();
+    let args = |v: Value| v.as_object().cloned();
+    // Text blocks of a tool result (rmcp types stay behind os-mcp).
+    macro_rules! text {
+        ($r:expr) => {
+            $r.content
+                .iter()
+                .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+    }
+    let started = server
+        .call(
+            "start_crawl",
+            args(
+                json!({"url":format!("http://127.0.0.1:{}/chain/1", site.port()),
+                "overrides":{"speed.threads":1,"speed.max_urls_per_sec":2.0}}),
+            ),
+        )
+        .await;
+    assert_eq!(started.is_error, Some(false), "{}", text!(started));
+    let body: Value = serde_json::from_str(&started.content[0].as_text().unwrap().text).unwrap();
+    let id = body["summary"]["crawl_id"].as_str().unwrap().to_owned();
+    let access = os_app::mcp::session::Access(app.downgrade());
+
+    // In der App kehrt `pause_crawl` zurück, wenn „Pausiert“ dauerhaft ist (derselbe Weg wie die Kopfleiste).
+    let paused = server
+        .call("pause_crawl", args(json!({"crawl_id":id})))
+        .await;
+    assert_eq!(paused.is_error, Some(false), "{}", text!(paused));
+    assert_eq!(
+        access.status(&id).unwrap().state,
+        os_model::CrawlState::Paused
+    );
+    let resumed = server
+        .call("resume_crawl", args(json!({"crawl_id":id})))
+        .await;
+    assert_eq!(resumed.is_error, Some(false), "{}", text!(resumed));
+    assert_eq!(
+        access.status(&id).unwrap().state,
+        os_model::CrawlState::Running
+    );
+    let stopped = server
+        .call("stop_crawl", args(json!({"crawl_id":id})))
+        .await;
+    assert_eq!(stopped.is_error, Some(false), "{}", text!(stopped));
+    let s = app
+        .sessions()
+        .all()
+        .into_iter()
+        .find(|s| s.key.0 == id)
+        .unwrap();
+    let meta = app
+        .read_pool()
+        .run(s.key.clone(), |f, _| f.meta())
+        .await
+        .unwrap();
+    assert_eq!(meta.end_reason, Some(os_model::EndReason::Stopped));
+    let requests = site.total_requests();
+    let refused = server
+        .call("resume_crawl", args(json!({"crawl_id":id})))
+        .await;
+    assert_eq!(refused.is_error, Some(true));
+    assert!(
+        text!(refused).contains("gestoppt – endgültig beendet"),
+        "{}",
+        text!(refused)
+    );
+    assert!(refused.structured_content.is_none(), "not retryable");
+    assert_eq!(site.total_requests(), requests);
+    // Ein beendeter Crawl lässt sich nicht pausieren; kein `busy`, sondern ein korrigierbarer Fehler.
+    let again = server
+        .call("pause_crawl", args(json!({"crawl_id":id})))
+        .await;
+    assert_eq!(again.is_error, Some(true));
+    assert!(again.structured_content.is_none());
+}
+
 // spec: OUT-285 [P1]
 #[tokio::test]
 async fn occupied_autostart_port_emits_notice_and_stays_off() {

@@ -62,6 +62,8 @@ async fn a_stopped_crawl_reports_stopped_live_and_after_reopening_in_a_restarted
     assert_eq!(items[0]["crawl"]["phase"], "completed");
     // The rest of the chain is still queued; only the stop makes the crawl final (UI-003).
     assert_eq!(items[0]["canResume"], false);
+    // B4-RESUME (CRAWL-128): the management shows „Abgeschlossen (gestoppt)“ from this additive field.
+    assert_eq!(items[0]["endReason"], "stopped");
 
     open(&restarted, Path::new(&started.file)).await;
     let reopened = status_json(&restarted).await;

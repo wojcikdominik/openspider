@@ -74,6 +74,12 @@ pub struct CrawlListing {
 
     /// Ob der Crawl fortgesetzt werden kann.
     pub can_resume: bool,
+
+    /// Endgrund (`queue_empty`, `limit_reached`, `stopped`) eines beendeten Crawls; die Verwaltung zeigt bei `stopped`
+    /// „Abgeschlossen (gestoppt)“ (CRAWL-128). Additiv: ältere Aufrufer ignorieren das Feld.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub end_reason: Option<String>,
 }
 
 /// Argument von `crawls.rename`.

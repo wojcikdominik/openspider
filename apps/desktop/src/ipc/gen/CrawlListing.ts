@@ -28,4 +28,9 @@ durationMs?: number | null,
 /**
  * Ob der Crawl fortgesetzt werden kann.
  */
-canResume: boolean, };
+canResume: boolean, 
+/**
+ * Endgrund (`queue_empty`, `limit_reached`, `stopped`) eines beendeten Crawls; die Verwaltung zeigt bei `stopped`
+ * „Abgeschlossen (gestoppt)“ (CRAWL-128). Additiv: ältere Aufrufer ignorieren das Feld.
+ */
+endReason?: string | null, };
