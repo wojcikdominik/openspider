@@ -67,6 +67,26 @@ it("sorts every column, preserves ordered IDs and enables comparison with two in
   for (const column of columns) expect(sortRows(fixtureRows, column, "asc")).toHaveLength(fixtureRows.length);
 });
 
+// spec: CRAWL-128
+// spec: AGENT-020
+it("shows a stopped crawl as completed (stopped) in both languages and never offers to resume it", async () => {
+  const cellOf = (name: string) => within(screen.getByText(name).closest("tr")!).getAllByRole("cell")[columns.indexOf("phase") + 1]!;
+  await mount();
+  expect(cellOf("Geschützt")).toHaveTextContent(/^Completed \(stopped\)$/);
+  expect(cellOf("Beta")).toHaveTextContent(/^Completed$/);
+  select("Geschützt");
+  expect(button("Resume")).toBeDisabled();
+  // The export key stays on the phase (`Completed`); only the label differs.
+  expect(fixtureRows.find(r => r.crawl.name === "Geschützt")!.crawl.phase).toBe("completed");
+  cleanup();
+  await setLanguage("de");
+  useCrawlsDialog.setState({ open: true });
+  render(<CrawlsHost desktop={fixture.desktop} />);
+  await screen.findByRole("checkbox", { name: /Alpha/ });
+  expect(cellOf("Geschützt")).toHaveTextContent(/^Abgeschlossen \(gestoppt\)$/);
+  expect(cellOf("Beta")).toHaveTextContent(/^Abgeschlossen$/);
+});
+
 // spec: CRAWL-143
 it("resumes a completed crawl with a remaining queue using the core's shared canResume decision (K2-34)", async () => {
   const rows = structuredClone(fixtureRows);

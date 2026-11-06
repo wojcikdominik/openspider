@@ -6,7 +6,7 @@ import data from "./management.json";
 export const fixtureRows: CrawlListing[] = data.rows.map((r, i) => ({
   crawl: { crawlId: r.id, name: r.name, file: `/fixture/${r.name}.ospider`, phase: r.phase as CrawlListing["crawl"]["phase"], mode: r.name === "list.csv" ? "list" : "spider",
     startedAt: `2026-10-${String(i + 1).padStart(2, "0")}T12:00:00Z`, urls: i + 1, fileBytes: r.size, schemaVersion: 3, owner: { kind: "app", live: r.phase === "running", controllable: true } },
-  project: r.project, locked: r.locked, startUrl: r.startUrl, durationMs: 1000 * (i + 1), canResume: r.canResume,
+  project: r.project, locked: r.locked, startUrl: r.startUrl, durationMs: 1000 * (i + 1), canResume: r.canResume, endReason: (r as { endReason?: string }).endReason ?? null,
 }));
 export function managementFixture() {
   const core = new MockCore();

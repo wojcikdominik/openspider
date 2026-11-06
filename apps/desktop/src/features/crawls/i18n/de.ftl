@@ -72,6 +72,7 @@ crawls-phase-idle = Bereit
 crawls-phase-running = Läuft
 crawls-phase-paused = Pausiert
 crawls-phase-completed = Abgeschlossen
+crawls-phase-completed-stopped = Abgeschlossen (gestoppt)
 crawls-phase-incomplete = Unterbrochen
 crawls-phase-failed = Fehlgeschlagen
 crawls-repair-result = Ergebnis des Reparaturversuchs

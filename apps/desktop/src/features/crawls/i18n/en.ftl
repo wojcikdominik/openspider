@@ -72,6 +72,7 @@ crawls-phase-idle = Idle
 crawls-phase-running = Running
 crawls-phase-paused = Paused
 crawls-phase-completed = Completed
+crawls-phase-completed-stopped = Completed (stopped)
 crawls-phase-incomplete = Incomplete
 crawls-phase-failed = Failed
 crawls-repair-result = Repair result
