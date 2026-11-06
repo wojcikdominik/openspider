@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { LOADING, ViewDataSource, type ViewApi } from "./ViewDataSource";
+import { IpcError, localError } from "../ipc/errors";
 import type { ViewHandle } from "../ipc/gen/ViewHandle";
 import type { RowWindow } from "../ipc/gen/RowWindow";
 import fixture from "../grid/fixtures/fx-ui-basic.json";
@@ -148,4 +149,47 @@ it("requests a detail reload on stale pages and keeps cached rows until replacem
   expect(source.version).toBe(2);
   expect(source.rowKey(0)).toBe(1);
   await source.dispose();
+});
+  // spec: UI-018
+  it("does not jump back when the user leaves the tail while a swap is running (F5)", async () => {
+    const { source, api } = setup();
+    await source.ensureRange(4_999_970, 4_999_999);
+    const release: (() => void)[] = [];
+    const rows = vi.mocked(api.rows).getMockImplementation()!;
+    vi.mocked(api.rows).mockImplementation(args => new Promise(resolve => { release.push(() => resolve(rows(args))); }));
+    const scrolled: number[] = []; source.onScrollTo = row => scrolled.push(row);
+    const swap = source.onViewChanged(fixture.version + 1, 5_000_100);
+    await vi.waitFor(() => expect(release.length).toBeGreaterThan(0));
+    // Mouse wheel upwards: the source learns it at once, before the grid has rendered the new position.
+    source.userScrolled(true);
+    while (release.length) release.shift()!();
+    vi.mocked(api.rows).mockImplementation(rows);
+    await swap;
+    expect(scrolled).toEqual([4_999_970]);
+  });
+  // spec: UI-012
+  it("resolves a range through the core, retries a stale answer and reports a missing command as unavailable (F3)", async () => {
+    const { source, api } = setup();
+    expect(await source.range(1, 2)).toBeUndefined();
+    const answer = { viewId: fixture.viewId, version: 1, fromRow: 0, toRow: 1, total: 2, keys: [1, 2], all: false };
+    const range = vi.fn().mockRejectedValueOnce(new IpcError(localError("Stale", "err-stale"))).mockResolvedValue(answer);
+    (api as { range?: unknown }).range = range;
+    await expect(source.range(1, 2)).resolves.toEqual(answer);
+    expect(range).toHaveBeenCalledTimes(2);
+    range.mockRejectedValueOnce(new IpcError(localError("NotFound", "err-unknown-command")));
+    await expect(source.range(1, 2)).resolves.toBeUndefined();
+  });
+// spec: UI-018
+it("a selected row holds the table at the bottom until the next scroll gesture", async () => {
+  const { source } = setup();
+  const scrolled: number[] = []; source.onScrollTo = row => scrolled.push(row);
+  await source.ensureRange(4_999_970, 4_999_999);
+  source.holdPosition();
+  await source.ensureRange(4_999_970, 4_999_999);
+  await source.onViewChanged(fixture.version + 1, 5_000_010);
+  expect(scrolled.at(-1)).toBe(4_999_970);
+  source.userScrolled(false);
+  await source.ensureRange(4_999_980, 5_000_009);
+  await source.onViewChanged(fixture.version + 2, 5_000_020);
+  expect(scrolled.at(-1)).toBe(4_999_990);
 });

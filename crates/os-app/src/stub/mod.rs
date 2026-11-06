@@ -39,6 +39,7 @@ pub fn registry(original: Registry, config: &AppConfig) -> Registry {
             "view.update" => update,
             "view.rows" => rows,
             "view.locate" => locate,
+            "view.range" => range,
             "view.copy" => copy,
             "view.close" => close,
             _ => original.get(meta.name).expect("registered command").1,
@@ -279,6 +280,36 @@ fn locate(app: &App, ctx: CallCtx, args: Value) -> BoxFuture<'_, CmdResult> {
                 .contains(&args.url_id)
                 .then(|| position(&v, args.url_id as u64)),
         )
+    })
+}
+fn range(app: &App, ctx: CallCtx, args: Value) -> BoxFuture<'_, CmdResult> {
+    Box::pin(async move {
+        let args: RangeArgs = parse(args)?;
+        let v = get(app, &ctx, &args.view_id)?;
+        let row = |id: i64| {
+            (1..=TOTAL as i64)
+                .contains(&id)
+                .then(|| position(&v, id as u64))
+        };
+        let (from_row, to_row) = (row(args.from), row(args.to));
+        let all = from_row
+            .zip(to_row)
+            .is_some_and(|(a, b)| crate::commands::view::range_covers_large(a, b, TOTAL));
+        let keys = match (from_row, to_row) {
+            (Some(a), Some(b)) if !all => {
+                (a.min(b)..=a.max(b)).map(|r| key(&v, r) as i64).collect()
+            }
+            _ => Vec::new(),
+        };
+        encode(KeyRange {
+            view_id: args.view_id,
+            version: v.version,
+            from_row,
+            to_row,
+            total: TOTAL,
+            keys,
+            all,
+        })
     })
 }
 fn close(app: &App, ctx: CallCtx, args: Value) -> BoxFuture<'_, CmdResult> {

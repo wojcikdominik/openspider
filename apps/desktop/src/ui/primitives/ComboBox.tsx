@@ -95,7 +95,8 @@ export function ComboBox({ label, options, selected, onSelect, formatCount = (n)
           <ChevronDown size={14} aria-hidden />
         </RacButton>
       </div>
-      <Popover className="os-popover" triggerRef={root} isNonModal isOpen={open} onOpenChange={next => { if (!next) close(); }}>
+      {/* M2-N32: the option list exists only while open; a closed filter box costs no per-option work (counts, badges). */}
+      {open && <Popover className="os-popover" triggerRef={root} isNonModal isOpen={open} onOpenChange={next => { if (!next) close(); }}>
         <div id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} className="os-listbox" onMouseDown={event => event.preventDefault()}>
           {filtered.map(o => (
             <div key={o.id} id={optionId(o.id)} role="option" aria-selected={o.id === selected} aria-disabled={o.isDisabled || undefined}
@@ -107,7 +108,7 @@ export function ComboBox({ label, options, selected, onSelect, formatCount = (n)
             </div>
           ))}
         </div>
-      </Popover>
+      </Popover>}
     </div>
   );
 }

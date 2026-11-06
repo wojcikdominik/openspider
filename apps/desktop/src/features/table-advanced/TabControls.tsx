@@ -66,11 +66,16 @@ export function TabContextMenuHost({ entriesFor, label, children, className }: {
   </div>;
 }
 
-/** „Tabs konfigurieren“ (UI-004 [P1]): visibility checkbox and up/down per tab; OK applies, Cancel discards. */
-export function TabsConfigDialog({ isOpen, onOpenChange, layout, label, onApply }: {
+type TabsConfigDialogProps = {
   isOpen: boolean; onOpenChange: (open: boolean) => void; layout: TabLayout; label: (id: string) => string;
   onApply: (order: string[], hidden: string[]) => void;
-}) {
+};
+/** „Tabs konfigurieren“ (UI-004 [P1]): visibility checkbox and up/down per tab; OK applies, Cancel discards.
+ * A closed dialog is not rendered (M2-N32): tab clicks and live ticks of the owning bar do not render it. */
+export function TabsConfigDialog(props: TabsConfigDialogProps) {
+  return props.isOpen ? <OpenTabsConfigDialog {...props} /> : null;
+}
+function OpenTabsConfigDialog({ isOpen, onOpenChange, layout, label, onApply }: TabsConfigDialogProps) {
   const t = useT();
   const [order, setOrder] = useState(layout.order); const [hidden, setHidden] = useState(layout.hidden);
   useEffect(() => { if (isOpen) { setOrder(layout.order); setHidden(layout.hidden); } }, [isOpen]);

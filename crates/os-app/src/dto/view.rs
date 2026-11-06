@@ -542,6 +542,38 @@ pub struct LocateArgs {
     pub url_id: i64,
 }
 
+/// Argumente von `view.range`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RangeArgs {
+    /// View.
+    pub view_id: String,
+    /// URL am Anker der Bereichsauswahl.
+    pub from: i64,
+    /// URL am Ziel der Bereichsauswahl.
+    pub to: i64,
+}
+
+/// Antwort auf `view.range`: der Bereich zwischen zwei URLs aus genau einem Stand der View (UI-012, UI-018).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyRange {
+    /// View.
+    pub view_id: String,
+    /// Stand der View, aus dem der Bereich stammt.
+    pub version: u64,
+    /// Zeile des Ankers; `None`, wenn die URL nicht (mehr) in der View ist.
+    pub from_row: Option<u64>,
+    /// Zeile des Ziels; `None`, wenn die URL nicht (mehr) in der View ist.
+    pub to_row: Option<u64>,
+    /// Zeilen der View in diesem Stand.
+    pub total: u64,
+    /// URL-Kennungen in Tabellenreihenfolge; leer, wenn ein Endpunkt fehlt oder `all` gesetzt ist.
+    pub keys: Vec<i64>,
+    /// Der Bereich umfasst eine große View vollständig: Auswahl „alle“ statt einzelner Kennungen.
+    pub all: bool,
+}
+
 /// Argumente von `view.copy`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

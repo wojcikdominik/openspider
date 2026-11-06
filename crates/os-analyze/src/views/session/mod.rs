@@ -594,6 +594,19 @@ impl ViewSnapshot {
             .ok()
             .and_then(|id| self.view.inverse.locate(id))
     }
+    /// Zeilen dieses Stands.
+    pub fn total(&self) -> u64 {
+        self.view.ids.len() as u64
+    }
+    /// URL-Kennungen der Zeilen `first..=last` dieses Stands (ohne Datenbankzugriff, K-1).
+    pub fn keys(&self, first: u64, last: u64) -> Vec<i64> {
+        let end = last.saturating_add(1).min(self.total()) as usize;
+        let start = (first as usize).min(end);
+        self.view.ids[start..end]
+            .iter()
+            .map(|id| i64::from(*id))
+            .collect()
+    }
 }
 fn query(spec: &SessionSpec) -> ViewQuery {
     let mut q = ViewQuery::new(&spec.tab, &spec.filter);

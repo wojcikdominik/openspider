@@ -1,5 +1,5 @@
 import { Button } from "../../../ui/primitives/Button";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useT } from "../../../i18n";
 import type { PanelKind } from "../../../ipc/gen/PanelKind";
 import { openExport } from "../../export/model";
@@ -9,7 +9,8 @@ export function tsv(rows: readonly (readonly (string | number)[])[]): string {
   return rows.map(row => row.map(cell => String(cell).replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n");
 }
 
-export function PanelActions({ which, rows }: { which: PanelKind; rows: (string | number)[][] }) {
+/** Memoized (M2-N32): callers pass memoized rows, so live ticks that do not change them skip the buttons. */
+export const PanelActions = memo(function PanelActions({ which, rows }: { which: PanelKind; rows: (string | number)[][] }) {
   const t = useT();
   const [error, setError] = useState<unknown>();
   async function copy() {
@@ -21,4 +22,4 @@ export function PanelActions({ which, rows }: { which: PanelKind; rows: (string 
     <div className="os-sidebar-actions" data-sidebar-export-which={which}><Button variant="tool" onPress={() => void copy()}>{t("sidebar-copy")}</Button><Button variant="tool" onPress={save}>{t("sidebar-export")}</Button></div>
     <QueryFeedback error={error} />
   </>;
-}
+});

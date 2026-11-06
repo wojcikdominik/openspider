@@ -1414,6 +1414,90 @@ fn locate<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<
         }
     })
 }
+/// Ab dieser Größe wird eine vollständig überdeckte View als „alle“ ausgewählt statt als Liste von Kennungen
+/// (gleiche Grenze wie der Zeilencache des Clients, UI-144).
+const RANGE_ALL_ABOVE: u64 = 20_000;
+pub(crate) fn range_covers_large(from_row: u64, to_row: u64, total: u64) -> bool {
+    total > RANGE_ALL_ABOVE && from_row.min(to_row) == 0 && from_row.max(to_row) == total - 1
+}
+/// Wie oft `view.range` neu ansetzt, wenn die Pflege die View zwischen Lesen der Version und des Stands weiterschaltet.
+/// Beides liegt Mikrosekunden auseinander; die Wiederholung kostet keine Rundreise.
+const RANGE_RETRIES: usize = 16;
+/// `view.range`: Bereichsauswahl im laufenden Crawl (UI-012, UI-018). Anker und Ziel bleiben URL-Kennungen; Position
+/// und Kennungen dazwischen stammen aus einem einzigen Stand, unabhängig davon, wie schnell die Version wechselt.
+fn range<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a, CmdResult> {
+    Box::pin(async move {
+        if let Some(result) = super::compare::change_view(app, &ctx, "view.range", &args).await {
+            return result;
+        }
+        let args: RangeArgs = parse_args(args)?;
+        let mut attempt = 0;
+        let (version, from_row, to_row, total, keys) = loop {
+            let v = get(app, &ctx, &args.view_id)?;
+            let result = if let Some(tab) = &v.tab {
+                tab.range(app, v.version, args.from, args.to)
+                    .await
+                    .map(|(a, b, total, keys)| (v.version, a, b, total, keys))
+            } else {
+                detail_range(app, &v, &args).await
+            };
+            match result {
+                Err(e) if e.code == ErrorCode::Stale && attempt < RANGE_RETRIES => attempt += 1,
+                other => break other?,
+            }
+        };
+        let all =
+            matches!((from_row, to_row), (Some(a), Some(b)) if range_covers_large(a, b, total));
+        to_json(&KeyRange {
+            view_id: args.view_id,
+            version,
+            from_row,
+            to_row,
+            total,
+            keys,
+            all,
+        })
+    })
+}
+/// Detail- und Linktabellen: materialisierte Link-IDs oder ein Lauf über die Seiten des Stands (wie `view.locate`).
+async fn detail_range(
+    app: &App,
+    v: &OpenView,
+    args: &RangeArgs,
+) -> Result<(u64, Option<u64>, Option<u64>, u64, Vec<i64>), CmdError> {
+    let ids = if let Some(links) = &v.links {
+        link_ids(app, v, links).await?.as_ref().clone()
+    } else {
+        let mut ids = Vec::new();
+        loop {
+            let p = page(
+                app,
+                &v.session,
+                v.spec.clone(),
+                v.columns.clone(),
+                ids.len() as u64,
+                500,
+                Some(v.version),
+            )
+            .await?;
+            let done = p.keys.is_empty() || ids.len() as u64 + p.keys.len() as u64 >= p.total;
+            ids.extend(p.keys);
+            if done {
+                break ids;
+            }
+        }
+    };
+    let position = |id: i64| ids.iter().position(|k| *k == id).map(|i| i as u64);
+    let (from_row, to_row) = (position(args.from), position(args.to));
+    let total = ids.len() as u64;
+    let keys = match (from_row, to_row) {
+        (Some(a), Some(b)) if !range_covers_large(a, b, total) => {
+            ids[a.min(b) as usize..=a.max(b) as usize].to_vec()
+        }
+        _ => Vec::new(),
+    };
+    Ok((v.version, from_row, to_row, total, keys))
+}
 fn copy<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a, CmdResult> {
     Box::pin(async move {
         if let Some(result) = super::compare::change_copy(app, &ctx, &args).await {
@@ -1473,6 +1557,7 @@ pub fn register(r: &mut Registry) {
         ("view.update", "ViewUpdateArgs", "ViewHandle", update),
         ("view.rows", "RowsArgs", "RowWindow", rows),
         ("view.locate", "LocateArgs", "number | null", locate),
+        ("view.range", "RangeArgs", "KeyRange", range),
         ("view.copy", "CopyArgs", "CopyResult", copy),
         ("view.close", "ViewCloseArgs", "void", close),
     ] {

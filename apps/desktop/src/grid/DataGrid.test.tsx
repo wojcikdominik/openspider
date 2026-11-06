@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { DataGrid, defaultColumns, type DataGridProps, type GridController } from "./DataGrid";
@@ -108,4 +108,72 @@ it("handles an empty fixture and cancels a pending row selection on unmount", as
     rowKeys: [1, 2], cells: [fixture.row, [2, ...fixture.row.slice(1)]] }));
   expect(pending.props.onSelectionChange).not.toHaveBeenCalled();
   await pending.source.dispose();
+});
+// spec: UI-145
+// spec: UI-143
+it("repaints the canvas and the accessibility rows only when their content changes (M2-N32)", async () => {
+  const { props, source } = setup();
+  let fills = 0;
+  const state = new Map<PropertyKey, unknown>();
+  const context = new Proxy({}, {
+    get: (_, key) => state.has(key) ? state.get(key) : key === "fillText" ? () => { fills++; } : () => undefined,
+    set: (_, key, value) => { state.set(key, value); return true; },
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as unknown as CanvasRenderingContext2D);
+  const mounted = render(<DataGrid {...props} />);
+  await waitFor(() => expect(mounted.getAllByRole("gridcell").some(c => c.textContent === "12.345")).toBe(true));
+  await act(async () => { await new Promise(r => requestAnimationFrame(r)); });
+  const painted = fills;
+  expect(painted).toBeGreaterThan(0);
+  const firstRow = mounted.getAllByRole("row")[1]!;
+  const cell = firstRow.querySelector("span[hidden]")!;
+  // A parent re-render with equal content (new theme object, new callbacks) neither repaints nor rebuilds rows.
+  mounted.rerender(<DataGrid {...props} theme={{ ...props.theme, tokens: { ...props.theme.tokens } }} onError={vi.fn()} />);
+  expect(fills).toBe(painted);
+  expect(mounted.getAllByRole("row")[1]!.querySelector("span[hidden]")).toBe(cell);
+  // Changed content repaints: another selection and another theme colour.
+  mounted.rerender(<DataGrid {...props} selection={SelectionModel.empty().select(2)} />);
+  expect(fills).toBeGreaterThan(painted);
+  const reselected = fills;
+  mounted.rerender(<DataGrid {...props} selection={SelectionModel.empty().select(2)} theme={{ ...props.theme, tokens: resolveTokens("dark", "#2f855a") }} />);
+  expect(fills).toBeGreaterThan(reselected);
+  mounted.unmount(); await source.dispose();
+});
+// spec: UI-012
+// spec: UI-018
+it("keeps a Shift range when the view version changes while the range is resolved, also from Shift+arrow keys (F3)", async () => {
+  const { props, source } = setup();
+  let answer: (value: Awaited<ReturnType<NonNullable<typeof source.api.range>>>) => void = () => undefined;
+  const range = vi.fn(() => new Promise<Awaited<ReturnType<NonNullable<typeof source.api.range>>>>(resolve => { answer = resolve; }));
+  (source.api as { range?: unknown }).range = range;
+  const mounted = render(<DataGrid {...props} />);
+  await waitFor(() => expect(mounted.getAllByRole("gridcell").some(c => c.textContent === "12.345")).toBe(true));
+  fireEvent.keyDown(mounted.getByRole("grid"), { key: "ArrowDown", shiftKey: true });
+  await waitFor(() => expect(range).toHaveBeenCalledWith({ viewId: source.viewId, from: 1, to: 2 }));
+  await act(async () => { await source.onViewChanged(source.version + 1, source.total + 10); });
+  await act(async () => { answer({ viewId: source.viewId, version: source.version, fromRow: 0, toRow: 1, total: source.total, keys: [1, 2], all: false }); });
+  await waitFor(() => expect(vi.mocked(props.onSelectionChange).mock.lastCall?.[0].value).toEqual({ kind: "ids", ids: [1, 2] }));
+  expect(vi.mocked(props.onSelectionChange).mock.lastCall![0].focus).toBe(2);
+  expect(props.onError).not.toHaveBeenCalled();
+  mounted.unmount(); await source.dispose();
+});
+// spec: UI-012
+it("Shift+arrow keys in quick succession continue from the keyboard row while earlier ranges are answered (F3)", async () => {
+  const { props, source } = setup();
+  const answers: (() => void)[] = [];
+  (source.api as { range?: unknown }).range = vi.fn((args: { from: number; to: number }) => new Promise(resolve => { answers.push(() => resolve({ viewId: source.viewId, version: source.version, fromRow: args.from - 1, toRow: args.to - 1, total: source.total,
+    keys: Array.from({ length: args.to - args.from + 1 }, (_, i) => args.from + i), all: false })); }));
+  const Owner = () => { const [selection, setSelection] = useState(props.selection); return <DataGrid {...props} selection={selection} onSelectionChange={setSelection} />; };
+  const mounted = render(<Owner />);
+  await waitFor(() => expect(mounted.getAllByRole("gridcell").some(c => c.textContent === "12.345")).toBe(true));
+  const grid = mounted.getByRole("grid");
+  for (let press = 0; press < 3; press++) {
+    fireEvent.keyDown(grid, { key: "ArrowDown", shiftKey: true });
+    await waitFor(() => expect(answers.length).toBe(press + 1));
+    // An older answer arrives while the next key is under way: it must not move the keyboard row back.
+    if (press === 1) { await act(async () => { answers[0](); }); await act(async () => { await source.onViewChanged(source.version + 1, source.total); }); }
+  }
+  await act(async () => { answers.forEach(answer => answer()); });
+  await waitFor(() => expect(mounted.getAllByRole("row").filter(r => r.getAttribute("aria-selected") === "true")).toHaveLength(4));
+  mounted.unmount(); await source.dispose();
 });

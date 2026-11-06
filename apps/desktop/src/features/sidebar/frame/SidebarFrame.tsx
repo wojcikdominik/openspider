@@ -47,12 +47,16 @@ export function SidebarFrame({ panels = Object.values(modules).flatMap(m => m.pa
   const hide = (ids: string[]) => setLayout(l => ({ ...l, hidden: [...new Set([...l.hidden, ...ids.filter(id => id !== MANDATORY)])] }));
   const reset = () => setLayout(l => ({ ...l, order: [], hidden: [], selected: MANDATORY }));
   const toggle = useCallback((id: string) => setLayout(l => ({ ...l, collapsed: l.collapsed.includes(id) ? l.collapsed.filter(x => x !== id) : [...l.collapsed, id] })), [setLayout]);
-  const staleSteps = useMemo(() => analysis.data?.steps.filter(s => s.stale).map(s => s.step) ?? [], [analysis.data?.steps]);
+  // UI-145/UI-018 (M2-N32): every analysis poll brings new step objects; memoize by content so the memoized Overview
+  // sections keep their props while the stale steps stay the same.
+  const staleKey = JSON.stringify(analysis.data?.steps.filter(s => s.stale).map(s => s.step) ?? []);
+  const staleSteps = useMemo(() => JSON.parse(staleKey) as string[], [staleKey]);
+  const panelRows = useMemo(() => overviewData ? overviewRows(overviewData, t) : undefined, [overviewData, t]);
   const startAnalysis = useCallback(() => void controls.start(), [controls.start]);
   const needsAnalysis = !!analysis.data?.steps.some(s => s.stale || s.state === "pending") || !!overview.data?.tabs.some(tab => tab.filters.some(f => f.state.kind === "needsCrawlAnalysis"));
   const content = (id: string) => {
     if (id === "issues") return <Issues needsAnalysis={needsAnalysis} />;
-    if (id === "overview") return <><QueryFeedback error={overview.error} loading={!!crawl && overview.isPending} retry={() => void overview.refetch()} />{!!crawl && overview.isPending && <CountProgress />}{!crawl && <p>{t("sidebar-no-crawl")}</p>}{overviewData && <><OverviewAge ageMs={overviewData.ageMs} receivedAt={overview.dataUpdatedAt} /><PanelActions which="overview" rows={overviewRows(overviewData, t)} /><Overview data={overviewData} staleSteps={staleSteps} collapsed={layout.collapsed} toggle={toggle} startAnalysis={startAnalysis} /></>}</>;
+    if (id === "overview") return <><QueryFeedback error={overview.error} loading={!!crawl && overview.isPending} retry={() => void overview.refetch()} />{!!crawl && overview.isPending && <CountProgress />}{!crawl && <p>{t("sidebar-no-crawl")}</p>}{overviewData && <><OverviewAge ageMs={overviewData.ageMs} receivedAt={overview.dataUpdatedAt} /><PanelActions which="overview" rows={panelRows!} /><Overview data={overviewData} staleSteps={staleSteps} collapsed={layout.collapsed} toggle={toggle} startAnalysis={startAnalysis} /></>}</>;
     const Panel = panels.find(p => p.id === id)?.Component;
     return Panel ? <Panel /> : <p>{t("sidebar-panel-unavailable")}</p>;
   };

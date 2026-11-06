@@ -252,6 +252,12 @@
     "longRunning": false
   },
   {
+    "name": "view.range",
+    "args": "RangeArgs",
+    "ret": "KeyRange",
+    "longRunning": false
+  },
+  {
     "name": "view.copy",
     "args": "CopyArgs",
     "ret": "CopyResult",

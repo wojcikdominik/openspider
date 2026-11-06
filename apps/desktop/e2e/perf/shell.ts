@@ -1,16 +1,19 @@
 import "../../src/main";
-import { client } from "../../src/ipc/client";
+import { eventBus } from "../../src/ipc/events";
 import { config } from "../../src/ipc/config";
 import { crawls } from "../../src/ipc/crawls";
 import { sidebar } from "../../src/ipc/sidebar";
 import { crawl } from "../../src/ipc/crawl";
 import { useSession } from "../../src/state/session";
 import { recordFrames, paint } from "../../src/grid/recorder";
+// B4-LIVEDETAIL (additiv): Messrezept `window.liveDetail` für Browser und nativen Release-Build.
+import "./livedetail";
 const ticks: { at: number; phase?: string }[] = [];
 const clicks: number[] = [];
-client.subscribe("main", (event) => {
-  if (event.kind === "tick")
-    ticks.push({ at: performance.now(), phase: event.tick.crawl?.phase });
+// B4-LIVEDETAIL: read ticks from the window's bus. There is exactly one event channel per window (`events.subscribe`);
+// a second subscription replaced the app's channel in the native build, and the session then received no ticks.
+eventBus.on("tick", (tick) => {
+  ticks.push({ at: performance.now(), phase: tick.crawl?.phase });
 });
 document.addEventListener(
   "click",

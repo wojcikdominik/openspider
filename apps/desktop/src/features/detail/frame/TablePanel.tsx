@@ -105,13 +105,13 @@ export function TablePanel(props: TablePanelProps) {
     ...defaults.filter(c => !columnLayout.some(saved => saved.key === c.key)),
   ];
   const changed = useSession(s => source ? s.views[source.viewId] : undefined);
-  const revision = useSession(s => `${s.countsVersion}:${s.sidebarVersion}`);
+  // UI-145/UI-143 (M2-N32): the data revision is read when the refresh timer fires, not subscribed for rendering;
+  // a live tick no longer re-renders every visible detail table (and its grid) only to update a ref.
   const appliedRevision = useRef<{ source: ViewDataSource; revision: string } | undefined>(undefined);
-  const latestRevision = useRef(revision);
-  latestRevision.current = revision;
   useEffect(() => {
     if (!source || !visible) return;
     let live = true;
+    const latestRevision = { get current() { const s = useSession.getState(); return `${s.countsVersion}:${s.sidebarVersion}`; } };
     if (appliedRevision.current?.source !== source) appliedRevision.current = { source, revision: latestRevision.current };
     let applied = appliedRevision.current.revision;
     let pending = false;

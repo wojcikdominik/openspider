@@ -607,6 +607,28 @@ impl TabView {
         Ok(snapshot.locate(UrlId(url_id)))
     }
 
+    /// Bereich zwischen zwei URLs aus genau einem veröffentlichten Stand (UI-012, UI-018): Der Live-Crawl kann die
+    /// Version nicht zwischen dem Nachschlagen der Endpunkte und dem Lesen der Kennungen ändern.
+    pub async fn range(
+        &self,
+        app: &App,
+        version: u64,
+        from: i64,
+        to: i64,
+    ) -> Result<(Option<u64>, Option<u64>, u64, Vec<i64>), CmdError> {
+        let (snapshot, _) = self.snapshot(app, version).await?;
+        let (from_row, to_row) = (snapshot.locate(UrlId(from)), snapshot.locate(UrlId(to)));
+        let keys = match (from_row, to_row) {
+            (Some(a), Some(b))
+                if !crate::commands::view::range_covers_large(a, b, snapshot.total()) =>
+            {
+                snapshot.keys(a.min(b), a.max(b))
+            }
+            _ => Vec::new(),
+        };
+        Ok((from_row, to_row, snapshot.total(), keys))
+    }
+
     fn announce(&self, app: &App, version: u64, total: u64) {
         lock(&shared(app).changed).push(ViewChanged {
             view_id: lock(&self.view_id).clone(),

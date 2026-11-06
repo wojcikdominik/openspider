@@ -21,7 +21,12 @@ export interface DialogProps {
 const slot = (s: Slot | undefined, close: () => void): ReactNode => (typeof s === "function" ? s(close) : s);
 
 /** Modaler In-App-Dialog: Fokusfalle, Esc schließt, Fokus kehrt zum Auslöser zurück (RAC). */
-export function Dialog({ title, isOpen, onOpenChange, children, footer, description, size = "medium", isDismissable = true }: DialogProps) {
+export function Dialog(props: DialogProps) {
+  // M2-N32 (UI-145/UI-143): a closed dialog renders nothing, so owners that re-render with every live tick (upper table,
+  // header, detail frame) do not run the overlay machinery of their closed dialogs. Focus still returns on close.
+  return props.isOpen ? <OpenDialog {...props} /> : null;
+}
+function OpenDialog({ title, isOpen, onOpenChange, children, footer, description, size = "medium", isDismissable = true }: DialogProps) {
   return (
     <ModalOverlay className="os-overlay" isOpen={isOpen} onOpenChange={onOpenChange} isDismissable={isDismissable}>
       <Modal className={cx("os-modal", `os-modal-${size}`)}>

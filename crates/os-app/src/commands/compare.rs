@@ -943,6 +943,38 @@ pub async fn change_view(
                     }
                 }
             }
+            "view.range" => {
+                let args: RangeArgs = parse_args(args)?;
+                let view = active
+                    .change_views
+                    .get(&args.view_id)
+                    .ok_or_else(|| CmdError::new(ErrorCode::NotFound, "err-view-not-found"))?;
+                let mut ids = Vec::new();
+                loop {
+                    let page = change_page(active, view, &["Address".into()], ids.len() as u64)?;
+                    let done = page.row_keys.is_empty()
+                        || ids.len() as u64 + page.row_keys.len() as u64 >= page.total;
+                    ids.extend(page.row_keys.iter().map(|id| id.0));
+                    if done {
+                        break;
+                    }
+                }
+                let position = |id: i64| ids.iter().position(|k| *k == id).map(|i| i as u64);
+                let (from_row, to_row) = (position(args.from), position(args.to));
+                let keys = match (from_row, to_row) {
+                    (Some(a), Some(b)) => ids[a.min(b) as usize..=a.max(b) as usize].to_vec(),
+                    _ => Vec::new(),
+                };
+                to_json(&KeyRange {
+                    view_id: args.view_id,
+                    version: view.version,
+                    from_row,
+                    to_row,
+                    total: ids.len() as u64,
+                    keys,
+                    all: false,
+                })
+            }
             "view.close" => {
                 let args: ViewCloseArgs = parse_args(args)?;
                 active

@@ -8,7 +8,8 @@ export const CRAWL_PATH_COLUMNS = ["Crawl Depth", "Address", "Anchor", "Link Typ
 const HIDDEN_COLUMNS = ["Target Address", "Step", "Status Code"];
 export function CrawlPath(props: DetailPanelProps) {
   const t = useT(); const [sort, setSort] = useState<SortKey[]>([]);
-  return <>{props.listMode && <Banner>{t("detail-direct-upload")}</Banner>}
+  // UI-050: the grid fills its parent; a dialog body has no height of its own, so this container provides it.
+  return <div className="os-crawl-path">{props.listMode && <Banner>{t("detail-direct-upload")}</Banner>}
     <TablePanel {...props} title={t("detail-tab-crawlPath")} pinAddress={false} columns={CRAWL_PATH_COLUMNS} hiddenColumns={HIDDEN_COLUMNS} columnTitles={{ "Crawl Depth": "Depth", Anchor: "Anchor Text" }}
-      spec={{ kind: "detail", detail: "crawlPath", urlIds: props.selection.urlIds, params: {}, sort }} onSort={setSort} /></>;
+      spec={{ kind: "detail", detail: "crawlPath", urlIds: props.selection.urlIds, params: {}, sort }} onSort={setSort} /></div>;
 }

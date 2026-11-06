@@ -484,6 +484,7 @@ Spalte „Quelle“: **M1** = existiert laut M1 3.6 (Funktion in Klammern), **K-
 | `view.update` | `viewId`, `ViewSpec` | `ViewHandle` (neue Version, ggf. `Building` + `OpHandle`) | UI-010, UI-011, UI-141 | K-1 |
 | `view.rows` | `viewId, version, offset, limit (≤ 500), columns` | `RowWindow` | UI-140, UI-142 | K-1 |
 | `view.locate` | `viewId, urlId` | `Option<u64>` (Zeilenindex) | UI-004, UI-018, UI-031 | K-1 |
+| `view.range` | `viewId, from, to` (URL-Kennungen) | `KeyRange` (Stand, Zeilen der Endpunkte, Kennungen dazwischen bzw. „alle“) | UI-012, UI-018 (B4-LIVEDETAIL) | K-1 |
 | `view.copy` | `viewId, Selection, columns, withHeader` | `CopyResult { rows, bytes }` (Zwischenablage im Kern); > 1 000 000 Zellen → `Unsupported` (`err-copy-too-large`, UI bietet Export an) | UI-012 | K-1, neu |
 | `view.close` | `viewId` | – | UI-142 (Freigabe; zusätzlich 60 s Leerlauf im Kern) | K-1 |
 | `search.parse` | `text` | `RuleNode \| CmdError(position)` | UI-011 [P1] | K-6 |
