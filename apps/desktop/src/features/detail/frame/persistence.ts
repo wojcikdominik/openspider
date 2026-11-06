@@ -12,10 +12,10 @@ export function updateDetailState(update: (state: State) => State): Promise<UiSt
   return task;
 }
 /** Timers survive a panel unmount, so switching tabs does not discard a just-edited layout. */
-export function scheduleDetailState(key: string, update: (state: State) => State, onError: (error: unknown) => void): void {
+export function scheduleDetailState(key: string, update: (state: State) => State, onError: (error: unknown) => void, onSaved?: () => void): void {
   clearTimeout(pending.get(key));
   pending.set(key, setTimeout(() => {
     pending.delete(key);
-    void updateDetailState(update).catch(onError);
+    void updateDetailState(update).then(onSaved).catch(onError);
   }, 1000));
 }

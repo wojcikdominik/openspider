@@ -292,7 +292,7 @@ async fn columns_follow_the_spec_and_unavailable_functions_are_empty_and_hidden(
     assert_eq!(shown, Value::Text(stored));
 }
 
-// spec: ONPAGE-142
+// spec: ONPAGE-142 [M2]
 #[tokio::test]
 async fn hash_column_is_empty_when_hash_storage_is_off() {
     let mut crawl_cfg = CrawlConfig::default();
@@ -628,7 +628,7 @@ async fn exact_duplicates_need_hash_storage_and_the_exact_switch() {
     assert!(hex32(&cell(&fx, &all, "/a.html", "Hash")));
 }
 
-// spec: ONPAGE-142 [P1]
+// spec: ONPAGE-142 [P1] [M2]
 #[test]
 fn pdf_row_has_word_count_and_readability() {
     let facts: serde_json::Value = serde_json::from_str(include_str!(

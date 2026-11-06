@@ -301,7 +301,7 @@ fn pause_during_flag_updates_resumes_or_cancels_with_atomic_rollback() {
 
 // spec: TECH-031
 #[test]
-#[ignore = "M2: P2 CRAWL-093"]
+#[ignore = "Klärung K2-32: P2 CRAWL-093 (Respect Next/Prev)"]
 fn respect_next_prev_crawls_and_hides_following_pages_except_in_pagination() {
     // Full integration belongs to P2; the tab exception is covered above.
     let (_dir, file) = fixture();

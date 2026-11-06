@@ -373,7 +373,9 @@ pub fn selected_crawl_paths(
     let mut total = 0u64;
     for id in req.url_ids {
         let page = os_store::queries::detail_ext::path_rows(file, id.0)?;
-        for row in page.rows {
+        // UI-050: the view reads from the start URL to the selected URL. Only the exported report (OUT-023, own code path)
+        // lists the target first; `Step` keeps its meaning (0 = target) in both.
+        for row in page.rows.into_iter().rev() {
             if total >= req.offset && rows.len() < req.limit.min(500) as usize {
                 rows.push(row);
             }

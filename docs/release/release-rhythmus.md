@@ -16,7 +16,7 @@ Beschlossen am 04.11.2026 (Nutzerwunsch, Termine vom Nutzer bestätigt): Ab der 
 
 ## Sprache der Release-Notes
 
-Nutzerentscheidung 05.11.2026: Die Notes (`docs/release/notes/<Version>.md`) sind auf Englisch, danach folgt ein kurzer deutscher Block unter `### Deutsch` (zwei bis vier Punkte, nur das Wichtigste). Erlaubt sind höchstens Überschriften der Ebene 3 (`notes.mjs --check`). Der Download-Kasten des Release-Texts ist unverändert zweisprachig, die Überschrift davor legt OUT-261 fest.
+Nutzerentscheidung 05.11.2026, ergänzt 06.11.2026: Die Notes (`docs/release/notes/<Version>.md`) sind auf Englisch, danach folgt unter `### Deutsch` dieselbe Liste vollständig auf Deutsch (nicht gekürzt; der Nutzer verwendet sie für Ankündigungen, z. B. LinkedIn). Erlaubt sind höchstens Überschriften der Ebene 3 (`notes.mjs --check`). Der Download-Kasten des Release-Texts ist unverändert zweisprachig, die Überschrift davor legt OUT-261 fest.
 
 ## Versionen
 

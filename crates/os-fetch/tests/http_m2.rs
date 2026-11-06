@@ -247,7 +247,7 @@ async fn headers_are_validated_merged_scoped_and_language_is_opt_in() {
 }
 
 // spec: CRAWL-075
-// spec: CRAWL-140 [P1]
+// spec: CRAWL-140 [P1] [M2]
 // spec: CRAWL-042 [M2]
 #[tokio::test]
 async fn limits_apply_during_receipt_to_decoded_body_and_media() {
@@ -375,7 +375,7 @@ async fn robots_gate_follows_synthetic_hsts_redirect_and_applies_https_rules() {
 
 // spec: CRAWL-011
 // spec: CRAWL-075
-// spec: CRAWL-140 [P1]
+// spec: CRAWL-140 [P1] [M2]
 #[tokio::test]
 async fn compressed_streams_with_large_or_unknown_wire_length_are_bounded() {
     use std::io::Write;

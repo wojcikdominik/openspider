@@ -3756,7 +3756,6 @@
       "description": "Extraktion."
     },
     "generator": {
-      "default": "openspider 0.1.0",
       "description": "Erzeuger, z. B. `openspider 0.1.0`.",
       "type": "string"
     },

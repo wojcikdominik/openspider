@@ -329,12 +329,13 @@ async fn short(app: &App, args: serde_json::Value, action: &'static str) -> CmdR
     let selected = ids(raw)?;
     if action == "crawls.lock" || action == "crawls.unlock" {
         let locked = action == "crawls.lock";
+        let now = app.config().clock.now();
         admin(app, move |m| {
             for id in &selected {
                 m.get(id).map_err(|e| store_error(&e))?;
             }
             for id in &selected {
-                m.lock(id, locked).map_err(|e| store_error(&e))?;
+                m.lock(id, locked, now).map_err(|e| store_error(&e))?;
             }
             Ok(())
         })

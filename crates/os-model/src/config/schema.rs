@@ -41,6 +41,11 @@ fn build() -> Value {
             ),
         );
     }
+    // Der Standardwert von `generator` ist die Version des schreibenden Programms; im Schema stünde sonst
+    // je Release ein anderer Wert. Die Datei unter docs/spec bleibt dadurch versionsunabhängig.
+    if let Some(node) = property_node_mut(&mut v, "generator") {
+        node.remove("default");
+    }
     for range in INT_RANGES {
         if let Some(node) = property_node_mut(&mut v, range.path) {
             node.insert("minimum".into(), json!(range.min));

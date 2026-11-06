@@ -4261,6 +4261,10 @@
  },
  {
   "id": "M2-Q02",
+  "merged_via": {
+   "commit": "5c70de74",
+   "subject": "m2: Merge base-4r (Fable N06/Q02 freigegeben)"
+  },
   "kind": "package",
   "model": "sonnet",
   "title": "Paritätslauf M2: os-parity run --all über alte und neue Sites, Klassifizierung jeder Abweichung, REF-FREE-Einträge, evidence.toml (M2-B02), Verifikation M2-S04/M2-S06, Bericht",
@@ -4350,6 +4354,10 @@
  },
  {
   "id": "M2-N06",
+  "merged_via": {
+   "commit": "5c70de74",
+   "subject": "m2: Merge base-4r (Fable N06/Q02 freigegeben)"
+  },
   "kind": "package",
   "model": "codex",
   "title": "Paritätsmessung nach Q02: dynamische Folgespalten, Spaltensätze der neuen Referenzversion, Exportaufruf/Dateinamen, verified-Auswertung in os-parity, Ausnahmen-Geltungsbereich (Q02-P01…P06, Q02-E01-Runnerteil)",
@@ -4800,6 +4808,10 @@
  },
  {
   "id": "M2-N15F",
+  "merged_via": {
+   "commit": "62164954",
+   "subject": "m2: Merge N20 (Fable N15F approved, N20 approved mit Auflagen)"
+  },
   "kind": "package",
   "model": "codex",
   "title": "Speicherfreigabe ohne mimalloc",
@@ -4974,6 +4986,10 @@
  },
  {
   "id": "M2-FIXE-PORT",
+  "merged_via": {
+   "commit": "77a22061",
+   "subject": "engine: FIX-E-Port an die M2-Linie anpassen"
+  },
   "kind": "package",
   "model": "opus",
   "title": "Port FIX-E aus der M3-Linie: Pause mit dauerhaftem Commit und WAL-Merge im Hintergrund, Detail- und Overview-Erstantwort, begrenzte Future-Stacks",

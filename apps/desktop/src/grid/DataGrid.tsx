@@ -1,5 +1,5 @@
 import { cellBadge, gridHeaderHeight } from "./theme";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LOADING, type ViewDataSource } from "../data/ViewDataSource";
 import type { ColumnMeta } from "../ipc/gen/ColumnMeta";
 import type { SortKey } from "../ipc/gen/SortKey";
@@ -50,6 +50,24 @@ export function defaultColumns(columns: ColumnMeta[]): ColumnState[] {
   return columns.map(c => ({ key: c.key, width: c.defaultWidth, visible: c.defaultVisible, pinned: c.key === "Row" || c.key === "Address" }));
 }
 
+/**
+ * One row of the hidden accessibility grid. UI-145/UI-143 (M2-N32): props are primitives (column indices, cell texts as
+ * JSON), so a re-render with unchanged row content (live ticks, tab switches, selection elsewhere) skips the row entirely.
+ */
+const A11yRow = memo(function A11yRow({ gridId, row, columns, texts, busy, selected }: {
+  gridId: string; row: number; columns: string; texts: string; busy: boolean; selected: boolean;
+}) {
+  const values = JSON.parse(texts) as string[];
+  return <div role="row" aria-rowindex={row + 2} aria-busy={busy} aria-selected={selected}>
+    {/* UI-144: the name text stays out of layout (WebKit retains text-width data for every distinct laid-out string). */}
+    {(columns ? columns.split(",") : []).map((col, i) => {
+      const id = `${gridId}-${col}-${row}`;
+      return <div role="gridcell" id={id} key={col} aria-colindex={Number(col) + 1} aria-labelledby={`${id}-t`}>
+        <span id={`${id}-t`} hidden>{values[i]}</span></div>;
+    })}
+  </div>;
+});
+
 export function DataGrid(props: DataGridProps) {
   const { source, selection, theme, rowHeight } = props;
   const root = useRef<HTMLDivElement>(null);
@@ -65,6 +83,8 @@ export function DataGrid(props: DataGridProps) {
   const [focus, setFocus] = useState({ col: 0, row: 0 });
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number }>();
   const selectionRequest = useRef(0);
+  /** Ranges on their way: the selection's focus lags behind the row the keyboard is already on. */
+  const rangesInFlight = useRef(0);
   const expectedTop = useRef<number | undefined>(undefined);
   const geometryChanging = useRef(false);
   const wheelRemainder = useRef(0);
@@ -95,7 +115,8 @@ export function DataGrid(props: DataGridProps) {
       element.scrollLeft = left;
       left = element.scrollLeft;
     }
-    setPosition({ row, left });
+    // Bail out when nothing moved: a live total change re-runs this on every tick (one render instead of two).
+    setPosition(old => old.row === row && old.left === left ? old : { row, left });
     setTooltip(undefined);
   };
   const reveal = (row: number, col: number, alignStart = false) => {
@@ -163,7 +184,7 @@ export function DataGrid(props: DataGridProps) {
   useEffect(() => {
     let active = true;
     if (selection.focus !== undefined) void source.locate(selection.focus).then(row => {
-      if (active && row !== null) setFocus(old => ({ col: old.col, row }));
+      if (active && row !== null && !rangesInFlight.current) setFocus(old => ({ col: old.col, row }));
     }).catch(error => latest.current.onError(error));
     return () => { active = false; };
   }, [source, source.version, selection.focus]);
@@ -178,6 +199,7 @@ export function DataGrid(props: DataGridProps) {
       wheelRemainder.current += (event.shiftKey ? 0 : event.deltaY) * factor;
       const rows = Math.trunc(wheelRemainder.current / latest.current.rowHeight);
       wheelRemainder.current -= rows * latest.current.rowHeight;
+      if (rows !== 0) latest.current.source.userScrolled(rows < 0);
       actions.current.move(r.first + rows, (scroller.current?.scrollLeft ?? 0) + horizontal * factor);
     };
     element.addEventListener("wheel", wheel, { passive: false });
@@ -191,14 +213,31 @@ export function DataGrid(props: DataGridProps) {
     const colors = raw === LOADING ? undefined : props.cellColors?.(meta.column.key, raw);
     return colors ? { ...cell, color: colors.text, background: colors.background } : cell;
   };
+  // Cell texts of the header and the visible rows, computed once per render for the canvas and the accessibility rows.
+  const painted = Array.from({ length: count + 1 }, (_, i) => layout.map(c => i === 0
+    ? { text: props.headerTitle?.(c.key) ?? (props.columnTitles?.[c.key] ?? c.key) + (c.sort ? ` ${c.sort === "asc" ? "↑" : "↓"} ${visible.filter(c => c.sort).findIndex(s => s.key === c.key) + 1}` : ""), color: theme.tokens.text, align: "left" as const }
+    : cell(c.index, first + i - 1)));
+  const rowKeys = Array.from({ length: count }, (_, i) => source.rowKey(first + i));
+  // UI-145/UI-143 (M2-N32): everything the canvas shows. A render that changes none of it (live ticks of other views,
+  // parent re-renders, a hidden detail tab) does not repaint.
+  const paintSignature = JSON.stringify([size, first, count, rowHeight, headerHeight, markerColumn, theme.tokens, theme.fontSize, theme.fontFamily, theme.zebra,
+    focus, layout.map(c => [c.key, c.x, c.width, c.clipLeft, c.clipRight]), painted, rowKeys.map(k => k !== undefined && selection.has(k))]);
+  const lastPaint = useRef<{ signature: string; width: number; height: number } | undefined>(undefined);
   useLayoutEffect(() => {
     const element = canvas.current!;
     const rect = element.getBoundingClientRect();
     const width = Math.round(rect.width * size.dpr), height = Math.round(rect.height * size.dpr);
+    const last = lastPaint.current;
+    if (last && last.signature === paintSignature && last.width === width && last.height === height
+      && element.width === width && element.height === height) return;
     if (element.width !== width) element.width = width;
     if (element.height !== height) element.height = height;
+    lastPaint.current = undefined;
+    // A hidden grid (retained detail tab) has no backing store to paint; it paints when shown again.
+    if (!width || !height) return;
     const ctx = element.getContext("2d");
     if (!ctx || !size.width || !size.height) return;
+    lastPaint.current = { signature: paintSignature, width, height };
     ctx.setTransform(width / size.width, 0, 0, height / size.height, 0, 0);
     const t = theme.tokens;
     ctx.fillStyle = t["bg.surface"]; ctx.fillRect(0, 0, size.width, size.height);
@@ -207,9 +246,6 @@ export function DataGrid(props: DataGridProps) {
     const measure = (text: string) => metrics.current!.width(text);
     ctx.font = `${theme.fontSize}px ${theme.fontFamily}`;
     metrics.current.setFont(ctx.font);
-    const painted = Array.from({ length: count + 1 }, (_, i) => layout.map(c => i === 0
-      ? { text: props.headerTitle?.(c.key) ?? (props.columnTitles?.[c.key] ?? c.key) + (c.sort ? ` ${c.sort === "asc" ? "↑" : "↓"} ${visible.filter(c => c.sort).findIndex(s => s.key === c.key) + 1}` : ""), color: t.text, align: "left" as const }
-      : cell(c.index, first + i - 1)));
     metrics.current.prepare(painted.flatMap((row, i) => row.map((value, j) => {
       const c = layout[j];
       return { text: value.text, width: c.width - (c.key === "Address" ? (markerColumn === "Address" ? D.addressReserved : D.labelInset + D.addressAction) : i === 0 ? 30 : 16) };
@@ -254,30 +290,57 @@ export function DataGrid(props: DataGridProps) {
   }); // Paint only on a committed change; no continuous animation loop.
   const selectRow = async (row: number, col: number, shift = false, toggle = false) => {
     if (!source.total) return;
-    const request = ++selectionRequest.current, version = source.version;
+    const request = ++selectionRequest.current;
+    source.holdPosition();
     row = clamp(row, source.total - 1);
     // A click targets the row on screen: resolve its URL id synchronously when the block is loaded, so a view update that
-    // lands meanwhile cannot swallow the click (A01-16). Only a block that still has to be fetched is bound to its version.
+    // lands meanwhile cannot swallow the click (A01-16). A block still to be fetched may outlive its version in a running
+    // crawl: the row stays the target, the request follows the new version.
     let key = source.rowKey(row);
-    if (key === undefined) {
+    for (let attempt = 0; key === undefined && attempt < 40 && request === selectionRequest.current; attempt++) {
+      await source.settled();
       await source.ensureRow(row);
-      if (version !== source.version) return;
       key = source.rowKey(row);
+      if (key === undefined) await new Promise(resolve => setTimeout(resolve, 25));
     }
     if (key === undefined || request !== selectionRequest.current) return;
-    let next = latest.current.selection.select(key, toggle);
-    if (shift && latest.current.selection.anchor !== undefined) {
-      const anchor = await source.locate(latest.current.selection.anchor!);
-      if (anchor !== null) {
-        const firstSelected = Math.min(anchor, row), lastSelected = Math.max(anchor, row);
-        next = firstSelected === 0 && lastSelected === source.total - 1
-          ? latest.current.selection.range([], key).all(source.viewId, version)
-          : latest.current.selection.range(await source.keys(firstSelected, lastSelected), key);
-      }
+    const anchor = shift ? latest.current.selection.anchor : undefined;
+    if (anchor !== undefined) {
+      // Focus and scroll position answer at once; the following key press continues from here.
+      source.setFocus(key, row); setFocus({ col, row }); actions.current.reveal(row, col);
+      rangesInFlight.current++;
+      try {
+        const next = await rangeSelection(anchor, key, row, request);
+        if (next && request === selectionRequest.current) latest.current.onSelectionChange(next);
+      } finally { rangesInFlight.current--; }
+      return;
     }
-    if (request !== selectionRequest.current || (shift && version !== source.version)) return;
-    source.setFocus(key, row); setFocus({ col, row }); latest.current.onSelectionChange(next);
+    source.setFocus(key, row); setFocus({ col, row }); latest.current.onSelectionChange(latest.current.selection.select(key, toggle));
     actions.current.reveal(row, col);
+  };
+  /**
+   * UI-012/UI-018: anchor and target are URL ids; the core resolves the range between them in one state of the view, so a
+   * running crawl cannot invalidate it at any rate. Only sources without that command read row windows of one version.
+   */
+  const rangeSelection = async (anchor: number, key: number, row: number, request: number): Promise<SelectionModel | undefined> => {
+    const current = () => latest.current.selection;
+    const range = await source.range(anchor, key);
+    if (request !== selectionRequest.current) return undefined;
+    if (range) {
+      if (range.fromRow === null || range.fromRow === undefined || range.toRow === null || range.toRow === undefined) return current().select(key);
+      if (!range.all) return current().range(range.keys, key);
+      // An all-selection belongs to one version: adopt the version it was resolved in first.
+      await source.onViewChanged(range.version, range.total);
+      return request === selectionRequest.current && source.version === range.version ? current().range([], key).all(source.viewId, range.version) : undefined;
+    }
+    const version = source.version;
+    const located = await source.locate(anchor);
+    if (located === null) return version === source.version ? current().select(key) : undefined;
+    const first = Math.min(located, row), last = Math.max(located, row);
+    const next = first === 0 && last === source.total - 1
+      ? current().range([], key).all(source.viewId, version)
+      : current().range(await source.keys(first, last), key);
+    return version === source.version ? next : undefined;
   };
   const sort = (col: number, multi: boolean) => {
     const c = visible[col];
@@ -302,6 +365,7 @@ export function DataGrid(props: DataGridProps) {
   const activeCol = clamp(focus.col, Math.max(0, visible.length - 1));
   const activeVisible = layout.some(c => c.index === activeCol) && (activeRow === -1 || (activeRow >= first && activeRow < first + count));
   const cellId = (col: number, row: number) => `${id}-${col}-${row}`;
+  const a11yColumns = layout.map(c => c.index).join(",");
   return <div ref={root} className="os-data-grid" role="grid" tabIndex={0} aria-label={props.ariaLabel}
     aria-rowcount={source.total + 1} aria-colcount={visible.length} aria-multiselectable="true" aria-readonly="true"
     aria-activedescendant={activeVisible ? cellId(activeCol, activeRow) : undefined}
@@ -336,7 +400,9 @@ export function DataGrid(props: DataGridProps) {
       if (geometryChanging.current) return;
       const same = expectedTop.current !== undefined && Math.abs(e.scrollTop - expectedTop.current) < 1;
       if (!same) expectedTop.current = undefined;
-      setPosition(old => ({ row: same ? old.row : scrollToRow(e.scrollTop, maxFirst, e.scrollHeight - e.clientHeight), left: e.scrollLeft }));
+      const target = same ? position.row : scrollToRow(e.scrollTop, maxFirst, e.scrollHeight - e.clientHeight);
+      if (target !== position.row) source.userScrolled(target < position.row);
+      setPosition(old => ({ row: same ? old.row : target, left: e.scrollLeft }));
       setTooltip(undefined);
     }}><div style={{ width: totalWidth + size.overlayX, height: extent }} /></div>
     <canvas ref={canvas} className="os-grid-canvas" aria-hidden="true" style={{ width: size.width, height: size.height }}
@@ -397,14 +463,8 @@ export function DataGrid(props: DataGridProps) {
     <div className="os-grid-a11y">
       <div role="row" aria-rowindex={1}>{layout.map(c => <div role="columnheader" id={cellId(c.index, -1)} key={c.key} aria-colindex={c.index + 1}
         aria-sort={c.sort === "asc" ? "ascending" : c.sort === "desc" ? "descending" : undefined}>{props.headerTitle?.(c.key) ?? props.columnTitles?.[c.key] ?? c.key}</div>)}</div>
-      {Array.from({ length: Math.max(0, count) }, (_, index) => {
-        const row = first + index, key = source.rowKey(row);
-        return <div role="row" aria-rowindex={row + 2} aria-busy={key === undefined} aria-selected={key !== undefined && selection.has(key)} key={row}>
-          {/* UI-144: the name text stays out of layout (WebKit retains text-width data for every distinct laid-out string). */}
-          {layout.map(c => <div role="gridcell" id={cellId(c.index, row)} key={c.key} aria-colindex={c.index + 1} aria-labelledby={`${cellId(c.index, row)}-t`}>
-            <span id={`${cellId(c.index, row)}-t`} hidden>{cell(c.index, row).text}</span></div>)}
-        </div>;
-      })}
+      {rowKeys.map((key, index) => <A11yRow key={first + index} gridId={id} row={first + index} columns={a11yColumns}
+        texts={JSON.stringify(painted[index + 1].map(v => v.text))} busy={key === undefined} selected={key !== undefined && selection.has(key)} />)}
     </div>
     {tooltip?.text && <div role="tooltip" className="os-grid-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>{tooltip.text}</div>}
   </div>;

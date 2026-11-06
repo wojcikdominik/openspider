@@ -80,7 +80,11 @@ export function ConfigDialog() {
   useEffect(() => {
     if (!pendingFocus || draft.status !== "ready" || showDiff) return;
     const raf = requestAnimationFrame(() => {
-      focusAnchor(contentRef.current, pendingFocus);
+      // A late frame (hidden or busy WebKit) must not pull the focus out of a field the user has already moved to:
+      // the next keystrokes would land in the jump target.
+      const active = document.activeElement;
+      const editing = active instanceof HTMLElement && !!contentRef.current?.contains(active) && active.matches("input, textarea, select");
+      if (!editing) focusAnchor(contentRef.current, pendingFocus);
       setPendingFocus(null);
     });
     return () => cancelAnimationFrame(raf);

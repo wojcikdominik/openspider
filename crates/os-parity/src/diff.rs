@@ -629,6 +629,7 @@ mod upload_format_tests {
     use super::*;
 
     // spec: OUT-015, OUT-085
+    // spec: OUT-015 [M2]
     #[test]
     fn original_input_keys_preserve_duplicates_and_expose_changed_addresses() {
         let mapping = Mapping::parse(

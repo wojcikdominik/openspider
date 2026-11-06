@@ -108,7 +108,7 @@ async fn population_columns_and_live_filters_match_source_fixture() {
 
 // spec: TECH-289
 // spec: TECH-290
-// spec: CRAWL-140 [P1]
+// spec: CRAWL-140 [P1] [M2]
 #[tokio::test]
 async fn decoded_size_thresholds_reclassify_without_another_request() {
     let fx = crawl(false).await;

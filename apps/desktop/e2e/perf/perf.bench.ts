@@ -205,7 +205,7 @@ test("seeded random action soak and attributable renderer RSS", async ({
   const seconds = Number(process.env.OS_PERF_SOAK_SECONDS ?? 1800);
   test.skip(
     info.project.name !== (process.env.OS_PERF_SOAK_ENGINE ?? "chromium"),
-    "Soak runs once per suite; reference selects WebKit",
+    "Benchmark: soak runs once per suite; reference selects WebKit",
   );
   test.setTimeout((seconds + 900) * 1000);
   await mkdir(output, { recursive: true });

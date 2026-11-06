@@ -4,6 +4,7 @@
 .os-detail-body { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; overflow:hidden; }
 .os-detail-scroll { overflow:auto; min-height:0; overflow-wrap:anywhere; }
 .os-detail-grid { flex:1; min-height:var(--os-size-120); min-width:0; }
+.os-crawl-path { display:flex; flex-direction:column; height:var(--os-size-360); min-height:0; }
 .os-detail-table-tools details { position:relative; }
 .os-detail-table-tools details[open] { max-height:var(--os-size-120); overflow:auto; }
 .os-detail-table-tools label { display:block; }

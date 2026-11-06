@@ -11,7 +11,7 @@ import { startVizBridge, type VizBridge } from "./viz-bridge";
 const HUNDRED_K = [1, 40, 2000, 97_959];
 let bridge: VizBridge;
 
-test.skip(process.env.OS_VIZ_PERF3D !== "1", "Messrezept, nur mit OS_VIZ_PERF3D=1");
+test.skip(process.env.OS_VIZ_PERF3D !== "1", "Benchmark: Messrezept, nur mit OS_VIZ_PERF3D=1");
 test.describe.configure({ timeout: 300_000, mode: "serial" });
 
 test.beforeEach(async () => {

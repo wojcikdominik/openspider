@@ -22,6 +22,8 @@ on:
       - 'docs/spec/**'
       - 'docs/issues/**'
       - 'docs/plan/M2*.md'
+      # B4-M2CLOSE: Vertragstests AGENT-041/042 lesen auch SKILL.md und Referenzen.
+      - 'integrations/**'
   pull_request:
     paths: *coverage-paths
   workflow_dispatch:
@@ -103,6 +105,21 @@ jobs:
           npm run -w apps/desktop test -- --reporter=default --reporter=junit --outputFile.junit=../../vitest-m2.xml || status=$?
           echo "vitest-Exit: $status" >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
+      # B4-M2CLOSE: Vertragstests von Skill und Plugin (AGENT-041/042, M2-M02, laufen sonst nur in integrations.yml).
+      # node:test schreibt die Fälle ohne <testsuite>; os-parity ordnet über Datei bzw. Suite zu, daher eine Suite
+      # mit dem Dateipfad. Installation, Slash-Befehl und Marketplace (AGENT-042) prüft weiterhin integrations.yml.
+      - name: Integrations-Vertragstests (node:test, JUnit)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          status=0
+          npm ci --prefix integrations --no-audit --no-fund
+          (cd integrations && node --test --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=junit --test-reporter-destination=../integrations-raw.xml tests/contracts.test.mjs) || status=$?
+          sed -e 's#<testsuites>#<testsuites><testsuite name="integrations/tests/contracts.test.mjs">#' \
+            -e 's#</testsuites>#</testsuite></testsuites>#' integrations-raw.xml > integrations-m2.xml
+          echo "Integrations-Exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -110,6 +127,7 @@ jobs:
           path: |
             rust-tests.txt
             vitest-m2.xml
+            integrations-m2.xml
           if-no-files-found: error
 
   # Übergang bis ci.yml/ui-e2e.yml JUnit exportieren (Schnittstellenbedarf im Q01-Bericht).
@@ -288,44 +306,13 @@ jobs:
           args=()
           if [[ "$M2_GATE" == "true" ]]; then args+=(--gate); fi
           # C1: gemergte Besitzer aus der main-Historie; keine Fachpakete pauschal erzwingen.
-          # B3-COV: Zweig aus „m2: Merge [m2/][M2-]<Zweig>“; es zählt der längste Bindestrich-Präfix, der eine Paket-ID
-          # aus M2-packages.json ist (fix-live → M2-FIX-LIVE, ci-e2e-limit → M2-CI-E2E). Andere Zweige (int-16, main,
-          # M2-N00-SPEC-TAGS …) werden protokolliert und nicht übergeben; Liste in main-merged-m2.txt.
-          git log origin/main --format=%s > main-merges.txt
-          merged=$(python3 - <<'PY'
-          import json, re, sys
-          ids = {}
-          for p in json.load(open("docs/plan/M2-packages.json", encoding="utf-8")):
-              ids[p["id"].upper()] = p["id"]
-              ids[re.sub(r"^M2-", "", p["id"], flags=re.I).upper()] = p["id"]
-          pattern = re.compile(r"m2: Merge (?:m2/)?(?:M2-)?([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)", re.I)
-          merged, unknown = {}, {}
-          for subject in open("main-merges.txt", encoding="utf-8"):
-              m = pattern.match(subject)
-              if not m:
-                  continue
-              parts = m.group(1).split("-")
-              for n in range(len(parts), 0, -1):
-                  pid = ids.get("-".join(parts[:n]).upper())
-                  if pid:
-                      merged.setdefault(pid, subject.strip())
-                      break
-              else:
-                  unknown.setdefault(m.group(1), subject.strip())
-          with open("main-merged-m2.txt", "w", encoding="utf-8") as out:
-              for pid, subject in sorted(merged.items()):
-                  print(f"{pid}\t{subject}", file=out)
-              for token, subject in sorted(unknown.items()):
-                  print(f"unbekannt {token}\t{subject}", file=out)
-          for token in sorted(unknown):
-              print(f"kein M2-Paket, nicht übergeben: {token}", file=sys.stderr)
-          print(",".join(sorted(merged)))
-          PY
-          )
-          known=$(grep -vc '^unbekannt ' main-merged-m2.txt || true)
-          other=$(grep -c '^unbekannt ' main-merged-m2.txt || true)
-          echo "Gemergte M2-Pakete laut main: $known; andere Merge-Zweige (nicht übergeben): $other" >> "$GITHUB_STEP_SUMMARY"
-          if [[ -n "$merged" ]]; then args+=(--merged "$merged"); fi
+          # B4-M2CLOSE: os-parity erkennt die Pakete selbst (coverage/merged.rs, mit Test): Titel „m2: Merge
+          # [m2/][M2-]<Zweig>“, „m2: Integration Runde N – merge m2/<Zweig>“, „merge: m2/<Zweig> … in Integrationsrunde N“
+          # (längster Bindestrich-Präfix, der eine Paket-ID ist) und das Feld `merged_via` in M2-packages.json für
+          # Pakete, die über einen Integrationszweig kamen. Ergebnis in M2-status.json (`merged_packages`,
+          # `other_merge_branches`, `merged_via_missing`).
+          git log origin/main --format='%H%x09%s' > main-merges.txt
+          args+=(--merged-log main-merges.txt)
           shopt -s nullglob
           # Fünf Matrix-Jobs (macOS-WebKit in zwei Shards) mit je playwright-m2.xml, der erste macOS-Shard zusätzlich
           # mit den Laufzeitbudgets (playwright-m2-perf.xml).
@@ -335,6 +322,8 @@ jobs:
           missing=0
           if [[ ${#junit_files[@]} -ne 5 || ${#perf_files[@]} -ne 1 ]]; then missing=1; fi
           for file in "${junit_files[@]}" "${perf_files[@]}"; do args+=(--frontend-junit "$file"); done
+          # B4-M2CLOSE: node:test-Verträge AGENT-041/042 aus dem evidence-Job.
+          if [[ -f evidence/core/integrations-m2.xml ]]; then args+=(--frontend-junit evidence/core/integrations-m2.xml); fi
           status=0
           cargo run --locked -p os-parity -- coverage --milestone M2 \
             --test-output evidence/core/rust-tests.txt --frontend-junit evidence/core/vitest-m2.xml \
@@ -360,7 +349,6 @@ jobs:
           path: |
             evidence/
             main-merges.txt
-            main-merged-m2.txt
             coverage-m2.txt
             target/M2-status.json
           if-no-files-found: warn

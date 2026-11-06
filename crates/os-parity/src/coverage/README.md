@@ -41,10 +41,14 @@ Entwicklung verlangt standardmäßig nur Welle 0 (einschließlich 0a–0e).
 `--merged D12,U10` ergänzt konkret gemergte Besitzerpakete; kurze oder volle
 Paket-IDs sind erlaubt. Unbekannte IDs wählen kein Paket aus, erscheinen als
 Warnung und in `unknown_merged` der Statusdatei, brechen den Bericht aber nicht ab.
-Die CI ermittelt die Liste aus `origin/main` anhand der C1-Merge-Titel
-(`m2: Merge [m2/][M2-]<Zweig>`): der längste Bindestrich-Präfix des Zweignamens,
-der eine Paket-ID aus `M2-packages.json` ist, zählt; übrige Zweige (z. B.
-`M2-N00-SPEC-TAGS`, `int-16`) protokolliert der Workflow und übergibt sie nicht. `--wave 1` wählt alternativ alle
+`--merged-log <datei>` liest die Merge-Historie (`git log origin/main --format='%H%x09%s'`)
+und ergänzt die daraus erkannten Pakete (`merged.rs`, B4-M2CLOSE): Titel `m2: Merge [m2/][M2-]<Zweig>`,
+`m2: Integration Runde N – [merge m2/]<Zweig>` und `merge: m2/<Zweig> … in Integrationsrunde N`; es zählt der
+längste Bindestrich-Präfix des Zweignamens, der eine Paket-ID aus `M2-packages.json` ist. Pakete ohne eigenen
+Merge-Titel (über einen Integrationszweig gemergt) tragen in `M2-packages.json` das Feld
+`merged_via: {"commit", "subject"}` und gelten als gemergt, wenn genau dieser Commit mit diesem Titel in der
+Historie steht. Die Statusdatei führt `merged_packages` (ID → Beleg), `other_merge_branches` (Zweige ohne
+Planpaket, z. B. `N00-SPEC-TAGS`, `int-16`) und `merged_via_missing`. Die CI nutzt diesen Weg. `--wave 1` wählt alternativ alle
 Pakete bis einschließlich Welle 1; das ist nur bei vollständig gemergter Welle
 sinnvoll. Für noch nicht gemergte Besitzer bleiben offene Pflicht-IDs und
 Anhang-B-Einträge Warnungen. Echte `FAILED`-Ergebnisse (auch ohne Tag) bleiben

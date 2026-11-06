@@ -26,6 +26,7 @@
 pub mod evidence;
 pub mod frontend;
 pub mod m2;
+pub mod merged;
 pub mod results;
 pub mod scan;
 pub mod targets;
@@ -67,6 +68,10 @@ pub struct CoverageArgs {
     /// M2-Entwicklung: zusätzliche gemergte Paket-IDs, z. B. --merged D12,U10.
     #[arg(long, value_delimiter = ',')]
     pub merged: Vec<String>,
+    /// M2-Entwicklung: Merge-Historie der Hauptlinie (`git log <main> --format='%H%x09%s'`); daraus erkannte
+    /// Pakete gelten zusätzlich zu `--merged` als gemergt (Regeln in `coverage/merged.rs`).
+    #[arg(long)]
+    pub merged_log: Option<PathBuf>,
     /// JUnit aus vitest oder Playwright (wiederholbar).
     #[arg(long)]
     pub frontend_junit: Vec<PathBuf>,

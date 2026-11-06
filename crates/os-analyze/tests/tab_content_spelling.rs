@@ -96,7 +96,7 @@ fn url_id(fx: &FixtureCrawl, path: &str) -> UrlId {
 
 // spec: ONPAGE-153
 // spec: ONPAGE-166
-// spec: ONPAGE-142 [P1]
+// spec: ONPAGE-142 [P1] [M2]
 #[tokio::test]
 async fn language_and_spelling_columns_follow_the_page_language() {
     let cfg = spec_cfg();
@@ -183,7 +183,7 @@ async fn filters_list_pages_with_at_least_one_finding() {
     );
 }
 
-// spec: ONPAGE-142 [P1]
+// spec: ONPAGE-142 [P1] [M2]
 // spec: ONPAGE-153
 #[tokio::test]
 async fn total_language_errors_sums_the_active_checks_and_switched_off_columns_stay_empty() {

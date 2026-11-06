@@ -414,7 +414,8 @@ pub fn scan_source(file: &str, src: &str) -> FileScan {
     out
 }
 
-/// Scannt nur Projektquellen, niemals node_modules oder generierte Testergebnisse.
+/// Scannt nur Projektquellen, niemals node_modules oder generierte Testergebnisse. Neben TypeScript der App
+/// zählen die `*.test.mjs` unter `integrations/tests` (node:test, gleiche Tag-Syntax).
 pub fn scan(root: &Path) -> Result<BTreeMap<String, FileScan>, ParityError> {
     fn walk(
         root: &Path,
@@ -436,7 +437,10 @@ pub fn scan(root: &Path) -> Result<BTreeMap<String, FileScan>, ParityError> {
                 ) {
                     walk(root, &path, out)?;
                 }
-            } else if name.ends_with(".ts") || name.ends_with(".tsx") {
+            } else if name.ends_with(".ts")
+                || name.ends_with(".tsx")
+                || (rel.starts_with("integrations/") && name.ends_with(".test.mjs"))
+            {
                 out.insert(
                     path.clone(),
                     scan_source(&path, &std::fs::read_to_string(root.join(&path))?),
@@ -451,6 +455,8 @@ pub fn scan(root: &Path) -> Result<BTreeMap<String, FileScan>, ParityError> {
         "apps/desktop/e2e",
         "apps/desktop/e2e-b",
         "apps/desktop/e2e-c",
+        // B4-M2CLOSE: node:test-Verträge von Skill und Plugin (AGENT-041/042, M2-M02).
+        "integrations/tests",
     ] {
         walk(root, dir, &mut out)?;
     }

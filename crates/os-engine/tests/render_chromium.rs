@@ -335,7 +335,7 @@ async fn cookie_none_blocks_javascript_and_resource_response_cookies() {
     );
 }
 
-// spec: CRAWL-022 [P1]
+// spec: CRAWL-022 [P1] [M2]
 // spec: ONPAGE-012 [P1]
 // spec: CRAWL-039 [M2]
 #[tokio::test]

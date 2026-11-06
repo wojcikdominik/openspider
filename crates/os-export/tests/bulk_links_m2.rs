@@ -205,7 +205,7 @@ fn non_indexable_inlinks_export_includes_list_inputs_at_depth_zero() {
     );
 }
 
-// spec: OUT-031 [P1]
+// spec: OUT-031 [P1] [M2]
 #[test]
 fn raw_mailto_and_tel_targets_survive_the_writebatch_contract() {
     let dir = tempfile::tempdir().unwrap();

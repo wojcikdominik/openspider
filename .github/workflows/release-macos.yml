@@ -82,7 +82,9 @@ jobs:
     if: inputs.run_tests
     name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
+    # Intel (OUT-261, nur Warnung): Ein Zeitlimit des Jobs bricht ihn ab und überspringt Bau und Smoke, continue-on-error hilft
+    # dann nicht (Trockenlauf beta.3 42290151510). Deshalb Zeitlimits je Schritt, die Summe bleibt unter dem des Jobs.
+    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 180 || 120 }}
     strategy:
       fail-fast: false
       matrix:
@@ -95,6 +97,26 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Wie ci.yml: Beim Linken der Testprogramme lief der macOS-Runner voll ("ld: write() failed, errno=28",
+      # Trockenlauf beta.3 42189071580). Nicht gewählte Xcode-Versionen im Hintergrund löschen.
+      - name: "Speicherplatz schaffen (ungenutzte Xcode-Versionen)"
+        run: |
+          df -h / | tail -n 1
+          selected="$(xcode-select -p | sed 's|/Contents/Developer$||')"
+          echo "Gewähltes Xcode: $selected"
+          case "$selected" in
+            /Applications/Xcode*.app) ;;
+            *) echo "Kein Xcode.app gewählt, nichts gelöscht"; exit 0 ;;
+          esac
+          selected_real="$(realpath "$selected")"
+          for app in /Applications/Xcode*.app; do
+            [ -L "$app" ] && continue
+            [ "$(realpath "$app")" = "$selected_real" ] && continue
+            echo "Entferne $app"
+            sudo nohup rm -rf "$app" > /dev/null 2>&1 &
+          done
+          sudo nohup rm -rf "$HOME/Library/Android" > /dev/null 2>&1 &
+          sleep 1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -115,12 +137,15 @@ jobs:
         run: cargo fmt --all --check
       - id: clippy
         continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
+        timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 40 || 120 }}
         run: cargo clippy --workspace --all-targets -j 4 --locked -- -D warnings
       - id: test
         continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
+        timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 75 || 120 }}
         run: cargo test --workspace -j 4 --locked
       - id: app
         continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
+        timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 15 || 120 }}
         run: npm run -w apps/desktop typecheck && npm run -w apps/desktop test && npm run -w apps/desktop check:static
       - id: release_py
         continue-on-error: ${{ matrix.os == 'macos-15-intel' }}

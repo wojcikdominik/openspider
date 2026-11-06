@@ -582,13 +582,6 @@ async fn total_transferred_equals_transferred_without_rendering() {
     }
 }
 
-// spec: ONPAGE-012 [M2]
-#[test]
-#[ignore = "M2: ONPAGE-012 [P1] Total Transferred mit Rendering braucht JavaScript-Rendering"]
-fn total_transferred_with_rendering_includes_resources() {
-    unreachable!("Rendering ist M2");
-}
-
 // ---------------------------------------------------------------------------------------------------
 // ONPAGE-011 Gleichheit mit den Element-Tabs
 

@@ -388,7 +388,7 @@ async fn unsupported_platform_reports_and_refuses_download() {
 /// Manuelle Prüfung der echten Archive: lädt das Archiv der Versionsdatei für `OPENSPIDER_K01_PLATFORM`
 /// (`mac-arm64`, `mac-x64`, `win64`) über den App-Transport, prüft SHA-256 und entpackt es.
 #[tokio::test]
-#[ignore = "Manuell: OUT-260 – Protokoll M3-Q03 (lädt ca. 200 MB von storage.googleapis.com)"]
+#[ignore = "Klärung K3-01: manuell, OUT-260 – Protokoll M3-Q03 (lädt ca. 200 MB von storage.googleapis.com)"]
 async fn real_archive_from_versions_file() {
     let platform = std::env::var("OPENSPIDER_K01_PLATFORM")
         .ok()

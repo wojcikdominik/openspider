@@ -1,7 +1,6 @@
 //! Persistenter Metadaten-Index. Unveränderte Crawl-Dateien werden nicht mit SQLite geöffnet.
 use super::*;
 use rusqlite::{params, OptionalExtension};
-use std::io::Read;
 
 /// Separater SQLite-Index; sein Verlust löscht keine Crawls.
 pub struct MetadataIndex {
@@ -75,7 +74,7 @@ impl MetadataIndex {
 }
 
 fn fingerprint(path: &Path) -> Result<String, StoreError> {
-    crate::files::probe_header(path)?;
+    let header = crate::files::probe_header(path)?;
     // Version of the cached payload: `n28` = `url_count` without auxiliary fetches (UI-061). Entries
     // written before carry no version and are read again once.
     let mut stamp = String::from("n28;");
@@ -91,10 +90,6 @@ fn fingerprint(path: &Path) -> Result<String, StoreError> {
         }
     }
     // SQLite-Dateiänderungszähler: erfasst auch ersetzte Dateien mit zurückgesetztem mtime.
-    let mut header = [0u8; 100];
-    let mut file = std::fs::File::open(path).map_err(|e| StoreError::io(path, e))?;
-    file.read_exact(&mut header)
-        .map_err(|e| StoreError::io(path, e))?;
     stamp.push_str(&format!("{:?}", &header[24..40]));
     Ok(stamp)
 }

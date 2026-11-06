@@ -42,6 +42,7 @@ impl Fixture {
             gate: false,
             wave: 1,
             merged: Vec::new(),
+            merged_log: None,
             frontend_junit: vec![data().join("vitest.xml"), data().join("playwright.xml")],
             packages: None,
             root: dir.path().into(),
@@ -321,6 +322,7 @@ fn repository_m2_report_includes_all_586_ids_including_spikes() {
         gate: false,
         wave: 1,
         merged: Vec::new(),
+        merged_log: None,
         frontend_junit: vec![],
         packages: None,
         root: root.into(),
@@ -576,6 +578,113 @@ fn unknown_merged_ids_warn_and_select_no_package() {
     f.args.merged = vec!["u20".into()];
     let (_, doc) = f.check();
     assert_eq!(doc["unknown_merged"], serde_json::json!([]));
+}
+
+// B4-M2CLOSE: keine Spec-ID (M2-Q01 ist Infrastruktur, siehe Dateikopf). node:test-Verträge unter
+// integrations/tests (AGENT-041/042) zählen wie TS-Tests; ihr JUnit (in eine Suite mit dem Dateipfad gehüllt,
+// wie im Workflow) liefert das Ergebnis. Andere .mjs-Dateien bleiben außen vor.
+#[test]
+fn node_test_contracts_under_integrations_are_scanned_and_credited() {
+    let mut f = Fixture::new();
+    f.args.wave = 0;
+    f.args.test_output = None;
+    f.args.merged = vec!["U20".into()];
+    let tests = f.dir.path().join("integrations/tests");
+    std::fs::create_dir_all(&tests).unwrap();
+    std::fs::write(
+        tests.join("contracts.test.mjs"),
+        "import test from 'node:test';\n// spec: UI-090\ntest('skill format agrees', () => {});\n",
+    )
+    .unwrap();
+    std::fs::write(
+        tests.join("helper.mjs"),
+        "// spec: UI-001\ntest('kein Testfile', () => {});\n",
+    )
+    .unwrap();
+    let junit = f.dir.path().join("integrations-m2.xml");
+    std::fs::write(
+        &junit,
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<testsuites><testsuite name=\"integrations/tests/contracts.test.mjs\">\n\
+         \t<testcase name=\"skill format agrees\" time=\"0.05\" classname=\"test\"/>\n\
+         \t<!-- tests 1 -->\n</testsuite></testsuites>\n",
+    )
+    .unwrap();
+    f.args.frontend_junit = vec![junit];
+    let (_, doc) = f.check();
+    assert_eq!(doc["blocking_specs"], serde_json::json!([]), "{doc:#}");
+    let entries = doc["specs"]["UI-090"]["tests"].as_array().unwrap();
+    assert!(entries
+        .iter()
+        .any(|t| t["file"] == "integrations/tests/contracts.test.mjs" && t["result"] == "ok"));
+    assert!(!doc["specs"]["UI-001"]["tests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["file"] == "integrations/tests/helper.mjs"));
+}
+
+// B4-M2CLOSE: keine Spec-ID (M2-Q01 ist Infrastruktur, siehe Dateikopf). Die Merge-Historie wählt Pakete über alle
+// drei Titelformen und über `merged_via` aus; Integrations- und Hilfszweige bleiben außen vor, `unknown_merged` leer.
+#[test]
+fn merge_log_selects_packages_by_title_form_and_merged_via() {
+    let mut f = Fixture::new();
+    f.args.wave = 0;
+    f.args.test_output = None;
+    f.args.frontend_junit.clear();
+    let p = f.dir.path().join("docs/plan/M2-packages.json");
+    let mut packages: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+    let q03 = packages
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|p| p["id"] == "M2-Q03")
+        .unwrap();
+    q03["merged_via"] =
+        serde_json::json!({"commit": "5c70de74", "subject": "m2: Merge base-4r (Q03 freigegeben)"});
+    std::fs::write(&p, packages.to_string()).unwrap();
+    let log = f.dir.path().join("main-merges.txt");
+    std::fs::write(
+        &log,
+        "\
+1111111111111111111111111111111111111111\tm2: Integration Runde 6 – merge m2/u20
+2222222222222222222222222222222222222222\tm2: Integration Runde 7 – D12 (C9-Auflösung)
+3333333333333333333333333333333333333333\tmerge: m2/e03 (M2-E03) in Integrationsrunde 8
+4444444444444444444444444444444444444444\tm2: Merge int-16
+5c70de74ffffffffffffffffffffffffffffffff\tm2: Merge base-4r (Q03 freigegeben)
+6666666666666666666666666666666666666666\tmerge: origin/main in m2/u10
+",
+    )
+    .unwrap();
+    f.args.merged_log = Some(log.clone());
+    let (_, doc) = f.check();
+    assert_eq!(
+        doc["required_packages"],
+        serde_json::json!(["M2-D12", "M2-E03", "M2-U20", "M2-Q03"]),
+        "{doc:#}"
+    );
+    assert_eq!(doc["unknown_merged"], serde_json::json!([]));
+    assert_eq!(
+        doc["merged_packages"]["M2-Q03"],
+        "merged_via 5c70de74: m2: Merge base-4r (Q03 freigegeben)"
+    );
+    assert_eq!(
+        doc["merged_packages"]["M2-U20"],
+        "m2: Integration Runde 6 – merge m2/u20"
+    );
+    assert_eq!(
+        doc["other_merge_branches"],
+        serde_json::json!({"base-4r": "m2: Merge base-4r (Q03 freigegeben)", "int-16": "m2: Merge int-16"})
+    );
+    assert_eq!(doc["merged_via_missing"], serde_json::json!([]));
+    // Ein Beleg mit abweichendem Titel zählt nicht und wird gemeldet.
+    std::fs::write(
+        &log,
+        "5c70de74ffffffffffffffffffffffffffffffff\tm2: Merge base-4r (anderer Titel)\n",
+    )
+    .unwrap();
+    let (_, doc) = f.check();
+    assert_eq!(doc["required_packages"], serde_json::json!([]));
+    assert_eq!(doc["merged_via_missing"][0]["package"], "M2-Q03");
 }
 
 #[test]

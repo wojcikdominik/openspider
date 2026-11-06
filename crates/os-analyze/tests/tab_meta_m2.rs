@@ -65,7 +65,7 @@ fn keywords_fixed_columns_missing_duplicates_and_multiple() {
 }
 // spec: ONPAGE-099
 // spec: ONPAGE-108
-// spec: TECH-008 [P1]
+// spec: TECH-008 [P1] [M2]
 #[test]
 fn outside_coverage_reports_unchecked_pages() {
     let (_d, f) = fixture();

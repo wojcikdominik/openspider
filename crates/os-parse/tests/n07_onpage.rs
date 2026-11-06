@@ -15,7 +15,7 @@ fn parse(cfg: &CrawlConfig) -> os_model::ParsedPage {
     })
 }
 
-// spec: CRAWL-039
+// spec: CRAWL-039 [M2]
 // spec: CRAWL-040
 // spec: ONPAGE-178
 #[test]

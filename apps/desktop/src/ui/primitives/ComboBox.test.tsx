@@ -57,3 +57,18 @@ it("lets the popup trigger close suggestions after focus moves from the input to
   fireEvent.click(trigger);
   await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
 });
+
+// spec: UI-145
+// spec: UI-143
+it("builds no option list while closed (M2-N32)", async () => {
+  let formatted = 0;
+  const formatCount = (n: number) => { formatted++; return String(n); };
+  const { rerender } = render(<ComboBox label="Filter" options={options} selected="blocked" onSelect={() => undefined} formatCount={formatCount} />);
+  rerender(<ComboBox label="Filter" options={[...options]} selected="blocked" onSelect={() => undefined} formatCount={formatCount} />);
+  expect(formatted).toBe(0);
+  expect(document.querySelectorAll('[role="option"]')).toHaveLength(0);
+  fireEvent.keyDown(screen.getByRole("combobox", { name: "Filter" }), { key: "ArrowDown" });
+  await screen.findByRole("listbox", { name: "Filter" });
+  expect(screen.getAllByRole("option")).toHaveLength(3);
+  expect(formatted).toBeGreaterThan(0);
+});

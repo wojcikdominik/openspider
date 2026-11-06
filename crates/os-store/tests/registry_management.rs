@@ -52,7 +52,7 @@ fn projects_and_locks_are_persistent_and_inherited_by_future_crawls() {
             .locked
     );
     m.lock_project(&p.id, false).unwrap();
-    m.lock(&id, true).unwrap();
+    m.lock(&id, true, now()).unwrap();
     assert!(!m.get(&new_id).unwrap().locked);
     m.rename_project(&p.id, "Kunde C", now()).unwrap();
     drop(m);
@@ -154,6 +154,24 @@ fn a_stopped_crawl_is_never_resumable_whatever_its_queue_holds() {
     assert!(!registry::read_listing(&stopped_path)
         .unwrap()
         .can_resume(now()));
+
+// Sperren schreibt in die Datei; ein laufender Crawl gehört seinem Besitzer wie bei Umbenennen und Löschen.
+// spec: OUT-228
+// spec: AGENT-020
+#[test]
+fn a_running_crawl_cannot_be_locked_or_unlocked_until_it_is_no_longer_running() {
+    let dir = tempfile::tempdir().unwrap();
+    let (id, _path) = crawl(dir.path(), 21, CrawlState::Running);
+    let mut m = Manager::open(dir.path()).unwrap();
+    for locked in [true, false] {
+        let err = m.lock(&id, locked, now()).unwrap_err().to_string();
+        assert!(err.contains("Crawl läuft"), "{err}");
+    }
+    assert!(!m.get(&id).unwrap().locked);
+    // Ohne Heartbeat gilt er als unterbrochen (CRAWL-125) und lässt sich sperren.
+    let later = Timestamp::from_unix_millis(now().unix_millis() + 10_001);
+    m.lock(&id, true, later).unwrap();
+    assert!(m.get(&id).unwrap().locked);
 }
 
 // spec: CRAWL-143
@@ -310,7 +328,7 @@ fn retention_uses_end_or_last_change_and_protects_open_running_and_locked() {
         .unwrap();
     }
     let mut m = Manager::open(dir.path()).unwrap();
-    m.lock(&ids[2].0, true).unwrap();
+    m.lock(&ids[2].0, true, now()).unwrap();
     m.create_project("protected", "Geschützt").unwrap();
     m.move_project(&ids[3].0, Some("protected"), now()).unwrap();
     m.lock_project("protected", true).unwrap();

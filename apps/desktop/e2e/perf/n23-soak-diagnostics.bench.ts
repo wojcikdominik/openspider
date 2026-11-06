@@ -37,7 +37,7 @@ function vmmap(pid: number): string {
 
 // spec: UI-144
 test("N23 diagnostic: WebKit soak RSS attribution", async ({ page }, info) => {
-  test.skip(info.project.name !== "webkit" || variant.startsWith("synthetic"), "WebKit soak attribution only");
+  test.skip(info.project.name !== "webkit" || variant.startsWith("synthetic"), "Benchmark: WebKit soak attribution only");
   const seconds = Number(process.env.OS_PERF_SOAK_SECONDS ?? 600);
   test.setTimeout((seconds + 900) * 1000);
   const out = resolve("../../target/loadtest/n23-soak", variant);
@@ -183,7 +183,7 @@ test("N23 diagnostic: WebKit soak RSS attribution", async ({ page }, info) => {
 // spec: UI-144
 // Synthetic engine check: RSS while unique short/long strings pass the engine's text-width path.
 test("N23 diagnostic: WebKit text width path with unique strings", async ({ browser }, info) => {
-  test.skip(variant !== "synthetic" || info.project.name !== "webkit", "Synthetic WebKit check only");
+  test.skip(variant !== "synthetic" || info.project.name !== "webkit", "Benchmark: synthetic WebKit check only");
   test.setTimeout(900_000);
   const out = resolve("../../target/loadtest/n23-soak", variant);
   await mkdir(out, { recursive: true });
@@ -222,7 +222,7 @@ test("N23 diagnostic: WebKit text width path with unique strings", async ({ brow
 // spec: UI-144
 // Synthetic engine check of the grid's hidden accessibility rows: which per-jump DOM content grows RSS?
 test("N23 diagnostic: WebKit hidden accessibility rows with unique content", async ({ browser }, info) => {
-  test.skip(variant !== "synthetic-a11y" || info.project.name !== "webkit", "Synthetic WebKit check only");
+  test.skip(variant !== "synthetic-a11y" || info.project.name !== "webkit", "Benchmark: synthetic WebKit check only");
   test.setTimeout(900_000);
   const out = resolve("../../target/loadtest/n23-soak", variant);
   await mkdir(out, { recursive: true });

@@ -57,10 +57,15 @@ function ColumnList({ label, keys, selected, onSelect, hint }: {
   </div>;
 }
 
-/** „Spalten konfigurieren“ (UI-009): available/displayed lists, search, multi-select, moves, defaults and named templates. */
-export function ColumnConfigurator({ tab, tabs, isOpen, onOpenChange, label }: {
+type ColumnConfiguratorProps = {
   tab: string; tabs: { id: string; label: string }[]; isOpen: boolean; onOpenChange: (open: boolean) => void; label: (tab: string) => string;
-}) {
+};
+/** „Spalten konfigurieren“ (UI-009): available/displayed lists, search, multi-select, moves, defaults and named templates.
+ * A closed dialog is not rendered (M2-N32): it neither re-renders with the upper table nor subscribes to the column store. */
+export function ColumnConfigurator(props: ColumnConfiguratorProps) {
+  return props.isOpen ? <ColumnConfiguratorDialog {...props} /> : null;
+}
+function ColumnConfiguratorDialog({ tab, tabs, isOpen, onOpenChange, label }: ColumnConfiguratorProps) {
   const t = useT(); const store = useColumns();
   const meta: ColumnMeta[] = store.metadata[tab] ?? [];
   const [draft, setDraft] = useState<ColumnState[]>([]);

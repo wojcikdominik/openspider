@@ -81,7 +81,7 @@ fn selection_order_configured_environment_provisioned_system() {
     }
 }
 
-// spec: CRAWL-077 [P1]
+// spec: CRAWL-077 [P1] [M2]
 #[test]
 fn explicit_missing_path_never_falls_back() {
     let f = fixture();
@@ -99,7 +99,7 @@ fn explicit_missing_path_never_falls_back() {
     );
 }
 
-// spec: CRAWL-077 [P1]
+// spec: CRAWL-077 [P1] [M2]
 #[test]
 fn without_any_chromium_the_message_names_download_and_path() {
     let dir = tempfile::tempdir().unwrap();

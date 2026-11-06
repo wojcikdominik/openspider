@@ -85,7 +85,7 @@ fn extractor_filters_hide_other_columns_and_exclude_empty_values() {
 
 // spec: INTEG-052
 // spec: INTEG-053
-// spec: AGENT-004
+// spec: AGENT-004 [M2]
 #[tokio::test(start_paused = true)]
 async fn sim_crawl_transports_values_and_warnings_without_extracting_external_or_error_pages() {
     use os_engine::{

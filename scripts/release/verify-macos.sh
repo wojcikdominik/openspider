@@ -50,12 +50,13 @@ trap cleanup EXIT
 # Die Ausgabe des letzten Befehls bleibt in $last_output (für Folgeprüfungen).
 last_output=""
 # stapler validate fragt Apples Ticket-Dienst ab; kurze Netzwerkaussetzer auf CI-Runnern (Error 68,
-# "network connection was lost") sollen den Lauf nicht rot machen – bis zu 3 Versuche mit Pause.
+# "network connection was lost", "CloudKit's response is inconsistent") sollen den Lauf nicht rot machen –
+# bis zu 5 Versuche im Abstand von 60 s wie beim Anheften (Trockenlauf beta.3 42207909586).
 stapler_validate() {
   local target="$1" i
-  for i in 1 2 3; do
+  for i in 1 2 3 4 5; do
     if xcrun stapler validate "$target"; then return 0; fi
-    [ "$i" -lt 3 ] && { echo "stapler validate fehlgeschlagen (Versuch $i/3), neuer Versuch in 15 s" >&2; sleep 15; }
+    [ "$i" -lt 5 ] && { echo "stapler validate fehlgeschlagen (Versuch $i/5), neuer Versuch in 60 s" >&2; sleep 60; }
   done
   return 1
 }

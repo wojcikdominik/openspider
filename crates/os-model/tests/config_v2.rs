@@ -629,6 +629,8 @@ fn v1_files_load_unchanged_with_defaults_for_the_new_sections() {
     expected.scope.crawl_outside_start_folder = false;
     expected.extraction.http_headers = true;
     expected.content.area.exclude_elements = vec!["nav".into(), "footer".into()];
+    // Die v1-Datei nennt ihren Erzeuger; Laden übernimmt ihn (erst Schreiben stempelt die aktuelle Version).
+    expected.generator = "openspider 0.1.0".to_owned();
     assert_eq!(l.config, expected);
     assert_eq!(
         fs::read_to_string(fixture("config/v1/default.osconfig")).unwrap(),

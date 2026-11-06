@@ -20,7 +20,7 @@ import { advancedContextEntries } from "./contextEntries";
 import { advancedFixture, advancedTabs, internalColumns, segmentDefs } from "./fixtures/core";
 import { appendAt, depth, emptyCond, formatRule, normalizeNumber, operatorsFor, pushHistory, removeAt } from "./query";
 import { useSearchHistory, useSegments } from "./stores";
-import { tabContextEntries } from "./TabControls";
+import { TabsConfigDialog, tabContextEntries } from "./TabControls";
 
 const capture = vi.hoisted(() => ({ grid: undefined as DataGridProps | undefined }));
 vi.mock("../../grid/DataGrid", async original => {
@@ -421,5 +421,28 @@ describe("row context menu", () => {
     act(() => capture.grid!.onSelectionChange(SelectionModel.empty().select(1).select(2, true)));
     act(() => capture.grid!.onContextMenu({ column: "Address", urlId: 2, row: 0, x: 1, y: 1 }));
     expect(await screen.findByRole("menuitem", { name: "Crawl tree" })).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
+describe("closed dialogs (M2-N32)", () => {
+  // spec: UI-145
+  // spec: UI-143
+  it("renders neither the column nor the tab configuration while closed and opens them unchanged", async () => {
+    await useColumns.getState().load("Internal");
+    const layout = { order: ["a", "b"], hidden: ["b"], mandatory: "a" };
+    const closed = render(<><ColumnConfigurator tab="Internal" tabs={[]} isOpen={false} onOpenChange={() => undefined} label={id => id} />
+      <TabsConfigDialog isOpen={false} onOpenChange={() => undefined} layout={layout} label={id => id} onApply={() => undefined} /></>);
+    expect(closed.container.innerHTML).toBe("");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    closed.rerender(<><ColumnConfigurator tab="Internal" tabs={[]} isOpen onOpenChange={() => undefined} label={id => id} />
+      <TabsConfigDialog isOpen={false} onOpenChange={() => undefined} layout={layout} label={id => id} onApply={() => undefined} /></>);
+    expect(await screen.findByRole("listbox", { name: "Available columns" })).toBeInTheDocument();
+    closed.unmount();
+    const onApply = vi.fn();
+    render(<TabsConfigDialog isOpen onOpenChange={() => undefined} layout={layout} label={id => id} onApply={onApply} />);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByRole("checkbox").map(c => (c as HTMLInputElement).checked)).toEqual([true, false]);
+    fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    expect(onApply).toHaveBeenCalledWith(["a", "b"], ["b"]);
   });
 });

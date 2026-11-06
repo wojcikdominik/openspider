@@ -316,7 +316,7 @@ fn response_status_gates_extraction_and_dom_is_taken_from_input() {
     );
 }
 
-// spec: AGENT-004
+// spec: AGENT-004 [M2]
 #[test]
 fn extracted_instructions_remain_inert_data() {
     let page = parse(

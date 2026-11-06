@@ -5,6 +5,7 @@ use os_engine::{
 use os_model::{CrawlConfig, CrawlState};
 use std::{sync::Arc, time::Duration};
 
+// spec: CRAWL-131 [M2]
 // spec: CRAWL-131 [P1], CRAWL-128
 #[tokio::test]
 async fn completed_crawl_accepts_only_new_valid_in_scope_urls_then_resumes() {
@@ -61,7 +62,7 @@ async fn completed_crawl_accepts_only_new_valid_in_scope_urls_then_resumes() {
     assert_eq!(status, 200);
 }
 
-// spec: CRAWL-131 [P1]
+// spec: CRAWL-131 [P1] [M2]
 #[tokio::test]
 async fn running_crawl_uses_the_same_deduplicating_admission() {
     let dir = tempfile::tempdir().unwrap();

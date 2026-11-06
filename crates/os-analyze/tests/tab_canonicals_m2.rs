@@ -129,7 +129,7 @@ fn live_attribute_and_fragment_filters_strip_the_display_fragment() {
 }
 
 // spec: TECH-023
-// spec: TECH-008 [P1]
+// spec: TECH-008 [P1] [M2]
 #[test]
 fn outside_head_coverage_tracks_disabled_missing_and_partial_validation() {
     let mut fx = fixture();

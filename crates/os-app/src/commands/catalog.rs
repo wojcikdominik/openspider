@@ -411,7 +411,7 @@ pub fn register(r: &mut Registry) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // spec: TECH-008
+    // spec: TECH-008 [M2]
     // spec: UI-006
     #[test]
     fn filter_state_dtos_preserve_prerequisite_and_partial_coverage_states() {

@@ -2,12 +2,13 @@ import { view } from "../ipc/view";
 import { isSilentError, toCmdError } from "../ipc/errors";
 import type { ViewHandle } from "../ipc/gen/ViewHandle";
 import type { RowWindow } from "../ipc/gen/RowWindow";
+import type { KeyRange } from "../ipc/gen/KeyRange";
 
 export const LOADING = Symbol("loading");
 export const BLOCK_SIZE = 200;
 export const MAX_BLOCKS = 100;
 export type CellValue = RowWindow["cells"][number][number];
-export type ViewApi = Pick<typeof view, "rows" | "locate" | "copy" | "close">;
+export type ViewApi = Pick<typeof view, "rows" | "locate" | "copy" | "close"> & Partial<Pick<typeof view, "range">>;
 type Block = { keys: number[]; cells: CellValue[][] };
 
 /** Canvas reads synchronously; only bounded row windows live in memory. */
@@ -26,6 +27,8 @@ export class ViewDataSource {
   private last = 0;
   private focus: { key: number; row: number } | undefined;
   private tail = false;
+  /** The user works on a row: appended rows must not move the table under the pointer (UI-018). A scroll gesture ends it. */
+  private hold = false;
   private sorted = false;
   /** A newer version is being fetched in the background; the previous rows stay on screen until it is complete (UI-142, A01-07). */
   private swap: AbortController | undefined;
@@ -75,7 +78,7 @@ export class ViewDataSource {
     if (this.disposed || !this.total) return;
     this.first = Math.max(0, Math.min(Math.floor(first), this.total - 1));
     this.last = Math.max(this.first, Math.min(Math.floor(last), this.total - 1));
-    this.tail = !this.sorted && this.last === this.total - 1;
+    this.tail = !this.sorted && !this.hold && this.last === this.total - 1;
     // The visible window of a pending version is fetched by the swap itself; a request for the outdated version cannot succeed.
     if (this.swap) return;
     const visibleFirst = this.first;
@@ -89,6 +92,29 @@ export class ViewDataSource {
       this.loadRange(Math.max(0, visibleFirst - height * 2), visibleFirst - 1),
       this.loadRange(visibleLast + 1, Math.min(this.total - 1, visibleLast + height * 2)),
     ]);
+  }
+  /** A scroll gesture: moving up stops following new rows at once, also for a swap that is already running (UI-018). */
+  userScrolled(up: boolean): void { this.hold = false; if (up) this.tail = false; }
+  /** A row was selected: the table keeps its position until the next scroll gesture, even at the bottom (UI-018). */
+  holdPosition(): void { this.hold = true; this.tail = false; }
+  /** Finishes when no version change is running. */
+  settled(): Promise<void> { return this.swapping ?? Promise.resolve(); }
+  /**
+   * Keys between two URLs from one state of the view (UI-012, UI-018). `undefined`: this source has no such command.
+   * The core retries internally; a `Stale` that still arrives here is retried a few times because the view keeps moving.
+   */
+  async range(from: number, to: number): Promise<KeyRange | undefined> {
+    if (!this.api.range) return undefined;
+    for (let attempt = 0; ; attempt++) {
+      // Not bound to this.controller: a version swap aborts that one, and the range does not depend on the version.
+      try { return await this.api.range({ viewId: this.viewId, from, to }); }
+      catch (error) {
+        const failure = toCmdError(error);
+        // A transport or fixture without the command falls back to reading row windows.
+        if (failure.messageKey === "err-unknown-command" || failure.code === "Unsupported") return undefined;
+        if (failure.code !== "Stale" || attempt >= 4) throw error;
+      }
+    }
   }
   async ensureRow(row: number): Promise<void> {
     if (!this.disposed && row >= 0 && row < this.total) await this.load(Math.floor(row / BLOCK_SIZE));
@@ -152,6 +178,7 @@ export class ViewDataSource {
   }
   private async swapTo(version: number, total: number): Promise<void> {
     const anchor = this.focus ?? { key: this.rowKey(this.first), row: this.first };
+    const startFirst = this.first;
     const relative = anchor.row - this.first;
     const height = this.last - this.first;
     const tail = this.tail;
@@ -197,6 +224,8 @@ export class ViewDataSource {
       if (this.swap === job) this.swap = undefined;
     }
     if (job.signal.aborted || this.disposed) return;
+    // UI-018: the user scrolled while this swap was running; the new position wins over following or anchoring.
+    if ((tail && !this.tail) || this.first !== startFirst) { first = Math.min(this.first, Math.max(0, total - 1)); located = undefined; }
     this.controller.abort();
     this.controller = new AbortController();
     this.generation++;
@@ -207,7 +236,7 @@ export class ViewDataSource {
     // Focus row and window move together: a following announcement computes its offset from both.
     if (this.focus && anchor.key === this.focus.key && located !== undefined) this.focus = { key: this.focus.key, row: located };
     this.first = first; this.last = Math.max(first, Math.min(total - 1, first + height));
-    this.tail = !this.sorted && total > 0 && this.last === total - 1;
+    this.tail = !this.sorted && !this.hold && total > 0 && this.last === total - 1;
     this.emit();
     this.onScrollTo?.(first);
     await this.ensureRange(first, Math.min(total - 1, first + height));

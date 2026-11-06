@@ -1,6 +1,5 @@
 //! Crawl-Datei anlegen und öffnen (OUT-230, CRAWL-127): Kennung, Versionsprüfung, Migration mit Sicherung.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use os_model::time::SystemClock;
@@ -48,6 +47,147 @@ pub(crate) fn sqlite_path(path: &Path) -> PathBuf {
     #[cfg(not(windows))]
     {
         path.to_path_buf()
+    }
+}
+
+/// Länge des SQLite-Dateikopfs.
+pub(crate) const HEADER_LEN: usize = 100;
+
+/// Liest den Anfang einer Crawl-Datei; liefert die Anzahl gelesener Bytes (kurze Dateien: weniger als `HEADER_LEN`).
+///
+/// **Nie `std::fs::File::open` auf eine Crawl-Datei (CRAWL-125):** POSIX gibt alle Sperren eines Prozesses auf eine Datei
+/// frei, sobald der Prozess irgendeinen Deskriptor dieser Datei schließt. Hielte er dabei eine SQLite-Verbindung, verlöre
+/// sie ihre gemeinsame Sperre; das beendende Schließen einer Verbindung in einem anderen Prozess hielte sich für die
+/// letzte und löschte `-wal`/`-shm`, in die der Besitzer weiterschreibt – die Datei wird beschädigt. Das Lesen über das VFS
+/// von SQLite vermeidet das: SQLite kennt die Sperren je Inode und schiebt das Schließen auf, solange welche bestehen.
+#[cfg(unix)]
+pub(crate) fn read_header(path: &Path, head: &mut [u8; HEADER_LEN]) -> std::io::Result<usize> {
+    use rusqlite::ffi;
+    use std::ffi::c_int;
+    use std::os::unix::ffi::OsStrExt;
+
+    let failed = |what: &str, rc: c_int| {
+        std::io::Error::other(format!("SQLite-VFS: {what} fehlgeschlagen (Code {rc})"))
+    };
+    let absolute = std::path::absolute(path)?;
+    let bytes = absolute.as_os_str().as_bytes();
+    if bytes.contains(&0) {
+        return Err(std::io::ErrorKind::InvalidInput.into());
+    }
+    // Das VFS erwartet einen vollständigen Pfad, hinter dem weitere NUL-Bytes stehen dürfen.
+    let mut name = bytes.to_vec();
+    name.extend_from_slice(&[0, 0, 0]);
+    // SAFETY: Das VFS bleibt bis Prozessende registriert. `storage` ist auf 8 Bytes ausgerichtet und `szOsFile` groß, wie es
+    // `xOpen` verlangt; `name` lebt bis nach `xClose`. `xRead` und `xFileSize` schreiben nur in `head` (höchstens dessen
+    // Länge) und `size`. `xClose` läuft genau einmal, nachdem `xOpen` Methoden gesetzt hat.
+    unsafe {
+        let vfs = ffi::sqlite3_vfs_find(std::ptr::null());
+        if vfs.is_null() {
+            return Err(std::io::Error::other("SQLite-VFS fehlt"));
+        }
+        let open = (*vfs).xOpen.ok_or_else(|| failed("xOpen", 0))?;
+        let mut storage = vec![0u64; usize::try_from((*vfs).szOsFile).unwrap_or(0).div_ceil(8)];
+        let file = storage.as_mut_ptr().cast::<ffi::sqlite3_file>();
+        let mut out_flags: c_int = 0;
+        let rc = open(
+            vfs,
+            name.as_ptr().cast(),
+            file,
+            ffi::SQLITE_OPEN_READONLY | ffi::SQLITE_OPEN_MAIN_DB,
+            &mut out_flags,
+        );
+        if rc != ffi::SQLITE_OK {
+            let os_error = std::io::Error::last_os_error();
+            let methods = (*file).pMethods;
+            if !methods.is_null() {
+                if let Some(close) = (*methods).xClose {
+                    close(file);
+                }
+            }
+            return Err(if os_error.raw_os_error().unwrap_or(0) != 0 {
+                os_error
+            } else {
+                failed("xOpen", rc)
+            });
+        }
+        let methods = (*file).pMethods;
+        let mut size: ffi::sqlite3_int64 = 0;
+        let mut rc = match (*methods).xFileSize {
+            Some(file_size) => file_size(file, &mut size),
+            None => ffi::SQLITE_MISUSE,
+        };
+        let wanted = usize::try_from(size.max(0))
+            .unwrap_or(usize::MAX)
+            .min(HEADER_LEN);
+        if rc == ffi::SQLITE_OK && wanted > 0 {
+            rc = match (*methods).xRead {
+                Some(read) => read(file, head.as_mut_ptr().cast(), wanted as c_int, 0),
+                None => ffi::SQLITE_MISUSE,
+            };
+        }
+        if let Some(close) = (*methods).xClose {
+            close(file);
+        }
+        if rc != ffi::SQLITE_OK {
+            return Err(failed("Lesen", rc));
+        }
+        Ok(wanted)
+    }
+}
+
+/// Windows: Sperren gehören dem Handle, ein weiteres Handle hebt sie nicht auf (`LockFileEx`). Der Weg über `std::fs` bleibt
+/// dort derselbe wie zuvor.
+#[cfg(not(unix))]
+pub(crate) fn read_header(path: &Path, head: &mut [u8; HEADER_LEN]) -> std::io::Result<usize> {
+    read_header_plain(path, head)
+}
+
+/// Unter Unix nur im Test (Vergleich mit dem VFS-Weg), damit der Windows-Weg auch hier übersetzt und geprüft wird.
+#[cfg(any(not(unix), test))]
+fn read_header_plain(path: &Path, head: &mut [u8; HEADER_LEN]) -> std::io::Result<usize> {
+    use std::io::Read;
+
+    let mut f = std::fs::File::open(path)?;
+    let mut read = 0;
+    while read < head.len() {
+        match f.read(&mut head[read..])? {
+            0 => break,
+            n => read += n,
+        }
+    }
+    Ok(read)
+}
+
+/// Öffnet eine Datei nur lesend, ohne Begleitdateien und ohne Sperren (`immutable`): für Dateien ohne `-wal`, `-shm` und
+/// `-journal`, also ohne Schreiber in diesem Augenblick.
+pub(crate) fn open_sqlite_immutable(path: &Path) -> rusqlite::Result<Connection> {
+    let path = sqlite_path(path);
+    #[cfg(unix)]
+    let bytes = {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes().to_vec()
+    };
+    #[cfg(not(unix))]
+    let bytes = path.to_string_lossy().into_owned().into_bytes();
+    let mut uri = String::from("file:");
+    for b in bytes {
+        if b.is_ascii_alphanumeric() || matches!(b, b'/' | b'.' | b'_' | b'-' | b'~' | b':') {
+            uri.push(char::from(b));
+        } else {
+            uri.push_str(&format!("%{b:02X}"));
+        }
+    }
+    uri.push_str("?immutable=1");
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY
+        | OpenFlags::SQLITE_OPEN_URI
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    #[cfg(windows)]
+    {
+        Connection::open_with_flags_and_vfs(uri, flags, "win32-longpath")
+    }
+    #[cfg(not(windows))]
+    {
+        Connection::open_with_flags(uri, flags)
     }
 }
 
@@ -119,16 +259,8 @@ fn wal_has_frames(path: &Path) -> bool {
 /// Prüft die SQLite-Kopfzeile: `Ok(false)`, wenn die Datei nicht mit dem SQLite-Magic beginnt (auch bei
 /// kürzeren Dateien); `Err(Corrupt)`, wenn die Datei kürzer ist als der Kopf angibt (abgeschnitten) und keine nicht leere `-wal`-Datei daneben liegt.
 fn check_sqlite_header(path: &Path) -> Result<bool, StoreError> {
-    let mut f = std::fs::File::open(path).map_err(|e| StoreError::io(path, e))?;
-    let mut head = [0u8; 100];
-    let mut read = 0;
-    while read < head.len() {
-        match f.read(&mut head[read..]) {
-            Ok(0) => break,
-            Ok(n) => read += n,
-            Err(e) => return Err(StoreError::io(path, e)),
-        }
-    }
+    let mut head = [0u8; HEADER_LEN];
+    let read = read_header(path, &mut head).map_err(|e| StoreError::io(path, e))?;
     if read < SQLITE_MAGIC.len() || &head[..16] != SQLITE_MAGIC {
         return Ok(false);
     }
@@ -153,7 +285,9 @@ fn check_sqlite_header(path: &Path) -> Result<bool, StoreError> {
     // `-wal`-Datei und stellt die Datei beim Öffnen wieder her (PERF-005, CRAWL-125). Ohne `-wal`-Datei ist die
     // Hauptdatei allein maßgeblich und eine zu kurze Datei abgeschnitten.
     if page_count > 0 && change_counter == valid_for && !wal_has_frames(path) {
-        let actual = f.metadata().map_err(|e| StoreError::io(path, e))?.len();
+        let actual = std::fs::metadata(path)
+            .map_err(|e| StoreError::io(path, e))?
+            .len();
         if actual < page_count * page_size {
             return Err(StoreError::Corrupt {
                 path: path.to_path_buf(),
@@ -572,5 +706,66 @@ pub fn merge_wal(path: &Path, cancel: &std::sync::atomic::AtomicBool) -> Result<
             return Ok(true);
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+#[cfg(test)]
+mod header_tests {
+    use super::*;
+
+    // Beide Lesewege liefern dasselbe, auch für kurze, leere und fremde Dateien (Windows nutzt den einfachen Weg).
+    // spec: CRAWL-127
+    #[test]
+    fn header_reads_agree_for_short_empty_foreign_and_real_files() {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, bytes) in [
+            ("leer", vec![]),
+            ("kurz", b"SQLite format".to_vec()),
+            ("png", vec![0x89; 4_096]),
+            ("genau", vec![7; HEADER_LEN]),
+        ] {
+            let path = dir.path().join(name);
+            std::fs::write(&path, &bytes).unwrap();
+            let mut plain = [0u8; HEADER_LEN];
+            let plain_len = read_header_plain(&path, &mut plain).unwrap();
+            let mut vfs = [0u8; HEADER_LEN];
+            let vfs_len = read_header(&path, &mut vfs).unwrap();
+            assert_eq!(vfs_len, plain_len, "{name}");
+            assert_eq!(vfs[..vfs_len], plain[..plain_len], "{name}");
+            assert_eq!(vfs_len, bytes.len().min(HEADER_LEN), "{name}");
+        }
+        let missing = read_header(&dir.path().join("fehlt"), &mut [0u8; HEADER_LEN]);
+        assert!(missing.is_err());
+    }
+
+    // Sonderzeichen im Pfad überstehen die URI-Form von `immutable`; es entstehen keine Begleitdateien.
+    // spec: OUT-228
+    #[test]
+    fn immutable_opens_paths_with_special_characters_without_companions() {
+        let dir = tempfile::tempdir().unwrap();
+        // `?` und `:` sind unter Windows in Dateinamen unzulässig.
+        let (folder, file) = if cfg!(windows) {
+            ("Kunde A #1 100% ä&=", "c r#awl.ospider")
+        } else {
+            ("Kunde A #1 100% ä?&=", "c r:awl.ospider")
+        };
+        let sub = dir.path().join(folder);
+        std::fs::create_dir(&sub).unwrap();
+        let path = sub.join(file);
+        let conn = open_sqlite(&path, OpenFlags::default()).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; CREATE TABLE t(a); INSERT INTO t VALUES (42);",
+        )
+        .unwrap();
+        drop(conn);
+        let names = || std::fs::read_dir(&sub).unwrap().count();
+        assert_eq!(names(), 1);
+        let reader = open_sqlite_immutable(&path).unwrap();
+        let value: i64 = reader
+            .query_row("SELECT a FROM t", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(value, 42);
+        drop(reader);
+        assert_eq!(names(), 1);
     }
 }

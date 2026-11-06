@@ -342,7 +342,7 @@ mod tests {
         );
     }
 
-    // spec: OUT-203
+    // spec: OUT-203 [P1]
     #[test]
     fn without_a_similar_name_the_whole_list_follows() {
         let unknown = resolve(Kind::Report, "Gibtsnicht-Gibtsnicht-Gibtsnicht").unwrap_err();

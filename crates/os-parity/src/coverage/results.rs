@@ -515,6 +515,33 @@ test src/lib.rs - parse (line 3) ... ok
         assert!(parse_junit("<foo/>").is_err());
         assert!(parse_junit("<testsuite name=\"a\"").is_err());
     }
+
+    // B4-M2CLOSE: keine Spec-ID (Infrastruktur M2-Q01). Form aus einem echten Playwright-JUnit (perf3d.spec.ts).
+    #[test]
+    fn playwright_skip_annotation_is_the_reason_of_an_empty_skipped_element() {
+        let xml = "<testsuites><testsuite name=\"viz/perf3d.spec.ts\" hostname=\"chromium\">\
+            <testcase name=\"messrezept\" classname=\"viz/perf3d.spec.ts\"><properties>\
+            <property name=\"serial\" value=\"\"></property>\
+            <property name=\"skip\" value=\"Benchmark: nur mit OS_VIZ_PERF3D=1\"></property>\
+            </properties><skipped></skipped></testcase>\
+            <testcase name=\"mit Nachricht\" classname=\"a.spec.ts\"><properties>\
+            <property name=\"skip\" value=\"Eigenschaft\"></property></properties>\
+            <skipped message=\"Nachricht\"/></testcase>\
+            <testcase name=\"ohne Grund\" classname=\"a.spec.ts\"><skipped/></testcase>\
+            <testcase name=\"lief\" classname=\"a.spec.ts\"></testcase>\
+            </testsuite></testsuites>";
+        let cases = super::frontend_cases(xml).unwrap();
+        let outcomes: Vec<_> = cases.iter().map(|c| c.outcome.clone()).collect();
+        assert_eq!(
+            outcomes,
+            vec![
+                Outcome::Ignored(Some("Benchmark: nur mit OS_VIZ_PERF3D=1".into())),
+                Outcome::Ignored(Some("Nachricht".into())),
+                Outcome::Ignored(None),
+                Outcome::Ok,
+            ]
+        );
+    }
 }
 
 /// Frontend-JUnit-Fall; Dateipfad und Titel bleiben getrennt, um gleiche Titel sicher zuzuordnen.
@@ -538,6 +565,9 @@ pub(crate) fn frontend_cases(xml: &str) -> Result<Vec<FrontendCase>, ParityError
     let mut suites: Vec<(String, String)> = Vec::new();
     let mut cases = Vec::new();
     let mut case: Option<FrontendCase> = None;
+    // B4-M2CLOSE: Playwright schreibt den Grund von `test.skip(bedingung, grund)` nicht in `<skipped>`, sondern als
+    // `<property name="skip" value="grund">` vor `<skipped>`. Ohne `message` gilt dieser Grund.
+    let mut skip_note: Option<String> = None;
     let mut seen = false;
     while let Some(lt) = rest.find('<') {
         rest = &rest[lt + 1..];
@@ -592,11 +622,15 @@ pub(crate) fn frontend_cases(xml: &str) -> Result<Vec<FrontendCase>, ParityError
                     name: tag.attr("name").ok_or_else(invalid)?.to_string(),
                     outcome: Outcome::Ok,
                 };
+                skip_note = None;
                 if tag.self_closing {
                     cases.push(c);
                 } else {
                     case = Some(c);
                 }
+            }
+            "property" if case.is_some() && tag.attr("name") == Some("skip") => {
+                skip_note = tag.attr("value").map(str::to_string);
             }
             "failure" | "error" => {
                 if let Some(c) = &mut case {
@@ -606,7 +640,11 @@ pub(crate) fn frontend_cases(xml: &str) -> Result<Vec<FrontendCase>, ParityError
             "skipped" => {
                 if let Some(c) = &mut case {
                     if c.outcome != Outcome::Failed {
-                        c.outcome = Outcome::Ignored(tag.attr("message").map(str::to_string));
+                        c.outcome = Outcome::Ignored(
+                            tag.attr("message")
+                                .map(str::to_string)
+                                .or_else(|| skip_note.clone()),
+                        );
                     }
                 }
             }

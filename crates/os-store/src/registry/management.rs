@@ -261,8 +261,9 @@ impl Manager {
         self.put(&l.path, "name", name)
     }
 
-    pub fn lock(&mut self, id: &CrawlId, locked: bool) -> Result<(), StoreError> {
+    pub fn lock(&mut self, id: &CrawlId, locked: bool, now: Timestamp) -> Result<(), StoreError> {
         let l = self.get(id)?;
+        guard(&l, now, false)?;
         self.put(&l.path, "locked", if locked { "1" } else { "0" })
     }
 
@@ -282,7 +283,7 @@ impl Manager {
     }
 
     fn put(&self, path: &Path, key: &str, value: &str) -> Result<(), StoreError> {
-        let conn = open_raw_metadata(path)?;
+        let conn = open_raw_write(path)?;
         let found = schema::user_version(&conn)?;
         let supported = schema::latest_version(schema::MIGRATIONS);
         if found > supported {
@@ -301,7 +302,7 @@ impl Manager {
         let l = self.get(id)?;
         guard(&l, now, true)?;
         // Checkpoint vor dem Löschen: keine Datenbankverbindung der Verwaltung bleibt offen.
-        let conn = open_raw_metadata(&l.path)?;
+        let conn = open_raw_write(&l.path)?;
         conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
         drop(conn);
         std::fs::remove_file(&l.path).map_err(|e| StoreError::io(&l.path, e))?;
@@ -544,8 +545,58 @@ pub fn copy_snapshot(
     dest: &Path,
     progress: &(dyn Fn(u64, u64) -> bool + Sync),
 ) -> Result<(), StoreError> {
+    copy_snapshot_checked(src, dest, progress, &copy_snapshot_from)
+}
+
+type CopyFrom<'a> = &'a dyn Fn(
+    &Connection,
+    &Path,
+    &Path,
+    &(dyn Fn(u64, u64) -> bool + Sync),
+    &dyn Fn() -> bool,
+) -> Result<bool, StoreError>;
+
+/// Ein Lesefehler der Quelle, nicht Abbruch durch den Nutzer und kein Fehler am Ziel.
+fn is_source_read_error(e: &StoreError) -> bool {
+    match e {
+        StoreError::Sqlite(rusqlite::Error::SqliteFailure(f, _)) => {
+            f.code != rusqlite::ErrorCode::OperationInterrupted
+        }
+        StoreError::Io { .. } | StoreError::AlreadyExists(_) => false,
+        _ => true,
+    }
+}
+
+/// Ohne Sperren gilt nur eine fehlerfreie Kopie, nach der kein Schreiber begonnen hat (`MetadataConn`): Ein Lesefehler erscheint
+/// nie als beschädigte Quelle, sondern wird unter Sperren wiederholt. `copy` ist die Testnaht.
+fn copy_snapshot_checked(
+    src: &Path,
+    dest: &Path,
+    progress: &(dyn Fn(u64, u64) -> bool + Sync),
+    copy: CopyFrom<'_>,
+) -> Result<(), StoreError> {
     let source = open_raw_metadata(src)?;
-    read_meta(&source).map_err(|e| classify_error(src, e))?;
+    let valid = || source.still_valid(src);
+    match copy(&source.conn, src, dest, progress, &valid) {
+        Ok(true) => return Ok(()),
+        Ok(false) => {}
+        Err(e) if source.is_locked() || !is_source_read_error(&e) => return Err(e),
+        Err(_) => {}
+    }
+    drop(source);
+    let source = crate::files::open_raw_readonly(src)?;
+    copy(&source, src, dest, progress, &|| true).map(|_| ())
+}
+
+/// Liefert `Ok(false)` ohne Veröffentlichung, wenn `valid` nach dem Kopieren die Quelle verwirft.
+fn copy_snapshot_from(
+    source: &Connection,
+    src: &Path,
+    dest: &Path,
+    progress: &(dyn Fn(u64, u64) -> bool + Sync),
+    valid: &dyn Fn() -> bool,
+) -> Result<bool, StoreError> {
+    read_meta(source).map_err(|e| classify_error(src, e))?;
     let total = file_stats(src)?.0;
     if !progress(0, total) {
         return Err(rusqlite::Error::SqliteFailure(
@@ -595,6 +646,9 @@ pub fn copy_snapshot(
             .map_err(|e| StoreError::io(&tmp, e))?;
         f.sync_all().map_err(|e| StoreError::io(&tmp, e))?;
         drop(f);
+        if !valid() {
+            return Ok(false);
+        }
         if !progress(total, total) {
             return Err(rusqlite::Error::SqliteFailure(
                 rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_INTERRUPT),
@@ -603,7 +657,7 @@ pub fn copy_snapshot(
             .into());
         }
         publish(&tmp, dest).map_err(|e| StoreError::io(dest, e))?;
-        Ok(())
+        Ok(true)
     });
     let _ = std::fs::remove_file(&tmp);
     result
@@ -689,6 +743,101 @@ fn publish(src: &Path, dest: &Path) -> std::io::Result<()> {
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    fn no_progress_limit(_: u64, _: u64) -> bool {
+        true
+    }
+
+    // Ein Lesefehler ohne Sperren erscheint nicht als beschädigte Quelle; die Kopie entsteht unter Sperren.
+    // spec: OUT-228
+    // spec: CRAWL-125
+    #[test]
+    fn a_copy_read_error_without_locks_is_repeated_under_locks() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = crate::registry::tests::crawl(dir.path());
+        let dest = dir.path().join("kopie.ospider");
+        let calls = Cell::new(0);
+        copy_snapshot_checked(
+            &src,
+            &dest,
+            &no_progress_limit,
+            &|source, s, d, p, valid| {
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    return Err(rusqlite::Error::SqliteFailure(
+                        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CORRUPT),
+                        Some("zerrissen".into()),
+                    )
+                    .into());
+                }
+                copy_snapshot_from(source, s, d, p, valid)
+            },
+        )
+        .unwrap();
+        assert_eq!(calls.get(), 2);
+        assert_eq!(read_listing(&dest).unwrap().meta.name, "alt");
+    }
+
+    // Beginnt während der Kopie ein Schreiber, wird nichts veröffentlicht, bevor unter Sperren neu kopiert wurde.
+    // spec: OUT-228
+    // spec: CRAWL-125
+    #[test]
+    fn a_copy_invalidated_by_a_writer_is_not_published_and_repeated_under_locks() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = crate::registry::tests::crawl(dir.path());
+        let dest = dir.path().join("kopie.ospider");
+        let calls = Cell::new(0);
+        let owner = Cell::new(None);
+        copy_snapshot_checked(
+            &src,
+            &dest,
+            &no_progress_limit,
+            &|source, s, d, p, valid| {
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    let file = CrawlFile::open(&src, OpenMode::ReadWrite).unwrap();
+                    file.set_meta("name", "neu").unwrap();
+                    owner.set(Some(file));
+                    let published = copy_snapshot_from(source, s, d, p, valid)?;
+                    assert!(!published, "die Quelle hat sich geändert");
+                    assert!(!d.exists());
+                    return Ok(published);
+                }
+                copy_snapshot_from(source, s, d, p, valid)
+            },
+        )
+        .unwrap();
+        assert_eq!(calls.get(), 2);
+        assert_eq!(read_listing(&dest).unwrap().meta.name, "neu");
+        drop(owner.take());
+    }
+
+    // Abbruch durch den Nutzer und ein belegtes Ziel sind keine Lesefehler der Quelle: kein zweiter Versuch.
+    // spec: OUT-228
+    #[test]
+    fn a_cancelled_copy_and_an_occupied_target_are_not_repeated() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = crate::registry::tests::crawl(dir.path());
+        let dest = dir.path().join("kopie.ospider");
+        let calls = Cell::new(0);
+        let real: CopyFrom<'_> = &|source, s, d, p, valid| {
+            calls.set(calls.get() + 1);
+            copy_snapshot_from(source, s, d, p, valid)
+        };
+        let cancel = |_: u64, _: u64| false;
+        let err = copy_snapshot_checked(&src, &dest, &cancel, real).unwrap_err();
+        assert!(!is_source_read_error(&err), "{err}");
+        assert_eq!(calls.get(), 1);
+        assert!(!dest.exists());
+
+        calls.set(0);
+        std::fs::write(&dest, "belegt").unwrap();
+        let err = copy_snapshot_checked(&src, &dest, &no_progress_limit, real).unwrap_err();
+        assert!(matches!(err, StoreError::AlreadyExists(_)), "{err}");
+        assert_eq!(calls.get(), 1);
+        assert_eq!(std::fs::read(&dest).unwrap(), b"belegt");
+    }
 
     // spec: CRAWL-127 [M2]
     #[test]

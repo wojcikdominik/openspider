@@ -117,7 +117,7 @@ fn the_general_help_groups_the_flags_and_marks_the_os_extensions() {
     }
 }
 
-// spec: OUT-203
+// spec: OUT-203 [P1] [M2]
 #[test]
 fn list_exports_and_list_reports_equal_the_help_topics_and_need_no_network() {
     let env = Env::new();

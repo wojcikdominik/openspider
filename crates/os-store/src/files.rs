@@ -142,22 +142,12 @@ pub(crate) fn classify_open(path: &Path, e: rusqlite::Error) -> StoreError {
 
 const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
 
-/// Liest nur den 100-Byte-Kopf der Datei (ohne SQLite zu öffnen) und weist fremde Dateien ab: kein
-/// SQLite-Magic oder falsche `application_id` → [`StoreError::NotACrawlFile`]; Kopf unvollständig →
-/// [`StoreError::Corrupt`]. Verändert nichts, auch keine Begleitdateien.
-pub(crate) fn probe_header(path: &Path) -> Result<(), StoreError> {
-    use std::io::Read;
-
-    let mut f = std::fs::File::open(path).map_err(|e| StoreError::io(path, e))?;
-    let mut head = [0u8; 100];
-    let mut read = 0;
-    while read < head.len() {
-        match f.read(&mut head[read..]) {
-            Ok(0) => break,
-            Ok(n) => read += n,
-            Err(e) => return Err(StoreError::io(path, e)),
-        }
-    }
+/// Liest nur den 100-Byte-Kopf der Datei (ohne eine SQLite-Verbindung und ohne die Sperren dieses Prozesses aufzuheben,
+/// [`crate::open::read_header`]) und weist fremde Dateien ab: kein SQLite-Magic oder falsche `application_id` →
+/// [`StoreError::NotACrawlFile`]; Kopf unvollständig → [`StoreError::Corrupt`]. Verändert nichts, auch keine Begleitdateien.
+pub(crate) fn probe_header(path: &Path) -> Result<[u8; crate::open::HEADER_LEN], StoreError> {
+    let mut head = [0u8; crate::open::HEADER_LEN];
+    let read = crate::open::read_header(path, &mut head).map_err(|e| StoreError::io(path, e))?;
     if read < SQLITE_MAGIC.len() || &head[..16] != SQLITE_MAGIC {
         return Err(StoreError::NotACrawlFile {
             path: path.to_path_buf(),
@@ -175,7 +165,7 @@ pub(crate) fn probe_header(path: &Path) -> Result<(), StoreError> {
             path: path.to_path_buf(),
         });
     }
-    Ok(())
+    Ok(head)
 }
 
 /// Öffnet eine Datei schreibgeschützt ohne Migration und prüft die `application_id`. Eine
@@ -194,26 +184,108 @@ pub(crate) fn open_raw_readonly(path: &Path) -> Result<Connection, StoreError> {
     Ok(conn)
 }
 
-/// Öffnet eine Datei zum Lesen von Metadaten ohne Migration und ohne sie zu verändern. Fremde Dateien
-/// werden vorab am Dateikopf abgewiesen. Die Verbindung ist – wenn möglich – mit Schreibrechten geöffnet,
-/// ohne zu schreiben: als letzte Verbindung entfernt SQLite beim Schließen `-wal`/`-shm` wieder, sodass
-/// die Verwaltung keine Begleitdateien zurücklässt. Auf schreibgeschützten Medien fällt sie auf eine
-/// schreibgeschützte Verbindung zurück.
-pub(crate) fn open_raw_metadata(path: &Path) -> Result<Connection, StoreError> {
+/// Verbindung der Crawl-Verwaltung zum Lesen von Metadaten: schreibt, führt und entfernt nichts (OUT-228, CRAWL-125).
+///
+/// Die Verwaltung liest auch Dateien, die ein anderer Prozess gerade schreibt. Eine Verbindung mit Schreibrechten wäre dort
+/// falsch: Hält sie sich beim Schließen für die letzte, führt sie das WAL zurück und löscht `-wal`/`-shm`. Deshalb nie
+/// mit Schreibrechten:
+/// * Liegen Begleitdateien daneben (ein Besitzer lebt oder ist abgestürzt), liest eine schreibgeschützte Verbindung unter den
+///   normalen Sperren mit und lässt sie liegen.
+/// * Liegen keine daneben, schreibt in diesem Augenblick niemand; dann liest `immutable`, das weder Begleitdateien anlegt
+///   (die Verwaltung hinterlässt nichts) noch Sperren nimmt, einen Besitzer also nicht stören kann. Beginnt während des Lesens
+///   ein Schreiber, sieht der Leser das ohne Sperren nicht. [`MetadataConn::still_valid`] prüft das **nach** dem Lesen; ein
+///   Ergebnis von `immutable` gilt nur, wenn sie danach noch `true` liefert, sonst wird unter Sperren neu gelesen.
+pub(crate) struct MetadataConn {
+    pub(crate) conn: Connection,
+    /// Dateizustand beim Öffnen; `None` = gewöhnliche schreibgeschützte Verbindung unter Sperren.
+    quiet: Option<QuietStamp>,
+}
+
+/// Größe, Änderungszeit und Kopf der Hauptdatei. Wer sie ändert, muss sie zuvor über ein WAL zurückgeführt haben.
+#[derive(PartialEq)]
+struct QuietStamp {
+    len: u64,
+    modified: std::time::SystemTime,
+    head: [u8; crate::open::HEADER_LEN],
+}
+
+fn quiet_stamp(path: &Path) -> Result<Option<QuietStamp>, StoreError> {
+    let companion = |suffix: &str| {
+        let mut name = path.as_os_str().to_owned();
+        name.push(suffix);
+        PathBuf::from(name).exists()
+    };
+    if companion("-wal") || companion("-shm") || companion("-journal") {
+        return Ok(None);
+    }
+    let head = probe_header(path)?;
+    let meta = std::fs::metadata(path).map_err(|e| StoreError::io(path, e))?;
+    let modified = meta.modified().map_err(|e| StoreError::io(path, e))?;
+    Ok(Some(QuietStamp {
+        len: meta.len(),
+        modified,
+        head,
+    }))
+}
+
+impl MetadataConn {
+    /// Schreibgeschützte Verbindung unter Sperren als letzter Versuch.
+    pub(crate) fn locked(conn: Connection) -> Self {
+        MetadataConn { conn, quiet: None }
+    }
+
+    /// `true` für die schreibgeschützte Verbindung unter Sperren: Ihre Ergebnisse, auch Fehler, gelten. Bei `false`
+    /// (`immutable`) gilt nur ein **fehlerfreies** Ergebnis, nach dem [`Self::still_valid`] noch `true` liefert: Ein Lesefehler kann
+    /// von einem Schreiber stammen, der die Datei gerade zurückführt, und darf nie als beschädigte Datei erscheinen.
+    pub(crate) fn is_locked(&self) -> bool {
+        self.quiet.is_none()
+    }
+
+    /// `true`, wenn alles bisher Gelesene verlässlich ist: Sperren schützen die Verbindung, oder seit dem Öffnen von
+    /// `immutable` hat niemand die Datei verändert und auch kein Schreiber begonnen.
+    pub(crate) fn still_valid(&self, path: &Path) -> bool {
+        match &self.quiet {
+            None => true,
+            Some(before) => matches!(quiet_stamp(path), Ok(Some(now)) if now == *before),
+        }
+    }
+}
+
+/// Öffnet eine Datei zum Lesen von Metadaten ohne Migration (siehe [`MetadataConn`]). Fremde Dateien werden vorab am Dateikopf
+/// abgewiesen.
+pub(crate) fn open_raw_metadata(path: &Path) -> Result<MetadataConn, StoreError> {
+    if !path.exists() {
+        return Err(StoreError::NotFound(path.to_path_buf()));
+    }
+    if let Some(quiet) = quiet_stamp(path)? {
+        if let Ok(conn) = crate::open::open_sqlite_immutable(path) {
+            conn.busy_timeout(std::time::Duration::from_secs(5))?;
+            return Ok(MetadataConn {
+                conn,
+                quiet: Some(quiet),
+            });
+        }
+    }
+    Ok(MetadataConn {
+        conn: open_raw_readonly(path)?,
+        quiet: None,
+    })
+}
+
+/// Öffnet eine Crawl-Datei ohne Migration für eine gewollte Änderung der Verwaltung (Metadaten, Checkpoint vor dem Löschen).
+/// Nur für Crawls, die laut Verwaltung nicht laufen (`guard`).
+pub(crate) fn open_raw_write(path: &Path) -> Result<Connection, StoreError> {
     if !path.exists() {
         return Err(StoreError::NotFound(path.to_path_buf()));
     }
     probe_header(path)?;
-    match crate::open::open_sqlite(
+    let conn = crate::open::open_sqlite(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) {
-        Ok(conn) => {
-            conn.busy_timeout(std::time::Duration::from_secs(5))?;
-            Ok(conn)
-        }
-        Err(_) => open_raw_readonly(path),
-    }
+    )
+    .map_err(|e| classify_open(path, e))?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    Ok(conn)
 }
 
 // ---------------------------------------------------------------------------------------------------------

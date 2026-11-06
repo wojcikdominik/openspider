@@ -27,6 +27,9 @@ struct Package {
     extra_spec_ids: Vec<String>,
     #[serde(default)]
     owns: Vec<String>,
+    /// Beleg für Pakete ohne eigenen Merge-Titel (B4-M2CLOSE, `coverage/merged.rs`).
+    #[serde(default)]
+    merged_via: Option<super::merged::MergedVia>,
 }
 impl Package {
     fn wave_number(&self) -> Option<u64> {
@@ -315,6 +318,26 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
         .clone()
         .unwrap_or_else(|| root.join("docs/plan/M2-packages.json"));
     let packages = load(&path)?;
+    // B4-M2CLOSE: gemergte Pakete aus der Merge-Historie (Titelformen und `merged_via`), zusätzlich zu --merged.
+    let detection = match &args.merged_log {
+        Some(log) => Some(super::merged::detect(
+            &std::fs::read_to_string(log)?,
+            packages
+                .iter()
+                .map(|p| (p.id.as_str(), p.merged_via.as_ref())),
+        )),
+        None => None,
+    };
+    let mut effective = args.clone();
+    if let Some(d) = &detection {
+        effective.merged.extend(
+            d.merged
+                .keys()
+                .filter(|id| !args.merged.contains(id))
+                .cloned(),
+        );
+    }
+    let args = &effective;
     // B3-COV: Merge-Titel auf main nennen auch Zweige, die kein Planpaket sind (z. B. M2-N00-SPEC-TAGS).
     // Unbekannte IDs sind eine Warnung und wählen kein Paket aus; sie brechen den Bericht nicht ab.
     let unknown_merged: Vec<String> = args
@@ -408,6 +431,11 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
             .iter()
             .map(|id| format!("unbekanntes gemergtes M2-Paket ignoriert: {id}")),
     );
+    if let Some(d) = &detection {
+        report
+            .warnings
+            .extend(d.missing_via.iter().map(|(id, why)| format!("{id}: {why}")));
+    }
     report.ignored_without_valid_reason.clear();
     let mut placeholders = Vec::new();
     let mut legacy_ignores = Vec::new();
@@ -625,6 +653,15 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
         .map(|p| &p.id)
         .collect::<Vec<_>>());
     doc["unknown_merged"] = json!(unknown_merged);
+    if let Some(d) = &detection {
+        doc["merged_packages"] = json!(d.merged);
+        doc["other_merge_branches"] = json!(d.other);
+        doc["merged_via_missing"] = json!(d
+            .missing_via
+            .iter()
+            .map(|(id, why)| json!({"package": id, "problem": why}))
+            .collect::<Vec<_>>());
+    }
     doc["blocking_specs"] = json!(blocking);
     doc["blocking_appendix_b"] = json!(appendix_open);
     doc["passed"] = json!(ok);
@@ -638,6 +675,20 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
             serde_json::to_string_pretty(&doc).map_err(|e| ParityError::Invalid(e.to_string()))?
                 + "\n",
         )?;
+    }
+    if let Some(d) = &detection {
+        println!(
+            "Gemergte M2-Pakete laut Merge-Historie: {} (davon über merged_via: {}); andere Merge-Zweige: {}",
+            d.merged.len(),
+            d.merged
+                .values()
+                .filter(|b| b.starts_with("merged_via "))
+                .count(),
+            d.other.len()
+        );
+        for (branch, subject) in &d.other {
+            println!("  kein M2-Paket: {branch} ({subject})");
+        }
     }
     print!("{}", report.summary_text());
     for name in &failed_tests {

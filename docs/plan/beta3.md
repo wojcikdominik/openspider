@@ -103,6 +103,7 @@ Anlass: LinkedIn-Frage nach einer Self-Hosted-Docker-Lösung. Grundlage besteht 
   - `unknown_merged` im Gate rot machen (Hygiene); `ui-e2e.yml` Browserinstallation ebenfalls mit 15-min-Schritt-Limit; Budget-Schritt nach E2E-Timeout kann das 60-min-Job-Limit reißen.
   - M3-Q01: Basis ist `m2.rs` nach B3-COV inkl. `unknown_merged`; Regressionstest `unknown_merged_ids_warn_and_select_no_package` einschließen.
   - Spec-coverage-M2 Shard-Balance macOS (21 vs. 34 min); flaky `sidebar-chart/live:40` (config.get im IPC-freien Fenster), `compare/bridge:44` (Spaltenkopf > 5 s).
+- **M2-N29 entfällt (Nutzerentscheidung 06.11.2026):** Kennzeichnung noch nicht gebauter Funktionen als „Kommt später“ wird nicht umgesetzt (kein Spec-Eintrag, kein Paket in `M2-packages.json`). Der technische Rest (Aufteilung von `Manager::retain_with`) bleibt Aufräumpunkt ohne Termin. M2-Abschluss damit: B4-LIVEDETAIL (M2-N32), B4-M2CLOSE (Nachweise, M2-N34, Merge-Erkennung), danach Fable-Gate M2-Q04.
 - Für beta.4 aus B3-N00:
   - Paket „Fortsetzen/MCP“: CLI `--resume` und MCP `resume_crawl` lehnen gestoppte Crawls ab (`os-store` `can_resume`, `os-engine` `lifecycle::prepare`, Werkzeugtexte `os-mcp`), dazu MCP-Werkzeug `pause_crawl(id)` und wiederholbarer Fehlercode `busy` (AGENT-020).
   - Verwaltung zeigt „Abgeschlossen (gestoppt)“ (additives `endReason` im Listing), Grenzart `limit_kind` in „Fertig (Grenze erreicht: …)“.

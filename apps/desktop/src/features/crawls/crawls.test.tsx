@@ -104,7 +104,7 @@ it("resumes a completed crawl with a remaining queue using the core's shared can
 // spec: CRAWL-143
 it("protects running and locked crawls while paused and interrupted crawls can resume", async () => {
   await mount(); select("Live");
-  for (const action of ["Delete", "Rename", "Move to project", "Export crawl…", "Resume"]) expect(button(action)).toBeDisabled();
+  for (const action of ["Delete", "Rename", "Move to project", "Export crawl…", "Resume", "Lock", "Unlock"]) expect(button(action)).toBeDisabled();
   expect(button("Export crawl…").parentElement).toHaveAttribute("title", "Crawl running – pause first");
   select("Live"); select("Geschützt");
   expect(button("Delete")).toBeDisabled(); expect(button("Rename")).toBeDisabled();
@@ -205,7 +205,7 @@ it("moves a paused crawl without resuming, passes exports from project and root,
   expect(calls("crawl.resume")).toHaveLength(0);
 });
 
-// spec: CRAWL-127
+// spec: CRAWL-127 [M2]
 it("native dialog cancellation sends no open/import/save/export and recent entries deduplicate and cap at ten", async () => {
   fixture.setPaths(null); fixture.setDestination(null); await mount();
   click("Open crawl…"); await waitFor(() => expect(button("Import crawls…")).toBeEnabled());
@@ -217,7 +217,7 @@ it("native dialog cancellation sends no open/import/save/export and recent entri
   expect(readRecent()).toHaveLength(10); expect(readRecent()[0]).toBe("/new.ospider");
 });
 
-// spec: CRAWL-127
+// spec: CRAWL-127 [M2]
 it("removes a missing recent file only on NotFound, and retains schema/permission failures", async () => {
   writeRecent(["/missing.ospider", "/denied.ospider"]);
   fixture.core.handlers.set("crawl.open", args => { const path = (args as { path: string }).path; throw new IpcError(localError(path.includes("missing") ? "NotFound" : "Permission", "err-not-a-crawl-file")); });
@@ -365,7 +365,7 @@ it("routes file integrity, configuration and repair through the added native ser
   for (const command of ["crawl_file_check", "crawl_file_config", "crawl_file_repair"]) expect(calls(command)[0]?.args).toEqual({ path: "/fixture/Alpha.ospider" });
 });
 
-// spec: CRAWL-127
+// spec: CRAWL-127 [M2]
 it("opening the already active running file relies on core identity and never asks to pause it", async () => {
   useSession.setState({ crawl: { crawlId: fixtureRows[0]!.crawl.crawlId, phase: "running", mode: "spider", crawled: 1, queued: 15, discovered: 16, percent: 6,
     rate: 1, avgRate: 1, elapsedS: 1, pausedS: 0, activeThreads: 1, owner: fixtureRows[0]!.crawl.owner } });

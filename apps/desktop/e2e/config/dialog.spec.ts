@@ -98,7 +98,7 @@ test("a crawl started by another process makes the dialog read-only", async ({ p
   await expect(dialog.getByTestId("config-pause-edit")).toHaveCount(0);
 });
 
-// spec: CRAWL-077 [P1]
+// spec: CRAWL-077 [P1] [M2]
 test("the rendering switch is locked while running and paused, with the new-crawl hint", async ({ page }) => {
   for (const phase of ["running", "paused"] as const) {
     await page.evaluate((p) => window.cfgFixture.setCrawl(p), phase);
@@ -112,7 +112,7 @@ test("the rendering switch is locked while running and paused, with the new-craw
   }
 });
 
-// spec: CRAWL-077 [P1]
+// spec: CRAWL-077 [P1] [M2]
 test("a Chromium error of the core appears as a dialog message with path and download option, without losing the input", async ({ page }) => {
   const dialog = await openDialog(page, "rendering.mode");
   await dialog.getByText("JavaScript (headless Chromium)", { exact: true }).click();

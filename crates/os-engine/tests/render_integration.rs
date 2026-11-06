@@ -108,8 +108,8 @@ fn search(cfg: &mut CrawlConfig) {
 // spec: TECH-100
 // spec: INTEG-030
 // spec: INTEG-052
-// spec: CRAWL-022 [P1]
-// spec: ONPAGE-012 [P1]
+// spec: CRAWL-022 [P1] [M2]
+// spec: ONPAGE-012 [P1] [M2]
 // spec: ONPAGE-016
 #[tokio::test]
 async fn raw_and_dom_are_compared_merged_and_persisted_without_double_counting() {
@@ -239,7 +239,7 @@ async fn crash_is_retried_once_and_failure_preserves_raw_data() {
     }
 }
 
-// spec: CRAWL-077 [P1]
+// spec: CRAWL-077 [P1] [M2]
 #[tokio::test]
 async fn text_mode_never_calls_renderer_and_missing_chromium_fails_before_creation() {
     let renderer = Arc::new(Mock::default());
@@ -373,7 +373,7 @@ async fn a_hanging_renderer_times_out_and_the_crawl_completes_with_raw_data() {
     assert_eq!(fx.summary.state, os_model::CrawlState::Completed);
 }
 
-// spec: CRAWL-077 [P1]
+// spec: CRAWL-077 [P1] [M2]
 #[test]
 fn a_started_crawl_cannot_change_its_rendering_mode() {
     let text = CrawlConfig::default();

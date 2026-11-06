@@ -42,6 +42,8 @@ fn missing_fields_get_default_values() {
     assert!(m.warnings.is_empty());
     let mut expected = CrawlConfig::default();
     expected.limits.max_depth = Some(2);
+    // Die Datei nennt ihren Erzeuger; Laden übernimmt ihn unverändert (erst Schreiben stempelt neu).
+    expected.generator = "openspider 0.1.0".to_owned();
     assert_eq!(m.config, expected);
 
     // Auch eine leere Datei ist eine gültige Konfiguration.
@@ -234,14 +236,29 @@ fn default_fixture_matches_written_defaults() {
         fs::write(&path, &expected).unwrap();
     }
     let on_disk = fs::read_to_string(&path).unwrap();
-    assert_eq!(on_disk, expected, "UPDATE_GOLDEN=1 schreibt die Datei neu");
+    // Die `generator`-Zeile trägt die Programmversion; der Golden-Vergleich gilt für alle übrigen Zeilen
+    // und darf nicht bei jeder Versionsanhebung brechen. Die geschriebene Zeile ist die aktuelle Version.
+    let current = format!("generator = \"openspider {}\"\n", env!("CARGO_PKG_VERSION"));
+    assert!(expected.contains(&current), "{expected}");
+    let golden_generator = on_disk
+        .lines()
+        .find(|l| l.starts_with("generator = "))
+        .expect("generator-Zeile im Golden");
+    assert_eq!(
+        on_disk,
+        expected.replacen(&current, &format!("{golden_generator}\n"), 1),
+        "UPDATE_GOLDEN=1 schreibt die Datei neu"
+    );
     // Alle Werte stehen drin (nicht nur Abweichungen) – und die Datei lädt zu den Standardwerten.
     assert!(on_disk.contains("threads = 5"));
     assert!(on_disk.contains("[spider.amp]"));
     assert!(on_disk.starts_with("schema_version = 2\ngenerator = \"openspider "));
     assert_eq!(
         load("config/default.osconfig").config,
-        CrawlConfig::default()
+        CrawlConfig {
+            generator: "openspider 0.1.0".to_owned(),
+            ..CrawlConfig::default()
+        }
     );
 }
 
@@ -315,7 +332,14 @@ fn save_and_load_file_round_trip() {
     assert_eq!(bytes, cfg.to_osconfig_string().unwrap());
     let back = CrawlConfig::load_file(&path).unwrap();
     assert!(back.warnings.is_empty());
-    assert_eq!(back.config, cfg);
+    // Speichern stempelt den Erzeuger des schreibenden Programms, alles andere bleibt gleich.
+    assert_eq!(
+        back.config,
+        CrawlConfig {
+            generator: CrawlConfig::default().generator,
+            ..cfg.clone()
+        }
+    );
     assert_eq!(back.config.to_osconfig_string().unwrap(), bytes);
 
     // Überschreiben ersetzt die Datei vollständig, es bleibt keine temporäre Datei zurück.

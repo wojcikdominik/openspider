@@ -53,6 +53,7 @@ const CATALOG_4_4: &[&str] = &[
     "view.update",
     "view.rows",
     "view.locate",
+    "view.range",
     "view.copy",
     "view.close",
     "search.parse",

@@ -4,7 +4,7 @@ use common::*;
 use os_analyze::views::{query_view, ViewQuery};
 use os_model::{CrawlConfig, Value};
 
-// spec: ONPAGE-142 [P1]
+// spec: ONPAGE-142 [P1] [M2]
 #[test]
 fn pdf_readability_and_language_totals_are_in_the_enabled_default_export() {
     let dir = tempfile::tempdir().unwrap();

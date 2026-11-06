@@ -21,6 +21,10 @@ const all = engines.flatMap((engine) => [
   { name: `${engine.name}-perf`, use: engine.use, testMatch: PERF, dependencies: [engine.name] },
 ]);
 
+// Eigener Port je Worktree (OS_E2E_PORT): Auf dem Build-Server laufen Pakete parallel; mit dem festen Port 1420 und
+// reuseExistingServer lief Playwright sonst gegen den Vite-Server eines fremden Worktrees (B4-LANG-Tests, 06.11.2026).
+const port = Number(process.env.OS_E2E_PORT ?? 1420);
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -30,14 +34,14 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   use: {
-    baseURL: "http://localhost:1420",
+    baseURL: `http://localhost:${port}`,
     trace: "retain-on-failure",
     reducedMotion: "reduce",
   },
   projects: all.filter((p) => wanted.includes(p.name.replace(/-perf$/, ""))),
   webServer: {
-    command: "npm run dev",
-    url: "http://localhost:1420",
+    command: `npm run dev -- --port ${port}`,
+    url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
     stdout: "ignore",

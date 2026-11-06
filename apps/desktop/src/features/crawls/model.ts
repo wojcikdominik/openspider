@@ -26,7 +26,7 @@ export function permissions(rows: CrawlListing[]) {
   const locked = rows.some(r => r.locked);
   return { open: rows.length === 1, resume: rows.length === 1 && rows[0]!.canResume,
     rename: rows.length === 1 && !running && !locked, delete: any && !running && !locked,
-    move: any && !running, export: any && !running, duplicate: any && !running, lock: any, unlock: any, copyIds: any, reveal: any,
+    move: any && !running, export: any && !running, duplicate: any && !running, lock: any && !running, unlock: any && !running, copyIds: any, reveal: any,
     // OUT-140: exactly two completed or idle files may be compared.
     compare: rows.length === 2 && !running };
 }

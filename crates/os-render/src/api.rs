@@ -91,7 +91,8 @@ impl Default for LaunchOpts {
             host_resolver_rules: Vec::new(),
             disable_cookie_storage: false,
             suppress_default_accept_language: false,
-            launch_timeout_ms: 20_000,
+            // Kaltstart auf langsamen Rechnern: 20 s reichten auf frischen Windows-Runnern nicht (Trockenlauf beta.3).
+            launch_timeout_ms: 60_000,
             no_sandbox: false,
         }
     }
@@ -413,6 +414,13 @@ pub(crate) async fn login_proxy(
 #[cfg(test)]
 mod document_read_tests {
     use super::*;
+
+    // Ein langsamer Kaltstart darf nicht als „Chromium nicht startbar“ gelten.
+    // spec: CRAWL-078
+    #[test]
+    fn default_launch_timeout_allows_a_slow_cold_start() {
+        assert_eq!(LaunchOpts::default().launch_timeout_ms, 60_000);
+    }
 
     #[derive(Debug)]
     struct Identity;

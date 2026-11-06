@@ -3,7 +3,7 @@ use os_model::{CrawlConfig, CrawlState};
 use serde_json::json;
 use std::sync::Arc;
 
-// spec: CRAWL-131 [P1]
+// spec: CRAWL-131 [P1] [M2]
 #[tokio::test]
 async fn command_queues_and_resumes_a_completed_crawl_as_an_operation() {
     let fx = os_engine::testing::crawl_fixture("crawl-m2-lifecycle", CrawlConfig::default()).await;

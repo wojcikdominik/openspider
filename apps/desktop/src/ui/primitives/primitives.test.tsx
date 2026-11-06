@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { setLanguage } from "../../i18n";
 import { EMPTY_CODES } from "../emptyState/codes";
 import { Button, ColorPicker, DialogFooter, EmptyState, KeyHint, SplitPane, TabBar, Tabs, clampSplit, fitTabs, moveItem } from "./index";
@@ -167,6 +168,29 @@ describe("Weitere Primitive", () => {
     expect(within(dialog).getByRole("heading", { name: "Demo" })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  // spec: UI-145
+  // spec: UI-143
+  it("Dialog: geschlossen ohne Inhalt und ohne Render der Teile; Fokus kehrt nach dem Schließen zurück (M2-N32)", async () => {
+    let body = 0;
+    const Body = () => { body++; return <p>Body</p>; };
+    function Owner() {
+      const [open, setOpen] = useState(false);
+      return <><button onClick={() => setOpen(true)}>Open</button>
+        <Dialog title="Demo" isOpen={open} onOpenChange={setOpen} footer={(close) => <DialogFooter platform="win" okLabel="OK" cancelLabel="Cancel" onCancel={close} />}><Body /></Dialog></>;
+    }
+    const { container } = render(<Owner />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(body).toBe(0);
+    expect(container.children).toHaveLength(1);
+    const trigger = screen.getByRole("button", { name: "Open" });
+    trigger.focus(); fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+    expect(body).toBeGreaterThan(0);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it("Button und Issue-Symbol rendern", () => {
