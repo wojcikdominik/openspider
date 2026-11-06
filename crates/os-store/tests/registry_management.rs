@@ -119,6 +119,43 @@ fn five_states_heartbeat_age_and_limit_queue_determine_resumability() {
     assert!(m.get(&ids[2]).unwrap().can_resume(now()));
 }
 
+// spec: CRAWL-128
+// spec: AGENT-020
+#[test]
+fn a_stopped_crawl_is_never_resumable_whatever_its_queue_holds() {
+    let dir = tempfile::tempdir().unwrap();
+    let (stopped, stopped_path) = crawl(dir.path(), 11, CrawlState::Completed);
+    let (limited, limited_path) = crawl(dir.path(), 12, CrawlState::Completed);
+    for (path, reason) in [(&stopped_path, "stopped"), (&limited_path, "limit_reached")] {
+        let file = CrawlFile::open(path, OpenMode::ReadWrite).unwrap();
+        file.set_meta("end_reason", reason).unwrap();
+        // Rest in der Warteschlange: ohne Endgrund `stopped` wäre der Crawl fortsetzbar (Limit, K2-34).
+        file.conn()
+            .execute(
+                "INSERT INTO queue(url_id,seq,depth,priority) VALUES (1,1,0,0)",
+                [],
+            )
+            .unwrap();
+    }
+    let mut m = Manager::open(dir.path()).unwrap();
+    let listed = m.get(&stopped).unwrap();
+    assert_eq!(listed.queued, 1);
+    assert_eq!(listed.meta.end_reason, Some(os_model::EndReason::Stopped));
+    assert!(!listed.can_resume(now()), "Gestoppt ist endgültig");
+    assert!(m.get(&limited).unwrap().can_resume(now()), "Limit mit Rest");
+    // Auch ohne Verwaltungsindex (CLI liest die Datei direkt) gilt dieselbe Regel.
+    let direct = registry::read_listing(&stopped_path).unwrap();
+    assert!(!direct.can_resume(now()));
+    // Ein gestoppter Crawl mit veraltetem Zustand (Absturz nach dem Stopp-Commit ist ausgeschlossen, Datei von Hand
+    // verändert) bleibt ebenfalls gesperrt: der Endgrund entscheidet, nicht der Zustand.
+    let file = CrawlFile::open(&stopped_path, OpenMode::ReadWrite).unwrap();
+    file.set_meta("state", "Paused").unwrap();
+    drop(file);
+    assert!(!registry::read_listing(&stopped_path)
+        .unwrap()
+        .can_resume(now()));
+}
+
 // spec: CRAWL-143
 #[test]
 fn paused_duplicate_and_export_preserve_queue_config_and_source() {

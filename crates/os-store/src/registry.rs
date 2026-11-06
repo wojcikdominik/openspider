@@ -195,8 +195,13 @@ impl CrawlListing {
         )
     }
 
-    /// Gemeinsame Fortsetzbarkeit nach K2-34.
+    /// Gemeinsame Fortsetzbarkeit nach K2-34 und CRAWL-128: „Pausiert“, „Unterbrochen“ und „Abgeschlossen“ mit
+    /// Restwarteschlange (Limit), nie ein Crawl mit Endgrund `stopped` („Gestoppt ist endgültig“, unabhängig von der
+    /// Warteschlange; gilt für App, CLI und MCP).
     pub fn can_resume(&self, now: Timestamp) -> bool {
+        if self.meta.end_reason == Some(EndReason::Stopped) {
+            return false;
+        }
         matches!(
             self.effective_state(now),
             CrawlState::Paused | CrawlState::Incomplete
