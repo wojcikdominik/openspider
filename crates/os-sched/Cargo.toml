@@ -22,7 +22,7 @@ thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 time.workspace = true
-uuid.workspace = true
+uuid = { workspace = true, features = ["v4"] }
 dirs.workspace = true
 
 [dev-dependencies]
