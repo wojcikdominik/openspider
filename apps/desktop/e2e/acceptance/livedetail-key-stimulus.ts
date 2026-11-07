@@ -6,13 +6,16 @@ import { flushSync } from "react-dom";
 // Fixture-Nachweis: Auswahlwechsel-Test in livedetail-detail.spec.ts, reale Grid-Key-Handler.
 // Diskrete Nutzereingaben haben jeweils einen eigenen React-Commit. Ohne diese Grenze würden
 // synthetische Ereignisse im selben JS-Takt dieselbe alte Fokuszeile mehrfach ansteuern.
-export function rapidArrows(grid: Element, count: number): number {
+export function rapidArrows(grid: Element, count: number): { stimulusMs: number; elapsedMs: number } {
   const start = performance.now();
+  let stimulusMs = 0;
   for (let i = 0; i < count; i++) {
     flushSync(() => {
+      const dispatched = performance.now();
       grid.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", bubbles: true, cancelable: true }));
       grid.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", code: "ArrowDown", bubbles: true, cancelable: true }));
+      stimulusMs += performance.now() - dispatched;
     });
   }
-  return performance.now() - start;
+  return { stimulusMs, elapsedMs: performance.now() - start };
 }

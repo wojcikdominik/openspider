@@ -208,12 +208,12 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   const m3 = await mark(page, "to-page-3");
   // spec: UI-012, UI-145 — drei Ereignisse ohne Timer/Protokoll-Roundtrips.
   // Fokus, Markierung und Modulimport liegen außerhalb der gemessenen Stimulusphase.
-  const stimulusMs = await page.evaluate(async () => {
+  const { stimulusMs, elapsedMs } = await page.evaluate(async () => {
     const { rapidArrows } = await import(/* @vite-ignore */ String("/e2e/acceptance/livedetail-key-stimulus.ts"));
-    return rapidArrows(document.activeElement!, 3) as number;
+    return rapidArrows(document.activeElement!, 3) as { stimulusMs: number; elapsedMs: number };
   });
-  await test.info().attach("arrow-stimulus", { body: JSON.stringify({ stimulusMs, count: 3 }), contentType: "application/json" });
-  console.log(`[livedetail] arrow stimulus: ${stimulusMs.toFixed(1)} ms for 3 keys`);
+  await test.info().attach("arrow-stimulus", { body: JSON.stringify({ stimulusMs, elapsedMs, count: 3 }), contentType: "application/json" });
+  console.log(`[livedetail] arrow stimulus: ${stimulusMs.toFixed(1)} ms for 3 keys; including React commits ${elapsedMs.toFixed(1)} ms`);
   expect(stimulusMs, "Testvorbedingung: nur drei Tastendrücke, ohne Fokus/Markierung/Warten").toBeLessThan(800);
   await expect.poll(() => selectedUpper(page)).toEqual([target3]);
   await expect.poll(async () => (await readDetail(page))?.rowcount, { timeout: 15_000 }).toBe(2);

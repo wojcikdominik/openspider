@@ -535,7 +535,9 @@ Die Last-Fixture und Fensterplanung sind in `livedetail-support.ts` überführt.
   Fokus, Modulimport und Recorder-Markierung vorher setzen, drei Keydown/Keyup-Paare
   im Seitenkontext ohne Timer oder Protokoll-Roundtrips; `flushSync` übernimmt zwischen
   diskreten Eingaben den React-Zustand, wie an normalen Nutzereingabegrenzen. Nur die
-  Ereignisfolge wird gemessen und vor Assertion angehängt. Der Browser-Helfer liegt in
+  Ereigniserzeugung wird gemessen und vor Assertion angehängt; die Gesamtdauer
+  einschließlich React-Commits steht separat daneben. Die Produkt-Zeitassertion
+  umfasst weiterhin die gesamte Zeit ab Recorder-Markierung. Der Browser-Helfer liegt in
   `livedetail-key-stimulus.ts` und wird gegen die echte Tabellen-Fixture geprüft. Die Produktprüfungen auf neue Daten,
   falsche/veraltete Zeilen und deren Zeitgrenze bleiben erhalten.
 
@@ -544,9 +546,9 @@ Vorläufe: Der erste direkte Ereignisversuch bündelte React-Updates und landete
 page-1 statt page-3; eine Microtask reichte nicht. Native Playwright-Tastendrücke
 überschritten unter Last die Testvorbedingung (1909 ms durch Protokoll-Roundtrips).
 Diese beiden Harness-Ansätze wurden verworfen. Der abschließende Browser-Helfer
-besteht den gezielten Auswahlwechsel-Test in **beiden Engines (2/2, 49 s)**, einschließlich
-aller unveränderten Produktassertions. Der begonnene erste Serienlauf mit dem nativen
-Zwischenstand wurde beendet und zählt nicht zum Endnachweis. Kein Produktfehler wurde
+besteht den gezielten Auswahlwechsel-Test in **beiden Engines (2/2, 49,6 s)**, einschließlich
+aller unveränderten Produktassertions. Begonnene Serienläufe vor der abschließenden Trennung von Stimulus- und
+Renderzeit wurden beendet und zählt nicht zum Endnachweis. Kein Produktfehler wurde
 dafür durch eine gelockerte Assertion ausgeblendet.
 
 Nachweise und Endstatus folgen nach den Läufen.
