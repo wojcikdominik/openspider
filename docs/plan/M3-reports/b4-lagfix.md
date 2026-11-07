@@ -13,7 +13,10 @@ UI-145/PERF-004 verlangen begrenzte Zeilenfenster und geringe Renderlast.
 
 Unveränderte Kopien aus `m3/livedetail-tests-ci`: `livedetail-lag-window.spec.ts`,
 `livedetail-load-fixture.ts`, `livedetail-gate.ts`, `livedetail-support.ts`, temporär unter
-`apps/desktop/e2e/lagfix-repro/`. Das vermeidet das Überschreiben der bereits versionierten,
+`apps/desktop/e2e/lagfix-repro/`. Alle vier Dateien sind byteidentisch zu
+`2c5c9b5b3` (SHA-256-Nachweis `/tmp/b4-lagfix-repro-hashes.json`). Der Testbranch
+wurde während der Arbeit parallel weitergeführt; spätere Änderungen wurden nicht in
+die Reproduktion übernommen. Das vermeidet das Überschreiben der bereits versionierten,
 abweichenden Support-Datei. Diese Kopien werden nicht committet. Eigene temporäre
 Instrumentierung in `diagnostic.spec.ts`, ebenfalls nicht zum Commit vorgesehen.
 Playwright: eigener Port 14791, zwei Worker, F7 mit `taskset -c 0,1`.
@@ -101,7 +104,38 @@ Noch offen. Messrezept aus `b4-livedetail.md`: Produktionsbuild, 5 000 Seiten ×
 
 ## Gates
 
-Noch offen. Tokio laut Lockdatei unverändert 1.53.3. Keine Tests oder Budgets gelockert.
+| Prüfung | Stand |
+|---|---|
+| `npm ci` | Exit 0, Lockdatei unverändert |
+| Frontend-Typecheck | Exit 0 |
+| Frontend-Vitest | **1034/1034**, 122 Dateien, 179,17 s, Exit 0 |
+| `cargo fmt --all --check` | Exit 0 |
+| Clippy, Workspace/all-targets, `-j 4 --locked`, `-D warnings` | Exit 0 |
+| Workspace-Test | **4414 bestanden, 0 fehlgeschlagen, 51 vorhandene Ignorierungen**, 612 Ergebnisgruppen, Exit 0 |
+| `scripts/check-neutral.sh` | Exit 0, keine Fundstellen |
+| bestehende Playwright-Specs | erster vollständiger Lauf **59/60**, Chromium **30/30**, WebKit **29/30**; Wiederholung folgt |
+| F7, fünf Wiederholungen je Engine auf zwei Kernen | folgt |
+
+Einziger Fehler im ersten vollständigen Browser-Lauf: geschützter Test
+`livedetail-detail.spec.ts:198`, Selbstkontrolle des Teststimulus an Zeile 227:
+acht Tastenereignisse in **936 ms**, verlangt **<800 ms**. Die fachliche Prüfung danach
+wird nicht erreicht. Das ist bereits in `b4-ldfollow.md` dokumentiert. UI-145 definiert
+100 ms Entprellung für schnelle Auswahlwechsel; die 800-ms-Prüfung stellt sicher,
+dass der Test überhaupt schnelle Eingaben liefert. Für diese Vorbedingung wurde weder
+das Produkt noch der unabhängige Test geändert. Protokoll `/tmp/b4-lagfix-suite-final.log`,
+Trace `/tmp/b4-lagfix-suite-final-results/`. Die komplette Suite wird nach Ende der
+eigenen Hintergrund-Gates nochmals ausgeführt.
+
+Workspace-Aufruf nach `~/ws-slot.sh`, mit `CARGO_PROFILE_DEV_DEBUG=0`,
+`CARGO_PROFILE_TEST_DEBUG=0`, `CARGO_INCREMENTAL=0`, `-j 4 --locked` und
+`OPENSPIDER_CHROMIUM=/home/build/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome`.
+Schwere Kommandos mit `timeout 3600s nice -n 10`, Playwright eigener Port 14791 und
+`--workers=2`. Ein zurückgebliebenes eigenes Fixture-Paar aus dem bewusst unterbrochenen
+Browser-Zwischenlauf wurde beendet, bevor die Kontrollmessungen beginnen.
+
+Tokio laut unveränderter Lockdatei **1.53.3**; keine Abhängigkeit aktualisiert.
+Keine bestehenden Tests, Budgets, Ignorierungen oder Wiederholungsregeln geändert.
+Logs `/tmp/b4-lagfix-{npm-ci-final,typecheck-final,vitest-final,fmt-final,clippy-final,workspace,neutral-final}.log`.
 
 ## Fremde Dateien
 
