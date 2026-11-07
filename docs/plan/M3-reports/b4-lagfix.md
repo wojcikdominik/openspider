@@ -99,8 +99,42 @@ unterbrochen und auf dem endgültigen Produktstand vollständig neu gestartet.
 
 ## Renderlast vorher/nachher
 
-Noch offen. Messrezept aus `b4-livedetail.md`: Produktionsbuild, 5 000 Seiten × 30 Links,
-150 URL/s, vier Crawl-Threads, acht Klickrunden, fünf Sekunden Leerlauf.
+Messrezept aus `b4-livedetail.md`: Produktionsbuild, Release-Bridge (WebSocket),
+5 000 Seiten × 30 Links, 150 URL/s, vier Crawl-Threads, 300 URLs Anlauf,
+acht Klickrunden (24 Detailwechsel), fünf Sekunden Leerlauf. Browser-Release-Aufbau
+auf dem gemeinsamen Linux-Server; keine Mac-Abnahme und kein Tauri-IPC-Nachweis.
+
+Kontrollaufbau: nach Ende der eigenen Gates je Engine separat, jeweils ein Messlauf,
+zwei Durchgänge in Reihenfolge Vorher → Nachher. Vorher: `UpperTable.tsx` aus
+`13ab61539`; Nachher: Produktstand `0e76f34c3`. Beide getrennt gebaut, dieselbe
+Release-Bridge (Rust unverändert), Fixture und Messwerkzeug unverändert. Eigener Port 14791,
+`--workers=2`; pro Messlauf tatsächlich ein Test/Worker. Die Renderlast-Messung läuft wie
+im ursprünglichen Bericht auf dem Server ohne die Zwei-Kern-Begrenzung; nur F7 nutzt CPU 0/1.
+
+Hauptthread-Belegung in % (verspätete 10-ms-Timer), Werte Durchgang 1 · 2:
+
+| Engine | Leerlauf vorher | Leerlauf nachher | Klickphase vorher | Klickphase nachher |
+|---|---|---|---|---|
+| Chromium | 5,9 · 5,5 | 5,1 · 5,8 | 7,3 · 8,5 | 8,3 · 7,4 |
+| WebKit | 2,8 · 3,3 | 2,7 · 2,7 | 8,0 · 8,2 | 7,8 · 7,5 |
+
+Kein Anstieg im Mittel: Leerlauf Chromium 5,70 → 5,45 %, WebKit 3,05 → 2,70 %;
+Klickphase Chromium 7,90 → 7,85 %, WebKit 8,10 → 7,65 %. Einzelne Chromium-Werte
+streuen in beide Richtungen; daraus wird keine gesicherte Beschleunigung abgeleitet.
+Die gesenkte Renderlast aus B4-LIVEDETAIL bleibt erhalten. Der Fixture-Test ergänzt die
+Messung mit einem direkten Nachweis: Metadatenfortschritt rendert das Grid nicht erneut.
+Alle acht Messläufe bestanden (je 24 Detailwechsel); keine Budgetprüfung geändert.
+
+Frühe explorative Messungen sind kein geeigneter Vergleich: gleichzeitig beide Engines
+auf denselben zwei Kernen ergaben 66,7/47,5 % Leerlauf; erste serielle Messungen mit
+parallel laufenden eigenen Gates 5,1/2,8 % vorher und 6,9/5,5 % nachher.
+Deshalb erfolgte der oben vollständig ausgewiesene wechselnde Kontrollvergleich ohne
+eigene Hintergrund-Gates, statt Lastunterschiede als Produkteffekt auszugeben.
+
+Rohdaten `/tmp/b4-lagfix-perf-evidence/livedetail-*-lagfix-control-*.json`,
+Tabelle `/tmp/b4-lagfix-perf-summary.json`, Exitcodes/Dauern
+`/tmp/b4-lagfix-control-summary.txt`, Einzelprotokolle
+`/tmp/b4-lagfix-control-<Durchgang>-<Stand>-<Engine>.log`.
 
 ## Gates
 
@@ -113,7 +147,7 @@ Noch offen. Messrezept aus `b4-livedetail.md`: Produktionsbuild, 5 000 Seiten ×
 | Clippy, Workspace/all-targets, `-j 4 --locked`, `-D warnings` | Exit 0 |
 | Workspace-Test | **4414 bestanden, 0 fehlgeschlagen, 51 vorhandene Ignorierungen**, 612 Ergebnisgruppen, Exit 0 |
 | `scripts/check-neutral.sh` | Exit 0, keine Fundstellen |
-| bestehende Playwright-Specs | erster vollständiger Lauf **59/60**, Chromium **30/30**, WebKit **29/30**; Wiederholung folgt |
+| bestehende Playwright-Specs | letzter vollständiger Lauf **60/60**, Chromium **30/30**, WebKit **30/30**, 8,8 min, Exit 0 |
 | F7, fünf Wiederholungen je Engine auf zwei Kernen | folgt |
 
 Einziger Fehler im ersten vollständigen Browser-Lauf: geschützter Test
@@ -123,8 +157,11 @@ wird nicht erreicht. Das ist bereits in `b4-ldfollow.md` dokumentiert. UI-145 de
 100 ms Entprellung für schnelle Auswahlwechsel; die 800-ms-Prüfung stellt sicher,
 dass der Test überhaupt schnelle Eingaben liefert. Für diese Vorbedingung wurde weder
 das Produkt noch der unabhängige Test geändert. Protokoll `/tmp/b4-lagfix-suite-final.log`,
-Trace `/tmp/b4-lagfix-suite-final-results/`. Die komplette Suite wird nach Ende der
-eigenen Hintergrund-Gates nochmals ausgeführt.
+Trace `/tmp/b4-lagfix-suite-final-results/`. Die komplette Suite wurde nach Ende der
+eigenen Hintergrund-Gates unverändert erneut ausgeführt: **60/60 grün**, 8,8 min.
+Auch die WebKit-Pfeiltastenprüfung besteht in diesem Lauf. Protokoll
+`/tmp/b4-lagfix-suite-quiet.log`, Exitcode `/tmp/b4-lagfix-suite-quiet-summary.txt`.
+Beide vollständigen Läufe zusammen **119/120**; der rote Zwischenbefund wird nicht ausgeblendet.
 
 Workspace-Aufruf nach `~/ws-slot.sh`, mit `CARGO_PROFILE_DEV_DEBUG=0`,
 `CARGO_PROFILE_TEST_DEBUG=0`, `CARGO_INCREMENTAL=0`, `-j 4 --locked` und
