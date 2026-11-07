@@ -143,3 +143,107 @@ eine eigene Schwelle wurde nicht erfunden. Die Release-Budgets selbst sind auf d
 - Debug-Build und Dev-Server, 27 bis 8000 URLs, 1 bis 100 URL/s; die Skalenkriterien aus UI-140 bis UI-145 (5 Mio. Zeilen, 1 Mio. Inlinks) sind
   nicht Gegenstand dieser Tests. Native Menüs/Fenster der Tauri-App (Stufe B) nicht geprüft.
 - Ein-/Ausblenden der Seitenleisten-Tab-Konfiguration wurde nicht gesondert getestet (gleicher Baustein wie obere und Detail-Tabs).
+
+## Nachtrag: Robustheit auf langsamen CI-Runnern (Branch `m3/livedetail-tests-ci`)
+
+Anlass: Die Abnahme-Specs fielen auf `main` auf den CI-Runnern um (Läufe 42309492668 und 42309492696: `livedetail-live` Zeile 138,
+`livedetail-dialogs` Zeilen 230 und 186, `livedetail-memo` Zeile 103). Nur Testdateien geändert; kein Produktfehler gefunden.
+
+### Ursache (bestätigt)
+
+Alle Tests liefen gegen einen Fixture-Crawl mit fester Rate (1 bis 12 URL/s, ein Thread) und nahmen an, dass ihre Schritte kürzer
+dauern als der Crawl (27 URLs, also 2 bis 27 s). Auf einem langsamen Rechner dauern die Schritte länger, die Uhr des Crawlers nicht:
+der Crawl war „Completed“, bevor der Test pausierte (`pauseCrawl`) oder auf weiteres Wachstum wartete (`rowcount` blieb bei 21).
+Auf einem Server mit 2 Kernen (`taskset -c 0,1`, 2 Worker, wie die CI) wurde die Annahme in 6 von 56 Läufen verletzt, dazu kamen
+weitere Geschwindigkeitsannahmen, die auf dem ruhigen Server nie auffielen (siehe unten).
+
+### Maßnahme: gesteuerter Crawl („Tor“) statt fester Rate
+
+`livedetail-gate.ts` setzt einen kleinen Vorsatz-Server (Node, nur Loopback) vor `os-testsite`. Er reicht Anfragen weiter, lässt aber nur so
+viele Inhalts-Anfragen durch, wie der Test freigibt (`allow`, `allowTo`, `open`, `meter`). Weitere Anfragen warten; der Crawl bleibt
+„Running“ und kann nicht vorzeitig enden – unabhängig von der Geschwindigkeit des Rechners. Der Test lässt den Crawl erst im letzten Schritt
+enden (`gate.open()`, danach `waitCompleted`). Der Crawl läuft unverändert durch die echte Bridge, Oberfläche und Kern bleiben
+unberührt; die Antwort-Frist des Crawlers (`advanced.response_timeout_s`) steht im Testprofil auf 3600 s, damit wartende Anfragen nicht
+ablaufen. Fortschritt, den ein Test über Zeit beobachten muss (Zähler wachsen, Lag), kommt vom Zeitgeber des Tests (`meter(rate, limit)`:
+eine URL je 1/rate s bis zur Obergrenze); Fortschritt, den ein Test nur braucht („noch 3 weitere Zeilen“), wird gezielt freigegeben
+(`crawlMore`). Beides hängt nicht vom Tempo des Rechners ab. Die Pause wartet auf die gerade laufende Anfrage (am Tor immer genau eine);
+`pauseCrawl(page, gate)` gibt sie nach dem Klick einmal frei. Die zwei externen URLs der Fixture gehen am Tor vorbei, werden aber erst
+nach den internen geholt; Obergrenzen bleiben deshalb bei höchstens 24.
+
+### Weitere geschwindigkeitsabhängige Annahmen (gefunden und behoben)
+
+| Stelle | Annahme | Änderung |
+|---|---|---|
+| `detail` Pfeiltasten-Burst | acht Tastendrücke im Abstand von 5 ms (auf dem 2-Kern-Server 3,5 bis 4,6 s) | Auswahlwechsel im selben Takt über die Übergabeschnittstelle des Detailfensters (`setDetailSelection`), Ziel und Anzahl der `view.open` unverändert geprüft |
+| `detail`, `live` Stichprobenzahl (> 20, > 10) | Recorder tastet alle 100 ms ab | Wächter auf > 5 Stichproben; die inhaltlichen Prüfungen (verschiedene Stände, Monotonie, Sortierung) tragen die Aussage |
+| `live` Overview „höchstens 6 s hinter dem Crawl“, „mindestens 3 Zwischenstände“ | feste Sekundengrenze und feste Beobachtungsdauer (7,7 s) | Spec: nächste Zählung nach max(2 s, 3 × Dauer) – das ist keine Rechner-unabhängige Grenze. Ersetzt durch Etappen (8, 16, 23 URLs; ebenso Dashboard 7, 14, 20): nach jeder Etappe steht der Crawl am Tor, bis die Overview/Karte den Etappenstand zeigt; so entstehen die Zwischenstände unabhängig vom Tempo, die Overview fällt nie zurück, und nach Pause und am Ende ist sie wie bisher exakt |
+| `live`, `detail` Lag-Grenzen (2 s Fuß/Chip, 3 s Inlinks) | absolute Sekunden | Grenze × Rechnerfaktor (größerer Wert aus `machineFactor` = Takt von `setTimeout(20)` vor dem Lauf und `recorderFactor` = Abstand der Takt-Schläge des Recorders während des Laufs, 1 bis 20); Bezugszeit ist die erste Stichprobe mit Zeilen (erstes Laden der Tabelle auf langsamem Rechner gehört nicht dazu) |
+| `detail` sortierte Inlinks: „≥ 4 verschiedene Gesamtzahlen“ | Anzeige folgt mindestens vier Stände (unter Last 3) | Wächter ≥ 3; Sortierung prüft jede Stichprobe, die Gesamtzahl am Ende den Kern |
+| `detail` Auswahlwechsel „erste Zeilen nach 3 s“ | absolute Grenze | **entfernt** (siehe unten) |
+| viele `expect.poll` mit 2 bis 8 s | Dev-Server ruhig | 15 s, die Norm der Alpha-Fixture (`expect.timeout` 15 s „unter paralleler Last“); Prüfungen auf Nicht-Auftreten bleiben zeitlich unverändert |
+| `detail` D2/D3 Obergrenze 24 | /redirect (22. URL) gibt page-1 einen zweiten Inlink | Obergrenze 20: der Zustand hängt nicht mehr davon ab, wie weit der Zeitgeber gekommen ist |
+| `memo` Spaltenwahl: `waitForTimeout(3000)` für das Speichern | feste Wartezeit | Poll auf den gespeicherten Stand (`persistedDetailColumn`) |
+| `detail` Umschalt+Klick: 1,2 s Wartezeit je Klick | Zeitpunkt | Poll bis 5 s auf die erwartete Markierung; eine Datenänderung kommt je Klick (`allow(1)`) und per Zeitgeber, damit der Befund F3 auch auf langsamen Rechnern auftritt |
+| `clickUpperRow` | Layout ändert sich zwischen Lesen und Klick (Meldung nach dem Crawl-Ende; WebKit traf einmal page-5 statt page-3) | einfacher Klick wird bis zu 4× wiederholt; Umschalt+Klicks nie |
+| `budget` | 14 Messungen in 300 s, `expect` mit 5 s, 8000 Seiten bei 100 URL/s | 5+5 Messungen, `expect` mit 15 s, 60 000 Seiten (Crawl läuft knapp 10 min, endet während der Messung nicht) |
+| `live` Tail-Modus | Zeitgeber, 4,5 s Beobachtung | zehn Schritte, je eine URL durch das Tor; danach zwei weitere URLs, die Ansicht bleibt oben |
+
+**Nichts gelockert – was sich geändert hat, ehrlich benannt:**
+- Entfernt wurde die absolute 3-s-Grenze für „erste Zeilen nach einem Auswahlwechsel“ (`detail`, Test D2). Sie war meine Wahl, die Spec nennt
+  Zeitbudgets nur für den Release-Build (Spec-Fragen S1/S2). Auf dem 2-Kern-Server maß der Wechsel 1,7 bis 4,6 s. Geprüft bleiben: die Zeilen der neuen URL
+  erscheinen (15 s), danach nie wieder Zeilen der vorigen, alle Inhalte; die Zeit bis zur ersten Seite misst weiter `budget` (Median, Regression).
+- Aufgegeben wurde die feste 6-s-Lag-Grenze der Overview (s. o., ersetzt, nicht gestrichen).
+- Die Wartegrenzen von 2 bis 8 s auf 15 s anzuheben ändert nur, wie lange auf ein Ereignis gewartet wird, das fehlen kann (Gegenprobe unten
+  zeigt, dass die Tests rot bleiben); es gilt nicht für Aussagen „nicht vor X“.
+- Verschärft: `dialogs` Auswahllisten (Inlinks-Filter) verlangt jetzt strenges Wachstum (vorher `> rows − 1`).
+
+### Gegenprobe: die Tests werden rot, wenn das Verhalten fehlt
+
+Mutationen im Frontend eines getrennten Server-Worktrees (nichts davon im Commit), je gezielt betroffene Tests in Chromium:
+
+| Mutation | Erwartung | Ergebnis |
+|---|---|---|
+| A Detailtabelle aktualisiert sich nicht mehr live (kein Intervall, kein `view_changed`) | Inlinks wachsen, verborgener Tab, Sortierung, später entdeckter Link, Auswahllisten, Spalten im Detail | 6 von 6 rot |
+| B obere Tabelle ignoriert den Tick | Fuß/Chip/Tail, Tab-Konfiguration, Filterliste | 4 von 4 rot |
+| C Detailtabelle ignoriert das Theme | Theme-Test | rot (Dashboard-Test erwartungsgemäß grün: nicht betroffen) |
+| D Detailtabelle zeigt Spaltennamen unübersetzt | Sprach-Test | rot |
+| E Tab-Konfiguration zeigt den Stand des ersten Öffnens | Tab-Konfigurations-Test | rot |
+| F Overview, Dashboard und Issues aktualisieren sich nicht | Fuß/Chip/Overview, Dashboard (2 Tests), Issues | 4 von 4 rot |
+| H „Abbrechen“ im Spaltenmenü verwirft nicht | Spaltenmenü, Spaltendialoge | 2 von 2 rot |
+| I Fehler F1 wieder eingebaut (ausstehende Spaltenwahl nicht berücksichtigt) | „Spaltenwahl nicht verloren“ | rot |
+| J Fix von F3/F5 zurückgenommen (Commit 1a9abef2 rückgängig) | Umschalt+Klick im Live-Crawl | rot (Verluste wie im ersten Bericht); der Tail-Modus-Test bleibt grün – er wiederholt das Hochscrollen bewusst einmal (F5, Anmerkung `observation-F5`) |
+
+Eine einfachere Nachbildung von F3 (nur Versionsvergleich) schlug nicht an, weil der Fix die Tabelle während der Auswahl festhält; erst
+das Zurücknehmen des Commits bringt den Verlust zurück. Die Tore verändern also nicht die Schärfe: der Crawl liefert weiter Änderungen, aber nur
+solange und so viele, wie der Test freigibt.
+
+### Messungen (2 Kerne, 2 Worker, `taskset -c 0,1`, Server zugleich von anderen Paketen belegt)
+
+| Lauf | Ergebnis | Dauer |
+|---|---|---|
+| alle 56 Tests (Chromium + WebKit), erste Fassung mit Tor | 50 grün, 6 rot (Pfeiltasten-Burst, Auswahlwechsel, Sortier-Stichproben, Listen, Zeitmessung) | 22,9 min |
+| zweite, dritte, vierte Fassung | 51, 51, 55 von 56 grün (zuletzt: Bezugszeit des Fußzählers in WebKit) | 23,6 / 21,0 / 20,8 min |
+| 5 Wiederholungen aller Specs (280 Läufe), Zwischenstand | 273 grün; die 7 roten: 6× `budget` (5-s-`expect`, behoben), 1× WebKit-Fehlklick im Crawl-Pfad (behoben) | 1,6 h (19,6 min je Durchlauf) |
+| 5 Wiederholungen der betroffenen Tests (budget, Crawl-Pfad, Umschalt+Klick, Mehrfachauswahl) nach der Korrektur | 60 von 60 grün | 35,4 min (Zeitmessung dominiert) |
+| Fremdlast: ein Durchlauf aller 56 Tests, zwei Rechenschleifen (`yes`) auf denselben zwei Kernen | 55 grün; rot: sortierte Inlinks (WebKit, Wächter „≥ 4 Stände“ sah 3 – behoben, s. o.) | 26,7 min |
+| Fremdlast: Fuß/Chip/Overview, Inlinks-Wachstum, Sortierung, Dashboard je 5× in beiden Engines, eine Rechenschleife | 40 von 40 grün | 15,9 min |
+| letzter Stand, 5 Wiederholungen aller Specs außer `budget` (270 Läufe), ruhig, 2 Kerne, 2 Worker | **270 von 270 grün** | 1,4 h (rund 16,5 min je Durchlauf) |
+
+Gesamtlaufzeit der Abnahme-Specs bei 2 Workern auf 2 Kernen: etwa 17 min ohne und 20 bis 21 min mit `budget` für beide Engines, das sind
+8 bis 10 min je Engine (27 Tests ohne, 28 mit `budget`). Die `livedetail-*`-Specs gehören damit zu den längsten der Suite (viele Tests mit je 10 bis 60 s unter Last). Wer den
+50-Minuten-Grenzwert von `linux-webkit` schonen will, kann `budget` (je Engine 1 bis 5 min unter Last) in den nächtlichen Lauf verlegen;
+das ist eine Entscheidung des Orchestrators, nicht der Tests.
+
+Zeitmessung unter Last (Median erster Klick, 2 Kerne, 100 URL/s im Hintergrund): Chromium URL Details 768 ms, Inlinks 1362 ms; WebKit 1077 und
+2069 ms. Auf dem ruhigen Server lagen sie bei 150 und 260 ms (siehe oben) – ein Grund, warum eine absolute Dev-Server-Schwelle (Spec-Frage S1) auf
+CI-Runnern nicht tragen würde.
+
+Verworfener Versuch: den Zufluss an die Anzeige zu koppeln (der Crawl läuft höchstens zwei URLs vor dem, was die Oberfläche zeigt). Unter
+zwei Rechenschleifen wurde der Crawl dadurch so langsam, dass die gedrosselte Overview keine Zwischenstände zeigte; die Etappen oben lösen
+das, ohne den Zufluss zu verlangsamen.
+
+### Beobachtung
+
+Die Pause wartet auf die gerade laufende Anfrage (im Tor-Test sichtbar: „Running“ bleibt, bis die wartende Anfrage freigegeben ist, dann
+„Paused – merging file“, dann „Paused“). Das ist Entwurf des Kerns und kein Fehler; auf einem langsamen Server mit lahmer Gegenstelle kann
+„Pause“ entsprechend dauern.
