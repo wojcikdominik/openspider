@@ -397,3 +397,25 @@ Protokolle `/tmp/b4-mutation-{a,a2,b,c}.log`, Dauer/Exitcodes
 `/tmp/b4-mutation-summary.txt`; Trace-ZIPs und Attachments unter
 `/tmp/b4-mutation-{a2,b,c}-results/`. Mutationsdefinitionen nur in
 `/tmp/b4-mutate.py` und `/tmp/b4-ldtests-mutations`.
+
+### Gates auf dem Endstand der Tests (`2c5c9b5b3`)
+
+- `npm ci`: Exit 0; Lockdatei unverändert.
+- `cargo fmt --all --check`: Exit 0.
+- `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 cargo clippy -j 4 --workspace --all-targets --locked -- -D warnings`: Exit 0.
+- Workspace-Test nach `~/ws-slot.sh`, mit denselben drei Profilvariablen und
+  `OPENSPIDER_CHROMIUM=/home/build/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome`,
+  `cargo test -j 4 --workspace --locked`: **4410 bestanden, 0 fehlgeschlagen, 51 vorhandene
+  Ignorierungen**, Exit 0. Enthält Unit-, Integrations- und Doc-Tests (611 Ergebnisgruppen).
+- `npm run -w apps/desktop typecheck`: Exit 0.
+- `npm run -w apps/desktop test`: **1022/1022 grün**, Exit 0 (135,72 s).
+- `bash scripts/check-neutral.sh`: Exit 0, keine Fundstellen.
+- Tokio laut unveränderter Lockdatei **1.53.3**; keine Abhängigkeit aktualisiert.
+
+Zwischenfehler der Umgebung: erster Workspace-Lauf ohne Chromium-Erkennung wie oben beschrieben.
+Ein weiterer Zwischenlauf kollidierte mit dem Entfernen von Symboltabellen aus eigenen lokalen
+Testbinärdateien zur Speicherfreigabe (`Text file busy`); nach Abschluss der Bereinigung vollständig
+neu gestartet und grün. Keine Quell- oder Teständerung als Reaktion darauf. Die 51 Ignorierungen
+stammen unverändert aus dem Repository; kein Test wurde neu ignoriert.
+
+Protokolle: `/tmp/b4-{npm-ci,clippy,workspace-final2,typecheck-final,vitest-final,fmt-final,neutral-final}.log`.
