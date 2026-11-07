@@ -225,6 +225,13 @@ fn resume_args(id: &str, extra: &[&str]) -> Vec<String> {
 fn spawn_cli(env: &Env, args: Vec<String>) -> Child {
     let mut cmd = env.command();
     cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Windows: Strg+Untbr geht an die eigene Prozessgruppe des Kindes (siehe `send_sigint`).
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    }
     cmd.spawn().expect("openspider startbar")
 }
 
@@ -426,10 +433,20 @@ impl Drop for Mcp {
 }
 
 fn send_sigint(child: &Child) {
-    let pid = i32::try_from(child.id()).unwrap();
-    // SAFETY: `kill` mit der PID eines eigenen Kindprozesses.
-    let rc = unsafe { libc::kill(pid, libc::SIGINT) };
-    assert_eq!(rc, 0, "kill(SIGINT) fehlgeschlagen");
+    #[cfg(unix)]
+    {
+        let pid = i32::try_from(child.id()).unwrap();
+        // SAFETY: `kill` mit der PID eines eigenen Kindprozesses.
+        let rc = unsafe { libc::kill(pid, libc::SIGINT) };
+        assert_eq!(rc, 0, "kill(SIGINT) fehlgeschlagen");
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Console::{GenerateConsoleCtrlEvent, CTRL_BREAK_EVENT};
+        // SAFETY: Aufruf mit der Prozessgruppe eines eigenen Kindprozesses (CREATE_NEW_PROCESS_GROUP in `spawn_cli`).
+        let sent = unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, child.id()) };
+        assert_ne!(sent, 0, "Strg+Untbr nicht zustellbar");
+    }
 }
 
 /// Startet einen langsamen CLI-Crawl, wartet auf `n` Seitenabrufe und pausiert ihn per SIGINT.
