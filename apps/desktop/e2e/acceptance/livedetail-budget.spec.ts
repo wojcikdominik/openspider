@@ -8,6 +8,9 @@
 //   - wenn OS_LD_BASELINE_URLDETAILS_MS / OS_LD_BASELINE_LINKS_MS gesetzt sind (Median eines früheren Laufs, z. B. von `main`):
 //     Median ≤ Basis × 1,10 (UI-148).
 // Ohne Basis bleibt der Median ein berichteter Messwert; er wird nicht gegen eine selbst erfundene Schwelle geprüft.
+//
+// Lauf: nur nächtlich (Playwright-Projekt `<engine>-nightly`, `ui-nightly.yml`); die PR-CI führt die Messung nicht aus, weil sie ohne Basis
+// kein Pass/Fail-Signal liefert (siehe playwright.config.ts).
 // acceptance: independent
 import { spawn } from "node:child_process";
 import { test, type Page } from "@playwright/test";

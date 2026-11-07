@@ -14,6 +14,7 @@ import {
   coreDetailTotal,
   detailGridLocator,
   installRecorder,
+  lagRate,
   machineFactor,
   mark,
   openDetailTab,
@@ -78,11 +79,13 @@ test("Inlinks of the selected URL grow with the running crawl and equal the core
   const homeId = await urlIdOf(page, home);
   const slow0 = await machineFactor(page);
   await installRecorder(page, 100);
-  // 3 URLs je Sekunde bis zur 20. URL (Zeitgeber im Test); danach hält das Tor den Crawl
-  gate.meter(3, 20);
-  await waitCrawled(page, 20);
+  // `rate` URLs je Sekunde bis zur 20. URL (Zeitgeber im Test; die Rate richtet sich nach dem Rechnerfaktor, damit das Fenster der
+  // Verzögerungsprüfung unten genug geprüfte Stichproben enthält); danach hält das Tor den Crawl
+  gate.meter(lagRate(slow0, 3, 20), 20);
+  await waitCrawled(page, 20, 180_000);
   await pauseCrawl(page, gate);
-  const slow = Math.max(slow0, await recorderFactor(page, 100));
+  const factors = await recorderFactor(page, 100, slow0);
+  const slow = factors.slow;
   const samples = (await stopRecorder(page)).filter((s) => s.phase === "running" && s.detail?.name === "Inlinks");
   expect(samples.length).toBeGreaterThan(5);
   const counts = samples.map((s) => s.detail!.rowcount - 1);
@@ -96,11 +99,15 @@ test("Inlinks of the selected URL grow with the running crawl and equal the core
   // Nachlauf des Detailfensters höchstens 3 s (Messspielraum Dev-Server; UI-142: „die UI lädt sichtbare Fenster nach“).
   const t0 = samples[0]!.t;
   const lag: string[] = [];
+  let checked = 0;
   for (const s of samples) {
-    if (s.t - t0 < 3500 * slow) continue;
+    if (s.t - t0 < 3000 * slow) continue;
     const reference = lastBefore(samples, s.t - 3000 * slow);
+    if (reference <= 21) checked++;
     if (reference <= 21 && s.detail!.rowcount - 1 < reference - 1) lag.push(`+${Math.round(s.t - t0)}ms inlinks=${s.detail!.rowcount - 1} < crawled(t-3s)-1=${reference - 1}`);
   }
+  await test.info().attach("inlinks-lag", { body: JSON.stringify({ checked, machineFactor: slow0, recorderFactorRaw: factors.raw, recorderFactorCapped: factors.capped, slow }), contentType: "application/json" });
+  expect(checked, "geprüfte Stichproben der Verzögerung (sonst wäre die Prüfung leer)").toBeGreaterThanOrEqual(5);
   expect(lag, "Inlinks der Startseite hinken dem Crawl um mehr als 3 s (mal Rechnerfaktor) hinterher").toEqual([]);
 
   // Nach der Pause: genau die Zahl des Kerns, ohne Nutzeraktion.
@@ -144,6 +151,7 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   const target1 = `${base}/page-1.html`;
   const target3 = `${base}/page-3.html`;
 
+  const slow0 = await machineFactor(page);
   await installRecorder(page, 50);
   // Der Crawl läuft während der Wechsel weiter (3 URLs je Sekunde bis zur 20. URL, /redirect – die 22. – bleibt aus), damit Änderungen der Ansichten dazwischenfallen.
   gate.meter(3, 20);
@@ -165,6 +173,8 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   await expect.poll(() => selectedUpper(page)).toEqual([target3]);
   await expect.poll(async () => (await readDetail(page))?.rowcount, { timeout: 15_000 }).toBe(2);
   await page.waitForTimeout(1500);
+  const factors = await recorderFactor(page, 50, slow0);
+  const slow = factors.slow;
   const samples = await stopRecorder(page);
 
   {
@@ -188,9 +198,10 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   console.log(`[livedetail] switch first-new-data ms: page-1=${a.firstNewMs?.toFixed(0)} home=${b.firstNewMs?.toFixed(0)} page-3=${c.firstNewMs?.toFixed(0)}`);
   for (const [label, r] of [["page-1", a], ["home", b], ["page-3", c]] as const) {
     expect(r.firstNewMs, `${label}: Inlinks der neuen Auswahl erscheinen`).not.toBeNull();
-    // Eine Obergrenze für die Zeit bis zur ersten Seite nennt die Spec nur für den Release-Build (UI-145: 150 ms; Spec-Fragen S1/S2).
-    // Für den Dev-Server misst `livedetail-budget.spec.ts` den Median; hier zählt, dass die neuen Zeilen erscheinen (Wartegrenze 15 s,
-    // wie in den übrigen Alpha-Tests) und danach keine Zeilen der vorigen URL mehr.
+    // Die Spec nennt Zeitbudgets nur für den Release-Build (UI-145: 150 ms; Spec-Fragen S1/S2). Für den Dev-Server gilt hier eine grobe
+    // Obergrenze von 3 s mal Rechnerfaktor (max. Faktor aus Rechnertakt vor dem Lauf und gekapptem Takt während des Laufs): Ein Rückschritt
+    // von 0,3 s auf 10 s fällt damit auch auf einem ruhigen Rechner auf. Den Median misst `livedetail-budget.spec.ts` (nächtlich).
+    expect(r.firstNewMs!, `${label}: Inlinks der neuen Auswahl erscheinen spätestens nach 3 s mal Rechnerfaktor ${slow.toFixed(1)} (Rechnertakt ${slow0.toFixed(1)}, Takt im Lauf roh ${factors.raw.toFixed(1)} / gekappt ${factors.capped.toFixed(1)})`).toBeLessThan(3000 * slow);
     expect(r.staleAfterNew, `${label}: nach dem Erscheinen der neuen Zeilen kehren Zeilen der vorigen URL nicht zurück`).toEqual([]);
   }
 

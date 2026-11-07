@@ -12,6 +12,7 @@ import {
   coreTotal,
   footer,
   installRecorder,
+  lagRate,
   machineFactor,
   mark,
   openSidebarTab,
@@ -55,28 +56,33 @@ test("table footer, filter chip and Overview grow while the crawl runs and are e
   await page.setViewportSize(TALL);
   await startGated(alpha, gate);
   const slow0 = await machineFactor(page);
+  const rate = lagRate(slow0, 2, 23);
   await installRecorder(page, 100);
   await expect.poll(() => phase(page)).toBe("running");
-  // Fortschritt in drei Etappen (jeweils 3 URLs je Sekunde, Zeitgeber im Test). Nach jeder Etappe steht der Crawl am Tor, bis die Overview den
+  // Fortschritt in drei Etappen (jeweils `rate` URLs je Sekunde, Zeitgeber im Test; die Rate richtet sich nach dem Rechnerfaktor, damit das Fenster der
+  // Verzögerungsprüfung unten genug geprüfte Stichproben enthält). Nach jeder Etappe steht der Crawl am Tor, bis die Overview den
   // Stand der Etappe zeigt: Die Overview zählt gedrosselt (UI-018: nächste Zählung frühestens nach max(2 s, 3 × Dauer der letzten)), wie weit sie
   // hinter dem Crawl liegt, hängt also von der Dauer der Zählung ab – eine feste Sekundengrenze wäre eine Aussage über den Rechner. Geprüft wird,
   // dass die Overview jeden Zwischenstand ohne Nutzeraktion einholt und dabei nie zurückfällt.
   for (const stage of [8, 16, 23]) {
-    gate.meter(3, stage);
-    await waitCrawled(page, stage);
-    await expect.poll(async () => (await overviewSummary(page))["Total URLs Crawled"], { timeout: 90_000, intervals: [250], message: `Overview holt den Stand ${stage} des wartenden Crawls ein` }).toBeGreaterThanOrEqual(stage);
+    gate.meter(rate, stage);
+    await waitCrawled(page, stage, 180_000);
+    await expect.poll(async () => (await overviewSummary(page))["Total URLs Crawled"], { timeout: 15_000 * (await recorderFactor(page, 100, slow0)).slow, intervals: [250], message: `Overview holt den Stand ${stage} des wartenden Crawls ein` }).toBeGreaterThanOrEqual(stage);
   }
   await expect.poll(() => recordedOverviewDistinct(page), { timeout: 15_000, intervals: [250] }).toBeGreaterThanOrEqual(3);
   await mark(page, "before-pause");
   await pauseCrawl(page, gate);
-  const slow = Math.max(slow0, await recorderFactor(page, 100));
+  const factors = await recorderFactor(page, 100, slow0);
+  const slow = factors.slow;
   const samples = await stopRecorder(page);
+  // Stand nach der Pause (zur Einordnung eines Nachlaufs: bleibt die Anzeige stehen oder holt sie auf?)
+  const afterPause = await footer(page);
 
   const running = samples.filter((s) => s.phase === "running" && s.footer);
   expect(running.length, "Stichproben während des Laufs").toBeGreaterThan(5);
-  // Bezugszeit: die erste Stichprobe, in der die Tabelle Zeilen zeigt (das erstmalige Laden der Tabelle auf einem langsamen Rechner gehört
-  // nicht zur Aktualisierung pro URL, UI-018).
-  const t0 = (running.find((s) => parseFooter(s.footer).shown > 0) ?? running[0]!).t;
+  // Bezugszeit: die erste Stichprobe, in der die Tabelle den Crawl eingeholt hat (Fuß ≥ gecrawlt). Das erstmalige Öffnen und Füllen der Tabelle auf
+  // einem langsamen Rechner gehört nicht zur Aktualisierung pro URL (UI-018); ab dann muss sie dem Crawl innerhalb der Grenze folgen.
+  const t0 = (running.find((s) => parseFooter(s.footer).shown > 0 && parseFooter(s.footer).shown >= s.crawled) ?? running[0]!).t;
 
   // 1. Der Tabellenfuß wächst fortlaufend und fällt nie zurück (UI-018: Tabellen wachsen kontinuierlich).
   const shown = running.map((s) => parseFooter(s.footer).shown).filter((n) => n >= 0);
@@ -88,8 +94,10 @@ test("table footer, filter chip and Overview grow while the crawl runs and are e
   const lagFooter: string[] = [];
   const lagChip: string[] = [];
   let worstFooter = 0;
+  let checked = 0;
   for (const s of running) {
-    if (s.t - t0 < 2500 * slow) continue;
+    if (s.t - t0 < 2000 * slow) continue;
+    checked++;
     const reference = lastBefore(samples, s.t - 2000 * slow, (x) => x.crawled);
     const f = parseFooter(s.footer).shown;
     const c = toNumber(/\(([\d.,]+)\)/.exec(s.chip)?.[1] ?? "-1");
@@ -97,10 +105,11 @@ test("table footer, filter chip and Overview grow while the crawl runs and are e
     if (f < reference) lagFooter.push(`t=${Math.round(s.t - t0)}ms footer=${f} < crawled(t-2s)=${reference}`);
     if (c < reference) lagChip.push(`t=${Math.round(s.t - t0)}ms chip=${c} < crawled(t-2s)=${reference}`);
   }
-  expect(lagFooter, "Tabellenfuß hinkt dem Crawl um mehr als 2 s (mal Rechnerfaktor) hinterher").toEqual([]);
+  expect(lagFooter, `Tabellenfuß hinkt dem Crawl um mehr als 2 s (mal Rechnerfaktor) hinterher; Stand nach der Pause: ${afterPause.shown} von ${afterPause.total}, Session-Zähler ${lastBefore(samples, Number.POSITIVE_INFINITY, (x) => x.crawled)}`).toEqual([]);
   expect(lagChip, "Chip des aktiven Filters hinkt dem Crawl um mehr als 2 s (mal Rechnerfaktor) hinterher").toEqual([]);
-  console.log(`[livedetail] samples=${running.length} distinctFooter=${new Set(shown).size} worstFooterShortfall=${worstFooter}`);
-  await test.info().attach("live-lag", { body: JSON.stringify({ worstFooterShortfall: worstFooter, samples: running.length }), contentType: "application/json" });
+  console.log(`[livedetail] samples=${running.length} checked=${checked} distinctFooter=${new Set(shown).size} worstFooterShortfall=${worstFooter} machine=${slow0.toFixed(1)} recorder=${factors.raw.toFixed(1)}/${factors.capped.toFixed(1)}`);
+  await test.info().attach("live-lag", { body: JSON.stringify({ worstFooterShortfall: worstFooter, samples: running.length, checked, machineFactor: slow0, recorderFactorRaw: factors.raw, recorderFactorCapped: factors.capped, slow }), contentType: "application/json" });
+  expect(checked, "geprüfte Stichproben der Verzögerung (sonst wäre die Prüfung leer)").toBeGreaterThanOrEqual(5);
 
   // 3. Overview (gemeinsame, gedrosselte Zählung): wächst während des Laufs mehrfach; Alter des Stands ≤ ca. 6 s hinter dem Crawl.
   const overviewCrawled = running.map((s) => summaryValue(s.overview, /^Total URLs Crawled/)).filter((n) => n >= 0);
@@ -212,6 +221,7 @@ test("the Overview dashboard follows the running crawl without user action and s
   const cards = () =>
     dashboard.evaluate((el) => Object.fromEntries([...el.querySelectorAll(".os-dashboard-card")].filter((c) => c.querySelector("strong") && c.querySelector("span")).map((c) => [c.querySelector("span")!.textContent!.trim(), Number((c.querySelector("strong")!.textContent ?? "").replace(/[^\d]/g, ""))])));
   const crawledKey = async () => Object.keys(await cards()).find((k) => /crawled/i.test(k)) ?? "";
+  const slow0 = await machineFactor(page);
   const series: number[] = [];
   const cardCrawled = async () => {
     const all = await cards();
@@ -223,7 +233,7 @@ test("the Overview dashboard follows the running crawl without user action and s
   // Etappen wie bei der Tabelle: nach jeder Etappe hält das Tor den Crawl, bis die (gedrosselte) Übersicht den Stand zeigt
   for (const stage of [7, 14, 20]) {
     gate.meter(3, stage);
-    await expect.poll(cardCrawled, { timeout: 90_000, intervals: [250], message: `Karte „gecrawlt“ holt den Stand ${stage} ein` }).toBeGreaterThanOrEqual(stage);
+    await expect.poll(cardCrawled, { timeout: 15_000 * slow0, intervals: [250], message: `Karte „gecrawlt“ holt den Stand ${stage} ein` }).toBeGreaterThanOrEqual(stage);
   }
   console.log(`[livedetail] dashboard crawled series distinct=${[...new Set(series)].join(",")}`);
   expect(new Set(series).size, "Karte „gecrawlt“ ändert sich während des Laufs").toBeGreaterThanOrEqual(3);
@@ -306,23 +316,20 @@ test("an unsorted table scrolled to the bottom follows new rows (tail mode) unti
   expect(totals.size, "die Tabelle wuchs während der Beobachtung").toBeGreaterThanOrEqual(4);
   expect(follow, "Tail-Modus: die Tabelle bleibt am Ende, wenn neue Zeilen eintreffen").toEqual([]);
 
-  // manuelles Hochscrollen beendet den Tail-Modus: die Ansicht bleibt oben stehen, auch wenn weitere Zeilen eintreffen
+  // manuelles Hochscrollen beendet den Tail-Modus (UI-018): Die Ansicht springt nach oben und bleibt dort, auch wenn weitere Zeilen eintreffen.
+  // Es gibt keine Wiederholung des Scrollens: Bleibt das Hochscrollen wirkungslos (Beobachtung F5, tritt unter Last auf), ist der Test rot.
+  // Der Verlauf der ersten sichtbaren Zeile steht in der Meldung.
   await page.mouse.wheel(0, -3000);
   const trail: string[] = [];
   for (let i = 0; i < 25; i++) {
     const state = await atBottom();
     trail.push(`${state?.first}/${state?.total}`);
     if (state?.first === 0) break;
-    if (i === 12) {
-      // Beobachtung F5 (siehe Bericht): gelegentlich bleibt das erste Hochscrollen wirkungslos. Der Test wiederholt das Scrollen
-      // einmal und vermerkt den Ausfall.
-      test.info().annotations.push({ type: "observation-F5", description: "erstes Hochscrollen im Tail-Modus blieb 2,4 s wirkungslos" });
-      await page.mouse.wheel(0, -3000);
-    }
     await page.waitForTimeout(200);
   }
   console.log(`[livedetail] tail mode scroll-up trail: ${trail.join(" ")}`);
-  await expect.poll(async () => (await atBottom())?.first, { timeout: 15_000, message: `erste sichtbare Zeile nach dem Hochscrollen: ${trail.join(" ")}` }).toBe(0);
+  await test.info().attach("tail-scroll-trail", { body: trail.join(" "), contentType: "text/plain" });
+  expect((await atBottom())?.first, `erste sichtbare Zeile nach dem Hochscrollen (Verlauf je 200 ms: ${trail.join(" ")})`).toBe(0);
   // zwei weitere URLs: die Zeilenzahl wächst, die Ansicht bleibt oben
   const totalBefore = (await atBottom())!.total;
   await crawlMore(page, gate, 2);

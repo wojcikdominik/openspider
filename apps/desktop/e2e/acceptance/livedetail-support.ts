@@ -192,6 +192,7 @@ export async function clickUpperRow(page: Page, address: string, modifiers: ("Sh
       return;
     } catch (error) {
       if (attempt >= 3) throw error;
+      test.info().annotations.push({ type: "click-retry", description: `Klick auf ${address} traf eine andere Zeile (Versuch ${attempt + 1}); Layout hatte sich verschoben` });
     }
   }
 }
@@ -532,15 +533,26 @@ export async function urlIdsOf(page: Page, addresses: string[]): Promise<number[
 }
 
 /**
- * Wie stark der Seitenkontext während der Aufzeichnung hinter seinem Takt herhinkte: Median der Abstände der Takt-Schläge des Recorders
- * geteilt durch den Soll-Abstand (≥ 1, höchstens 20). Maß für die tatsächliche Auslastung des Rechners im Testlauf; die Verzögerungsgrenzen
- * für Anzeigen werden damit multipliziert.
+ * Auslastung des Rechners während der Aufzeichnung: Median der Abstände der Takt-Schläge des Recorders geteilt durch den Soll-Abstand
+ * (`raw`, ≥ 1). Dieses Maß steigt auch, wenn die Oberfläche selbst den Hauptthread belegt, also bei genau dem Rückschritt, den die Tests
+ * finden sollen. Deshalb wird es auf `max(2 × machine, 4)` gekappt (`capped`; `machine` = `machineFactor` vor dem Lauf): ein Rückschritt
+ * der Oberfläche kann die Verzögerungsgrenzen höchstens um diesen Faktor aufweichen, nicht beliebig. Beide Werte gehören ins Attachment.
  */
-export async function recorderFactor(page: Page, intervalMs: number): Promise<number> {
-  const factor = await page.evaluate((intervalMs) => {
+export async function recorderFactor(page: Page, intervalMs: number, machine: number): Promise<{ raw: number; capped: number; slow: number }> {
+  const raw = await page.evaluate((intervalMs) => {
     const beats = (window as unknown as { __ld?: { beats: number[] } }).__ld?.beats ?? [];
     const gaps = beats.slice(1).map((b, i) => b - beats[i]!).sort((a, b) => a - b);
     return gaps.length ? gaps[Math.floor(gaps.length / 2)]! / intervalMs : 1;
   }, intervalMs);
-  return Math.min(20, Math.max(1, factor));
+  const capped = Math.min(Math.max(1, raw), Math.max(2 * machine, 4));
+  return { raw, capped, slow: Math.max(machine, capped) };
+}
+
+/**
+ * Rate (URLs je Sekunde), mit der ein Test den Crawl bis `urls` laufen lässt, damit das Beobachtungsfenster für eine Verzögerungsprüfung mit
+ * Grenze `boundSec` auch beim größten zulässigen Faktor (`max(2 × machine, 4)`) mindestens fünf geprüfte Stichproben enthält:
+ * Fenster ≥ `boundSec` × Faktor + 3 s. Auf einem ruhigen Rechner (Faktor 4) ergibt das 11 s für 2 s Grenze, auf einem langsamen entsprechend mehr.
+ */
+export function lagRate(machine: number, boundSec: number, urls: number): number {
+  return Math.min(3, urls / (boundSec * Math.max(2 * machine, 4) + 3));
 }

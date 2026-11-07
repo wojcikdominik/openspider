@@ -8,10 +8,15 @@ const wanted = (process.env.OS_E2E_PROJECTS ?? "chromium,webkit").split(",").map
 // Laufzeitbudgets (UI-146) werden erst nach allen übrigen Tests und ohne parallele Last gemessen: je Engine ein eigenes
 // Projekt `<engine>-perf`, das vom Hauptprojekt abhängt. `OS_E2E_PROJECTS` nennt weiterhin nur die Engines.
 const PERF = /viz[\\/]perf\.spec\.ts$/;
+// Die Zeitmessung B4-LIVEDETAIL (Median erster Klick, UI-145) liefert in der PR-CI ohne Basis kein Pass/Fail-Signal (der Test prüft nur mit
+// OS_LD_BASELINE_*) und braucht je Engine mehrere Minuten. Sie läuft nächtlich (`ui-nightly.yml`) im Projekt `<engine>-nightly`
+// und ist in den Haupt- und Perf-Projekten ausgenommen. Die Nightly-Projekte gibt es nur mit OS_E2E_NIGHTLY=1, sonst liefe die Messung bei
+// jedem `npm run e2e` ohne `--project` (ui-e2e.yml, spec-coverage-m2.yml) mit.
+const NIGHTLY = /acceptance[\\/]livedetail-budget\.spec\.ts$/;
 // Visual snapshots require the dedicated platform/scale configuration. Node tests of the U31 perf harness
 // (`e2e/perf/**/*.test.mjs`, `*.nodetest.mts`) run under `node --test`, not in `npm run e2e`.
 const PERF_NODE_TESTS = [/perf[\\/].*\.test\.mjs$/, /\.nodetest\.mts$/];
-const MAIN_IGNORE = [PERF, /visual[\\/]/, ...PERF_NODE_TESTS];
+const MAIN_IGNORE = [PERF, NIGHTLY, /visual[\\/]/, ...PERF_NODE_TESTS];
 const engines = [
   { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
   { name: "webkit", use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 800 } } },
@@ -19,6 +24,7 @@ const engines = [
 const all = engines.flatMap((engine) => [
   { ...engine, testIgnore: MAIN_IGNORE },
   { name: `${engine.name}-perf`, use: engine.use, testMatch: PERF, dependencies: [engine.name] },
+  { name: `${engine.name}-nightly`, use: engine.use, testMatch: NIGHTLY },
 ]);
 
 // Eigener Port je Worktree (OS_E2E_PORT): Auf dem Build-Server laufen Pakete parallel; mit dem festen Port 1420 und
@@ -38,7 +44,7 @@ export default defineConfig({
     trace: "retain-on-failure",
     reducedMotion: "reduce",
   },
-  projects: all.filter((p) => wanted.includes(p.name.replace(/-perf$/, ""))),
+  projects: all.filter((p) => wanted.includes(p.name.replace(/-(perf|nightly)$/, "")) && (!p.name.endsWith("-nightly") || process.env.OS_E2E_NIGHTLY === "1")),
   webServer: {
     command: `npm run dev -- --port ${port}`,
     url: `http://localhost:${port}`,
