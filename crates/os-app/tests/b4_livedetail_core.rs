@@ -76,7 +76,7 @@ async fn store_split(app: &os_app::App, url: i64, incoming: bool) -> (f64, usize
 
 // spec: UI-145
 #[tokio::test]
-#[ignore = "Messrezept B4-LIVEDETAIL, nur auf Anforderung (--ignored)"]
+#[ignore = "Benchmark: Messrezept B4-LIVEDETAIL, nur auf Anforderung (--ignored)"]
 async fn live_link_view_open_time_split() {
     let pages = env_u64("OS_LIVEDETAIL_PAGES", 5000);
     let rate = env_u64("OS_LIVEDETAIL_RATE", 150);
