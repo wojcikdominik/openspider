@@ -1469,15 +1469,21 @@ async fn detail_range(
         link_ids(app, v, links).await?.as_ref().clone()
     } else {
         let mut ids = Vec::new();
+        let generation = Arc::new(Mutex::new(None));
         loop {
-            let p = page(
+            let p = page_query(
                 app,
                 &v.session,
                 v.spec.clone(),
                 v.columns.clone(),
                 ids.len() as u64,
                 500,
-                Some(v.version),
+                PageSelection {
+                    expected: Some(v.version),
+                    ids: None,
+                    ordered: false,
+                    detail_seq: Some(generation.clone()),
+                },
             )
             .await?;
             let done = p.keys.is_empty() || ids.len() as u64 + p.keys.len() as u64 >= p.total;
@@ -1588,5 +1594,74 @@ mod tests {
     #[tokio::test]
     async fn two_selected_ids_use_one_restricted_page_in_a_large_view() {
         assert_copy_uses_one_page(|app| app.ext::<PageReads>().0.load(Ordering::Relaxed)).await;
+    }
+}
+
+#[cfg(test)]
+#[path = "../../tests/cmd_catalog_fixture.rs"]
+mod ldfollow_fixture;
+
+#[cfg(test)]
+mod ldfollow_tests {
+    use super::ldfollow_fixture::Fx;
+    use super::*;
+    use serde_json::json;
+
+    // spec: UI-012
+    // spec: UI-018
+    #[tokio::test]
+    async fn detail_range_pages_reject_a_changed_generation_and_retry_without_gaps() {
+        let fx = Fx::new();
+        fx.write("DELETE FROM http_headers; WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<1100) INSERT INTO http_headers(url_id,direction,position,name,value) SELECT 1,'response',x,'header-'||x,'value' FROM n;");
+        let h = fx
+            .open(
+                json!({"kind":"detail","detail":"headers","urlIds":[1],"params":{},"sort":[]}),
+                json!([]),
+            )
+            .await;
+        let v = get(
+            &fx.app,
+            &CallCtx::for_window("main"),
+            h["viewId"].as_str().unwrap(),
+        )
+        .unwrap();
+        assert!(v.links.is_none());
+        let generation = Arc::new(Mutex::new(None));
+        let read = |offset| {
+            page_query(
+                &fx.app,
+                &v.session,
+                v.spec.clone(),
+                v.columns.clone(),
+                offset,
+                500,
+                PageSelection {
+                    expected: Some(v.version),
+                    ids: None,
+                    ordered: false,
+                    detail_seq: Some(generation.clone()),
+                },
+            )
+        };
+        assert_eq!(read(0).await.unwrap().keys.len(), 500);
+        fx.write("DELETE FROM http_headers WHERE position=1; UPDATE crawl_meta SET value='43' WHERE key='change_seq';");
+        let error = read(500)
+            .await
+            .err()
+            .expect("a mixed-generation range must fail");
+        assert_eq!(error.code, ErrorCode::Stale);
+        let result = detail_range(
+            &fx.app,
+            &v,
+            &RangeArgs {
+                view_id: h["viewId"].as_str().unwrap().into(),
+                from: 1,
+                to: 1099,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.3, 1099);
+        assert_eq!(result.4, (1..=1099).collect::<Vec<_>>());
     }
 }
