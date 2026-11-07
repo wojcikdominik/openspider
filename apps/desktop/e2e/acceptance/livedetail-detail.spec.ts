@@ -202,23 +202,16 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   await expect.poll(() => selectedUpper(page)).toEqual([home]);
   await expect.poll(async () => (await readDetail(page))?.rowcount ?? 0, { timeout: 15_000 }).toBeGreaterThan(8);
   await page.waitForTimeout(1500);
-  // Start → page-3 (drei Zeilen tiefer, synchroner Tastatur-Stimulus)
+  // Start → page-3 (drei Zeilen tiefer, Tastendrücke ohne Zwischenwarten)
   await upperGrid(page).focus();
   const m3 = await mark(page, "to-page-3");
-  // spec: UI-012, UI-145 — echte Key-Handler ohne Timer, IPC oder Zwischenassertions.
-  const stimulusMs = await page.evaluate(async () => {
-    const grid = document.activeElement!;
-    const start = performance.now();
-    for (let i = 0; i < 3; i++) {
-      grid.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", bubbles: true }));
-      grid.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", code: "ArrowDown", bubbles: true }));
-      // React übernimmt den diskreten Tastendruck vor dem nächsten Ereignis.
-      await Promise.resolve();
-    }
-    return performance.now() - start;
-  });
+  // spec: UI-012, UI-145 — native Tastendrücke ohne Timer oder Zwischenassertions.
+  // Fokus und Recorder-Markierung liegen vor der gemessenen Stimulusphase.
+  const stimulusStart = performance.now();
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
+  const stimulusMs = performance.now() - stimulusStart;
   await test.info().attach("arrow-stimulus", { body: JSON.stringify({ stimulusMs, count: 3 }), contentType: "application/json" });
-  expect(stimulusMs, "Testvorbedingung: nur der synchrone Stimulus, ohne Fokus/IPC/Warten").toBeLessThan(800);
+  expect(stimulusMs, "Testvorbedingung: nur drei Tastendrücke, ohne Fokus/Markierung/Warten").toBeLessThan(800);
   await expect.poll(() => selectedUpper(page)).toEqual([target3]);
   await expect.poll(async () => (await readDetail(page))?.rowcount, { timeout: 15_000 }).toBe(2);
   await page.waitForTimeout(1500);
