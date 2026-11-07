@@ -70,7 +70,29 @@ Neue eigene Fixture-Regression `b4-live-counts.test.tsx`: ausstehende Zeilenantw
 anschließendes `Stale`, korrekter Fuß/Chip/Listeneintrag, kein zusätzlicher Grid-Render;
 außerdem fremde View und ältere Ankündigung. Gegen den unveränderten Ausgangsstand
 1/2 rot, gegen den Fix 2/2 grün. Zusammen mit `table.test.tsx` und `n27-live-chip.test.tsx`
-31/31 grün. Kein bestehender Test geändert; unabhängige Abnahme unverändert.
+31/31 grün (erste Fassung). Ein weiterer Fixture-Test erhält den bekannten „All“-Nenner,
+solange die gemeinsame Zählung noch `null` ist; Endfassung 3/3 neue Tests grün.
+Kein bestehender Test geändert; unabhängige Abnahme unverändert.
+
+### Zwischenlauf und Störungen
+
+Ein erster Nachher-Versuch überlappte die eigenen Clippy-/Workspace-/Frontend-Gates.
+Erste Zählerprüfung: eine verletzte Probe (10 statt ≥11 nach 2592 ms), Inlinks grün.
+Der Recorder zeigt zwischen zwei tatsächlichen Takten **3889,4 ms** Abstand: bei +5009 ms
+Crawl 11 / Fuß 10, erst bei +8899 ms die nächste Probe, bei +10445 ms Crawl 24 / Fuß 23.
+Das ist ein zusätzlicher langer Browser-/Scheduling-Stillstand; die Beobachtung allein
+belegt dessen Ursprung nicht. Keine Testgrenze geändert. Serie für die Untersuchung
+unterbrochen: 5 bestanden, 1 fehlgeschlagen, 2 unterbrochen, 32 nicht ausgeführt.
+Protokoll `/tmp/b4-lagfix-f7.log`, Attachment/Trace `/tmp/b4-lagfix-f7-results/`,
+extrahiert `/tmp/b4-lagfix-first-fix-f7.json`. Die vollständige Serie wird ohne eigene
+parallel laufende Gates wiederholt; das parallele fremde Paket ist nicht angehalten worden.
+
+Eigene Instrumentierungsprobleme: Die erste Diagnose wurde vor dem erneuten `alpha.open()`
+installiert und dadurch verworfen; korrigierter Lauf lieferte das oben ausgewertete Protokoll.
+Eine spätere, unbenutzte Diagnose-Erweiterung verletzte TypeScript `unknown` im Catch;
+der temporäre Diagnose-Test wurde aus dem Worktree entfernt, Typecheck anschließend grün.
+Ein früh gestarteter bestehender Playwright-Lauf wurde für den „All“-Nenner-Randfall
+unterbrochen und auf dem endgültigen Produktstand vollständig neu gestartet.
 
 ## Renderlast vorher/nachher
 
@@ -84,4 +106,8 @@ Noch offen. Tokio laut Lockdatei unverändert 1.53.3. Keine Tests oder Budgets g
 ## Fremde Dateien
 
 Keine fremden Änderungen übernommen. Temporäre unabhängige Reproduktion und Instrumentierung
-wie oben; werden am Ende entfernt. Weitere nötige Pfade werden hier mit Grund ergänzt.
+wie oben; werden am Ende entfernt. Kurzzeitig vorbereitete Diagnose-Marker in
+`crates/os-app/src/session/feed.rs` und `crates/os-app/src/views/mod.rs` wurden vor einem
+Diagnoselauf byteidentisch zurückgenommen; keine Kernänderung übernommen. Eine separate
+Bridge-Kompilation bestätigte den wiederhergestellten Stand. Keine fremden Quellen oder
+Tests committet. Mess-Builds und Logs bleiben ausschließlich unter `/tmp/b4-lagfix-*`.
