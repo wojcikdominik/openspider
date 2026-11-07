@@ -327,9 +327,21 @@ async fn short(app: &App, args: serde_json::Value, action: &'static str) -> CmdR
     let selected = ids(raw)?;
     if action == "crawls.lock" || action == "crawls.unlock" {
         let locked = action == "crawls.lock";
+        // Bekannte eigene und fremde Live-Sitzungen vor jedem Zugriff auf Crawl-Dateien abweisen.
+        if app.sessions().all().iter().any(|session| {
+            session.state == CrawlState::Running
+                && selected.iter().any(|id| session.key.0 == id.to_string())
+        }) {
+            return Err(CmdError::new(ErrorCode::Busy, "err-crawl-running"));
+        }
         admin(app, move |m| {
+            // Unbekannte Fremdzustände nur lesend über das VFS prüfen. Die gesamte Auswahl muss
+            // zulässig sein, bevor Manager::lock die erste Schreibverbindung öffnen darf.
             for id in &selected {
-                m.get(id).map_err(|e| store_error(&e))?;
+                let listing = m.get(id).map_err(|e| store_error(&e))?;
+                if listing.effective_state(now) == CrawlState::Running {
+                    return Err(CmdError::new(ErrorCode::Busy, "err-crawl-running"));
+                }
             }
             for id in &selected {
                 m.lock(id, locked, now).map_err(|e| store_error(&e))?;

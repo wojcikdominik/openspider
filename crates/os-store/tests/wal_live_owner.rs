@@ -258,3 +258,52 @@ fn migrating_an_old_fixture_backs_up_all_pages_and_keeps_a_second_connections_lo
             .unwrap());
     }
 }
+
+// spec: OUT-228
+// spec: CRAWL-125
+#[test]
+fn manager_rejects_lock_and_unlock_without_disturbing_a_live_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let (file, path) = owner(dir.path());
+    let now = created_at();
+    file.set_meta("state", "Running").unwrap();
+    file.set_meta("heartbeat_at", &now.to_db()).unwrap();
+    let id = file.meta().unwrap().crawl_id;
+    let mut manager = Manager::open(dir.path()).unwrap();
+    for locked in [true, false] {
+        assert!(manager
+            .lock(&id, locked, now)
+            .unwrap_err()
+            .to_string()
+            .contains("Crawl läuft"));
+    }
+    assert_ne!(file.get_meta("locked").unwrap().as_deref(), Some("1"));
+    in_second_process(CHILD_WRITE, &path);
+    assert_owner_intact(file, &path);
+}
+
+// spec: CRAWL-125
+// spec: OUT-233
+#[test]
+fn a_blocked_checkpoint_does_not_publish_an_incomplete_migration_backup() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = copy_fixture("schema-v2.ospider", dir.path());
+    let reader = rusqlite::Connection::open(&path).unwrap();
+    reader
+        .execute_batch("PRAGMA journal_mode=WAL; BEGIN;")
+        .unwrap();
+    let _: i64 = reader
+        .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
+        .unwrap();
+    let writer = rusqlite::Connection::open(&path).unwrap();
+    writer.execute("INSERT OR REPLACE INTO crawl_meta(key,value) VALUES ('backup_probe','not-checkpointed')", []).unwrap();
+    let err = CrawlFile::open(&path, OpenMode::ReadWrite).err().unwrap();
+    assert!(
+        matches!(err, os_store::StoreError::Sqlite(ref error)
+        if error.sqlite_error_code() == Some(rusqlite::ErrorCode::DatabaseBusy)),
+        "{err}"
+    );
+    assert!(!os_store::backup_path(&path, 2).exists());
+    assert_eq!(os_store::schema::user_version(&writer).unwrap(), 2);
+    reader.execute_batch("ROLLBACK").unwrap();
+}

@@ -263,6 +263,8 @@ impl Manager {
 
     pub fn lock(&mut self, id: &CrawlId, locked: bool, now: Timestamp) -> Result<(), StoreError> {
         let l = self.get(id)?;
+        // `get` liest die Crawl-Datei ausschließlich über das VFS. Erst hinter `guard` darf
+        // `put` sie schreibend öffnen (auch beim Entsperren eines fremden Crawls).
         guard(&l, now, false)?;
         self.put(&l.path, "locked", if locked { "1" } else { "0" })
     }
