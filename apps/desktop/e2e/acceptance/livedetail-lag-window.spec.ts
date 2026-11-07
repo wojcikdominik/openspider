@@ -64,6 +64,7 @@ for (const kind of ["counters", "inlinks"] as const) {
       // Keine Pause, Auswahl, Tab-Änderung oder weitere URL. F6 darf nicht durch Pause repariert werden.
       await page.waitForTimeout(boundMs * plan.maxFactor + plan.reserveMs);
       const factors = await recorderFactor(page, INTERVAL, machine);
+      const beats = await page.evaluate(() => (window as unknown as { __ld: { beats: number[] } }).__ld.beats);
       const samples = await stopRecorder(page);
       const running = samples.filter((s) => s.t >= start && s.phase === "running");
       const limitMs = boundMs * factors.slow;
@@ -87,14 +88,18 @@ for (const kind of ["counters", "inlinks"] as const) {
         if (value(s) < target(reference)) lag.push({ t: s.t - start, actual: value(s), expected: target(reference) });
         if (kind === "counters" && chip(s) < reference.crawled) chipLag.push({ t: s.t - start, actual: chip(s), expected: reference.crawled });
       }
+      const flowingBeats = beats.filter((t) => t >= start + limitMs && t < finalStart).length;
+      const finalBeats = beats.filter((t) => t >= finalStart + limitMs).length;
       // Diagnose VOR jeder inhaltlichen Assertion, einschließlich Anlauf und Stichprobenwächtern.
       await test.info().attach("live-lag", { body: JSON.stringify({ kind, rate: RATE, initial, plan, start, finalStart,
         machineFactor: machine, recorderFactorRaw: factors.raw, recorderFactorCapped: factors.capped,
-        slow: factors.slow, limitMs, checked, flowingChecked, finalChecked, first, startup, lag, chipLag, samples }), contentType: "application/json" });
+        slow: factors.slow, limitMs, checked, flowingChecked, finalChecked, flowingBeats, finalBeats, beats, first, startup, lag, chipLag, samples }), contentType: "application/json" });
       expect(first, "erste URL nach festem Messbeginn aufgezeichnet").toBeDefined();
       expect(startup, "eigene, feste Anlaufgrenze ab erster URL statt erstem Einholen").toBeDefined();
       expect(value(startup!), "Anlauf: erste URL innerhalb der Lag-Grenze angezeigt").toBeGreaterThanOrEqual(target(first!));
       if (kind === "counters") expect(chip(startup!), "Anlauf: aktiver Chip").toBeGreaterThanOrEqual(first!.crawled);
+      expect(flowingBeats, "echte Recorder-Takte während des Zuflusses").toBeGreaterThanOrEqual(5);
+      expect(finalBeats, "echte Recorder-Takte im ereignisfreien Schlussfenster").toBeGreaterThanOrEqual(5);
       expect(flowingChecked, "Lag-Stichproben noch während des Zuflusses").toBeGreaterThanOrEqual(5);
       expect(finalChecked, "Lag-Stichproben nach letzter URL ohne weiteres Ereignis").toBeGreaterThanOrEqual(5);
       expect(lag, `${kind}: Lag-Grenze während Anlauf, Last und ereignisfreiem Schlussfenster`).toEqual([]);
