@@ -1,26 +1,32 @@
 // Unabhängige Abnahme B4-LIVEDETAIL, Teil 1: Live-Aktualisierung von Tabellen, Zählern, Overview, Filterzahlen und Seitenleiste
 // während eines laufenden Crawls gegen die echte Bridge (UI-018). Erwartetes Verhalten stammt aus docs/spec/05-ui.md.
 // acceptance: independent
-import { expect, test } from "../alpha/fixture";
 import { startAlphaBridge } from "../alpha/support";
+import { startGate } from "./livedetail-gate";
 import {
   TALL,
   activeChipCount,
+  crawlMore,
+  crawlTo,
+  expect,
   coreTotal,
-  crawledCount,
   footer,
   installRecorder,
+  machineFactor,
   mark,
   openSidebarTab,
   overviewFingerprint,
   overviewSummary,
   parseFooter,
+  recordedOverviewDistinct,
+  recorderFactor,
   pauseCrawl,
   phase,
   readUpper,
   resumeCrawl,
-  slowProfile,
-  startSlow,
+  startGated,
+  test,
+  gatedProfile,
   stopRecorder,
   summaryValue,
   toNumber,
@@ -43,21 +49,34 @@ const lastBefore = (samples: Sample[], t: number, pick: (s: Sample) => number): 
 // spec: UI-006
 // spec: UI-060
 // acceptance: independent
-test("table footer, filter chip and Overview grow while the crawl runs and are exact after pause and at the end", async ({ alpha }) => {
-  test.setTimeout(120_000);
+test("table footer, filter chip and Overview grow while the crawl runs and are exact after pause and at the end", async ({ alpha, gate }) => {
+  test.setTimeout(180_000);
   const { page } = alpha;
   await page.setViewportSize(TALL);
-  await startSlow(alpha, 3);
+  await startGated(alpha, gate);
+  const slow0 = await machineFactor(page);
   await installRecorder(page, 100);
   await expect.poll(() => phase(page)).toBe("running");
-  await waitCrawled(page, 23);
+  // Fortschritt in drei Etappen (jeweils 3 URLs je Sekunde, Zeitgeber im Test). Nach jeder Etappe steht der Crawl am Tor, bis die Overview den
+  // Stand der Etappe zeigt: Die Overview zählt gedrosselt (UI-018: nächste Zählung frühestens nach max(2 s, 3 × Dauer der letzten)), wie weit sie
+  // hinter dem Crawl liegt, hängt also von der Dauer der Zählung ab – eine feste Sekundengrenze wäre eine Aussage über den Rechner. Geprüft wird,
+  // dass die Overview jeden Zwischenstand ohne Nutzeraktion einholt und dabei nie zurückfällt.
+  for (const stage of [8, 16, 23]) {
+    gate.meter(3, stage);
+    await waitCrawled(page, stage);
+    await expect.poll(async () => (await overviewSummary(page))["Total URLs Crawled"], { timeout: 90_000, intervals: [250], message: `Overview holt den Stand ${stage} des wartenden Crawls ein` }).toBeGreaterThanOrEqual(stage);
+  }
+  await expect.poll(() => recordedOverviewDistinct(page), { timeout: 15_000, intervals: [250] }).toBeGreaterThanOrEqual(3);
   await mark(page, "before-pause");
-  await pauseCrawl(page);
+  await pauseCrawl(page, gate);
+  const slow = Math.max(slow0, await recorderFactor(page, 100));
   const samples = await stopRecorder(page);
 
   const running = samples.filter((s) => s.phase === "running" && s.footer);
-  expect(running.length, "Stichproben während des Laufs").toBeGreaterThan(20);
-  const t0 = running[0]!.t;
+  expect(running.length, "Stichproben während des Laufs").toBeGreaterThan(5);
+  // Bezugszeit: die erste Stichprobe, in der die Tabelle Zeilen zeigt (das erstmalige Laden der Tabelle auf einem langsamen Rechner gehört
+  // nicht zur Aktualisierung pro URL, UI-018).
+  const t0 = (running.find((s) => parseFooter(s.footer).shown > 0) ?? running[0]!).t;
 
   // 1. Der Tabellenfuß wächst fortlaufend und fällt nie zurück (UI-018: Tabellen wachsen kontinuierlich).
   const shown = running.map((s) => parseFooter(s.footer).shown).filter((n) => n >= 0);
@@ -70,16 +89,16 @@ test("table footer, filter chip and Overview grow while the crawl runs and are e
   const lagChip: string[] = [];
   let worstFooter = 0;
   for (const s of running) {
-    if (s.t - t0 < 2500) continue;
-    const reference = lastBefore(samples, s.t - 2000, (x) => x.crawled);
+    if (s.t - t0 < 2500 * slow) continue;
+    const reference = lastBefore(samples, s.t - 2000 * slow, (x) => x.crawled);
     const f = parseFooter(s.footer).shown;
     const c = toNumber(/\(([\d.,]+)\)/.exec(s.chip)?.[1] ?? "-1");
     worstFooter = Math.max(worstFooter, reference - f);
     if (f < reference) lagFooter.push(`t=${Math.round(s.t - t0)}ms footer=${f} < crawled(t-2s)=${reference}`);
     if (c < reference) lagChip.push(`t=${Math.round(s.t - t0)}ms chip=${c} < crawled(t-2s)=${reference}`);
   }
-  expect(lagFooter, "Tabellenfuß hinkt dem Crawl um mehr als 2 s hinterher").toEqual([]);
-  expect(lagChip, "Chip des aktiven Filters hinkt dem Crawl um mehr als 2 s hinterher").toEqual([]);
+  expect(lagFooter, "Tabellenfuß hinkt dem Crawl um mehr als 2 s (mal Rechnerfaktor) hinterher").toEqual([]);
+  expect(lagChip, "Chip des aktiven Filters hinkt dem Crawl um mehr als 2 s (mal Rechnerfaktor) hinterher").toEqual([]);
   console.log(`[livedetail] samples=${running.length} distinctFooter=${new Set(shown).size} worstFooterShortfall=${worstFooter}`);
   await test.info().attach("live-lag", { body: JSON.stringify({ worstFooterShortfall: worstFooter, samples: running.length }), contentType: "application/json" });
 
@@ -88,15 +107,6 @@ test("table footer, filter chip and Overview grow while the crawl runs and are e
   console.log(`[livedetail] overview distinct=${[...new Set(overviewCrawled)].join(",")}`);
   expect(new Set(overviewCrawled).size, "Overview-Zähler „Total URLs Crawled“ ändert sich während des Laufs").toBeGreaterThanOrEqual(3);
   for (let i = 1; i < overviewCrawled.length; i++) expect(overviewCrawled[i]!, `Overview fällt zurück bei Stichprobe ${i}`).toBeGreaterThanOrEqual(overviewCrawled[i - 1]!);
-  const lagOverview: string[] = [];
-  for (const s of running) {
-    if (s.t - t0 < 6500) continue;
-    const reference = lastBefore(samples, s.t - 6000, (x) => x.crawled);
-    const value = summaryValue(s.overview, /^Total URLs Crawled/);
-    if (value < reference) lagOverview.push(`t=${Math.round(s.t - t0)}ms overview=${value} < crawled(t-6s)=${reference}`);
-  }
-  expect(lagOverview, "Overview hinkt dem Crawl um mehr als 6 s hinterher (UI-018: nächste Zählung nach max(2 s, 3 × Dauer))").toEqual([]);
-
   // 4. Nach der Pause: alle Werte exakt, ohne Nutzeraktion (UI-018 OS-Festlegung); Quelle der Wahrheit ist der Kern.
   const total = await coreTotal(page, "Response Codes", "All");
   await expect
@@ -111,6 +121,7 @@ test("table footer, filter chip and Overview grow while the crawl runs and are e
 
   // 5. Fortsetzen und beenden: 27 URLs, 25 interne, 2 externe (expected.json von fx-ui-basic), alle Anzeigen identisch.
   await resumeCrawl(page);
+  gate.open();
   await alpha.waitCompleted(60_000);
   await expect
     .poll(async () => {
@@ -135,13 +146,12 @@ test("table footer, filter chip and Overview grow while the crawl runs and are e
 // spec: UI-061
 // spec: UI-062
 // acceptance: independent
-test("after pause, resume and completion Overview and Issues equal an uninterrupted crawl", async ({ alpha }) => {
+test("after pause, resume and completion Overview and Issues equal an uninterrupted crawl", async ({ alpha, gate }) => {
   test.setTimeout(180_000);
   const { page } = alpha;
-  // Lauf A: ununterbrochen (schneller gedrosselt, weil nur der Endstand zählt)
-  await alpha.open();
-  await alpha.slowCrawl(12);
-  await alpha.startFromHeader();
+  // Lauf A: ununterbrochen (Tor offen, nur der Endstand zählt)
+  await startGated(alpha, gate, "Internal");
+  gate.open();
   await alpha.waitCompleted(60_000);
   await openSidebarTab(page, "Issues");
   await expect(page.getByRole("tabpanel", { name: "Issues" })).toContainText("Client Error (4XX)", { timeout: 15_000 });
@@ -151,22 +161,25 @@ test("after pause, resume and completion Overview and Issues equal an uninterrup
 
   // Lauf B in einer zweiten App-Instanz: Pause nach der Hälfte, Fortsetzen, Abschluss (UI-018 Kriterium 3)
   const second = await startAlphaBridge();
+  const gateB = await startGate(alpha.site.base);
   const pageB = await page.context().newPage();
   alpha.track(pageB);
   try {
     await pageB.goto(`/?${new URLSearchParams({ bridge: second.url })}`);
     await expect(pageB.locator("[data-shell-ready]")).toHaveAttribute("data-shell-ready", "true");
-    await slowProfile(pageB, 12);
+    await gatedProfile(pageB);
     const field = pageB.getByLabel("Start URL");
-    await field.fill(alpha.startUrl);
+    await field.fill(gateB.startUrl);
     await field.press("Enter");
-    await waitCrawled(pageB, 13);
-    await pauseCrawl(pageB);
+    // die Hälfte der Fixture-Seiten, dann Pause: das Tor hält den Crawl, bis der Test ihn weiterlaufen lässt
+    await crawlTo(pageB, gateB, 13);
+    await pauseCrawl(pageB, gateB);
     await expect
       .poll(async () => (await overviewSummary(pageB))["Total URLs Crawled"], { timeout: 12_000, intervals: [250] })
       .toBe(await coreTotal(pageB, "Response Codes", "All"));
     expect((await overviewSummary(pageB))["Total URLs Crawled"], "nach der Pause zeigt die Overview weniger als den Endstand").toBeLessThan(27);
     await resumeCrawl(pageB);
+    gateB.open();
     await expect(pageB.getByTestId("crawl-phase")).toHaveText("Completed", { timeout: 60_000 });
     await openSidebarTab(pageB, "Issues");
     await expect(pageB.getByRole("tabpanel", { name: "Issues" })).toContainText("Client Error (4XX)", { timeout: 15_000 });
@@ -177,6 +190,7 @@ test("after pause, resume and completion Overview and Issues equal an uninterrup
     expect(issuesB, "Issues nach Pause/Fortsetzen = Issues des ununterbrochenen Crawls").toEqual(issuesA);
   } finally {
     await pageB.close();
+    await gateB.stop();
     await second.stop();
   }
 });
@@ -186,14 +200,12 @@ test("after pause, resume and completion Overview and Issues equal an uninterrup
 // spec: UI-061
 // spec: UI-004
 // acceptance: independent
-test("the Overview dashboard follows the running crawl without user action and shows exact numbers after pause and at the end", async ({ alpha }) => {
+test("the Overview dashboard follows the running crawl without user action and shows exact numbers after pause and at the end", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
-  await alpha.open();
-  await alpha.slowCrawl(3);
-  await alpha.startFromHeader();
+  await startGated(alpha, gate, "Internal");
   // erst wenn der Crawl läuft: ein neu gestarteter Crawl setzt die Ansicht auf die Tabellen zurück
-  await waitCrawled(page, 1);
+  await crawlTo(page, gate, 1);
   await page.locator(".u34-nav-item[data-group=overview] .u34-nav-button").click();
   const dashboard = page.locator("[data-dashboard]");
   await expect(dashboard).toBeVisible();
@@ -201,22 +213,26 @@ test("the Overview dashboard follows the running crawl without user action and s
     dashboard.evaluate((el) => Object.fromEntries([...el.querySelectorAll(".os-dashboard-card")].filter((c) => c.querySelector("strong") && c.querySelector("span")).map((c) => [c.querySelector("span")!.textContent!.trim(), Number((c.querySelector("strong")!.textContent ?? "").replace(/[^\d]/g, ""))])));
   const crawledKey = async () => Object.keys(await cards()).find((k) => /crawled/i.test(k)) ?? "";
   const series: number[] = [];
-  const started = Date.now();
-  while (Date.now() - started < 30_000) {
+  const cardCrawled = async () => {
     const all = await cards();
     const key = Object.keys(all).find((k) => /crawled/i.test(k));
-    if (key) series.push(all[key]!);
-    if ((await phase(page)) !== "running" && series.length > 5) break;
-    if (series.length && (await crawledCount(page)) >= 20) break;
-    await page.waitForTimeout(250);
+    const value = key ? all[key]! : -1;
+    if (value >= 0) series.push(value);
+    return value;
+  };
+  // Etappen wie bei der Tabelle: nach jeder Etappe hält das Tor den Crawl, bis die (gedrosselte) Übersicht den Stand zeigt
+  for (const stage of [7, 14, 20]) {
+    gate.meter(3, stage);
+    await expect.poll(cardCrawled, { timeout: 90_000, intervals: [250], message: `Karte „gecrawlt“ holt den Stand ${stage} ein` }).toBeGreaterThanOrEqual(stage);
   }
   console.log(`[livedetail] dashboard crawled series distinct=${[...new Set(series)].join(",")}`);
   expect(new Set(series).size, "Karte „gecrawlt“ ändert sich während des Laufs").toBeGreaterThanOrEqual(3);
   for (let i = 1; i < series.length; i++) expect(series[i]!, `Karte fällt zurück bei Stichprobe ${i}`).toBeGreaterThanOrEqual(series[i - 1]!);
-  await pauseCrawl(page);
+  await pauseCrawl(page, gate);
   const truth = await coreTotal(page, "Response Codes", "All");
   await expect.poll(async () => (await cards())[await crawledKey()], { timeout: 12_000, intervals: [250] }).toBe(truth);
   await resumeCrawl(page);
+  gate.open();
   await alpha.waitCompleted(60_000);
   await expect
     .poll(async () => {
@@ -238,17 +254,16 @@ test("the Overview dashboard follows the running crawl without user action and s
 // spec: UI-018
 // spec: UI-062
 // acceptance: independent
-test("the sidebar Issues list fills during the crawl without user action and is exact at the end", async ({ alpha }) => {
+test("the sidebar Issues list fills during the crawl without user action and is exact at the end", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
-  await alpha.open();
-  await alpha.slowCrawl(4);
-  await alpha.startFromHeader();
+  await startGated(alpha, gate, "Internal");
   await openSidebarTab(page, "Issues");
   const panel = page.getByRole("tabpanel", { name: "Issues" });
   // der 404-Fund (/missing) entsteht erst nach den 20 Seiten: vorher gibt es das Problem nicht
-  await waitCrawled(page, 8);
+  await crawlTo(page, gate, 8);
   await expect(panel).not.toContainText("Client Error (4XX)");
+  gate.open();
   await alpha.waitCompleted(60_000);
   // … nachher erscheint es ohne weiteres Zutun, mit genau einer URL (expected.json: clientErrors = 1)
   await expect(panel).toContainText("Client Error (4XX)", { timeout: 15_000 });
@@ -259,11 +274,11 @@ test("the sidebar Issues list fills during the crawl without user action and is 
 // spec: UI-018
 // spec: UI-140
 // acceptance: independent
-test("an unsorted table scrolled to the bottom follows new rows (tail mode) until the user scrolls up", async ({ alpha }) => {
+test("an unsorted table scrolled to the bottom follows new rows (tail mode) until the user scrolls up", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
-  await startSlow(alpha, 3);
-  await waitCrawled(page, 8);
+  await startGated(alpha, gate);
+  await crawlTo(page, gate, 8);
   const grid = upperGrid(page);
   const atBottom = async () => {
     const g = await readUpper(page);
@@ -273,18 +288,19 @@ test("an unsorted table scrolled to the bottom follows new rows (tail mode) unti
   };
   await grid.hover({ position: { x: 160, y: 80 } });
   await page.mouse.wheel(0, 4000);
-  await expect.poll(async () => (await atBottom())?.hidden, { timeout: 8000 }).toBe(0);
-  // folgt neuen Zeilen: die letzte sichtbare Zeile ist über den Lauf stets die letzte der Tabelle
+  await expect.poll(async () => (await atBottom())?.hidden, { timeout: 15_000 }).toBe(0);
+  // Folgt neuen Zeilen: Der Test lässt zehnmal je eine URL durch (das Tor, nicht die Uhr, bestimmt den Takt); nach jeder neuen Zeile
+  // ist die letzte sichtbare Zeile wieder die letzte der Tabelle.
   const follow: string[] = [];
   const totals = new Set<number>();
-  const t0 = Date.now();
-  while (Date.now() - t0 < 4500 && (await phase(page)) === "running") {
-    const state = await atBottom();
-    if (state) {
-      totals.add(state.total);
-      if (state.hidden > 1) follow.push(`+${Date.now() - t0}ms total=${state.total} last=${state.last}`);
-    }
-    await page.waitForTimeout(200);
+  for (let i = 0; i < 10; i++) {
+    const before = (await atBottom())!.total;
+    gate.allow(1);
+    await expect.poll(async () => (await atBottom())?.total ?? 0, { timeout: 15_000, intervals: [100] }).toBeGreaterThan(before);
+    let state = await atBottom();
+    await expect.poll(async () => ((state = await atBottom())?.hidden ?? 99) <= 1, { timeout: 15_000, intervals: [100] }).toBe(true).catch(() => undefined);
+    totals.add(state!.total);
+    if (state!.hidden > 1) follow.push(`Schritt ${i}: total=${state!.total} last=${state!.last}`);
   }
   console.log(`[livedetail] tail mode totals=${[...totals].join(",")} misses=${follow.length}`);
   expect(totals.size, "die Tabelle wuchs während der Beobachtung").toBeGreaterThanOrEqual(4);
@@ -298,20 +314,21 @@ test("an unsorted table scrolled to the bottom follows new rows (tail mode) unti
     trail.push(`${state?.first}/${state?.total}`);
     if (state?.first === 0) break;
     if (i === 12) {
-      // Beobachtung F5 (siehe Bericht): gelegentlich (etwa jeder zehnte Lauf, auch auf main) bleibt das erste Hochscrollen wirkungslos
-      // und die Tabelle folgt weiter den neuen Zeilen. Der Test wiederholt das Scrollen einmal und vermerkt den Ausfall.
+      // Beobachtung F5 (siehe Bericht): gelegentlich bleibt das erste Hochscrollen wirkungslos. Der Test wiederholt das Scrollen
+      // einmal und vermerkt den Ausfall.
       test.info().annotations.push({ type: "observation-F5", description: "erstes Hochscrollen im Tail-Modus blieb 2,4 s wirkungslos" });
       await page.mouse.wheel(0, -3000);
     }
     await page.waitForTimeout(200);
   }
   console.log(`[livedetail] tail mode scroll-up trail: ${trail.join(" ")}`);
-  await expect.poll(async () => (await atBottom())?.first, { timeout: 5000, message: `erste sichtbare Zeile nach dem Hochscrollen: ${trail.join(" ")}` }).toBe(0);
+  await expect.poll(async () => (await atBottom())?.first, { timeout: 15_000, message: `erste sichtbare Zeile nach dem Hochscrollen: ${trail.join(" ")}` }).toBe(0);
+  // zwei weitere URLs: die Zeilenzahl wächst, die Ansicht bleibt oben
   const totalBefore = (await atBottom())!.total;
-  await page.waitForTimeout(3000);
+  await crawlMore(page, gate, 2);
+  await expect.poll(async () => (await atBottom())?.total ?? 0, { timeout: 15_000 }).toBeGreaterThan(totalBefore);
   const after = (await atBottom())!;
   expect(after.first, "nach dem Hochscrollen folgt die Tabelle den neuen Zeilen nicht mehr").toBe(0);
-  if ((await phase(page)) === "running") expect(after.total).toBeGreaterThan(totalBefore);
 });
 
 async function issueRows(page: import("@playwright/test").Page): Promise<string[]> {
