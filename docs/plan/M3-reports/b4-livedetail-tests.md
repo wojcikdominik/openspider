@@ -552,3 +552,36 @@ Renderzeit wurden beendet und zählt nicht zum Endnachweis. Kein Produktfehler w
 dafür durch eine gelockerte Assertion ausgeblendet.
 
 Nachweise und Endstatus folgen nach den Läufen.
+
+### Gegenproben Runde 2
+
+Isolierte Frontend-Kopie `/tmp/b4-ldtests-mutations`, unveränderte eigene Bridge,
+`OS_E2E_PORT=14733`, `taskset -c 0,1`, zwei Worker, beide Engines, keine Retries.
+Die geprüften Last-/Anlauf-/Schlussfenster bleiben im abschließenden Stand unverändert;
+die spätere Stimuluskorrektur betrifft ausschließlich den anderen Auswahlwechsel-Test.
+
+| Mutation | Chromium | WebKit | Dauer beider Engines |
+|---|---|---|---|
+| Tabellenanlauf erst nach 8 s, Tick und erste View-Übernahme zurückgehalten | Anlauf rot: 0 statt ≥4, Grenze 1000 ms | Anlauf rot: 0 statt ≥4, Grenze 1000 ms | 130 s |
+| Detailkapazität 2,5 URL/s bei 3 URL/s Zufluss | Lag rot, 261 Verstöße | Lag rot, 228 Verstöße | 123 s |
+| Footer nur während Running beim letzten Stand 180 auf 179 gesetzt; Pause würde reparieren | 77 verletzende Schluss-Stichproben, finale Exaktheit rot | 71 verletzende Schluss-Stichproben im Attachment; bereits Anlauf rot | 93 s |
+| Detailintervall 500 → 10 000 ms | Anlauf rot; Attachment: 292 Lag-Verstöße | Anlauf rot; Attachment: 256 Lag-Verstöße | 113 s |
+
+**8/8 Mutationsläufe erwartungsgemäß rot.** Alle acht Traces enthalten das vor den
+Auswertungsassertions angehängte `live-lag`. Bei der Footer-Mutation in WebKit verdeckt
+ein zusätzlicher 1-s-Anlaufverstoß die spätere Assertion; die komplette, bereits vorher
+aufgezeichnete Schlussbeobachtung zeigt dennoch 71-mal 179 statt 180 ohne Pause.
+Das ist kein grüner Nachweis einer Produktreparatur: **F6 bleibt offen**. In beiden
+unmutierten Vorläufen sind die Schlussfenster dagegen ohne Lag-Verstoß.
+
+Die reine Ereigniserzeugung des abschließenden Stimulus dauert im gezielten Vergleich
+38,0 ms (Chromium) und 42,8 ms (WebKit), einschließlich React-Commits 494,0/973,2 ms.
+Die Ereignisse liegen ohne Timer im selben JS-Task; Debounce-Timer können zwischen ihnen
+nicht feuern. Das `<800 ms`-Kriterium ist eine Harness-Vorbedingung für die reine
+Ereigniserzeugung, kein zusätzlich behauptetes Produktbudget. Produktlatenz wird weiterhin
+ab der vorherigen Recorder-Markierung über die gesamte Dauer geprüft.
+
+Nachweise: `/tmp/b4-r2-mutation-{a,b,c,d}.log`,
+`/tmp/b4-r2-mutation-summary`, Traces unter den gleichnamigen `-results/`-Verzeichnissen;
+extrahierte Kennwerte `/tmp/b4-r2-lag-evidence.jsonl` und
+`/tmp/b4-r2-stimulus-final.log`.
