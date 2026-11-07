@@ -376,3 +376,24 @@ bleibt davon getrennt offen. Nachweise: `/tmp/b4-lag-baseline.log`, Trace-ZIPs u
 Erster Workspace-Lauf: Abbruch bei `os-analyze --test tab_accessibility`, zwei Tests mit
 `ChromiumMissing`; das vorhandene Playwright-Chromium war dem Rust-Test nicht bekannt.
 Wiederholung mit `OPENSPIDER_CHROMIUM` auf dessen ausführbare Datei, unveränderte Tests.
+
+### Neue Gegenproben (isoliert, keine Mutation committet)
+
+Alle gegen die unveränderte Brückenbinärdatei des Arbeitsstands, `OS_E2E_PORT=14733`,
+`taskset -c 0,1`, `--workers=2`, Chromium und WebKit; pro Mutation beide Engines zusammen.
+
+| Gegenprobe | Definition | Ergebnis / Nachweis |
+|---|---|---|
+| a (abschließend `a2`) | Obere Tabelle nimmt ihren ersten View erst 8 s nach erster Crawl-URL an; auch Ticks werden bis dahin zurückgehalten | **2/2 rot an der eigenen Anlauf-Assertion**, 95 s. Chromium: Grenze 2100 ms, beim Anlauf 0 statt ≥2; WebKit: 2300 ms, 0 statt ≥3. Erster positiver Tabellenfuß +7085/+8165 ms nach erster aufgezeichneter URL; die Session kann mehrere URLs gebündelt melden. `live-lag` liegt trotz Anlauffehler im Trace. |
+| b | `TablePanel` begrenzt die vom View übernommenen Gesamtzahlen auf anfänglichen Stand + floor(verstrichene ms / 400), also 2,5 URL/s; Zufluss weiter 3 URL/s | **2/2 rot**, 112 s. Chromium 225 verletzende Stichproben ab +39 886 ms bei 3789-ms-Grenze; WebKit 246 ab +28 143 ms bei 3660-ms-Grenze. Unmutierte Inlinks-Prüfung zuvor in beiden Engines grün. |
+| c | Nur während Running wird der letzte Footer-Stand 180 als 179 ausgegeben; beim Verlassen von Running würde er wieder den tatsächlichen Wert anzeigen | **2/2 rot**, 97 s. Nach letzter URL und Ablauf der Lag-Spanne noch 96 (Chromium) bzw. 98 (WebKit) verletzende Schluss-Stichproben, jeweils 179 statt 180. Während der Aufzeichnung wurde nie pausiert. |
+
+Ein Vorversuch zu a hielt nur `controller.tick` acht Sekunden zurück: ebenfalls 2/2 rot, aber
+am laufenden Lag statt am Anlauf, weil der erste View-Aufbau den Tick-Pfad umgehen kann.
+Die abschließende Gegenprobe `a2` hält deshalb auch die erste View-Übernahme zurück und
+weist ausdrücklich die eigene Anlaufgrenze nach.
+
+Protokolle `/tmp/b4-mutation-{a,a2,b,c}.log`, Dauer/Exitcodes
+`/tmp/b4-mutation-summary.txt`; Trace-ZIPs und Attachments unter
+`/tmp/b4-mutation-{a2,b,c}-results/`. Mutationsdefinitionen nur in
+`/tmp/b4-mutate.py` und `/tmp/b4-ldtests-mutations`.
