@@ -1626,6 +1626,7 @@ mod ldfollow_tests {
     // spec: UI-012
     // spec: UI-018
     #[tokio::test]
+    #[allow(clippy::disallowed_types, clippy::disallowed_methods)]
     async fn detail_range_pages_reject_a_changed_generation_and_retry_without_gaps() {
         let fx = Fx::new();
         fx.write("DELETE FROM http_headers; WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<1100) INSERT INTO http_headers(url_id,direction,position,name,value) SELECT 1,'response',x,'header-'||x,'value' FROM n;");
@@ -1654,8 +1655,7 @@ mod ldfollow_tests {
         };
         let error = detail_range(&fx.app, &v, &args)
             .await
-            .err()
-            .expect("mixed generations must fail");
+            .expect_err("mixed generations must fail");
         assert_eq!(error.code, ErrorCode::Stale);
         let path = fx.path.clone();
         *fx.app.ext::<RangePageWrite>().0.lock().unwrap() = Some(Box::new(move || {
