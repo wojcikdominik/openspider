@@ -205,13 +205,15 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   // Start → page-3 (drei Zeilen tiefer, synchroner Tastatur-Stimulus)
   await upperGrid(page).focus();
   const m3 = await mark(page, "to-page-3");
-  // spec: UI-012, UI-145 — echte Key-Handler, drei Ereignisse im selben JS-Takt.
-  const stimulusMs = await page.evaluate(() => {
+  // spec: UI-012, UI-145 — echte Key-Handler ohne Timer, IPC oder Zwischenassertions.
+  const stimulusMs = await page.evaluate(async () => {
     const grid = document.activeElement!;
     const start = performance.now();
     for (let i = 0; i < 3; i++) {
       grid.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", bubbles: true }));
       grid.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", code: "ArrowDown", bubbles: true }));
+      // React übernimmt den diskreten Tastendruck vor dem nächsten Ereignis.
+      await Promise.resolve();
     }
     return performance.now() - start;
   });
