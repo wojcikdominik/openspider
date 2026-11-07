@@ -1,6 +1,6 @@
 # B4-RESUME – Crawls per MCP und CLI anhalten und fortsetzen – Bericht
 
-Stand 06.11.2026. Branch `m3/resume` (Basis `main` 816e51d2), Mac-Worktree `openspider-wt/c-resume`, Server-Worktree
+Stand 07.11.2026 (Nacharbeit, Abschnitt 5). Branch `m3/resume` (Basis `main` 816e51d2, zuletzt `main` 6d879a26 und `m3/resume-tests` df8a9435 eingemischt), Mac-Worktree `openspider-wt/c-resume`, Server-Worktree
 `m3-resume` (git-Worktree auf 816e51d2, per `srv-sync.sh` gespiegelt). Grundlage: AGENT-001/003/020 (10), CRAWL-126/128/130
 (01), UI-003/UI-013 (05), OUT-233 (06), `docs/plan/beta3.md` „Für beta.4 aus B3-N00“, `M3-reports/b3-n00.md` (S2, Punkt 4),
 `M3-reports/b3-flakes.md` (Pause-Fixtures ohne natürliches Ende).
@@ -84,6 +84,24 @@ Stand 06.11.2026. Branch `m3/resume` (Basis `main` 816e51d2), Mac-Worktree `open
   (`crawls-phase-completed-stopped`, DE/EN), „Fortsetzen“ ist aus (über `canResume`).
 - `limit_kind` in „Fertig (Grenze erreicht: …)“ steht nicht eindeutig in der Spec → weggelassen, siehe S1.
 
+### 5 Nacharbeit: Abnahmetests eingebunden, Befunde behoben
+
+`main` (mit Crawl-Datei-Fix, B4-LIVEDETAIL, Playwright-Port) und `m3/resume-tests` sind eingemischt. **Die 38 Abnahmetests sind unverändert und jetzt alle grün** (19 in `os-mcp`, 19 in `os-cli`),
+auch die vorher drei roten. Keinen halte ich für falsch.
+
+| Befund (`b4-resume-tests.md`) | Ursache | Fix | Test |
+|---|---|---|---|
+| 1, schwer: `--list-crawls` zerstört die Datei | siehe `b4-listfix.md` | auf `main`, per Merge hier | `listing_crawls_while_…` (Abnahme) |
+| 2, mittel: nicht erreichbare Start-URL wird `Completed` statt `Failed` (CRAWL-128) | Die Engine kannte nur `QueueEmpty`; nur die CLI prüfte die Start-URL, und nur für den Exit-Code | `crawl.rs`: Endet ein Spider-Crawl mit genau einer abgerufenen Seite und ist das die Start-URL ohne Antwort wegen eines Netzfehlers (auch nicht erreichbare robots.txt), dann Zustand `Failed` ohne Endgrund. **OUT-182 bleibt erfüllt:** eine Zeile, Analyse-Hook, Exporte, Exit 0 mit Warnung, Exit 3 nur mit `--fail-on-start-error`. Der CLI-Zweig „`Failed` ist immer Exit 3“ entfällt, denn alle anderen Fehlschläge kommen als `Err` | `a_crawl_whose_start_url_is_unreachable_is_listed_as_failed` (Abnahme), `an_unreachable_start_url_fails_keeps_its_row_and_cannot_be_resumed`, `a_start_url_that_answers_is_completed_even_with_an_error_or_a_robots_block`, `an_unreachable_url_of_a_list_crawl_is_no_failed_crawl` (Engine, gegen Fixtures bzw. geschlossenen Port), `an_unreachable_start_url_is_listed_as_failed_and_stays_a_valid_result` (CLI) |
+| 3, niedrig: `crawl_status` nennt nach `resume_crawl` bis rund 180 ms `Paused` | `state` kam aus der Datei, der erste Batch des Laufs ist da noch nicht geschrieben | `crawl_status` nimmt den Zustand des eigenen Laufs, nur ohne Lauf die Datei. Ein gemeldeter Endzustand ist dauerhaft (Abschnitt 3) | `m2_process`: `crawl_status` direkt nach `resume_crawl` ist `Running` |
+| 4, niedrig: `resume_crawl` auf gestopptem Crawl antwortet `busy`, solange der Lauf abschließt | `busy` wurde vor dem Endgrund geprüft | Erst Endgrund `stopped` prüfen (dauerhaft, sobald gemeldet), dann `busy` | `m2_process`: der Aufruf direkt nach dem Stopp liefert den Hinweis, ohne Wiederholung |
+
+**Spec:** `busy` steht jetzt in AGENT-020 (nur Code und Form, kein neues Verhalten). S1–S5 unten und die 8 Fragen aus `b4-resume-tests.md` bleiben offen und gehen an Fable; `limit_kind` bleibt offen.
+
+**Bei den Gates gefunden, im ersten Bericht übersehen:** `e2e/beta/n04-mcp.spec.ts` zählte 16 Werkzeuge. Mit `pause_crawl` sind es 17; die Erwartung ist angepasst (kein Lockern, das Werkzeug ist gewollt).
+
+**Merge-Fehler von mir:** Der Konflikt in `registry_management.rs` war im Merge-Commit `d29c6ddf` falsch gelöst (fehlende Klammer, Datei übersetzt dort nicht), Korrektur in `62faa845`. Beim Merge nach `main` zählt nur der Endstand.
+
 ## Commits (Branch `m3/resume`)
 
 | Commit | Inhalt |
@@ -94,6 +112,12 @@ Stand 06.11.2026. Branch `m3/resume` (Basis `main` 816e51d2), Mac-Worktree `open
 | `0d787fc6` | mcp: `pause_crawl`, `busy`, Werkzeugtexte, `m2_process` umgebaut, Fixture, Skill-Tabelle |
 | `494515b7` | app: HTTP-MCP `pause_crawl`/`busy`/Fehlerabbildung, Listing `endReason` + Tests |
 | `60eeacba` | ui: Verwaltung „Abgeschlossen (gestoppt)“ + Vitest |
+| `d29c6ddf`, `ba1d9edd` | merge: `main`, `m3/resume-tests` |
+| `62faa845` | test: Merge-Konflikt `registry_management` vervollständigt |
+| `824a01a9` | engine: nicht erreichbare Start-URL endet als `Failed` (Befund 2) |
+| `7e42db74` | mcp: `crawl_status` und `resume_crawl` (Befunde 3 und 4) |
+| `e6c4f3ea` | spec: AGENT-020 Fehlercode `busy` |
+| `d78808ce`, `556d36af` | test: clippy in `b4_resume`, `n04-mcp` erwartet 17 Werkzeuge |
 | (letzter Commit) | docs: Bericht |
 
 ## Spec-Fragen
@@ -106,7 +130,7 @@ Stand 06.11.2026. Branch `m3/resume` (Basis `main` 816e51d2), Mac-Worktree `open
   {`max_urls`} (weitere Werte erst mit einer Zeitgrenze), im Manifest optional; Anzeige UI-013 „Fertig (Grenze erreicht:
   max. URLs)“ / „Completed (Limit reached: max URLs)“; ausdrücklich festhalten, dass die Tiefengrenze `queue_empty` bleibt
   (oder, falls gewünscht, als `limit_reached`/`max_depth` zählt – dann Engine-Änderung).
-- **S2 (AGENT-020): Fehlercode `busy`.** Nur in `docs/plan/beta3.md`/B3-N00 beschrieben, nicht in `docs/spec`.
+- **S2 (AGENT-020): Fehlercode `busy`.** Code und Form stehen seit Abschnitt 5 in AGENT-020; offen bleibt, wann genau er gilt. Vorher nur in `docs/plan/beta3.md`/B3-N00 beschrieben.
   Umgesetzt auf Anweisung des Orchestrators. **Vorschlag Nachtrag AGENT-020:** „Steuerwerkzeuge (`pause_crawl`,
   `stop_crawl`, `resume_crawl`, `start_crawl`) melden vorübergehende Belegung (Pause/Stopp läuft noch, Endzustand wird
   gespeichert, App führt eine andere Operation aus) als MCP-Fehler mit `structuredContent.error = {code: "busy",
@@ -123,32 +147,31 @@ Stand 06.11.2026. Branch `m3/resume` (Basis `main` 816e51d2), Mac-Worktree `open
   STDIO antwortet sofort (`pausing: true`, wie `stop_crawl`), In-App-HTTP nach dem dauerhaften „Pausiert“ (Weg der
   Kopfleiste). Beides ist für Agenten über `crawl_status` gleich zu behandeln; ggf. vereinheitlichen.
 
+- **S6 (OUT-182 ↔ CRAWL-128): nicht erreichbare Start-URL.** OUT-182 sagt „endet regulär … kein Fehler“, CRAWL-128 nennt sie als Beispiel für „Fehlgeschlagen“. Umgesetzt: beides zusammen (Ergebnis und Exit-Code nach OUT-182,
+  Zustand nach CRAWL-128). **Vorschlag:** OUT-182 ergänzen „Zustand in der Verwaltung: Fehlgeschlagen“.
+- **S7 (CRAWL-128): Was zählt als „nicht erreichbar“?** Umgesetzt: Netzfehler und eine deshalb nicht erreichbare robots.txt. **Nicht** als Fehlschlag: Sperre per robots.txt, zu viele Weiterleitungen, Zielschutz
+  (`blocked_private_target`), außerdem Listen-Crawls und Crawls mit weiteren abgerufenen Seiten. Bitte bestätigen, vor allem den Zielschutz.
+- **Folge von S6 für die Analyse, nicht getrennt festgelegt:** CLI und MCP lassen den Analyse-Hook für diesen Fall laufen, die Analyse gilt dort aber als unvollständig, weil der Crawl nicht `Completed` ist. Die App startet für `Failed` keine automatische Analyse.
+- **Die 8 Fragen aus `b4-resume-tests.md`:** unverändert offen, nicht von mir entschieden.
+
 ## Testergebnisse (Server `openspider-build`, Worktree `m3-resume`)
 
-- `cargo fmt --all --check`: ok. `cargo clippy --workspace --all-targets -- -D warnings`: ok.
-- `cargo test --workspace --exclude openspider-desktop -j 6 --locked --no-fail-fast` (über `ws-slot.sh`): **4 357 bestanden,
-  0 fehlgeschlagen, 50 ignoriert**, 602 Testprogramme, Exit 0 (keine neuen Ignores).
-- Gezielt (vor dem Gesamtlauf):
-  - `os-engine`: `b4_resume` 4/4 (neu), `lifecycle_pause` 13 + 1 ignoriert (unverändert), `core_stop`, `lifecycle_hook`,
-    `add_urls_m2` grün.
-  - `os-store` `registry_management` 14/14 (darin neu `a_stopped_crawl_is_never_resumable_whatever_its_queue_holds`).
-  - `os-mcp` Unit 85/85 (darin `busy_is_a_retryable_error_code_and_other_errors_stay_plain_text`, Werkzeugliste),
-    `m2_process` 4/4; die übrigen Integrations-Tests über den Gesamtlauf.
-  - `os-cli` `cli_load` 10/10 (darin neu `resume_refuses_a_stopped_crawl_with_exit_1_whatever_its_queue_holds`).
-  - `os-app`: `cmd_mcp_service` 6/6 (neu `http_pause_resume_and_stop_follow_the_app_session_and_stopped_is_final`),
-    `n00_stopped_state` 2/2 (+ `endReason`), `dto_exports` 7/7 (TS-Vertrag), `beta_stop` 2/2.
-- **`m2_process`-Test 20× unter Last:** Testbinärdatei, MCP-Kind und Testsite auf CPU 0–1 (`taskset`), dort je Lauf zwei
-  `yes`-Lastprozesse (mit `timeout`, danach beendet, 0 Reste): **20/20 grün**, 4,7–5,8 s je Lauf.
-- Gegenprobe owner_pid-Wettlauf ohne Engine-Fix: 5/5 rot (siehe oben).
-- `npm run -w apps/desktop typecheck`: ok. `npm run -w apps/desktop test`: CSS-Lint ok, **Vitest 117 Dateien,
-  1 012 Tests bestanden** (neu: Verwaltung „Completed (stopped)“/„Abgeschlossen (gestoppt)“).
-- Playwright mit echter Bridge (`os-app-bridge`, `--workers=1 --retries=0`, Engines nacheinander; Hauptspecs über eine
-  nur im Server-Worktree angelegte Konfiguration mit Vite-Port 1447, danach gelöscht):
-  `crawls/management.spec.ts` + `crawls/bridge.spec.ts` (eigene Konfiguration) und `beta/resume.spec.ts`,
-  `beta/control.spec.ts`, `header/header.spec.ts`, `statusbar/statusbar.spec.ts`, `alpha/crawl-control.spec.ts`:
-  **Chromium 18/18, WebKit 18/18**.
+Endstand mit Abnahmetests, nach dem Merge von `main`, Playwright-Port `OS_E2E_PORT=14829`.
+
+- `cargo fmt --all --check`: ok. `cargo clippy --workspace --all-targets -- -D warnings`: ok (nach `d78808ce`).
+- `cargo test --workspace --exclude openspider-desktop -j 6 --locked --no-fail-fast` (über `ws-slot.sh`): **4 439 bestanden, 0 fehlgeschlagen, 50 ignoriert**, 609 Testprogramme, Exit 0;
+  gegenüber `main` keine `#[ignore]` hinzugekommen. Danach nur `b4_resume.rs` (ohne Verhaltensänderung, einzeln erneut 7/7), `n04-mcp.spec.ts` und dieser Bericht geändert.
+- **Abnahmetests:** `os-mcp` 19/19, `os-cli` 19/19, unverändert.
+- **`m2_process`-Test 20× unter Last:** Testlauf auf CPU 0–1 mit zwei `yes`-Prozessen je Lauf (mit `timeout`, danach beendet, 0 Reste): **20/20**.
+- Gegenprobe owner_pid-Wettlauf ohne Engine-Fix (erster Stand): 5/5 rot.
+- `npm run -w apps/desktop typecheck`: ok. `npm run -w apps/desktop test`: CSS-Lint ok, **Vitest 119 Dateien, 1 023 Tests bestanden**.
+- Playwright mit echter Bridge, `--workers=1 --retries=0`, je Chromium und WebKit:
+  - `crawls/management.spec.ts`, `crawls/bridge.spec.ts`: Chromium 7/7, WebKit 7/7.
+  - `beta/resume`, `beta/control`, `header/header`, `statusbar/statusbar`, `alpha/crawl-control`: je 11/11; `beta/n04-mcp` war in diesem Lauf rot (Zählung, Abschnitt 5), danach siehe nächste Zeile.
+  - `mcp/dialog`, `beta/services`, `beta/n04-mcp`, `polish/visual-heights`: nach der Korrektur von `n04-mcp` Chromium 17/17, WebKit 17/17.
+  - `mcp/bridge.spec.ts` (mit dem echten 10-Minuten-Test): Chromium 6/6, WebKit 6/6.
+- `os-parity run --all`: **„Paritätslauf: bestanden“, 218/218 Vergleiche ok**, Exit 0.
 - `bash scripts/check-neutral.sh`: keine Fundstellen.
-- `os-parity run --all` (`--openspider target/debug/openspider`): **„Paritätslauf: bestanden“, 218/218 Vergleiche ok**, 10 Sites, Exit 0.
 - `target/` des Server-Worktrees am Ende gelöscht.
 
 ## Fremde Dateien (K2-92)
@@ -162,6 +185,10 @@ Stand 06.11.2026. Branch `m3/resume` (Basis `main` 816e51d2), Mac-Worktree `open
 | `crates/os-app/tests/n00_stopped_state.rs` | eine Zusicherung `endReason` | Nachweis Listing mit echtem Stopp (Datei aus B3-N00) |
 | `integrations/skills/openspider/references/tools.md`, `integrations/claude-plugin/skills/openspider/references/tools.md` | `pause_crawl`, `busy`, Texte zu Stopp/Fortsetzen | Validator vergleicht die Tabelle mit `tools::all()` (AGENT-041/042); beide Kopien byte-gleich (`sync-skill`) |
 | `tests/fixtures/agent-m2-crawl/scenario.toml` | Routen `/held`, `/chain/1…12` | Fixture ohne natürliches Ende vor der Pause (B3-FLAKES) |
+| `docs/spec/10-agent-interface.md` | AGENT-020: Fehlercode `busy` | Auftrag, nur Code und Form |
+| `apps/desktop/e2e/beta/n04-mcp.spec.ts` | 17 statt 16 Werkzeuge | `pause_crawl` (AGENT-020) |
+| `crates/os-cli/tests/acceptance_resume.rs`, `crates/os-mcp/tests/acceptance_resume.rs`, `docs/plan/M3-reports/b4-resume-tests.md` | per Merge aus `m3/resume-tests`, unverändert | Abnahmetests des Testagenten |
+| `crates/os-cli/src/exec.rs`, `crates/os-cli/tests/cli_basics.rs` | `Failed` ohne Fehler bleibt gültiges Ergebnis; neuer Test | Befund 2, OUT-182 |
 | `apps/desktop/src/features/crawls/i18n/{de,en}.ftl` | Schlüssel `crawls-phase-completed-stopped` | neue UI-Texte DE/EN; nicht unter `apps/desktop/src/i18n/**` (B4-LANG). Neue Sprachen von B4-LANG fallen für diesen Schlüssel auf Englisch zurück, bis sie ihn übersetzen |
 
 Eigene Pfade: `crates/os-store/src/registry.rs`, `crates/os-store/tests/registry_management.rs`,
@@ -170,12 +197,7 @@ Eigene Pfade: `crates/os-store/src/registry.rs`, `crates/os-store/tests/registry
 
 ## Offene Punkte
 
-- Spec-Nachträge S1–S5 (Planer/Fable). `limit_kind` folgt nach S1.
-- **Serverplatte:** Ein vollständiger `cargo test --workspace` belegt je Worktree rund 120 GB `target/`. Am Vormittag
-  liefen B4-M2CLOSE und mein erster Gesamtlauf gleichzeitig, die Platte lief voll (0 B frei; mein Lauf brach beim Linken ab,
-  der gleichzeitige Lauf von B4-M2CLOSE sollte auf Folgefehler geprüft werden). `ws-slot.sh` prüft nur 25 GB frei; für zwei
-  gleichzeitige Gesamtläufe reicht das nicht. Mein `target/` wurde sofort gelöscht, der wiederholte Gesamtlauf startete
-  erst bei ≥ 135 GB frei (trotzdem zeitweise nur 12 GB frei, weil danach zwei weitere Läufe begannen). Vorschlag: Schwelle
-  in `ws-slot.sh` auf rund 130 GB.
+- Spec-Fragen S1–S7 und die 8 Fragen aus `b4-resume-tests.md` (Planer/Fable). `limit_kind` folgt nach S1.
+- UI-019 (Dialog bei nicht erreichbarer Start-URL) habe ich nicht geprüft; die App zeigt jetzt die Phase „Fehlgeschlagen“.
 - Die App-Kopfleiste/Statuskarte bleibt unverändert (Statuskarte „Analyse läuft“ / „Gestoppt – Datei wird
   zusammengeführt“ ist ein eigener beta.4-Punkt aus B3-N00).
