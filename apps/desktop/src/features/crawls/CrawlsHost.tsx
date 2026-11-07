@@ -200,8 +200,11 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
           case "resume": await requestOpen({ kind: "id", crawlId: ids[0]! }, true); break;
           case "export": { const dest = ids.length === 1 ? await desktop.chooseSave(t("crawls-export"), `${chosen[0]!.crawl.name}.ospider`) : await desktop.chooseDirectory(t("crawls-export")); if (dest) startOp(await crawls.export({ ids, dest })); break; }
           case "duplicate": startOp(await crawls.duplicate({ ids })); break;
-          case "lock": await crawls.lock({ ids }); await refresh(); break;
-          case "unlock": await crawls.unlock({ ids }); await refresh(); break;
+          case "lock":
+          case "unlock":
+            try { await crawls[action]({ ids }); }
+            finally { await refresh().catch(e => setError({ text: textError(e) })); }
+            break;
           case "copyIds": await crawls.copyIds({ ids }); break;
           case "reveal": await crawls.reveal({ ids }); break;
         }
