@@ -31,4 +31,3 @@ test("extended fixture has exactly one backlink per content page and a held fina
     expect(gate.budget()).toBe(4);
   } finally { await gate.stop(); }
 });
-
