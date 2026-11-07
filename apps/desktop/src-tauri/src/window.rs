@@ -149,7 +149,7 @@ mod tests {
             let reply_handle = app.handle().clone();
             let listener = window.once("os:flush-ui-state", move |event| {
                 let reply: String = serde_json::from_str(event.payload()).unwrap();
-                reply_handle.emit(reply, success).unwrap();
+                reply_handle.emit(&reply, success).unwrap();
             });
             assert_eq!(flush_frontend(app.handle()).await, success);
             window.unlisten(listener);
