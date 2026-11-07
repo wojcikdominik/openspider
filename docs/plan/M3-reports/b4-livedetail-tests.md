@@ -301,3 +301,54 @@ steht am Tor) zeigte der Tabellenfuß mehr als 1,3 s lang 22 statt 23 (Rechnerfa
 Aktualisierung geht verloren und die Anzeige holt erst mit dem nächsten Ereignis auf. Das ist die Prüfung der Spec („≤ 1 s“, UI-018), unverändert scharf;
 sie ist in 16 von 16 Folgeläufen (mit Last) und in allen übrigen Läufen grün. Ob Produkt oder Rechner, ließ sich nicht klären; das Protokoll enthält jetzt
 den Stand nach der Pause (Fehlermeldung) zur Einordnung. Als Produktbefund nur dann zu führen, wenn er sich wiederholt.
+
+## B4-LDTESTS – Astra-Nachprüfung (07.11.2026)
+
+Ausgangspunkt `5cb8df472`, Prüftext `~/astra-ldtests-befunde.md` (needs_work 76).
+Das Soll stammt ausschließlich aus `docs/spec/*`, insbesondere UI-018 Zeilen 455–468;
+Produktcode wird nur für Aufrufe und die ausdrücklich bestellten isolierten Mutationen gelesen.
+
+### Schutz bestehender unabhängiger Tests
+
+Die Auftragsregel „Tests mit `// acceptance: independent` gar nicht ändern“ betrifft alle genannten
+Altdateien, einschließlich `livedetail-support.ts` und `livedetail-gate.ts`. Eine Ausnahme wurde
+angefragt. Solange sie nicht vorliegt, bleiben diese Dateien unverändert. Die Ergänzung
+`livedetail-lag-window.spec.ts` prüft die fünf Auflagen zusätzlich; die beanstandeten Altstellen
+bleiben als solche offen. Kein bestehender Test, Wächter oder Budget wird gelockert.
+
+### Ergänzende Prüfungen
+
+1. **Anlauf:** feste Bezugszeit unmittelbar vor dem Start des Zeitgebers. Eigene Anlaufprüfung ab
+   erster aufgezeichneter neuer URL mit derselben begrenzten Lag-Spanne wie im weiteren Lauf.
+   Kein Zeitpunkt hängt vom ersten erfolgreichen Einholen der Anzeige ab.
+2. **Last:** konstant 3 URL/s, mindestens 60 Sekunden Zufluss. Neue Loopback-Fixture mit Root,
+   zusätzlichen Rückverlinkern und einer am Ende gesperrten Anfrage; 50 ms Antwortverzögerung.
+   Eine eigene Fixture-Prüfung kontrolliert Links und Gate-Budget. 200 URL/s nach UI-018 bleiben
+   außerhalb dieses Nachbesserungsumfangs; diese Tests ersetzen den entsprechenden Lasttest nicht.
+3. **Fenster:** `remaining = ceil(3 × max(60 s, Grenze × maxFaktor + Reserve))`,
+   `limit = bereitsGecrawlt + remaining`; Startmarker vor `meter`, nicht erste erfolgreiche Anzeige.
+   Reserve = zehn Recorder-Takte beim maximalen Faktor. Rechenprüfung für machine 1/4/8,
+   Grenzen 2/3 s und Anfangsstände 0/4. Getrennte Wächter verlangen ≥5 Lag-Stichproben während
+   Zufluss und ≥5 nach der letzten URL.
+4. **F6 bleibt offen:** Nach der letzten Mess-URL bleibt der Crawl Running und am Tor gesperrt.
+   Mindestens maximale Lag-Spanne plus zehn Recorder-Takte ohne Pause, Auswahlwechsel oder
+   zusätzliche URL. Ein erst durch Pause reparierter Footer darf nicht bestehen. Der frühere
+   Befund ist damit nicht als behoben erklärt; Wiederholbarkeit wird weiter untersucht.
+5. **Diagnose:** `live-lag` wird vor sämtlichen inhaltlichen Assertions geschrieben, auch vor
+   Anlauf-/Stichprobenwächtern. Enthält Messplan, feste Marker, Faktoren, Anlaufstand,
+   Lag-Verletzungen und vollständige Stichproben.
+
+Messspielräume bleiben 2 s für Zähler und 3 s für Inlinks, jeweils mit dem bereits vorhandenen
+gekappten Rechnerfaktor. Die Spec selbst verlangt für aktive Tabellenzähler ≤1 s. Diese
+Dev-Server-Prüfung beweist daher nicht das absolute Release-Limit (bestehende Spec-Fragen S1/S2).
+
+### Fremde Dateien
+
+Keine Änderungen an fremden versionierten Dateien. Isolierte Produktmutationen erfolgen nur im
+separaten Worktree `/tmp/b4-ldtests-mutations`, werden nicht committet. Build- und Laufprotokolle
+liegen außerhalb des Repositorys unter `/tmp/b4-*.log`.
+
+### Nachweise
+
+Zwischenstand: Rechen- und HTTP-Fixture-Prüfung in Chromium **2/2 grün** (3,4 s).
+Weitere Lauf- und Mutationsnachweise werden nach Abschluss ergänzt.
