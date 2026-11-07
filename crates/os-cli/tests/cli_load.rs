@@ -209,6 +209,30 @@ async fn resume_refuses_a_stopped_crawl_with_exit_1_whatever_its_queue_holds() {
     assert_eq!(meta.end_reason, Some(os_model::EndReason::Stopped));
 }
 
+// spec: CRAWL-126
+// spec: CRAWL-128
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn resume_without_raising_the_limit_exits_0_with_a_hint_and_fetches_nothing() {
+    let site = site("out-queue").await;
+    let env = Env::new();
+    let run = env.run_async(crawl_args(&site, &["--max-urls", "5"])).await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    let (_, id) = only_crawl(&env);
+    let requests = site.total_requests();
+    let run = env
+        .run_async(vec![
+            "--load-crawl".to_string(),
+            id,
+            "--resume".into(),
+            "--resolve".into(),
+            resolve(&site),
+        ])
+        .await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    assert!(run.stderr.contains("URL-Limit erreicht"), "{}", run.dump());
+    assert_eq!(site.total_requests(), requests);
+}
+
 // spec: OUT-184
 #[test]
 fn resume_needs_a_loaded_crawl() {
