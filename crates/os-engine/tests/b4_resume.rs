@@ -289,6 +289,37 @@ async fn a_start_url_that_answers_is_completed_even_with_an_error_or_a_robots_bl
     }
 }
 
+// Die robots.txt antwortet mit 500: Der Host ist erreichbar, auch wenn die Regel „nicht erreichbar“ die Start-URL sperrt.
+// spec: CRAWL-128
+// spec: CRAWL-100
+#[tokio::test]
+async fn a_robots_txt_answering_500_is_no_failed_crawl_although_it_blocks_the_start_url() {
+    let dir = site_with(
+        "[[route]]\npath = \"/robots.txt\"\nstatus = 500\nbody = \"kaputt\"\n\n[[route]]\npath = \"/\"\nbody = \"x\"\n",
+    );
+    let site = start_site(dir.path()).await;
+    let work = tempfile::tempdir().unwrap();
+    let path = crawl_file_in(&work, "crawl.ospider");
+    let mut cfg = config_for(&site, 1);
+    cfg.robots.retries = 0;
+    let summary = run_to_end(start(cfg, &path, deps()).await).await;
+    let file = open_ro(&path);
+    let reason: String = file
+        .conn()
+        .query_row(
+            "SELECT no_response_reason FROM urls WHERE url = ?1",
+            [start_url()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        reason, "blocked_by_robots_unreachable",
+        "der Fall dieses Tests"
+    );
+    assert_eq!(summary.state, CrawlState::Completed);
+    assert_eq!(summary.end_reason, Some(EndReason::QueueEmpty));
+}
+
 // Listenmodus: eine nicht erreichbare Zeile ist ein Ergebnis, keine Start-URL.
 // spec: CRAWL-128
 #[tokio::test]

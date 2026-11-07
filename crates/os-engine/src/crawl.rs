@@ -1218,36 +1218,61 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     Ok(summary)
 }
 
-/// Ob die einzige abgerufene Seite die Start-URL ohne Antwort ist (Netzfehler, auch eine deshalb nicht erreichbare robots.txt).
-/// Eine Sperre per robots.txt, zu viele Weiterleitungen und der Zielschutz sind keine Nichterreichbarkeit: Dort hat der Server
-/// geantwortet oder es gab keinen Versuch.
+/// Netzfehler ohne Antwort des Hosts (CRAWL-128): DNS, Verbindung verweigert, Timeout, Verbindungsfehler oder TLS. `malformed` hat
+/// geantwortet; Sperre per robots.txt, zu viele Weiterleitungen und der Zielschutz sind keine Nichterreichbarkeit.
+fn is_network_failure(reason: Option<&str>) -> bool {
+    use os_model::NoResponseReason as R;
+    matches!(
+        reason.and_then(|r| r.parse::<R>().ok()),
+        Some(
+            R::DnsLookupFailed
+                | R::ConnectionRefused
+                | R::ConnectionTimeout
+                | R::ResponseTimeout
+                | R::ConnectionError
+                | R::TlsError
+        )
+    )
+}
+
+/// Ob die einzige abgerufene Seite die Start-URL ohne Antwort ist, weil sie oder ihre robots.txt am Netz scheiterte. Sperrt die
+/// Regel „robots.txt nicht erreichbar“, entscheidet die Hilfszeile der robots.txt: Antwortete der Host dort mit 5xx oder 429, ist
+/// er erreichbar.
 async fn start_url_unreachable(writer: &WriterThread, file: &Path, start_url: &str) -> bool {
     if writer.flush().await.is_err() {
         return false;
     }
     let (file, start_url) = (file.to_path_buf(), start_url.to_owned());
     tokio::task::spawn_blocking(move || {
-        let reason: Option<String> = CrawlFile::open(&file, os_store::OpenMode::ReadOnly)
-            .ok()?
+        let crawl = CrawlFile::open(&file, os_store::OpenMode::ReadOnly).ok()?;
+        let (reason, robots_url): (Option<String>, Option<String>) = crawl
             .conn()
             .query_row(
-                "SELECT no_response_reason FROM urls WHERE url = ?1 AND state = 'done' AND status_code = 0",
+                "SELECT no_response_reason, robots_txt_url FROM urls \
+                 WHERE url = ?1 AND state = 'done' AND status_code = 0",
                 [&start_url],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .ok()?;
+        if reason.as_deref()
+            != Some(os_model::NoResponseReason::BlockedByRobotsUnreachable.as_str())
+        {
+            return Some(is_network_failure(reason.as_deref()));
+        }
+        let robots_reason: Option<String> = crawl
+            .conn()
+            .query_row(
+                "SELECT no_response_reason FROM urls WHERE url = ?1 AND discovered_via = 'robots_txt'",
+                [robots_url?],
                 |r| r.get(0),
             )
             .ok()?;
-        reason?.parse::<os_model::NoResponseReason>().ok()
+        Some(is_network_failure(robots_reason.as_deref()))
     })
     .await
     .ok()
     .flatten()
-    .is_some_and(|reason| {
-        use os_model::NoResponseReason as R;
-        !matches!(
-            reason,
-            R::BlockedByRobots | R::TooManyRedirects | R::BlockedPrivateTarget
-        )
-    })
+    .unwrap_or(false)
 }
 
 // K2-61: API work runs off the asynchronous worker threads; SQLite connections stay on that thread.
@@ -1325,6 +1350,35 @@ async fn initialize_apis<F: Fetch>(
         .await
         .map_err(|_| EngineError::Join("API frontier write failed".into()))?;
     Ok(Some(run))
+}
+
+#[cfg(test)]
+mod unreachable_tests {
+    // spec: CRAWL-128
+    #[test]
+    fn only_network_failures_count_as_unreachable() {
+        for reason in [
+            "dns_lookup_failed",
+            "connection_refused",
+            "connection_timeout",
+            "response_timeout",
+            "connection_error",
+            "tls_error",
+        ] {
+            assert!(super::is_network_failure(Some(reason)), "{reason}");
+        }
+        for reason in [
+            "malformed",
+            "blocked_by_robots",
+            "blocked_by_robots_unreachable",
+            "too_many_redirects",
+            "blocked_private_target",
+            "unbekannt",
+        ] {
+            assert!(!super::is_network_failure(Some(reason)), "{reason}");
+        }
+        assert!(!super::is_network_failure(None));
+    }
 }
 
 #[cfg(test)]
