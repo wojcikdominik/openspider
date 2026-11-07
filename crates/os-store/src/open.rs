@@ -61,7 +61,11 @@ pub(crate) const HEADER_LEN: usize = 100;
 /// letzte und löschte `-wal`/`-shm`, in die der Besitzer weiterschreibt – die Datei wird beschädigt. Das Lesen über das VFS
 /// von SQLite vermeidet das: SQLite kennt die Sperren je Inode und schiebt das Schließen auf, solange welche bestehen.
 #[cfg(unix)]
-pub(crate) fn read_header(path: &Path, head: &mut [u8; HEADER_LEN]) -> std::io::Result<usize> {
+fn read_vfs(
+    path: &Path,
+    limit: u64,
+    mut consume: impl FnMut(&[u8]) -> std::io::Result<()>,
+) -> std::io::Result<usize> {
     use rusqlite::ffi;
     use std::ffi::c_int;
     use std::os::unix::ffi::OsStrExt;
@@ -78,8 +82,8 @@ pub(crate) fn read_header(path: &Path, head: &mut [u8; HEADER_LEN]) -> std::io::
     let mut name = bytes.to_vec();
     name.extend_from_slice(&[0, 0, 0]);
     // SAFETY: Das VFS bleibt bis Prozessende registriert. `storage` ist auf 8 Bytes ausgerichtet und `szOsFile` groß, wie es
-    // `xOpen` verlangt; `name` lebt bis nach `xClose`. `xRead` und `xFileSize` schreiben nur in `head` (höchstens dessen
-    // Länge) und `size`. `xClose` läuft genau einmal, nachdem `xOpen` Methoden gesetzt hat.
+    // `xOpen` verlangt; `name` lebt bis nach `xClose`. `xRead` und `xFileSize` schreiben nur in den begrenzten
+    // Puffer und `size`. `xClose` läuft genau einmal, nachdem `xOpen` Methoden gesetzt hat.
     unsafe {
         let vfs = ffi::sqlite3_vfs_find(std::ptr::null());
         if vfs.is_null() {
@@ -116,23 +120,59 @@ pub(crate) fn read_header(path: &Path, head: &mut [u8; HEADER_LEN]) -> std::io::
             Some(file_size) => file_size(file, &mut size),
             None => ffi::SQLITE_MISUSE,
         };
-        let wanted = usize::try_from(size.max(0))
-            .unwrap_or(usize::MAX)
-            .min(HEADER_LEN);
-        if rc == ffi::SQLITE_OK && wanted > 0 {
-            rc = match (*methods).xRead {
-                Some(read) => read(file, head.as_mut_ptr().cast(), wanted as c_int, 0),
-                None => ffi::SQLITE_MISUSE,
-            };
-        }
+        let wanted = u64::try_from(size.max(0)).unwrap_or(0).min(limit);
+        let mut offset = 0;
+        let mut buffer = [0u8; 64 * 1024];
+        let result: std::io::Result<()> = (|| {
+            while rc == ffi::SQLITE_OK && offset < wanted {
+                let len = (wanted - offset).min(buffer.len() as u64) as usize;
+                rc = match (*methods).xRead {
+                    Some(read) => read(
+                        file,
+                        buffer.as_mut_ptr().cast(),
+                        len as c_int,
+                        offset as i64,
+                    ),
+                    None => ffi::SQLITE_MISUSE,
+                };
+                if rc == ffi::SQLITE_OK {
+                    consume(&buffer[..len])?;
+                    offset += len as u64;
+                }
+            }
+            Ok(())
+        })();
         if let Some(close) = (*methods).xClose {
             close(file);
         }
         if rc != ffi::SQLITE_OK {
             return Err(failed("Lesen", rc));
         }
-        Ok(wanted)
+        result?;
+        Ok(offset as usize)
     }
+}
+
+#[cfg(unix)]
+pub(crate) fn read_header(path: &Path, head: &mut [u8; HEADER_LEN]) -> std::io::Result<usize> {
+    read_vfs(path, HEADER_LEN as u64, |bytes| {
+        head[..bytes.len()].copy_from_slice(bytes);
+        Ok(())
+    })
+}
+
+/// Bytegleiche Sicherung ohne POSIX-Sperrverlust bei weiteren Verbindungen im selben Prozess.
+fn copy_migration_backup(path: &Path, target: &Path) -> Result<(), StoreError> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        let mut output = std::fs::File::create(target).map_err(|e| StoreError::io(target, e))?;
+        read_vfs(path, u64::MAX, |bytes| output.write_all(bytes))
+            .map_err(|e| StoreError::io(target, e))?;
+    }
+    #[cfg(not(unix))]
+    std::fs::copy(path, target).map_err(|e| StoreError::io(target, e))?;
+    Ok(())
 }
 
 /// Windows: Sperren gehören dem Handle, ein weiteres Handle hebt sie nicht auf (`LockFileEx`). Der Weg über `std::fs` bleibt
@@ -553,12 +593,23 @@ impl CrawlFile {
 
         // Die Sicherungskopie entsteht vor der ersten Änderung der Datei (auch vor `PRAGMA journal_mode`), damit sie
         // dem Original Byte für Byte entspricht (OUT-184). Liegen noch Frames in einer `-wal`-Datei, ist die Hauptdatei
-        // allein unvollständig; dann entsteht die Kopie nach dem Zusammenführen (weiter unten).
-        let mut backed_up = false;
-        if found < latest && mode == OpenMode::ReadWrite && backup && !wal_has_frames(path) {
-            let target = backup_path(path, found);
-            std::fs::copy(path, &target).map_err(|e| StoreError::io(&target, e))?;
-            backed_up = true;
+        // allein unvollständig; dann entsteht die Kopie nach dem Zusammenführen.
+        if found < latest && mode == OpenMode::ReadWrite && backup {
+            if wal_has_frames(path) {
+                // Temporäre Verbindung vor der Kopie schließen. Ein blockierter Checkpoint darf keine
+                // unvollständige Hauptdatei als Sicherung veröffentlichen.
+                let checkpoint = open_sqlite(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+                checkpoint.busy_timeout(std::time::Duration::from_secs(5))?;
+                let busy: i64 =
+                    checkpoint.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?;
+                if busy != 0 {
+                    return Err(StoreError::Sqlite(rusqlite::Error::SqliteFailure(
+                        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+                        None,
+                    )));
+                }
+            }
+            copy_migration_backup(path, &backup_path(path, found))?;
         }
 
         let flags = match mode {
@@ -576,10 +627,6 @@ impl CrawlFile {
         if found < latest {
             // Sicherungskopie als eigenständige Datei (WAL zusammenführen), dann migrieren.
             conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
-            if backup && !backed_up {
-                let target = backup_path(path, found);
-                std::fs::copy(path, &target).map_err(|e| StoreError::io(&target, e))?;
-            }
             schema::migrate(&mut conn, found, migrations)?;
             conn.execute(
                 "INSERT INTO crawl_meta (key, value) VALUES ('schema_version', ?1) \
