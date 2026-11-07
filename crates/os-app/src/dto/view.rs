@@ -568,10 +568,12 @@ pub struct KeyRange {
     pub to_row: Option<u64>,
     /// Zeilen der View in diesem Stand.
     pub total: u64,
-    /// URL-Kennungen in Tabellenreihenfolge; leer, wenn ein Endpunkt fehlt oder `all` gesetzt ist.
+    /// URL-Kennungen in Tabellenreihenfolge; höchstens 20 000; leer bei fehlendem Endpunkt, `all` oder `exportRequired`.
     pub keys: Vec<i64>,
     /// Der Bereich umfasst eine große View vollständig: Auswahl „alle“ statt einzelner Kennungen.
     pub all: bool,
+    /// Teilbereich über 20 000 Zeilen: keine Kennungsliste; Oberfläche zeigt einen Export-Hinweis (UI-012).
+    pub export_required: bool,
 }
 
 /// Argumente von `view.copy`.

@@ -151,7 +151,7 @@ it("keeps a Shift range when the view version changes while the range is resolve
   fireEvent.keyDown(mounted.getByRole("grid"), { key: "ArrowDown", shiftKey: true });
   await waitFor(() => expect(range).toHaveBeenCalledWith({ viewId: source.viewId, from: 1, to: 2 }));
   await act(async () => { await source.onViewChanged(source.version + 1, source.total + 10); });
-  await act(async () => { answer({ viewId: source.viewId, version: source.version, fromRow: 0, toRow: 1, total: source.total, keys: [1, 2], all: false }); });
+  await act(async () => { answer({ viewId: source.viewId, version: source.version, fromRow: 0, toRow: 1, total: source.total, keys: [1, 2], all: false, exportRequired: false }); });
   await waitFor(() => expect(vi.mocked(props.onSelectionChange).mock.lastCall?.[0].value).toEqual({ kind: "ids", ids: [1, 2] }));
   expect(vi.mocked(props.onSelectionChange).mock.lastCall![0].focus).toBe(2);
   expect(props.onError).not.toHaveBeenCalled();
@@ -175,5 +175,17 @@ it("Shift+arrow keys in quick succession continue from the keyboard row while ea
   }
   await act(async () => { answers.forEach(answer => answer()); });
   await waitFor(() => expect(mounted.getAllByRole("row").filter(r => r.getAttribute("aria-selected") === "true")).toHaveLength(4));
+  mounted.unmount(); await source.dispose();
+});
+
+// spec: UI-012
+it("shows the export hint for an oversized partial range without selecting the whole view", async () => {
+  const { props, source } = setup();
+  (source.api as { range?: unknown }).range = vi.fn(async () => ({ viewId: source.viewId, version: 1, fromRow: 0, toRow: 20000, total: source.total, keys: [], all: false, exportRequired: true }));
+  const mounted = render(<DataGrid {...props} />);
+  await waitFor(() => expect(source.rowKey(1)).toBe(2));
+  fireEvent.keyDown(mounted.getByRole("grid"), { key: "ArrowDown", shiftKey: true });
+  await waitFor(() => expect(props.onError).toHaveBeenCalledWith(expect.objectContaining({ messageKey: "err-range-export" })));
+  expect(props.onSelectionChange).not.toHaveBeenCalled();
   mounted.unmount(); await source.dispose();
 });

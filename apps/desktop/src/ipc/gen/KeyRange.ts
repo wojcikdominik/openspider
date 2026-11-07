@@ -25,10 +25,14 @@ toRow: number | null,
  */
 total: number, 
 /**
- * URL-Kennungen in Tabellenreihenfolge; leer, wenn ein Endpunkt fehlt oder `all` gesetzt ist.
+ * URL-Kennungen in Tabellenreihenfolge; höchstens 20 000; leer bei fehlendem Endpunkt, `all` oder `exportRequired`.
  */
 keys: Array<number>, 
 /**
  * Der Bereich umfasst eine große View vollständig: Auswahl „alle“ statt einzelner Kennungen.
  */
-all: boolean, };
+all: boolean, 
+/**
+ * Teilbereich über 20 000 Zeilen: keine Kennungsliste; Oberfläche zeigt einen Export-Hinweis (UI-012).
+ */
+exportRequired: boolean, };

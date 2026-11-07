@@ -327,6 +327,7 @@ export function DataGrid(props: DataGridProps) {
     const range = await source.range(anchor, key);
     if (request !== selectionRequest.current) return undefined;
     if (range) {
+      if (range.exportRequired) { props.onError({ code: "InvalidInput", messageKey: "err-range-export", args: {}, retryable: false }); return undefined; }
       if (range.fromRow === null || range.fromRow === undefined || range.toRow === null || range.toRow === undefined) return current().select(key);
       if (!range.all) return current().range(range.keys, key);
       // An all-selection belongs to one version: adopt the version it was resolved in first.

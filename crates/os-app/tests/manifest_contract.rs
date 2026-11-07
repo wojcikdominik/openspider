@@ -468,3 +468,29 @@ fn service_extensions_follow_their_command_domains() {
         "QuitDecision"
     );
 }
+
+// spec: UI-012
+#[test]
+fn range_contract_includes_the_bounded_export_outcome() {
+    let range = os_app::dto::KeyRange {
+        view_id: "fixture".into(),
+        version: 1,
+        from_row: Some(1),
+        to_row: Some(25_000),
+        total: 30_000,
+        keys: vec![],
+        all: false,
+        export_required: true,
+    };
+    let value = serde_json::to_value(range).unwrap();
+    assert_eq!(value["exportRequired"], true);
+    assert_eq!(value["keys"], serde_json::json!([]));
+    assert!(
+        fs::read_to_string(repo("apps/desktop/src/ipc/gen/KeyRange.ts"))
+            .unwrap()
+            .contains("exportRequired: boolean")
+    );
+    let manifest = default_registry().manifest();
+    let command = manifest.iter().find(|m| m.name == "view.range").unwrap();
+    assert_eq!((command.args, command.ret), ("RangeArgs", "KeyRange"));
+}

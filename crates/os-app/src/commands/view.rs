@@ -1417,6 +1417,10 @@ fn locate<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<
 /// Ab dieser Größe wird eine vollständig überdeckte View als „alle“ ausgewählt statt als Liste von Kennungen
 /// (gleiche Grenze wie der Zeilencache des Clients, UI-144).
 const RANGE_ALL_ABOVE: u64 = 20_000;
+/// Bound the IPC response like the client row cache (UI-144); larger partial ranges use the export hint (UI-012).
+pub(crate) fn range_requires_export(from_row: u64, to_row: u64) -> bool {
+    from_row.abs_diff(to_row) >= RANGE_ALL_ABOVE
+}
 pub(crate) fn range_covers_large(from_row: u64, to_row: u64, total: u64) -> bool {
     total > RANGE_ALL_ABOVE && from_row.min(to_row) == 0 && from_row.max(to_row) == total - 1
 }
@@ -1456,6 +1460,10 @@ fn range<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'
             total,
             keys,
             all,
+            export_required: !all
+                && from_row
+                    .zip(to_row)
+                    .is_some_and(|(a, b)| range_requires_export(a, b)),
         })
     })
 }
@@ -1497,7 +1505,7 @@ async fn detail_range(
     let (from_row, to_row) = (position(args.from), position(args.to));
     let total = ids.len() as u64;
     let keys = match (from_row, to_row) {
-        (Some(a), Some(b)) if !range_covers_large(a, b, total) => {
+        (Some(a), Some(b)) if !range_requires_export(a, b) => {
             ids[a.min(b) as usize..=a.max(b) as usize].to_vec()
         }
         _ => Vec::new(),
