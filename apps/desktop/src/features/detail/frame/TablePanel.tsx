@@ -127,6 +127,7 @@ export function TablePanel(props: TablePanelProps) {
         await source.onViewChanged(handle.version, handle.total ?? 0);
         // Only acknowledge data actually adopted by this visible effect.
         if (!live || source.version < handle.version) return;
+        setError(undefined);
         applied = updating;
         appliedRevision.current = { source, revision: updating };
       }).catch(error => { if (live) { stale = true; setError(error); } }).finally(() => { pending = false; });
