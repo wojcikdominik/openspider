@@ -341,7 +341,7 @@ function RegularUpperTable() {
     </div>
     <LiveViewTotal source={source}>{liveTotal => {
       const shown = empty ? 0 : liveTotal ?? 0;
-      return <div className="u10-counter" role="status">{t("u10-count", { shown, total: total == null ? "–" : Math.max(total, shown) })}
+      return <div className="u10-counter" role="status">{t("u10-count", { shown, total: total == null && !(source && liveCountEnabled && query.filter === "All") ? "–" : Math.max(total ?? 0, shown) })}
         {(query.search || query.rules) && ` · ${t("u10-search-active")}`}{count > 0 && ` · ${t("u10-selected", { count })}`}</div>;
     }}</LiveViewTotal>
     <span ref={anchor} className="u10-menu-anchor" style={{ left: context?.x ?? 0, top: context?.y ?? 0 }} />

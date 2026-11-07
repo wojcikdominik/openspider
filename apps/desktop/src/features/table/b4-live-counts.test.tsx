@@ -74,3 +74,12 @@ it("uses only the current view's metadata and falls back to its row total for an
   expect(screen.getByRole("status")).toHaveTextContent("Showing: 3 of 3");
   expect(screen.getByRole("button", { name: "All (3)" })).toBeVisible();
 });
+
+// spec: UI-018
+it("retains the known All denominator before the shared fixture count has arrived", async () => {
+  fx.core.handlers.set("catalog.filterCounts", () => ({ version: 1,
+    filters: fixtureTabs.flatMap(tab => tab.filters.map(filter => ({ tab: tab.id, filter: { ...filter, count: null } }))) }));
+  await mounted();
+  expect(screen.getByRole("status")).toHaveTextContent("Showing: 3 of 3");
+  expect(screen.getByRole("button", { name: "All (3)" })).toBeVisible();
+});
