@@ -608,3 +608,26 @@ Nach Abschluss der Rust-Gates wurden rund 61 GB Build-Zwischendateien freigegebe
 die vier unveränderten ausführbaren E2E-Werkzeuge bleiben bis zum Ende der Browserläufe.
 Protokolle `/tmp/b4-r2-{npm-ci,fmt,clippy,workspace,typecheck,vitest,neutral}.log`,
 Exitcodes `/tmp/b4-r2-gate-summary` und `/tmp/b4-r2-setup-summary`.
+
+### F8 – zusätzlicher Inlinks-Lag in der zweiten regulären WebKit-Runde
+
+Die bestehende, direkt überführte Inlinks-Grenze bleibt unverändert `3000 × slow` ms.
+In Runde 2/WebKit tritt **eine** verletzende Stichprobe während des Zuflusses auf:
+bei Messzeit **+12 493 ms** zeigt das Detailfenster **24 statt mindestens 26 Inlinks**.
+Die Referenz meldet 27 gecrawlte URLs (Startseite plus 26 Rückverlinker), ist **3772 ms**
+alt; Grenze **3720 ms**, machine=1,2, Recorder roh=1,24, slow=1,24. Der aktuelle
+Session-Zähler steht bei 35. Das ist kein leeres Fenster und kein Timeout: 115 echte
+Recorder-Takte während Zufluss, 115 im Schlussfenster, 152/117 geprüfte Stichproben.
+Das Schlussfenster enthält keinen Lag-Verstoß; Pause und Endabgleich wurden nach der
+weichen Lag-Assertion weiterhin ausgeführt. Testdauer gerundet 3,0 min.
+
+F8 ist von F7 (Tabellenzähler, harte UI-018-Grenze 1000 ms) zu trennen. Es wird keine
+Ursache behauptet; die Zuordnung zu Produkt-/Hostbelastung ist offen. Die 3-s-Dev-Grenze
+war bereits Bestandteil der ursprünglichen Abnahme und wurde nicht für diesen Lauf
+verändert. Der Befund wird nicht durch eine höhere Toleranz oder eine geringere
+Fixture-Rate beseitigt. Der erste reguläre WebKit-Lauf und beide Chromium-Läufe
+bestehen denselben Inlinks-Test.
+
+Nachweis `/tmp/b4-r2-suite-2-webkit.log`, Trace unter
+`/tmp/b4-r2-suite-2-webkit-results/acceptance-livedetail-deta-*/trace.zip`,
+`live-lag` vor den Assertions vorhanden; Kennwerte `/tmp/b4-r2-lag-evidence.jsonl`.
