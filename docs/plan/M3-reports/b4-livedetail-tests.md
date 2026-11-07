@@ -419,3 +419,30 @@ neu gestartet und grün. Keine Quell- oder Teständerung als Reaktion darauf. Di
 stammen unverändert aus dem Repository; kein Test wurde neu ignoriert.
 
 Protokolle: `/tmp/b4-{npm-ci,clippy,workspace-final2,typecheck-final,vitest-final,fmt-final,neutral-final}.log`.
+
+### CI-ähnliche Wiederholungen (laufender Nachweis)
+
+Alle Specs `livedetail-*.spec.ts` außer `budget`, einschließlich der vier neuen Prüfungen:
+31 Tests je Engine. Jede Engine separat mit `OS_E2E_PORT=14733`, `taskset -c 0,1`,
+`--workers=2`, ohne Test-Wiederholung bei Fehlern. Drei reguläre Durchläufe je Engine,
+anschließend ein zusätzlicher Durchlauf je Engine mit einer durch `timeout 3600s`
+begrenzten CPU-Schleife auf denselben Kernen. Auf dem Server läuft zusätzlich das fremde Paket.
+Runde 1 überlappte den eigenen Workspace-Test; spätere reguläre Runden nicht mehr.
+
+| Runde | Engine | grün / rot | Dauer | Rot |
+|---|---|---|---|---|
+| 1 | Chromium | 30 / 1 | 533 s (8:53 min) | F7 |
+| 1 | WebKit | 30 / 1 | 683 s (11:23 min) | F7 |
+| 2 | Chromium | 30 / 1 | 537 s (8:57 min) | F7 |
+| 2 | WebKit | 31 / 0 | 687 s (11:27 min) | – |
+| 3 | Chromium | 30 / 1 | 530 s (8:50 min) | F7 |
+
+F7 ist damit in Chromium auch ohne parallelen eigenen Workspace-Test reproduziert;
+in WebKit besteht mindestens ein grüner Vergleichslauf mit identischer Testlogik.
+Die drei Chromium-Runden enthalten zusammen 90 grüne Tests und drei F7-Fehler.
+Die unmutierten Schlussfenster zeigen bisher keinen erneuten F6-Nachlauf.
+
+Einzelprotokolle `/tmp/b4-suite-<Runde>-<Engine>.log`, Exitcodes und Sekundenwerte
+`/tmp/b4-suite-summary.txt`; Fehler-Traces jeweils im zugehörigen
+`/tmp/b4-suite-<Runde>-<Engine>-results/`. Extrahierte Lag-Kennwerte:
+`/tmp/b4-lag-evidence.jsonl`.
