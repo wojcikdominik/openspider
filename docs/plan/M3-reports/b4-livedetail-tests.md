@@ -436,6 +436,7 @@ Runde 1 überlappte den eigenen Workspace-Test; spätere reguläre Runden nicht 
 | 2 | Chromium | 30 / 1 | 537 s (8:57 min) | F7 |
 | 2 | WebKit | 31 / 0 | 687 s (11:27 min) | – |
 | 3 | Chromium | 30 / 1 | 530 s (8:50 min) | F7 |
+| 3 | WebKit | 30 / 1 | 685 s (11:25 min) | F7 |
 
 F7 ist damit in Chromium auch ohne parallelen eigenen Workspace-Test reproduziert;
 in WebKit besteht mindestens ein grüner Vergleichslauf mit identischer Testlogik.
@@ -446,3 +447,13 @@ Einzelprotokolle `/tmp/b4-suite-<Runde>-<Engine>.log`, Exitcodes und Sekundenwer
 `/tmp/b4-suite-summary.txt`; Fehler-Traces jeweils im zugehörigen
 `/tmp/b4-suite-<Runde>-<Engine>-results/`. Extrahierte Lag-Kennwerte:
 `/tmp/b4-lag-evidence.jsonl`.
+
+Die drei regulären Runden sind vollständig: **181/186 grün, 5/186 rot (ausschließlich F7)**.
+Chromium 90/93, WebKit 91/93. Alle sechs Engine-Läufe bleiben unter dem 12-Minuten-Ziel:
+Chromium 530–537 s, WebKit 683–687 s. Eine Paketrunde beider Engines dauert 1215–1224 s
+(20:15–20:24 min); die drei Wiederholungen zusammen 3655 s (60:55 min). Die 50-Minuten-Grenze
+wird pro einzelner Paketrunde eingehalten; die Gesamtdauer der drei bestellten Wiederholungen
+liegt darüber. Andere E2E-Specs außerhalb dieses Pakets wurden nicht mitgemessen.
+
+Der zusätzliche Lastlauf läuft anschließend je Engine mit einer zeitlich begrenzten `yes`-Schleife
+auf CPU 0/1; für Chromium ist deren Aktivität im Prozessmonitor bestätigt. Ergebnisse folgen.
