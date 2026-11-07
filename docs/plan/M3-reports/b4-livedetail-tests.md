@@ -247,3 +247,57 @@ das, ohne den Zufluss zu verlangsamen.
 Die Pause wartet auf die gerade laufende Anfrage (im Tor-Test sichtbar: „Running“ bleibt, bis die wartende Anfrage freigegeben ist, dann
 „Paused – merging file“, dann „Paused“). Das ist Entwurf des Kerns und kein Fehler; auf einem langsamen Server mit lahmer Gegenstelle kann
 „Pause“ entsprechend dauern.
+
+## Nachbesserung nach der Prüfung (Fable: `needs_work`, 78)
+
+Der Vorsatz-Server (Tor) wurde als zulässig bewertet; vier Stellen waren Lockerungen oder leere Prüfungen. Behoben auf `m3/livedetail-tests-ci`
+(Branch vorher mit `main` 3921e096 zusammengeführt).
+
+| # | Befund | Änderung |
+|---|---|---|
+| 1 | „switching the selection“: Obergrenze für die erste Seite war entfernt | wieder da: `firstNewMs < 3000 ms × Faktor`, Faktor = `max(machineFactor, recorderFactor)` (Takt 50 ms). Der Faktor und seine Bestandteile stehen in der Fehlermeldung |
+| 2 | Lag-Schleifen konnten bei Faktor ≥ 3 leer laufen | geprüfte Stichproben werden gezählt, Anforderung ≥ 5 (Fuß/Chip in `live`, Inlinks in `detail`). Das Beobachtungsfenster wächst mit dem Faktor: `lagRate()` wählt die Rate so, dass das Fenster auch beim größten zulässigen Faktor (`max(2 × machine, 4)`) ≥ Grenze × Faktor + 3 s ist (bei ruhigem Rechner 2,1 URL/s statt 3 in `live`, 1,3 statt 3 in `detail`). Die Anfangsüberspringung ist jetzt genau die Referenzspanne (2 s bzw. 3 s × Faktor) |
+| 3 | `recorderFactor` steigt bei genau dem Rückschritt, den der Test finden soll | gekappt auf `max(2 × machineFactor, 4)`; das Attachment `live-lag` (und `inlinks-lag`) enthält `machineFactor`, `recorderFactorRaw`, `recorderFactorCapped`, `slow`, `checked` |
+| 4 | Etappen-Timeouts 90 s ließen eine Overview zu, die nur alle 60 s zählt | `15 000 ms × Faktor` (Tabelle: Faktor des laufenden Recorders; Dashboard: `machineFactor`) |
+| 5 | Tail-Test: Wiederholung des Scrollens (`i === 12`) verdeckte F5 | Wiederholung entfernt; Verlauf `trail` bleibt (Meldung und Attachment `tail-scroll-trail`). Bleibt das Hochscrollen wirkungslos, ist der Test rot und das Ergebnis ein Produktbefund |
+| 6 | Klick-Wiederholungen in `clickUpperRow` unsichtbar | jede Wiederholung wird als Anmerkung `click-retry` am Test vermerkt |
+| 7 | Gegenprobe | siehe unten |
+| 8 | `budget` in der PR-CI ohne Basis kein Signal | verschoben in den nächtlichen Lauf (siehe unten) |
+
+### Gegenprobe zu 7 (Frontend-Mutationen im getrennten Worktree, unter `taskset -c 0,1`, 2 Worker, eine Rechenschleife, beide Engines)
+
+| Mutation | betroffene Tests | Ergebnis unter Last |
+|---|---|---|
+| K Aktualisierungsintervall von `TablePanel` 500 → 10 000 ms | Inlinks wachsen mit dem Crawl (`detail`), sortierte Inlinks | beide Tests in Chromium und WebKit rot (Lag-/Wachstumsprüfung); der Auswahlwechsel-Test bleibt erwartungsgemäß grün (hängt nicht am Intervall) |
+| L langsame erste Seite nach Auswahlwechsel (8 s Verzögerung vor `view.open`) | Auswahlwechsel (`detail`) | in Chromium und WebKit rot; auf dem ruhigen Rechner (Faktor 1,0) schlägt genau die Obergrenze an: „spätestens nach 3 s mal Rechnerfaktor 1.0 … Received 8256 ms“ |
+
+Damit ist die Lücke geschlossen, dass ein Rückschritt von 0,3 s auf 10 s nirgends auffiele; der Faktor kann die Grenze wegen der Kappung höchstens
+auf das Vierfache (bzw. das Doppelte des Rechnertakts) weiten.
+
+### Zu 8: `livedetail-budget` nur nächtlich
+
+`apps/desktop/playwright.config.ts`: neue Konstante `NIGHTLY` (Datei `livedetail-budget.spec.ts`), in `MAIN_IGNORE` aufgenommen, eigenes Projekt
+`<engine>-nightly` ohne Abhängigkeit. Die Nightly-Projekte existieren nur mit `OS_E2E_NIGHTLY=1`; ohne Variable bleiben sie weg, damit auch ein
+`npm run e2e` ohne `--project` (`ui-e2e.yml`, `spec-coverage-m2.yml`) die Messung nicht mitläuft (geprüft mit `playwright test --list`: 0 Treffer ohne,
+2 mit der Variable). `.github/workflows/ui-nightly.yml`: neuer Schritt „Live-detail first-click regression“ nach der Browser-Performance-Suite
+(`--project=${OS_E2E_PROJECTS}-nightly`, `OS_E2E_NIGHTLY=1`, Basis über Repository-Variablen `OS_LD_BASELINE_URLDETAILS_MS` / `OS_LD_BASELINE_LINKS_MS`
+nach UI-148 +10 %). `actionlint` (1.7.12) meldet für `ui-nightly.yml` und `ui-e2e.yml` nichts.
+
+### Nachweis (2 Kerne, 2 Worker, `taskset -c 0,1`, Chromium und WebKit)
+
+| Lauf | Ergebnis | Dauer |
+|---|---|---|
+| alle `livedetail-*`-Specs außer `budget`, 5 Wiederholungen (270 Läufe) | 269 grün, 1 rot (Beobachtung F6, unten) | 1,4 h (rund 16,5 min je Durchlauf) |
+| Fuß/Chip/Overview-Test, 16 Wiederholungen Chromium, eine Rechenschleife | 16 von 16 grün | 7,6 min |
+| ein Durchlauf aller Specs außer `budget` unter Fremdlast (eine Rechenschleife auf denselben Kernen) | 53 von 54 grün; rot: Fuß/Chip in WebKit, 2–3 s nach dem ersten Zeilenbild (Anlaufphase der Tabelle) | 19,8 min |
+| nach der Korrektur der Bezugszeit (s. u.): Fuß/Chip/Overview 5× je Engine ruhig, danach 5× je Engine unter Last | 10 von 10 und 10 von 10 grün | 4,3 min / 4,9 min |
+
+Eine Korrektur nach dem Lastlauf: Die Bezugszeit der Fuß-Verzögerung ist jetzt die erste Stichprobe, in der die Tabelle den Crawl eingeholt hat
+(Fuß ≥ gecrawlt), nicht schon die erste mit Zeilen; das erstmalige Öffnen und Füllen der Tabelle (unter Last in WebKit über 2 s) ist keine
+Aktualisierung pro URL. Ab dem Einholen gilt die Grenze unverändert (auch für F6 unten, das später im Lauf auftrat).
+
+**F6 (Beobachtung, einmal aufgetreten, nicht wieder reproduziert):** `live` Fuß/Chip/Overview, Chromium, 2-Kern-Lauf: nach der dritten Etappe (23 URLs, der Crawl
+steht am Tor) zeigte der Tabellenfuß mehr als 1,3 s lang 22 statt 23 (Rechnerfaktor 1,0 / 1,1, die Prüfung nach 2 s × 1,0 schlug an). Möglich: eine letzte
+Aktualisierung geht verloren und die Anzeige holt erst mit dem nächsten Ereignis auf. Das ist die Prüfung der Spec („≤ 1 s“, UI-018), unverändert scharf;
+sie ist in 16 von 16 Folgeläufen (mit Last) und in allen übrigen Läufen grün. Ob Produkt oder Rechner, ließ sich nicht klären; das Protokoll enthält jetzt
+den Stand nach der Pause (Fehlermeldung) zur Einordnung. Als Produktbefund nur dann zu führen, wenn er sich wiederholt.
