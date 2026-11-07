@@ -16,6 +16,7 @@ Faster crawls, Chromium on demand, one-click agent connections and a report for 
 - Visualisations: 3D crawl and directory graphs, word cloud, and a chart for the selected entry of the overview.
 - New "About OpenSpider" dialog with developer, website and source code links.
 - Docker: a Dockerfile for running the CLI, exports and the MCP server on Linux servers (build the image yourself, see the user guide).
+- Live crawl: the detail window stays responsive while a crawl runs; Shift+click and Shift+arrow selections are no longer lost during a running crawl; the Crawl Path dialog shows its rows again; a column choice in a detail table is kept when you select another URL; scrolling up in tail mode takes effect at once.
 - Fixed possible crawl file damage: listing crawls from a second process (CLI, MCP server or a second app instance) while a crawl was running could damage that crawl's file. Listing now only reads such files and never changes them; locking a running crawl is no longer possible.
 - Fixes: a stopped crawl stays "Stopped" after a restart; the status card shows "Finished (limit reached)" like the status bar; the findings sidebar follows the UI language; repairing a crawl file no longer counts write errors as lost rows; more reliable "Check for updates"; updated spreadsheet import library (security advisory RUSTSEC-2026-0436).
 
@@ -31,6 +32,7 @@ Schnellere Crawls, Chromium auf Abruf, Agenten mit einem Klick verbinden und ein
 - Visualisierungen: 3D-Crawl- und Verzeichnisgraph, Wortwolke und ein Diagramm zum gewählten Eintrag der Übersicht.
 - Neuer Dialog „Über OpenSpider“ mit Entwickler, Website und Link zum Quellcode.
 - Docker: ein Dockerfile, um CLI, Exporte und den MCP-Server auf Linux-Servern zu betreiben (Image selbst bauen, siehe Handbuch).
+- Live-Crawl: Das Detailfenster reagiert während eines Crawls flüssiger; Auswahlen mit Umschalt+Klick und Umschalt+Pfeil gehen im laufenden Crawl nicht mehr verloren; der Crawl-Pfad-Dialog zeigt wieder seine Zeilen; die Spaltenwahl einer Detailtabelle bleibt beim Wechsel zu einer anderen URL erhalten; Hochscrollen im Tail-Modus wirkt sofort.
 - Mögliche Beschädigung von Crawl-Dateien behoben: Wurden Crawls aus einem zweiten Prozess aufgelistet (CLI, MCP-Server oder eine zweite App-Instanz), während ein Crawl lief, konnte dessen Datei beschädigt werden. Das Auflisten liest solche Dateien jetzt nur noch und ändert sie nie; laufende Crawls lassen sich nicht mehr sperren.
 - Korrekturen: Ein gestoppter Crawl bleibt nach einem Neustart „Gestoppt“; die Statuskarte zeigt wie die Statusleiste „Fertig (Grenze erreicht)“; die Befunde-Seitenleiste folgt der Oberflächensprache; die Reparatur einer Crawl-Datei zählt Schreibfehler nicht mehr als verlorene Zeilen; „Nach Updates suchen“ ist zuverlässiger; die Bibliothek für den Tabellen-Import ist aktualisiert (Sicherheitshinweis RUSTSEC-2026-0436).
 
