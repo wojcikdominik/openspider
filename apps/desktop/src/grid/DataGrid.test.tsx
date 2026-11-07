@@ -189,3 +189,20 @@ it("shows the export hint for an oversized partial range without selecting the w
   expect(props.onSelectionChange).not.toHaveBeenCalled();
   mounted.unmount(); await source.dispose();
 });
+
+// spec: UI-012
+// spec: UI-018
+it("binds an all-range to the settled view even when a newer version overtakes its reply", async () => {
+  const { props, source } = setup();
+  let answer!: (value: Awaited<ReturnType<NonNullable<typeof source.api.range>>>) => void;
+  (source.api as { range?: unknown }).range = vi.fn(() => new Promise(resolve => { answer = resolve; }));
+  const mounted = render(<DataGrid {...props} />);
+  await waitFor(() => expect(source.rowKey(1)).toBe(2));
+  fireEvent.keyDown(mounted.getByRole("grid"), { key: "ArrowDown", shiftKey: true });
+  await waitFor(() => expect(answer).toBeDefined());
+  await act(async () => { await source.onViewChanged(3, source.total + 10); });
+  await act(async () => { answer({ viewId: source.viewId, version: 2, fromRow: 0, toRow: source.total - 1, total: source.total - 5, keys: [], all: true, exportRequired: false }); });
+  await waitFor(() => expect(vi.mocked(props.onSelectionChange).mock.lastCall?.[0].value).toEqual({ kind: "all", viewId: source.viewId, version: 3, except: [] }));
+  expect(props.onError).not.toHaveBeenCalled();
+  mounted.unmount(); await source.dispose();
+});
