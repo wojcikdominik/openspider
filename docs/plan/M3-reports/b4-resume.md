@@ -1,6 +1,6 @@
 # B4-RESUME – Crawls per MCP und CLI anhalten und fortsetzen – Bericht
 
-Stand 07.11.2026 (Nacharbeit, Abschnitt 5). Branch `m3/resume` (Basis `main` 816e51d2, zuletzt `main` 6d879a26 und `m3/resume-tests` df8a9435 eingemischt), Mac-Worktree `openspider-wt/c-resume`, Server-Worktree
+Stand 07.11.2026 (Nacharbeit, Abschnitte 5 und 6). Branch `m3/resume` (Basis `main` 816e51d2, zuletzt `main` 6d879a26 und `m3/resume-tests` df8a9435 eingemischt), Mac-Worktree `openspider-wt/c-resume`, Server-Worktree
 `m3-resume` (git-Worktree auf 816e51d2, per `srv-sync.sh` gespiegelt). Grundlage: AGENT-001/003/020 (10), CRAWL-126/128/130
 (01), UI-003/UI-013 (05), OUT-233 (06), `docs/plan/beta3.md` „Für beta.4 aus B3-N00“, `M3-reports/b3-n00.md` (S2, Punkt 4),
 `M3-reports/b3-flakes.md` (Pause-Fixtures ohne natürliches Ende).
@@ -102,6 +102,29 @@ auch die vorher drei roten. Keinen halte ich für falsch.
 
 **Merge-Fehler von mir:** Der Konflikt in `registry_management.rs` war im Merge-Commit `d29c6ddf` falsch gelöst (fehlende Klammer, Datei übersetzt dort nicht), Korrektur in `62faa845`. Beim Merge nach `main` zählt nur der Endstand.
 
+### 6 Auflagen der Fable-Prüfung (Score 80)
+
+| Punkt | Ursache | Fix | Test und Gegenprobe |
+|---|---|---|---|
+| **A1** `acceptance_resume.rs` übersetzt unter Windows nicht | `libc::kill` ohne `cfg(unix)` | `send_sigint` wie `cli_load.rs` gekapselt, `spawn_cli` setzt unter Windows `CREATE_NEW_PROCESS_GROUP`. **Einzige Änderung an den Abnahmetests**, vom Orchestrator freigegeben; Unix-Verhalten unverändert | Windows nicht ausgeführt, nur die `cfg`-Stellen geprüft. Anders als `cli_load` überspringt der Test nicht, wenn Strg+Untbr nicht zustellbar ist, denn die Aufrufer dürfen sich nicht ändern. Die letzte Windows-CI (Lauf 42309492699) ließ den SIGINT-Test von `cli_load` rund 9 s laufen, das spricht für eine zustellbare Konsole; sicher zeigt das erst die CI nach dem Merge |
+| **A2** `crawl_status` meldet nach fremdem Weiterführen weiter `Paused` | `CrawlService::state()` nutzte auch den Handle eines beendeten Laufs | Handle-Zustand nur, solange `!is_finished()`, sonst gilt die Datei. Zusätzlich entfällt `progress`, wenn der letzte Lauf nicht mehr zum Zustand passt, sonst widerspräche sich die Antwort | `crawl_status_follows_the_file_after_another_process_finished_the_crawl` (zwei echte Prozesse); Gegenprobe ohne Fix: rot (`Paused` statt `Completed`) |
+| **B3** robots.txt mit 5xx/429 macht den Crawl `Failed` | Mein Fix aus Abschnitt 5 zählte `blocked_by_robots_unreachable` und `malformed` mit | `is_network_failure`: nur DNS, Verbindung verweigert, Timeout, Verbindungsfehler, TLS. Bei `blocked_by_robots_unreachable` entscheidet die Hilfszeile der robots.txt | `a_robots_txt_answering_500_is_no_failed_crawl_although_it_blocks_the_start_url` (Gegenprobe ohne Fix: rot, `Failed`), `an_unreachable_start_url_fails_…` (geschlossener Port), `only_network_failures_count_as_unreachable` |
+
+**Spec-Nachträge** (nur dokumentiert, kein neues Verhalten): S2 Fälle von `busy`, S5 und Testbericht (2), (3), (5), (7) in AGENT-020; S3 in CRAWL-131; S4 und S7 in CRAWL-128; S6 in OUT-182; Testbericht (3) auch in UI-003; Testbericht (6) in CRAWL-126 (mit neuem Test `resume_without_raising_the_limit_exits_0_with_a_hint_and_fetches_nothing`).
+Zwei Stellen weichen bewusst vom Wortlaut der Vorgabe ab, weil sie sonst nicht stimmen:
+- **(5):** `progress` gibt es nur, solange der Server den letzten Lauf kennt und er zum Zustand passt.
+- **(7):** Nach einem harten Abbruch lässt sich `owner_pid` nicht mehr leeren; dort gilt der Heartbeat.
+
+**Testbericht (8): kein Nachtrag, der Code macht es anders.** Beim Fortsetzen wird die robots.txt bekannter Hosts **nicht** erneut gelesen: `PrimedFetch` bedient sie aus `robots_files` (`os-engine/src/resume.rs`), und `lifecycle_pause.rs:235` prüft ausdrücklich „keine URL – auch nicht robots.txt – doppelt im Request-Log“. Der vorgesehene Nachtrag „erneut lesen ist erlaubt“ widerspräche dem. Entscheidung bei Fable.
+
+**Neu gefunden, wackeliger Abnahmetest (nicht geändert, K2-63):** `a_killed_server_leaves_an_incomplete_crawl_that_resumes_without_duplicates` (`os-mcp/tests/acceptance_resume.rs:984`) verlangt nach SIGKILL mindestens 8 gespeicherte URLs bei 10 begonnenen Abrufen. Einzeln und allein gelaufen, bei Serverlast um 12:
+| Stand | grün | rot |
+|---|---|---|
+| `m3/resume-tests` (df8a9435, vor meinen Änderungen dieser Runde) | 15 | 5 |
+| Stand dieser Runde | 11 | 9 |
+
+Jeder Fehlschlag meldet genau 7 gespeicherte URLs. Der Writer ist seit der Paketbasis unverändert (`writer_thread.rs`, `os-store/src/writer.rs`). Die Differenz der beiden Zeilen ist bei je 20 Läufen und wechselnder Last nicht belastbar; einen Rückschritt schließt sie nicht sicher aus, einen Zusammenhang mit meinen Änderungen sehe ich aber nicht. CRAWL-125 verlangt nur alle bis 2 s vor dem Abbruch gecrawlten URLs. Bei 250 ms je Seite dürften demnach bis zu 8 der 10 Abrufe fehlen, die Schwelle 8 ist also strenger als die Spec. **Vorschlag an Orchestrator/Fable:** Schwelle aus der Spec ableiten (Abrufe bis 2 s vor dem Abbruch). Bis dahin kann der Test CI und Workspace-Läufe rot färben.
+
 ## Commits (Branch `m3/resume`)
 
 | Commit | Inhalt |
@@ -118,9 +141,13 @@ auch die vorher drei roten. Keinen halte ich für falsch.
 | `7e42db74` | mcp: `crawl_status` und `resume_crawl` (Befunde 3 und 4) |
 | `e6c4f3ea` | spec: AGENT-020 Fehlercode `busy` |
 | `d78808ce`, `556d36af` | test: clippy in `b4_resume`, `n04-mcp` erwartet 17 Werkzeuge |
+| `d1f06fcc`, `a5f8e5c2`, `7d34c501` | Auflagen A1, A2, B3 |
+| `e32139ff`, `d1b8a0f0` | test: `--resume` am Limit; spec: Nachträge |
 | (letzter Commit) | docs: Bericht |
 
 ## Spec-Fragen
+
+**Stand nach Fable-Entscheidung:** S2–S7 und die Testbericht-Fragen (2), (3), (5), (6), (7) sind entschieden und in der Spec nachgetragen. Offen: S1 `limit_kind` (entscheidet der Nutzer) und Testbericht (8), siehe Abschnitt 6. Der Text unten ist der ursprüngliche Stand der Fragen.
 
 - **S1 (UI-013 Nachtrag beta.4 ↔ OUT-233/CRAWL-130): `limit_kind`.** UI-013 nennt „max. URLs“, „max. Tiefe“, „Zeit“,
   „sobald der Endgrund sie führt (`limit_kind`)“. Es fehlen: der Speicherort/Schlüssel (OUT-233 `q_manifest` kennt nur
@@ -156,22 +183,22 @@ auch die vorher drei roten. Keinen halte ich für falsch.
 
 ## Testergebnisse (Server `openspider-build`, Worktree `m3-resume`)
 
-Endstand mit Abnahmetests, nach dem Merge von `main`, Playwright-Port `OS_E2E_PORT=14829`.
+Endstand `d1b8a0f0` (mit allen Auflagen), danach nur dieser Bericht committet. Playwright-Port `OS_E2E_PORT=14829`.
 
-- `cargo fmt --all --check`: ok. `cargo clippy --workspace --all-targets -- -D warnings`: ok (nach `d78808ce`).
-- `cargo test --workspace --exclude openspider-desktop -j 6 --locked --no-fail-fast` (über `ws-slot.sh`): **4 439 bestanden, 0 fehlgeschlagen, 50 ignoriert**, 609 Testprogramme, Exit 0;
-  gegenüber `main` keine `#[ignore]` hinzugekommen. Danach nur `b4_resume.rs` (ohne Verhaltensänderung, einzeln erneut 7/7), `n04-mcp.spec.ts` und dieser Bericht geändert.
-- **Abnahmetests:** `os-mcp` 19/19, `os-cli` 19/19, unverändert.
+- `cargo fmt --all --check`: ok. `cargo clippy --workspace --all-targets -- -D warnings`: ok.
+- `cargo test --workspace --exclude openspider-desktop -j 6 --locked --no-fail-fast` (über `ws-slot.sh`): **4 443 bestanden, 0 fehlgeschlagen, 50 ignoriert**, 609 Testprogramme, Exit 0;
+  gegenüber `main` keine `#[ignore]` hinzugekommen. Der wackelige Abnahmetest (Abschnitt 6) war in diesem Lauf grün.
+- **Abnahmetests:** in diesem Lauf `os-mcp` 19/19, `os-cli` 19/19; einzige Änderung ist A1.
 - **`m2_process`-Test 20× unter Last:** Testlauf auf CPU 0–1 mit zwei `yes`-Prozessen je Lauf (mit `timeout`, danach beendet, 0 Reste): **20/20**.
-- Gegenprobe owner_pid-Wettlauf ohne Engine-Fix (erster Stand): 5/5 rot.
+- **Gegenproben:** A2 ohne Fix rot, B3 ohne Fix rot (Abschnitt 6), owner_pid-Wettlauf ohne Engine-Fix 5/5 rot (erster Stand).
 - `npm run -w apps/desktop typecheck`: ok. `npm run -w apps/desktop test`: CSS-Lint ok, **Vitest 119 Dateien, 1 023 Tests bestanden**.
-- Playwright mit echter Bridge, `--workers=1 --retries=0`, je Chromium und WebKit:
+- Playwright mit echter Bridge, `--workers=1 --retries=0`:
   - `crawls/management.spec.ts`, `crawls/bridge.spec.ts`: Chromium 7/7, WebKit 7/7.
-  - `beta/resume`, `beta/control`, `header/header`, `statusbar/statusbar`, `alpha/crawl-control`: je 11/11; `beta/n04-mcp` war in diesem Lauf rot (Zählung, Abschnitt 5), danach siehe nächste Zeile.
-  - `mcp/dialog`, `beta/services`, `beta/n04-mcp`, `polish/visual-heights`: nach der Korrektur von `n04-mcp` Chromium 17/17, WebKit 17/17.
-  - `mcp/bridge.spec.ts` (mit dem echten 10-Minuten-Test): Chromium 6/6, WebKit 6/6.
+  - `beta/resume`, `beta/control`, `beta/n04-mcp`, `beta/services`, `header/header`, `statusbar/statusbar`, `alpha/crawl-control`, `mcp/dialog`, `polish/visual-heights`, `mcp/bridge` (mit dem echten 10-Minuten-Test): **Chromium 34/34, WebKit 34/34**.
+  - Der erste Chromium-Lauf wurde nach 20 grünen Tests von außen beendet (Exit 143, SIGTERM, nicht von mir, Absender unbekannt). Die 34/34 stammen aus der vollständigen Wiederholung.
 - `os-parity run --all`: **„Paritätslauf: bestanden“, 218/218 Vergleiche ok**, Exit 0.
 - `bash scripts/check-neutral.sh`: keine Fundstellen.
+- Nicht ausgeführt: macOS und Windows; die CI läuft nach dem Merge.
 - `target/` des Server-Worktrees am Ende gelöscht.
 
 ## Fremde Dateien (K2-92)
@@ -185,9 +212,11 @@ Endstand mit Abnahmetests, nach dem Merge von `main`, Playwright-Port `OS_E2E_PO
 | `crates/os-app/tests/n00_stopped_state.rs` | eine Zusicherung `endReason` | Nachweis Listing mit echtem Stopp (Datei aus B3-N00) |
 | `integrations/skills/openspider/references/tools.md`, `integrations/claude-plugin/skills/openspider/references/tools.md` | `pause_crawl`, `busy`, Texte zu Stopp/Fortsetzen | Validator vergleicht die Tabelle mit `tools::all()` (AGENT-041/042); beide Kopien byte-gleich (`sync-skill`) |
 | `tests/fixtures/agent-m2-crawl/scenario.toml` | Routen `/held`, `/chain/1…12` | Fixture ohne natürliches Ende vor der Pause (B3-FLAKES) |
-| `docs/spec/10-agent-interface.md` | AGENT-020: Fehlercode `busy` | Auftrag, nur Code und Form |
+| `docs/spec/10-agent-interface.md`, `docs/spec/01-crawl.md`, `docs/spec/05-ui.md`, `docs/spec/06-output-ops.md` | Nachträge nach Fable-Entscheidungen (Abschnitt 6) | Auftrag, kein neues Verhalten |
+| `crates/os-cli/tests/listing_live_owner.rs` | Test zu A2 | braucht `openspider` und `openspider mcp` als echte Prozesse; Datei kam über `main` aus B4-LISTFIX |
+| `crates/os-cli/tests/acceptance_resume.rs` | `send_sigint`/`spawn_cli` portabel (A1) | vom Orchestrator freigegeben, sonst unverändert |
 | `apps/desktop/e2e/beta/n04-mcp.spec.ts` | 17 statt 16 Werkzeuge | `pause_crawl` (AGENT-020) |
-| `crates/os-cli/tests/acceptance_resume.rs`, `crates/os-mcp/tests/acceptance_resume.rs`, `docs/plan/M3-reports/b4-resume-tests.md` | per Merge aus `m3/resume-tests`, unverändert | Abnahmetests des Testagenten |
+| `crates/os-mcp/tests/acceptance_resume.rs`, `docs/plan/M3-reports/b4-resume-tests.md` | per Merge aus `m3/resume-tests`, unverändert | Abnahmetests des Testagenten |
 | `crates/os-cli/src/exec.rs`, `crates/os-cli/tests/cli_basics.rs` | `Failed` ohne Fehler bleibt gültiges Ergebnis; neuer Test | Befund 2, OUT-182 |
 | `apps/desktop/src/features/crawls/i18n/{de,en}.ftl` | Schlüssel `crawls-phase-completed-stopped` | neue UI-Texte DE/EN; nicht unter `apps/desktop/src/i18n/**` (B4-LANG). Neue Sprachen von B4-LANG fallen für diesen Schlüssel auf Englisch zurück, bis sie ihn übersetzen |
 
@@ -197,7 +226,7 @@ Eigene Pfade: `crates/os-store/src/registry.rs`, `crates/os-store/tests/registry
 
 ## Offene Punkte
 
-- Spec-Fragen S1–S7 und die 8 Fragen aus `b4-resume-tests.md` (Planer/Fable). `limit_kind` folgt nach S1.
-- UI-019 (Dialog bei nicht erreichbarer Start-URL) habe ich nicht geprüft; die App zeigt jetzt die Phase „Fehlgeschlagen“.
+- Offen: S1 `limit_kind` (Nutzer), Testbericht (8) (Fable), Schwelle des wackeligen Abnahmetests (Abschnitt 6).
+- **Folgepunkte, nicht in diesem Paket:** B4 `stop_unowned` nicht atomar (vorbestehend), B5 Dialog UI-019 (eigenes Paket), `owner_kind`.
 - Die App-Kopfleiste/Statuskarte bleibt unverändert (Statuskarte „Analyse läuft“ / „Gestoppt – Datei wird
   zusammengeführt“ ist ein eigener beta.4-Punkt aus B3-N00).
