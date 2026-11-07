@@ -585,3 +585,26 @@ Nachweise: `/tmp/b4-r2-mutation-{a,b,c,d}.log`,
 `/tmp/b4-r2-mutation-summary`, Traces unter den gleichnamigen `-results/`-Verzeichnissen;
 extrahierte Kennwerte `/tmp/b4-r2-lag-evidence.jsonl` und
 `/tmp/b4-r2-stimulus-final.log`.
+
+### Gates Runde 2
+
+Auf dem abschließenden Testcode `b212ddaa3`, unveränderter Produktcode seit `6f669f9ad`:
+
+- `npm ci`: Exit 0, Lockdatei unverändert.
+- `cargo fmt --all --check`: Exit 0.
+- `cargo clippy -j 4 --workspace --all-targets --locked -- -D warnings`: Exit 0.
+- Workspace-Test nach `~/ws-slot.sh`, mit `CARGO_PROFILE_DEV_DEBUG=0`,
+  `CARGO_PROFILE_TEST_DEBUG=0`, `CARGO_INCREMENTAL=0` und
+  `OPENSPIDER_CHROMIUM=/home/build/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome`,
+  `cargo test -j 4 --workspace --locked`: **4410 bestanden, 0 fehlgeschlagen,
+  51 vorhandene Ignorierungen**, 611 Ergebnisgruppen, Exit 0.
+- `npm run -w apps/desktop typecheck`: Exit 0, einschließlich Browser-Stimulusmodul.
+- `npm run -w apps/desktop test`: **1022/1022 grün**, 119 Dateien, 138,76 s, Exit 0.
+- `bash scripts/check-neutral.sh`: Exit 0, keine Fundstellen.
+- Tokio unverändert **1.53.3**, keine Abhängigkeit aktualisiert.
+
+Alle schweren Befehle mit `timeout 3600s nice -n 10`, Cargo maximal vier Build-Jobs.
+Nach Abschluss der Rust-Gates wurden rund 61 GB Build-Zwischendateien freigegeben;
+die vier unveränderten ausführbaren E2E-Werkzeuge bleiben bis zum Ende der Browserläufe.
+Protokolle `/tmp/b4-r2-{npm-ci,fmt,clippy,workspace,typecheck,vitest,neutral}.log`,
+Exitcodes `/tmp/b4-r2-gate-summary` und `/tmp/b4-r2-setup-summary`.
