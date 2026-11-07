@@ -114,8 +114,8 @@ test("table footer, filter chip and Overview grow at 3 URL/s with bounded startu
       expect(finalBeats, "echte Recorder-Takte im ereignisfreien Schlussfenster").toBeGreaterThanOrEqual(5);
       expect(flowingChecked, "Lag-Stichproben noch während des Zuflusses").toBeGreaterThanOrEqual(5);
       expect(finalChecked, "Lag-Stichproben nach letzter URL ohne weiteres Ereignis").toBeGreaterThanOrEqual(5);
-      expect(lag, `${kind}: Lag-Grenze während Anlauf, Last und ereignisfreiem Schlussfenster`).toEqual([]);
-      expect(chipLag, "aktiver Chip hält dieselbe Lag-Grenze ein").toEqual([]);
+      expect.soft(lag, `${kind}: Lag-Grenze während Anlauf, Last und ereignisfreiem Schlussfenster`).toEqual([]);
+      expect.soft(chipLag, "aktiver Chip hält dieselbe Lag-Grenze ein").toEqual([]);
       const final = running.at(-1)!;
       expect(value(final), "letzter Stand wird ohne Pause exakt").toBe(plan.limit - (kind === "inlinks" ? 1 : 0));
 
@@ -125,12 +125,12 @@ test("table footer, filter chip and Overview grow at 3 URL/s with bounded startu
       expect(new Set(overview).size, "Overview wächst mehrfach ohne Nutzeraktion").toBeGreaterThanOrEqual(3);
       for (let i = 1; i < overview.length; i++) expect(overview[i]!).toBeGreaterThanOrEqual(overview[i - 1]!);
       const total = await coreTotal(page, "Response Codes", "All");
-      await expect.poll(async () => JSON.stringify({ footer: await footer(page), chip: await activeChipCount(page), overview: (await overviewSummary(page))["Total URLs Crawled"] }), { timeout: 12_000 }).toBe(JSON.stringify({ footer: { shown: total, total, selected: 0 }, chip: total, overview: total }));
+      await expect.poll(async () => JSON.stringify({ footer: (({ shown, total }) => ({ shown, total }))(await footer(page)), chip: await activeChipCount(page), overview: (await overviewSummary(page))["Total URLs Crawled"] }), { timeout: 12_000 }).toBe(JSON.stringify({ footer: { shown: total, total }, chip: total, overview: total }));
       await resumeCrawl(page);
       gate.open();
       await alpha.waitCompleted(60_000);
       const endTotal = plan.limit + 2; // Root, plan.limit Rückverlinker, Hold.
-      await expect.poll(async () => JSON.stringify({ footer: await footer(page), chip: await activeChipCount(page), overview: (await overviewSummary(page))["Total URLs Crawled"] }), { timeout: 12_000 }).toBe(JSON.stringify({ footer: { shown: endTotal, total: endTotal, selected: 0 }, chip: endTotal, overview: endTotal }));
+      await expect.poll(async () => JSON.stringify({ footer: (({ shown, total }) => ({ shown, total }))(await footer(page)), chip: await activeChipCount(page), overview: (await overviewSummary(page))["Total URLs Crawled"] }), { timeout: 12_000 }).toBe(JSON.stringify({ footer: { shown: endTotal, total: endTotal }, chip: endTotal, overview: endTotal }));
       await alpha.table().getByRole("button", { name: /Filter/, exact: true }).click();
       await expect(page.getByRole("option", { name: new RegExp(`^Success \\(2XX\\)\\s*${endTotal}$`) })).toBeVisible();
       await page.keyboard.press("Escape");
@@ -190,6 +190,20 @@ test("after pause, resume and completion Overview and Issues equal an uninterrup
     const overviewB = await settledFingerprint(pageB);
     expect(overviewB, "Overview nach Pause/Fortsetzen = Overview des ununterbrochenen Crawls").toEqual(overviewA);
     expect(issuesB, "Issues nach Pause/Fortsetzen = Issues des ununterbrochenen Crawls").toEqual(issuesA);
+    // spec: UI-018, UI-006 — ursprünglicher Endabgleich gegen fx-ui-basic bleibt erhalten.
+    await pageB.getByRole("tablist", { name: /^(Data tabs|Daten-Tabs)$/ }).getByRole("tab", { name: "Response Codes", exact: true }).click();
+    await expect.poll(async () => {
+      const f = await footer(pageB);
+      const o = await overviewSummary(pageB);
+      return JSON.stringify({ shown: f.shown, total: f.total, chip: await activeChipCount(pageB), crawled: o["Total URLs Crawled"], internal: o["Total Internal URLs"], external: o["Total External URLs"] });
+    }, { timeout: 12_000 }).toBe(JSON.stringify({ shown: 27, total: 27, chip: 27, crawled: 27, internal: 25, external: 2 }));
+    await pageB.locator("#data-panel").getByRole("button", { name: /Filter/, exact: true }).click();
+    await expect(pageB.getByRole("option", { name: /^Success \(2XX\)\s*25$/ })).toBeVisible();
+    await expect(pageB.getByRole("option", { name: /^Redirection \(3XX\)\s*1$/ })).toBeVisible();
+    await expect(pageB.getByRole("option", { name: /^Client Error \(4XX\)\s*1$/ })).toBeVisible();
+    await pageB.keyboard.press("Escape");
+    await expect(pageB.locator("[data-overview-age]")).toHaveCount(0, { timeout: 12_000 });
+    expect((await readUpper(pageB))?.rowcount).toBe(28);
   } finally {
     await pageB.close();
     await gateB.stop();

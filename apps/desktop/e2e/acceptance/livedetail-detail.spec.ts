@@ -141,8 +141,8 @@ test("Inlinks of the selected URL grow at 3 URL/s with bounded startup and final
       expect(finalBeats, "echte Recorder-Takte im ereignisfreien Schlussfenster").toBeGreaterThanOrEqual(5);
       expect(flowingChecked, "Lag-Stichproben noch während des Zuflusses").toBeGreaterThanOrEqual(5);
       expect(finalChecked, "Lag-Stichproben nach letzter URL ohne weiteres Ereignis").toBeGreaterThanOrEqual(5);
-      expect(lag, `${kind}: Lag-Grenze während Anlauf, Last und ereignisfreiem Schlussfenster`).toEqual([]);
-      expect(chipLag, "aktiver Chip hält dieselbe Lag-Grenze ein").toEqual([]);
+      expect.soft(lag, `${kind}: Lag-Grenze während Anlauf, Last und ereignisfreiem Schlussfenster`).toEqual([]);
+      expect.soft(chipLag, "aktiver Chip hält dieselbe Lag-Grenze ein").toEqual([]);
       const final = running.at(-1)!;
       expect(value(final), "letzter Stand wird ohne Pause exakt").toBe(plan.limit - (kind === "inlinks" ? 1 : 0));
 
