@@ -22,6 +22,9 @@ use serde_json::{json, Value};
 const BIN: &str = env!("CARGO_BIN_EXE_openspider-mcp");
 /// Site mit 40 Seiten, jede Antwort 250 ms verzögert: mit einem Thread mindestens 10 s bis zum natürlichen Ende.
 const SLOW: &str = "synthetic:n=40,links=4,seed=7,delay_ms=250";
+/// Wie [`SLOW`], aber 1 s je Antwort: Mit der Standard-Threadzahl (parallele Anfragen) endet der Crawl nicht, bevor mehrfach
+/// pausiert werden konnte (CRAWL-126: Tests, die „Pausiert“ erwarten, nutzen eine Fixture, die vor der Pause nicht enden kann).
+const SLOW_PARALLEL: &str = "synthetic:n=40,links=4,seed=7,delay_ms=1000";
 /// Dieselbe Site ohne Verzögerung (Referenz für den ununterbrochenen Lauf).
 const FAST: &str = "synthetic:n=40,links=4,seed=7";
 const WAIT: Duration = Duration::from_secs(60);
@@ -67,6 +70,18 @@ fn duplicated(site: &TestSite) -> BTreeSet<String> {
         .filter(|(_, n)| *n > 1)
         .map(|(p, _)| p)
         .collect()
+}
+
+/// CRAWL-125: nach SIGKILL sind „alle bis ≤ 2 s vor dem Abbruch gecrawlten URLs“ gespeichert. Diese Menge wird hier
+/// aus dem Request-Log der Testsite abgeleitet statt aus einer festen Zahl: Der Schnappschuss enthält alle Seiten, die
+/// bis jetzt angefragt wurden; jede davon ist spätestens nach der Antwortverzögerung der Fixture (250 ms) abgerufen.
+/// Wer den Schnappschuss nimmt, beendet den Prozess frühestens [`KILL_AFTER_SNAPSHOT`] später; bis dahin sind die Seiten
+/// des Schnappschusses mehr als 2 s vor dem Abbruch fertig (Reserve für Last auf dem Testrechner: rund 250 ms Verzögerung
+/// plus 250 ms Sicherheitsabstand).
+const KILL_AFTER_SNAPSHOT: Duration = Duration::from_millis(2500);
+
+fn snapshot_pages_stored_by_kill_time(site: &TestSite) -> BTreeSet<String> {
+    page_requests(site).into_iter().collect()
 }
 
 fn wait_until(what: &str, limit: Duration, mut f: impl FnMut() -> bool) {
@@ -963,6 +978,14 @@ async fn a_killed_server_leaves_an_incomplete_crawl_that_resumes_without_duplica
     let mut mcp = env.spawn(&["--allow", "crawl"]);
     let id = mcp.start(&site, threads1());
     wait_until("10 Seitenabrufe", WAIT, || page_request_count(&site) >= 10);
+    // CRAWL-125: Diese Seiten sind beim Abbruch länger als 2 s fertig und müssen gespeichert sein.
+    let must_be_stored = snapshot_pages_stored_by_kill_time(&site);
+    assert!(must_be_stored.len() >= 10, "Voraussetzung des Tests");
+    std::thread::sleep(KILL_AFTER_SNAPSHOT);
+    assert!(
+        page_request_count(&site) < reference.len(),
+        "Voraussetzung: der Crawl darf vor dem Abbruch nicht enden"
+    );
     mcp.kill();
 
     let file = env.crawl_file(&id);
@@ -981,10 +1004,14 @@ async fn a_killed_server_leaves_an_incomplete_crawl_that_resumes_without_duplica
     // Nach dem Ausbleiben des Heartbeats gilt der Crawl als „Unterbrochen“.
     mcp.wait_state(&id, "Incomplete", Duration::from_secs(60));
     let stored_before = paths(&crawled_set(&file));
+    let missing: Vec<&String> = must_be_stored.difference(&stored_before).collect();
     assert!(
-        stored_before.len() >= 8 && stored_before.len() < reference.len(),
-        "{}",
-        stored_before.len()
+        missing.is_empty(),
+        "CRAWL-125: länger als 2 s vor dem Abbruch abgerufene URLs fehlen in der Datei: {missing:?}"
+    );
+    assert!(
+        stored_before.len() < reference.len(),
+        "der Abbruch kam erst nach dem Ende des Crawls"
     );
     assert_eq!(manifest(&file)["completeness"], "interrupted");
 
@@ -1053,7 +1080,7 @@ fn path_status(set: &BTreeSet<(String, i64, i64)>) -> BTreeSet<(String, i64)> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn repeated_pause_and_resume_cycles_with_parallel_threads_lose_and_duplicate_nothing() {
     let reference = reference_set().await;
-    let site = site(SLOW).await;
+    let site = site(SLOW_PARALLEL).await;
     let env = Env::new();
     let mut mcp = env.spawn(&["--allow", "crawl"]);
     // Standard-Threadzahl (parallele Anfragen): beim Pausieren sind mehrere Anfragen unterwegs.

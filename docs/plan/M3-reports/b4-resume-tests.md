@@ -173,3 +173,37 @@ Dateikürzel: **M** = `os-mcp/tests/acceptance_resume.rs`, **C** = `os-cli/tests
 - Server: `cargo test -j 6 --locked`, `CARGO_PROFILE_*_DEBUG=0`, `CARGO_INCREMENTAL=0`, `nice -n 10`; `cargo fmt --all --check` und
   `cargo clippy -p os-mcp -p os-cli --test acceptance_resume -- -D warnings` sind sauber.
 - Die Testprozesse (MCP-Server, CLI-Kinder) werden bei Abbruch des Tests über `Drop` beendet; die Tests benutzen keine `pkill`-Muster.
+
+## Nachtrag 07.11.2026: Kill-Tests spec-treu (Branch `m3/resume-tests-ci`)
+
+**Problem.** `a_killed_server_leaves_an_incomplete_crawl_that_resumes_without_duplicates` (MCP) und `a_killed_cli_crawl_is_listed_as_incomplete_and_resumes_without_duplicates`
+(CLI) verlangten nach SIGKILL pauschal `>= 8` gespeicherte URLs bei 10 verlangten Abrufen. Die Schwelle stammte nicht aus der Spec:
+CRAWL-125 verlangt nur, dass „alle bis ≤ 2 s vor dem Abbruch gecrawlten URLs“ vorhanden sind; bei 250 ms je Seite sind das nur
+die ersten rund zwei. Folge: rot bei 7 gespeicherten URLs (Wackler, abhängig vom Commit-Zeitpunkt des Writers).
+
+**Korrektur.**
+- Der Test hält im Request-Log der Testsite fest, welche Seiten bei einem Schnappschuss schon angefragt waren (mindestens 10), wartet
+  `KILL_AFTER_SNAPSHOT` = 2,5 s weiter und beendet den Prozess erst dann. Jede Seite des Schnappschusses ist nach der Antwortverzögerung der
+  Fixture (250 ms) abgerufen, also beim Abbruch mehr als 2 s fertig (Reserve 250 ms plus der Rest bis 2,5 s). Genau diese Menge muss nach dem Abbruch in
+  der Datei stehen (`must_be_stored ⊆ stored_before`); die Fehlermeldung nennt die fehlenden Pfade.
+- Voraussetzungen werden geprüft statt angenommen: Schnappschuss nicht kleiner als 10 Seiten (die Prüfung ist nie leer) und der Crawl darf vor dem Abbruch
+  nicht enden (`page_request_count < reference.len()`); nach dem Abbruch muss `stored_before.len() < reference.len()` bleiben.
+- Gegenprobe (nicht eingecheckt): `BATCH_MAX_WAIT` und `BATCH_MAX_WAIT_BACKLOG` im Writer des Servers (`os-engine/src/writer_thread.rs`) von
+  100/500 ms auf 5 s gesetzt, damit der Writer „zu spät sichert“. Ergebnis: beide Tests 3 von 3 rot, mit „länger als 2 s vor dem Abbruch abgerufene URLs fehlen …:
+  ["/", "/s1/p1.html", …]“. Danach zurückgesetzt. Der Test bleibt also scharf.
+- Die übrigen Schwellen beider Dateien auf Tempoabhängigkeit gesichtet: Unverändert bleiben die aus der Spec stammenden Prüfungen (CRAWL-126:
+  höchstens Threads-viele Anfragen nach der Pause, gespeichert = abgerufen; Limit 12 → 12 URLs) und reine Vorbedingungen, die bei langsamerem Rechner nur
+  sicherer werden (Pause oder Stopp vor dem natürlichen Ende bei 250 ms je Seite und einem Thread). Geändert (Spec-Begründung CRAWL-126:
+  „Tests, die ‚Pausiert‘ erwarten, nutzen eine Fixture, die vor der Pause nicht enden kann“):
+  - `repeated_pause_and_resume_cycles_with_parallel_threads_…` (MCP) und `two_sigint_cycles_with_parallel_threads_…` (CLI) laufen mit mehreren Threads gegen
+    die neue Fixture `SLOW_PARALLEL` (1 s je Antwort). Mit 5 Threads und 250 ms hätte der Crawl bei einem schnellen Rechner enden können, bevor
+    der dritte Zyklus pausiert.
+  - `sigint_pauses_with_exit_130_and_resume_equals_an_uninterrupted_crawl` (CLI): `stored.len() >= 8` ersetzt durch `stored.len() == page_request_count`
+    (CRAWL-126: laufende Anfragen werden zu Ende geführt und gespeichert) – strenger und unabhängig vom Tempo.
+
+**Nachweis (Server, `m3-resume-ci`, Stand `m3/resume` 922fd64f plus Teständerungen).**
+- Beide Kill-Tests je 40 Läufe, davon je 20 unter Fremdlast (14 Busy-Loops mit `timeout 900` auf 16 Kernen, Lastmittel rund 14): 80 von 80 grün.
+  Die Auswertung verlangt „1 passed“ (ein erster Versuch mit unvollständigem `--exact`-Namen hatte 0 Tests ausgeführt und wurde verworfen).
+- Ganze Datei `acceptance_resume.rs` je einmal: MCP 19 von 19, CLI 19 von 19 grün (die drei früher roten CLI-Tests zu Befund 1 und 2 sind auf diesem Stand grün).
+- `cargo fmt --all --check` und `cargo clippy -p os-mcp -p os-cli --test acceptance_resume -- -D warnings` sauber.
+- Kein Produktfehler gefunden.

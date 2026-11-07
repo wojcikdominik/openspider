@@ -23,6 +23,9 @@ use os_testsite::{SiteOptions, TestSite};
 use serde_json::{json, Value};
 
 const SLOW: &str = "synthetic:n=40,links=4,seed=7,delay_ms=250";
+/// Wie [`SLOW`], aber 1 s je Antwort: Mit mehreren Threads endet der Crawl nicht, bevor mehrfach pausiert werden konnte
+/// (CRAWL-126: Tests, die „Pausiert“ erwarten, nutzen eine Fixture, die vor der Pause nicht enden kann).
+const SLOW_PARALLEL: &str = "synthetic:n=40,links=4,seed=7,delay_ms=1000";
 const FAST: &str = "synthetic:n=40,links=4,seed=7";
 const WAIT: Duration = Duration::from_secs(60);
 const STOPPED_HINT: &str = "gestoppt – endgültig beendet";
@@ -66,6 +69,18 @@ fn duplicated(site: &TestSite) -> BTreeSet<String> {
         .filter(|(_, n)| *n > 1)
         .map(|(p, _)| p)
         .collect()
+}
+
+/// CRAWL-125: nach SIGKILL sind „alle bis ≤ 2 s vor dem Abbruch gecrawlten URLs“ gespeichert. Diese Menge wird hier
+/// aus dem Request-Log der Testsite abgeleitet statt aus einer festen Zahl: Der Schnappschuss enthält alle Seiten, die
+/// bis jetzt angefragt wurden; jede davon ist spätestens nach der Antwortverzögerung der Fixture (250 ms) abgerufen.
+/// Wer den Schnappschuss nimmt, beendet den Prozess frühestens [`KILL_AFTER_SNAPSHOT`] später; bis dahin sind die Seiten
+/// des Schnappschusses mehr als 2 s vor dem Abbruch fertig (Reserve für Last auf dem Testrechner: rund 250 ms Verzögerung
+/// plus 250 ms Sicherheitsabstand).
+const KILL_AFTER_SNAPSHOT: Duration = Duration::from_millis(2500);
+
+fn snapshot_pages_stored_by_kill_time(site: &TestSite) -> BTreeSet<String> {
+    page_requests(site).into_iter().collect()
 }
 
 fn wait_until(what: &str, limit: Duration, mut f: impl FnMut() -> bool) {
@@ -484,10 +499,11 @@ async fn sigint_pauses_with_exit_130_and_resume_equals_an_uninterrupted_crawl() 
     assert_eq!(m["state"], "Paused", "{m:?}");
     assert_eq!(m["completeness"], "paused", "{m:?}");
     let stored = crawled_set(&file);
+    // CRAWL-126: laufende Anfragen werden zu Ende geführt und gespeichert – gespeichert ist genau, was abgerufen wurde.
+    assert_eq!(stored.len(), page_request_count(&site));
     assert!(
-        stored.len() >= 8 && stored.len() < reference.len(),
-        "{}",
-        stored.len()
+        stored.len() < reference.len(),
+        "Voraussetzung: der Crawl darf vor der Pause nicht enden"
     );
 
     let resumed = env.run_async(resume_args(&id, &[])).await;
@@ -545,6 +561,14 @@ async fn a_killed_cli_crawl_is_listed_as_incomplete_and_resumes_without_duplicat
     let env = Env::new();
     let mut child = spawn_cli(&env, crawl_args(&site, &[]));
     wait_until("10 Seitenabrufe", WAIT, || page_request_count(&site) >= 10);
+    // CRAWL-125: Diese Seiten sind beim Abbruch länger als 2 s fertig und müssen gespeichert sein.
+    let must_be_stored = snapshot_pages_stored_by_kill_time(&site);
+    assert!(must_be_stored.len() >= 10, "Voraussetzung des Tests");
+    std::thread::sleep(KILL_AFTER_SNAPSHOT);
+    assert!(
+        page_request_count(&site) < reference.len(),
+        "Voraussetzung: der Crawl darf vor dem Abbruch nicht enden"
+    );
     child.kill().unwrap(); // SIGKILL
     let _ = finish(child).await;
     let (file, id) = only_file(&env);
@@ -564,7 +588,15 @@ async fn a_killed_cli_crawl_is_listed_as_incomplete_and_resumes_without_duplicat
     }
     assert_eq!(manifest(&file)["completeness"], "interrupted");
     let stored_before = paths(&crawled_set(&file));
-    assert!(stored_before.len() >= 8 && stored_before.len() < reference.len());
+    let missing: Vec<&String> = must_be_stored.difference(&stored_before).collect();
+    assert!(
+        missing.is_empty(),
+        "CRAWL-125: länger als 2 s vor dem Abbruch abgerufene URLs fehlen in der Datei: {missing:?}"
+    );
+    assert!(
+        stored_before.len() < reference.len(),
+        "der Abbruch kam erst nach dem Ende des Crawls"
+    );
 
     let resumed = env.run_async(resume_args(&id, &[])).await;
     assert_eq!(resumed.code, 0, "{}", resumed.dump());
@@ -988,7 +1020,7 @@ fn read_only_together_with_allow_crawl_does_not_start() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_sigint_cycles_with_parallel_threads_lose_and_duplicate_nothing() {
     let reference = reference_set().await;
-    let site = site(SLOW).await;
+    let site = site(SLOW_PARALLEL).await;
     let env = Env::new();
     // Erster Lauf mit mehreren Threads; SIGINT nach 5 Abrufen.
     let child = spawn_cli(
