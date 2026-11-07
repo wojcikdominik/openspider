@@ -133,10 +133,14 @@ impl CrawlService {
             .map(|h| json!({"crawl_id":id,"progress":h.progress()}))
     }
 
-    /// Zustand des Laufs, wenn ihn dieser Prozess führt.
+    /// Zustand des Laufs, solange ihn dieser Prozess führt. Ist der Lauf beendet, gilt die Datei: Ein anderer Prozess kann den
+    /// Crawl inzwischen fortgesetzt und beendet haben.
     pub fn state(&self, id: &str) -> Option<os_model::CrawlState> {
         let handles = self.handles.lock().ok()?;
-        handles.get(id).map(|h| h.progress().state)
+        handles
+            .get(id)
+            .filter(|h| !h.is_finished())
+            .map(|h| h.progress().state)
     }
 
     /// Zustand des Engine-Handles dieses Prozesses; räumt erledigte Anforderungen auf.

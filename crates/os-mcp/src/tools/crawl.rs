@@ -306,6 +306,15 @@ fn status(ctx: &ToolContext, id: &str) -> Result<Value, ToolError> {
     };
     status["state"] = json!(state.as_str());
     status["errors"] = json!(errors);
+    // Der letzte Fortschritt eines beendeten Laufs gilt nicht mehr, wenn ein anderer Prozess den Crawl weitergeführt hat.
+    if status["progress"]
+        .get("state")
+        .is_some_and(|s| s != state.as_str())
+    {
+        if let Some(fields) = status.as_object_mut() {
+            fields.remove("progress");
+        }
+    }
     Ok(status)
 }
 
