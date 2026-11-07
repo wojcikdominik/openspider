@@ -1,3 +1,4 @@
+// acceptance: independent
 // Ergänzt die unveränderten, als acceptance: independent gesperrten Altprüfungen.
 // Soll ausschließlich docs/spec/05-ui.md; Messspielraum wie bisher 2 s Zähler / 3 s Inlinks.
 import { test, expect, TALL, clickUpperRow, crawlTo, installRecorder, machineFactor, mark,

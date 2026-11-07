@@ -1,3 +1,4 @@
+// acceptance: independent
 // Ergänzende, unabhängige Last-Fixture: wie fx-ui-basic verlinkt jede Inhaltsseite zurück auf die Startseite.
 // spec: UI-018, UI-032
 import { createServer } from "node:http";
