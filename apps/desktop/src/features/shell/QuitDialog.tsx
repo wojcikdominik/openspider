@@ -8,6 +8,7 @@ import { useLayout } from "../../state/layout";
 import { registerAction } from "../../ui/actions";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
+import { flushDetailState } from "../detail/frame/persistence";
 import { quitApp } from "../../app/windows";
 
 /** Both the native close request notice and the menu action enter the same confirmation dialog. */
@@ -23,6 +24,7 @@ export function QuitDialog() {
       pending.current = true;
       setError(false);
       try {
+        await flushDetailState();
         await useLayout.getState().flush();
         const decision = await app.requestQuit();
         if (decision.kind === "confirm") setReasons(decision.reasons);
@@ -43,7 +45,7 @@ export function QuitDialog() {
     setBusy(true);
     setError(false);
     try {
-      if (value) await useLayout.getState().flush();
+      if (value) { await flushDetailState(); await useLayout.getState().flush(); }
       await app.confirmQuit({ value });
       setReasons(null);
     } catch (e) {
