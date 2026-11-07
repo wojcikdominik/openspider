@@ -312,7 +312,7 @@ Produktcode wird nur für Aufrufe und die ausdrücklich bestellten isolierten Mu
 
 Die Auftragsregel „Tests mit `// acceptance: independent` gar nicht ändern“ betrifft alle genannten
 Altdateien, einschließlich `livedetail-support.ts` und `livedetail-gate.ts`. Eine Ausnahme wurde
-angefragt. Solange sie nicht vorliegt, bleiben diese Dateien unverändert. Die Ergänzung
+angefragt und bis zum Abschluss nicht erteilt; diese Dateien bleiben unverändert. Die Ergänzung
 `livedetail-lag-window.spec.ts` prüft die fünf Auflagen zusätzlich; die beanstandeten Altstellen
 bleiben als solche offen. Kein bestehender Test, Wächter oder Budget wird gelockert.
 
@@ -350,8 +350,8 @@ liegen außerhalb des Repositorys unter `/tmp/b4-*.log`.
 
 ### Nachweise
 
-Zwischenstand: Rechen- und HTTP-Fixture-Prüfung in Chromium **2/2 grün** (3,4 s).
-Weitere Lauf- und Mutationsnachweise werden nach Abschluss ergänzt.
+Erster Einzeltest der Rechen- und HTTP-Fixture-Prüfung in Chromium: **2/2 grün** (3,4 s).
+Die vollständigen Lauf- und Mutationsnachweise stehen in den folgenden Abschnitten.
 
 ### F7 – neuer Lag-Nachweis mit verlängerter Fixture (offen)
 
@@ -420,23 +420,25 @@ stammen unverändert aus dem Repository; kein Test wurde neu ignoriert.
 
 Protokolle: `/tmp/b4-{npm-ci,clippy,workspace-final2,typecheck-final,vitest-final,fmt-final,neutral-final}.log`.
 
-### CI-ähnliche Wiederholungen (laufender Nachweis)
+### CI-ähnliche Wiederholungen (abgeschlossen)
 
 Alle Specs `livedetail-*.spec.ts` außer `budget`, einschließlich der vier neuen Prüfungen:
 31 Tests je Engine. Jede Engine separat mit `OS_E2E_PORT=14733`, `taskset -c 0,1`,
 `--workers=2`, ohne Test-Wiederholung bei Fehlern. Drei reguläre Durchläufe je Engine,
 anschließend ein zusätzlicher Durchlauf je Engine mit einer durch `timeout 3600s`
-begrenzten CPU-Schleife auf denselben Kernen. Auf dem Server läuft zusätzlich das fremde Paket.
+begrenzten CPU-Schleife auf denselben Kernen. Der Auftrag nennt zusätzlich ein parallel laufendes fremdes Paket auf diesem Server.
 Runde 1 überlappte den eigenen Workspace-Test; spätere reguläre Runden nicht mehr.
 
 | Runde | Engine | grün / rot | Dauer | Rot |
 |---|---|---|---|---|
 | 1 | Chromium | 30 / 1 | 533 s (8:53 min) | F7 |
-| 1 | WebKit | 30 / 1 | 683 s (11:23 min) | F7 |
+| 1 | WebKit | 29 / 2 | 683 s (11:23 min) | F7, zusätzlich alter Footer-Test (ebenfalls Zähler-Lag) |
 | 2 | Chromium | 30 / 1 | 537 s (8:57 min) | F7 |
 | 2 | WebKit | 31 / 0 | 687 s (11:27 min) | – |
 | 3 | Chromium | 30 / 1 | 530 s (8:50 min) | F7 |
 | 3 | WebKit | 30 / 1 | 685 s (11:25 min) | F7 |
+| Zusatzlast | Chromium | 30 / 1 | 618 s (10:18 min) | F7 |
+| Zusatzlast | WebKit | 30 / 1 | 768 s (12:48 min) | F7 |
 
 F7 ist damit in Chromium auch ohne parallelen eigenen Workspace-Test reproduziert;
 in WebKit besteht mindestens ein grüner Vergleichslauf mit identischer Testlogik.
@@ -448,12 +450,59 @@ Einzelprotokolle `/tmp/b4-suite-<Runde>-<Engine>.log`, Exitcodes und Sekundenwer
 `/tmp/b4-suite-<Runde>-<Engine>-results/`. Extrahierte Lag-Kennwerte:
 `/tmp/b4-lag-evidence.jsonl`.
 
-Die drei regulären Runden sind vollständig: **181/186 grün, 5/186 rot (ausschließlich F7)**.
-Chromium 90/93, WebKit 91/93. Alle sechs Engine-Läufe bleiben unter dem 12-Minuten-Ziel:
+Die drei regulären Runden sind vollständig: **180/186 grün, 6/186 rot (Zähler-Lag; siehe Korrektur unten)**.
+Chromium 90/93, WebKit 90/93. Alle sechs Engine-Läufe bleiben unter dem 12-Minuten-Ziel:
 Chromium 530–537 s, WebKit 683–687 s. Eine Paketrunde beider Engines dauert 1215–1224 s
 (20:15–20:24 min); die drei Wiederholungen zusammen 3655 s (60:55 min). Die 50-Minuten-Grenze
 wird pro einzelner Paketrunde eingehalten; die Gesamtdauer der drei bestellten Wiederholungen
 liegt darüber. Andere E2E-Specs außerhalb dieses Pakets wurden nicht mitgemessen.
 
-Der zusätzliche Lastlauf läuft anschließend je Engine mit einer zeitlich begrenzten `yes`-Schleife
-auf CPU 0/1; für Chromium ist deren Aktivität im Prozessmonitor bestätigt. Ergebnisse folgen.
+Der zusätzliche Lastlauf ist vollständig: **60/62 grün**, zweimal F7 rot. Die `yes`-Schleife
+war jeweils durch `timeout 3600s` begrenzt, auf CPU 0/1 aktiv und wurde nach dem Engine-Lauf
+beendet; am Schluss ist kein solcher Prozess mehr aktiv. Beide Engines nutzten zwei Worker.
+Chromium bleibt mit 10:18 min unter dem 12-Minuten-Ziel, **WebKit überschreitet es mit 12:48 min
+um 48 Sekunden**. Kein Test oder Budget wurde dafür gelockert oder ausgenommen.
+Die Zusatzlast-Paketrunde beider Engines dauert 1386 s (23:06 min), unter 50 min.
+Alle acht Engine-Läufe zusammen dauern 5041 s (84:01 min), über 50 min für die gesamte Serie.
+
+
+### Korrektur der Zwischenzählung und Endergebnis
+
+Die erste WebKit-Runde wurde im Zwischenstand irrtümlich als 30/31 statt **29/31 grün**
+gezählt. Die abschließende Auswertung aller acht vollständigen Protokolle erfasst zusätzlich
+den roten bestehenden Test `livedetail-live.spec.ts`, „table footer, filter chip and Overview …“:
+Footer 9 statt mindestens 10 bei +9623 ms nach dessen Bezugszeit, nach Pause exakt 24 von 24.
+Das ist ein weiterer Zähler-Lag während des Zuflusses, kein Nachweis für F6 am letzten Tick.
+Der Test bleibt unverändert rot. Sein `live-lag`-Attachment fehlt wegen genau der beanstandeten
+Reihenfolge in der geschützten Altdatei (Assertion Zeile 108 vor Attachment Zeile 111).
+Nachweis: `/tmp/b4-suite-1-webkit.log` und
+`/tmp/b4-suite-1-webkit-results/acceptance-livedetail-live-4956e--after-pause-and-at-the-end-webkit/trace.zip`.
+
+**Endergebnis:** regulär 180/186 grün, Zusatzlast 60/62 grün, zusammen **240/248 grün**
+(Chromium 120/124, WebKit 120/124). Acht Fehler: siebenmal die neue Zähler-Lag-Prüfung F7,
+einmal der bestehende Footer-Lag-Test. Die unveränderten Altprüfungen bestehen 215/216,
+die neuen Prüfungen 25/32. Alle Inlinks-Lastprüfungen bestehen. Keine neue Ignorierung,
+kein Retry, kein geänderter bestehender Test, keine Produktänderung im Arbeitsbranch.
+F7 erscheint auch ohne eigenen Workspace-Test und unter zusätzlicher CPU-Last; ein grüner
+WebKit-Vergleichslauf besteht mit identischer Testlogik. Die Ursache bleibt unermittelt.
+
+Alle sieben Fehler-Traces der neuen Zählerprüfung F7 enthalten das vor den Assertions geschriebene `live-lag`-Attachment.
+Darin 192–465 echte Recorder-Takte während Zufluss und 90–104 im Schlussfenster: keine leeren
+Lag-Prüfungen. Keiner dieser unmutierten Schlussverläufe verletzt die finale Lag-Grenze;
+**F6 bleibt offen**, nicht als behoben erklärt. Die explizite Footer-Mutation wird in beiden
+Engines im ereignisfreien Schlussfenster erkannt.
+
+### Abschlussstatus
+
+**PAKET OFFEN.** Die fünf Prüfauflagen sind durch zusätzliche unabhängige Tests abgesichert;
+die konkret beanstandeten Altstellen wurden wegen des ausdrücklichen Änderungsverbots nicht
+geändert. Direkte Nachbesserung dort bleibt offen, einschließlich der Attachment-Reihenfolge.
+Nächste Schritte: F7 produktseitig untersuchen/beheben, Ausnahme für gezielte Änderungen der
+geschützten Altprüfungen klären und die WebKit-Laufzeit unter Zusatzlast (12:48 > 12:00 min)
+beurteilen. Die vollständige Wiederholungsserie überschreitet 50 min; einzelne Paketrunden
+beider Engines liegen unter 24 min. Die Tests werden wegen dieser Befunde nicht angepasst.
+
+Nur zwei neue Acceptance-Dateien und dieser Bericht sind versioniert geändert; die ursprünglichen
+`livedetail-*`-Dateien sind gegen `5cb8df47` unverändert. Kein Push. Die Verzeichnisse `target/`, `apps/desktop/node_modules` und `node_modules` sind nach den
+abgeschlossenen Nachweisen entfernt und ihr Fehlen ist geprüft. Externe Protokolle und
+isolierte Mutationsquellen bleiben zur Prüfung erhalten.
