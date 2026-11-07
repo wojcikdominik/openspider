@@ -5,6 +5,8 @@
 import type { Alpha } from "../alpha/fixture";
 import {
   TALL,
+  upperGrid,
+  parseFooter,
   crawlMore,
   crawlTo,
   expect,
@@ -14,7 +16,10 @@ import {
   coreDetailTotal,
   detailGridLocator,
   installRecorder,
-  lagRate,
+  RATE,
+  INTERVAL,
+  lagWindow,
+  startLoadFixture,
   machineFactor,
   mark,
   openDetailTab,
@@ -33,14 +38,7 @@ import {
   type Sample,
 } from "./livedetail-support";
 
-const lastBefore = (samples: Sample[], t: number): number => {
-  let value = 0;
-  for (const s of samples) {
-    if (s.t > t) break;
-    value = s.crawled;
-  }
-  return value;
-};
+
 
 /** Der sichtbare Inhalt des Detailfensters zeigt Daten einer anderen URL als erwartet. */
 interface Switch {
@@ -72,63 +70,100 @@ async function selectHomeWithInlinks(alpha: Alpha, gate: Gate, minCrawled: numbe
 // spec: UI-018
 // spec: UI-145
 // acceptance: independent
-test("Inlinks of the selected URL grow with the running crawl and equal the core after pause and at the end", async ({ alpha, gate }) => {
-  test.setTimeout(180_000);
-  const { page } = alpha;
-  const { home, base } = await selectHomeWithInlinks(alpha, gate, 4);
-  const homeId = await urlIdOf(page, home);
-  const slow0 = await machineFactor(page);
-  await installRecorder(page, 100);
-  // `rate` URLs je Sekunde bis zur 20. URL (Zeitgeber im Test; die Rate richtet sich nach dem Rechnerfaktor, damit das Fenster der
-  // Verzögerungsprüfung unten genug geprüfte Stichproben enthält); danach hält das Tor den Crawl
-  gate.meter(lagRate(slow0, 3, 20), 20);
-  await waitCrawled(page, 20, 180_000);
-  await pauseCrawl(page, gate);
-  const factors = await recorderFactor(page, 100, slow0);
-  const slow = factors.slow;
-  const samples = (await stopRecorder(page)).filter((s) => s.phase === "running" && s.detail?.name === "Inlinks");
-  expect(samples.length).toBeGreaterThan(5);
-  const counts = samples.map((s) => s.detail!.rowcount - 1);
-  console.log(`[livedetail] inlinks distinct=${[...new Set(counts)].join(",")}`);
+test("Inlinks of the selected URL grow at 3 URL/s with bounded startup and final observation", async ({ alpha }) => {
+    const kind = "inlinks" as "counters" | "inlinks";
+    test.setTimeout(180_000);
+    const { page } = alpha;
+    await page.setViewportSize(TALL);
+    await alpha.open();
+    const machine = await machineFactor(page);
+    const boundMs = kind === "counters" ? 1000 : 3000;
+    const initial = kind === "counters" ? 0 : 4;
+    const plan = lagWindow(machine, boundMs, initial);
+    // Eine weitere URL wartet hinter der Messgrenze: der Crawl bleibt auch im Schlussfenster Running.
+    const gate = await startLoadFixture(plan.limit);
+    try {
+      await startGated(alpha, gate);
+      if (initial) {
+        await crawlTo(page, gate, initial);
+        await clickUpperRow(page, gate.startUrl);
+        await openDetailTab(page, "Inlinks");
+        await expect.poll(async () => (await readDetail(page))?.rowcount ?? 0).toBe(initial);
+      }
+      await installRecorder(page, INTERVAL);
+      const start = await mark(page, "fixed-measurement-start");
+      gate.meter(RATE, plan.limit);
+      await waitCrawled(page, plan.limit, 120_000);
+      gate.stopMeter();
+      const finalStart = await mark(page, "last-url-no-further-event");
+      // Keine Pause, Auswahl, Tab-Änderung oder weitere URL. F6 darf nicht durch Pause repariert werden.
+      await page.waitForTimeout(boundMs * plan.maxFactor + plan.reserveMs);
+      const factors = await recorderFactor(page, INTERVAL, machine);
+      const beats = await page.evaluate(() => (window as unknown as { __ld: { beats: number[] } }).__ld.beats);
+      const samples = await stopRecorder(page);
+      const running = samples.filter((s) => s.t >= start && s.phase === "running");
+      // UI-018: harte Grenze 1 s für Tabellenzähler, ohne Dev- oder Rechnerzuschlag.
+      const limitMs = kind === "counters" ? boundMs : boundMs * factors.slow;
+      const value = (s: Sample) => kind === "counters" ? parseFooter(s.footer).shown : (s.detail?.rowcount ?? 0) - 1;
+      const target = (s: Sample) => s.crawled - (kind === "inlinks" ? 1 : 0);
+      const chip = (s: Sample) => Number(/\(([\d.,]+)\)/.exec(s.chip)?.[1]?.replace(/[^\d]/g, "") ?? -1);
+      const first = running.find((s) => s.crawled > initial);
+      const startup = first && running.find((s) => s.t >= first.t + limitMs);
+      const lag: object[] = [];
+      const chipLag: object[] = [];
+      let checked = 0;
+      let flowingChecked = 0;
+      let finalChecked = 0;
+      for (const s of running) {
+        if (s.t < start + limitMs) continue;
+        const reference = [...running].reverse().find((r) => r.t <= s.t - limitMs);
+        if (!reference) continue;
+        checked++;
+        if (s.t < finalStart) flowingChecked++;
+        if (s.t >= finalStart + limitMs) finalChecked++;
+        if (value(s) < target(reference)) lag.push({ t: s.t - start, actual: value(s), expected: target(reference) });
+        if (kind === "counters" && chip(s) < reference.crawled) chipLag.push({ t: s.t - start, actual: chip(s), expected: reference.crawled });
+      }
+      const flowingBeats = beats.filter((t) => t >= start + limitMs && t < finalStart).length;
+      const finalBeats = beats.filter((t) => t >= finalStart + limitMs).length;
+      // Diagnose VOR jeder inhaltlichen Assertion, einschließlich Anlauf und Stichprobenwächtern.
+      await test.info().attach("live-lag", { body: JSON.stringify({ kind, rate: RATE, initial, plan, start, finalStart,
+        machineFactor: machine, recorderFactorRaw: factors.raw, recorderFactorCapped: factors.capped,
+        slow: factors.slow, limitMs, checked, flowingChecked, finalChecked, flowingBeats, finalBeats, beats, first, startup, lag, chipLag, samples }), contentType: "application/json" });
+      const values = running.map(value);
+      expect(new Set(values).size, "mindestens fünf sichtbare Zwischenstände").toBeGreaterThanOrEqual(5);
+      for (let i = 1; i < values.length; i++) expect(values[i]!, "Anzeige fällt nie zurück").toBeGreaterThanOrEqual(values[i - 1]!);
+      expect(first, "erste URL nach festem Messbeginn aufgezeichnet").toBeDefined();
+      expect(startup, "eigene, feste Anlaufgrenze ab erster URL statt erstem Einholen").toBeDefined();
+      expect(value(startup!), "Anlauf: erste URL innerhalb der Lag-Grenze angezeigt").toBeGreaterThanOrEqual(target(first!));
+      if (kind === "counters") expect(chip(startup!), "Anlauf: aktiver Chip").toBeGreaterThanOrEqual(first!.crawled);
+      expect(flowingBeats, "echte Recorder-Takte während des Zuflusses").toBeGreaterThanOrEqual(5);
+      expect(finalBeats, "echte Recorder-Takte im ereignisfreien Schlussfenster").toBeGreaterThanOrEqual(5);
+      expect(flowingChecked, "Lag-Stichproben noch während des Zuflusses").toBeGreaterThanOrEqual(5);
+      expect(finalChecked, "Lag-Stichproben nach letzter URL ohne weiteres Ereignis").toBeGreaterThanOrEqual(5);
+      expect(lag, `${kind}: Lag-Grenze während Anlauf, Last und ereignisfreiem Schlussfenster`).toEqual([]);
+      expect(chipLag, "aktiver Chip hält dieselbe Lag-Grenze ein").toEqual([]);
+      const final = running.at(-1)!;
+      expect(value(final), "letzter Stand wird ohne Pause exakt").toBe(plan.limit - (kind === "inlinks" ? 1 : 0));
 
-  // Die Zeilenzahl wächst fortlaufend (mindestens fünf verschiedene Stände) und fällt nie zurück.
-  expect(new Set(counts).size).toBeGreaterThanOrEqual(5);
-  for (let i = 1; i < counts.length; i++) expect(counts[i]!, `Inlinks fällt zurück bei Stichprobe ${i}`).toBeGreaterThanOrEqual(counts[i - 1]!);
-
-  // Solange nur die Startseite und page-1 … page-20 gecrawlt sind, verlinkt jede gecrawlte Seite zurück: Inlinks(Start) = gecrawlt − 1.
-  // Nachlauf des Detailfensters höchstens 3 s (Messspielraum Dev-Server; UI-142: „die UI lädt sichtbare Fenster nach“).
-  const t0 = samples[0]!.t;
-  const lag: string[] = [];
-  let checked = 0;
-  for (const s of samples) {
-    if (s.t - t0 < 3000 * slow) continue;
-    const reference = lastBefore(samples, s.t - 3000 * slow);
-    if (reference <= 21) checked++;
-    if (reference <= 21 && s.detail!.rowcount - 1 < reference - 1) lag.push(`+${Math.round(s.t - t0)}ms inlinks=${s.detail!.rowcount - 1} < crawled(t-3s)-1=${reference - 1}`);
-  }
-  await test.info().attach("inlinks-lag", { body: JSON.stringify({ checked, machineFactor: slow0, recorderFactorRaw: factors.raw, recorderFactorCapped: factors.capped, slow }), contentType: "application/json" });
-  expect(checked, "geprüfte Stichproben der Verzögerung (sonst wäre die Prüfung leer)").toBeGreaterThanOrEqual(5);
-  expect(lag, "Inlinks der Startseite hinken dem Crawl um mehr als 3 s (mal Rechnerfaktor) hinterher").toEqual([]);
-
-  // Nach der Pause: genau die Zahl des Kerns, ohne Nutzeraktion.
-  await expect
-    .poll(async () => ((await readDetail(page))?.rowcount ?? 0) - 1, { timeout: 10_000, intervals: [250] })
-    .toBe(await coreDetailTotal(page, "inlinks", homeId));
-  const paused = await readDetail(page);
-  for (const row of paused!.rows) {
-    expect(row.cells[2], "To jeder Inlink-Zeile ist die ausgewählte Startseite").toBe(home);
-    expect(row.cells[1]).toMatch(new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/page-\\d+\\.html$`));
-  }
-
-  // Fortsetzen und Ende: 20 Inlinks (page-1 … page-20), jede From-Adresse einmal.
-  await resumeCrawl(page);
-  gate.open();
-  await alpha.waitCompleted(60_000);
-  await expect.poll(async () => ((await readDetail(page))?.rowcount ?? 0) - 1, { timeout: 10_000 }).toBe(20);
-  // Sortiert nach From aufsteigend sind die ersten Zeilen page-1, page-10, page-11 … (Bytefolge der URL, UI-010).
-  const end = await readDetail(page);
-  const froms = end!.rows.map((r) => r.cells[1]);
-  expect(new Set(froms).size, "keine doppelten Zeilen im sichtbaren Ausschnitt").toBe(froms.length);
+      // Pause/Fortsetzen und Endstand bleiben Bestandteil der ursprünglichen Abnahme.
+      await pauseCrawl(page, gate);
+      const homeId = await urlIdOf(page, gate.startUrl);
+      await expect.poll(async () => ((await readDetail(page))?.rowcount ?? 0) - 1, { timeout: 10_000 }).toBe(await coreDetailTotal(page, "inlinks", homeId));
+      const paused = await readDetail(page);
+      for (const row of paused!.rows) {
+        expect(row.cells[2], "To jeder Inlink-Zeile ist die ausgewählte Startseite").toBe(gate.startUrl);
+        expect(row.cells[1]).toMatch(/\/page-\d+\.html$/);
+      }
+      await resumeCrawl(page);
+      gate.open();
+      await alpha.waitCompleted(60_000);
+      await expect.poll(async () => ((await readDetail(page))?.rowcount ?? 0) - 1, { timeout: 10_000 }).toBe(plan.limit);
+      const froms = (await readDetail(page))!.rows.map((r) => r.cells[1]);
+      expect(new Set(froms).size, "keine doppelten sichtbaren Inlinks").toBe(froms.length);
+    } finally {
+      await gate.stop();
+    }
 });
 
 // spec: UI-032
@@ -167,9 +202,21 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   await expect.poll(() => selectedUpper(page)).toEqual([home]);
   await expect.poll(async () => (await readDetail(page))?.rowcount ?? 0, { timeout: 15_000 }).toBeGreaterThan(8);
   await page.waitForTimeout(1500);
-  // Start → page-3 (zwei Zeilen tiefer, schnell hintereinander)
+  // Start → page-3 (drei Zeilen tiefer, synchroner Tastatur-Stimulus)
+  await upperGrid(page).focus();
   const m3 = await mark(page, "to-page-3");
-  await pressUpper(page, "ArrowDown", 3);
+  // spec: UI-012, UI-145 — echte Key-Handler, drei Ereignisse im selben JS-Takt.
+  const stimulusMs = await page.evaluate(() => {
+    const grid = document.activeElement!;
+    const start = performance.now();
+    for (let i = 0; i < 3; i++) {
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", bubbles: true }));
+      grid.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", code: "ArrowDown", bubbles: true }));
+    }
+    return performance.now() - start;
+  });
+  await test.info().attach("arrow-stimulus", { body: JSON.stringify({ stimulusMs, count: 3 }), contentType: "application/json" });
+  expect(stimulusMs, "Testvorbedingung: nur der synchrone Stimulus, ohne Fokus/IPC/Warten").toBeLessThan(800);
   await expect.poll(() => selectedUpper(page)).toEqual([target3]);
   await expect.poll(async () => (await readDetail(page))?.rowcount, { timeout: 15_000 }).toBe(2);
   await page.waitForTimeout(1500);

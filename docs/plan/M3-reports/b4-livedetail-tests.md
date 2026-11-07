@@ -506,3 +506,35 @@ Nur zwei neue Acceptance-Dateien und dieser Bericht sind versioniert geändert; 
 `livedetail-*`-Dateien sind gegen `5cb8df47` unverändert. Kein Push. Die Verzeichnisse `target/`, `apps/desktop/node_modules` und `node_modules` sind nach den
 abgeschlossenen Nachweisen entfernt und ihr Fehlen ist geprüft. Externe Protokolle und
 isolierte Mutationsquellen bleiben zur Prüfung erhalten.
+
+## Runde 2
+
+Die Klarstellung des Orchestrators erlaubt dem unabhängigen Testautor ausdrücklich die
+Änderung der bestehenden `livedetail-*`-Tests. Die beanstandeten Altprüfungen werden deshalb
+direkt ersetzt; die Zusatzspec enthält nur noch die Fixture- und Fenster-Rechenproben.
+Die Last-Fixture und Fensterplanung sind in `livedetail-support.ts` überführt.
+
+- Anlaufgrenze ab erster aufgezeichneter Crawl-URL, fester Messbeginn vor Freigabe der
+  3 URL/s, keine Bezugnahme auf das erste erfolgreiche Einholen der Anzeige.
+- Mindestens 60 s Zufluss durch zusätzliche Fixture-Seiten; Planung mit den tatsächlich
+  verbleibenden URLs (Inlinks: vier bereits gecrawlt), selbst machine=8/maxFactor=16
+  mit zehn Recorder-Takten Reserve. Während Zufluss und Schlussfenster jeweils mindestens
+  fünf echte Takte und fünf auswertbare Stichproben.
+- Nach der letzten URL bleibt der Crawl Running, ohne weitere URL oder Nutzeraktion.
+  Erst nach Lag-Spanne plus Reserve folgen Pause/Fortsetzen und Abschlussabgleich.
+  Das vollständige Lag-Attachment wird vor sämtlichen Auswertungsassertions geschrieben.
+- UI-018 (`docs/spec/05-ui.md:465–466`) legt während Running für Tabellenfuß und aktiven
+  Filterchip **≤ 1000 ms** fest. Die bisherigen `2000 × slow` ms waren **schwächer**, nicht
+  strenger als die Spec. Jetzt gilt exakt 1000 ms ohne Rechner- oder Dev-Zuschlag.
+  Die Referenz ist der aufgezeichnete Session-Crawlstand mindestens 1000 ms zuvor;
+  Recorder-Abstände machen diesen Nachweis konservativ. F7 (bisher 2044/2420 ms) bleibt
+  ein Produktbefund und wird nicht durch Testtoleranz behoben. Der 3-URL/s-Lauf ersetzt
+  weiterhin nicht die gesonderten 200-URL/s-Kriterien aus UI-018.
+- Im angegebenen HEAD existiert die gemeldete `<800 ms`-Assertion noch nicht. Der schnelle
+  Wechsel in der bestehenden Auswahlprüfung wird jetzt dennoch deterministisch erzeugt:
+  Fokus vorher setzen, drei Keydown/Keyup-Paare synchron im Seitenkontext, ausschließlich
+  deren Laufzeit messen und vor Assertion anhängen. Die Produktprüfungen auf neue Daten,
+  falsche/veraltete Zeilen und deren Zeitgrenze bleiben erhalten.
+
+Fremde Dateien: keine. Keine Produktänderung, keine Abhängigkeit aktualisiert.
+Nachweise und Endstatus folgen nach den Läufen.
