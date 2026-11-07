@@ -352,3 +352,27 @@ liegen außerhalb des Repositorys unter `/tmp/b4-*.log`.
 
 Zwischenstand: Rechen- und HTTP-Fixture-Prüfung in Chromium **2/2 grün** (3,4 s).
 Weitere Lauf- und Mutationsnachweise werden nach Abschluss ergänzt.
+
+### F7 – neuer Lag-Nachweis mit verlängerter Fixture (offen)
+
+Erster Brückenlauf der Ergänzung, beide Engines auf CPU 0/1, zwei Worker, neben laufenden
+Rust-Workspace-Tests: **6/8 grün, 2/8 rot**, 3,6 min. Rechen-/HTTP-Fixture-Prüfungen und
+Inlinks-Wachstum grün; beide Zählerprüfungen spec-treu rot:
+
+- Chromium: bei Messzeit +50 226 bis +50 981 ms Footer 140 statt mindestens 142 aus dem
+  um **2 044 ms** zurückliegenden Crawl-Stand. machine=1,005, Recorder=1,022; 431 echte
+  Recorder-Takte während Zufluss, 101 im Schlussfenster; acht verletzende Stichproben.
+- WebKit: bei +49 742 bis +50 216 ms Footer und Chip 138 statt mindestens 139 aus dem
+  um **2 420 ms** zurückliegenden Stand. machine=1,2, Recorder=1,21; 221 echte Takte
+  während Zufluss, 94 im Schlussfenster; drei verletzende Stichproben.
+
+Damit ist ein Anzeigeverzug jenseits sogar des bisherigen 2-s-Dev-Spielraums nachgewiesen.
+Die Ursache ist nicht ermittelt; eine eindeutige Zuordnung zu verlorenen Ticks oder einem
+anderen Auslöser wäre Spekulation. Der Test wird nicht angepasst. F6 (verlorener letzter Tick)
+bleibt davon getrennt offen. Nachweise: `/tmp/b4-lag-baseline.log`, Trace-ZIPs unter
+`/tmp/b4-lag-baseline-results/`, extrahierte Attachments
+`/tmp/b4-baseline-counter-chromium.json` und `/tmp/b4-baseline-counter-webkit.json`.
+
+Erster Workspace-Lauf: Abbruch bei `os-analyze --test tab_accessibility`, zwei Tests mit
+`ChromiumMissing`; das vorhandene Playwright-Chromium war dem Rust-Test nicht bekannt.
+Wiederholung mit `OPENSPIDER_CHROMIUM` auf dessen ausführbare Datei, unveränderte Tests.
