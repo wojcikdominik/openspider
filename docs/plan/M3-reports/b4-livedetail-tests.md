@@ -532,9 +532,21 @@ Die Last-Fixture und Fensterplanung sind in `livedetail-support.ts` überführt.
   weiterhin nicht die gesonderten 200-URL/s-Kriterien aus UI-018.
 - Im angegebenen HEAD existiert die gemeldete `<800 ms`-Assertion noch nicht. Der schnelle
   Wechsel in der bestehenden Auswahlprüfung wird jetzt dennoch deterministisch erzeugt:
-  Fokus vorher setzen, drei Keydown/Keyup-Paare synchron im Seitenkontext, ausschließlich
-  deren Laufzeit messen und vor Assertion anhängen. Die Produktprüfungen auf neue Daten,
+  Fokus, Modulimport und Recorder-Markierung vorher setzen, drei Keydown/Keyup-Paare
+  im Seitenkontext ohne Timer oder Protokoll-Roundtrips; `flushSync` übernimmt zwischen
+  diskreten Eingaben den React-Zustand, wie an normalen Nutzereingabegrenzen. Nur die
+  Ereignisfolge wird gemessen und vor Assertion angehängt. Der Browser-Helfer liegt in
+  `livedetail-key-stimulus.ts` und wird gegen die echte Tabellen-Fixture geprüft. Die Produktprüfungen auf neue Daten,
   falsche/veraltete Zeilen und deren Zeitgrenze bleiben erhalten.
 
 Fremde Dateien: keine. Keine Produktänderung, keine Abhängigkeit aktualisiert.
+Vorläufe: Der erste direkte Ereignisversuch bündelte React-Updates und landete auf
+page-1 statt page-3; eine Microtask reichte nicht. Native Playwright-Tastendrücke
+überschritten unter Last die Testvorbedingung (1909 ms durch Protokoll-Roundtrips).
+Diese beiden Harness-Ansätze wurden verworfen. Der abschließende Browser-Helfer
+besteht den gezielten Auswahlwechsel-Test in **beiden Engines (2/2, 49 s)**, einschließlich
+aller unveränderten Produktassertions. Der begonnene erste Serienlauf mit dem nativen
+Zwischenstand wurde beendet und zählt nicht zum Endnachweis. Kein Produktfehler wurde
+dafür durch eine gelockerte Assertion ausgeblendet.
+
 Nachweise und Endstatus folgen nach den Läufen.

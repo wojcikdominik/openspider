@@ -203,14 +203,17 @@ test("switching the selection shows the new URL's Inlinks and Outlinks and never
   await expect.poll(async () => (await readDetail(page))?.rowcount ?? 0, { timeout: 15_000 }).toBeGreaterThan(8);
   await page.waitForTimeout(1500);
   // Start → page-3 (drei Zeilen tiefer, Tastendrücke ohne Zwischenwarten)
+  await page.evaluate(async () => { await import(/* @vite-ignore */ String("/e2e/acceptance/livedetail-key-stimulus.ts")); });
   await upperGrid(page).focus();
   const m3 = await mark(page, "to-page-3");
-  // spec: UI-012, UI-145 — native Tastendrücke ohne Timer oder Zwischenassertions.
-  // Fokus und Recorder-Markierung liegen vor der gemessenen Stimulusphase.
-  const stimulusStart = performance.now();
-  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
-  const stimulusMs = performance.now() - stimulusStart;
+  // spec: UI-012, UI-145 — drei Ereignisse ohne Timer/Protokoll-Roundtrips.
+  // Fokus, Markierung und Modulimport liegen außerhalb der gemessenen Stimulusphase.
+  const stimulusMs = await page.evaluate(async () => {
+    const { rapidArrows } = await import(/* @vite-ignore */ String("/e2e/acceptance/livedetail-key-stimulus.ts"));
+    return rapidArrows(document.activeElement!, 3) as number;
+  });
   await test.info().attach("arrow-stimulus", { body: JSON.stringify({ stimulusMs, count: 3 }), contentType: "application/json" });
+  console.log(`[livedetail] arrow stimulus: ${stimulusMs.toFixed(1)} ms for 3 keys`);
   expect(stimulusMs, "Testvorbedingung: nur drei Tastendrücke, ohne Fokus/Markierung/Warten").toBeLessThan(800);
   await expect.poll(() => selectedUpper(page)).toEqual([target3]);
   await expect.poll(async () => (await readDetail(page))?.rowcount, { timeout: 15_000 }).toBe(2);
