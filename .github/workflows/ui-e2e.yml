@@ -76,10 +76,18 @@ jobs:
             projects: chromium
             browsers: chromium
             timeout: 60
-          - name: linux-webkit
+          # linux-webkit überschritt mit 566 Specs das Schritt-Limit von 50 min (Lauf 42309492668), deshalb wie macOS zwei Shards.
+          - name: linux-webkit-1
             os: ubuntu-latest
             projects: webkit
             browsers: webkit
+            shard: 1/2
+            timeout: 60
+          - name: linux-webkit-2
+            os: ubuntu-latest
+            projects: webkit
+            browsers: webkit
+            shard: 2/2
             timeout: 60
     defaults:
       run:
