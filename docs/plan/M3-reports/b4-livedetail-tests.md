@@ -631,3 +631,17 @@ bestehen denselben Inlinks-Test.
 Nachweis `/tmp/b4-r2-suite-2-webkit.log`, Trace unter
 `/tmp/b4-r2-suite-2-webkit-results/acceptance-livedetail-deta-*/trace.zip`,
 `live-lag` vor den Assertions vorhanden; Kennwerte `/tmp/b4-r2-lag-evidence.jsonl`.
+
+Weitere Beobachtungen derselben zweiten WebKit-Runde: Die **unveränderten** Dialogtests
+`livedetail-dialogs.spec.ts:41` und `:133` laufen in ihr bestehendes **120 000-ms-Budget**.
+Abbruchstellen sind der Klick auf „To top“ im Spaltendialog bzw. „More detail tabs“.
+Kein Budget und kein Dialogtest wird angepasst; dies sind zunächst Laufzeitbefunde,
+keine belegten fachlichen Produktfehler. Beide Tests bestehen die vorigen vollständigen
+Engine-Läufe.
+
+Prüfung der Prozessbäume zeigt nur die beiden aktuellen eigenen Browser-/Bridge-Worker,
+keine verwaisten eigenen Browser aus beendeten Vorläufen. Ein Vite-Server auf dem eigenen
+Port 14733 wird weiterverwendet. Parallel sind zwei Bridge-Prozesse aus dem fremden
+Worktree `m3-lagfix` mit derselben CPU-Affinität **0/1** nachgewiesen (Momentaufnahme
+`/tmp/b4-r2-concurrent-processes.json`). Das belegt Fremdlast, ohne daraus die Ursache
+von F8 oder den Dialog-Timeouts abzuleiten.
