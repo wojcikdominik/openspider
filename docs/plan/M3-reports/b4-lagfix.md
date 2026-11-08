@@ -1,6 +1,6 @@
 # B4-LAGFIX: F7, Live-Zähler
 
-Arbeitsbranch `m3/lagfix`, Ausgangsstand `13ab61539` (B4-LDFOLLOW). Produktänderung umgesetzt; Endnachweise laufen.
+Arbeitsbranch `m3/lagfix`, Ausgangsstand `13ab61539` (B4-LDFOLLOW). Produktänderung umgesetzt; Endnachweise abgeschlossen (07./08.11.2026).
 Soll ausschließlich `docs/spec/*`; keine Referenzprodukt-Sichtung, keine Abhängigkeitsänderung.
 
 ## Anforderung und Reproduktion
@@ -17,9 +17,10 @@ Unveränderte Kopien aus `m3/livedetail-tests-ci`: `livedetail-lag-window.spec.t
 `2c5c9b5b3` (SHA-256-Nachweis `/tmp/b4-lagfix-repro-hashes.json`). Der Testbranch
 wurde während der Arbeit parallel weitergeführt; spätere Änderungen wurden nicht in
 die Reproduktion übernommen. Das vermeidet das Überschreiben der bereits versionierten,
-abweichenden Support-Datei. Diese Kopien werden nicht committet. Eigene temporäre
+abweichenden Support-Datei. Diese Kopien wurden nicht committet. Eigene temporäre
 Instrumentierung in `diagnostic.spec.ts`, ebenfalls nicht zum Commit vorgesehen.
-Playwright: eigener Port 14791, zwei Worker, F7 mit `taskset -c 0,1`.
+Playwright: eigener Port 14791, zwei Worker. Ausgangs-/Interferenzläufe mit
+`taskset -c 0,1`; der abgeschlossene Zwei-CPU-Nachweis nutzt `taskset -c 2,3` (Details unten).
 
 ## Ursache mit Messwerten
 
@@ -77,6 +78,51 @@ außerdem fremde View und ältere Ankündigung. Gegen den unveränderten Ausgang
 solange die gemeinsame Zählung noch `null` ist; Endfassung 3/3 neue Tests grün.
 Kein bestehender Test geändert; unabhängige Abnahme unverändert.
 
+### F7-Endnachweis auf zwei logischen CPUs
+
+Unveränderte komplette Reproduktion, fünf Wiederholungen je Engine, CPU **2/3**, zwei Worker,
+Nice 10, eigener Port 14791, keine Retries oder Skips. CPU 2/3 ist wie das ursprünglich
+verwendete Paar 0/1 ein SMT-Paar: gleiche logische CPU-Anzahl und gleiche physische
+Kernkapazität, ohne die nachgewiesene Bindung des fremden Pakets an dasselbe Paar.
+Die Grenzwerte und adaptive Faktorrechnung der unabhängigen Prüfung blieben unverändert.
+
+```sh
+OS_E2E_PORT=14791 PLAYWRIGHT_JSON_OUTPUT_FILE=/tmp/b4-lagfix-f7-isolated.json \
+  timeout 3600s nice -n 10 taskset -c 2,3 npm exec -w apps/desktop -- \
+  playwright test e2e/lagfix-repro/livedetail-lag-window.spec.ts \
+  --repeat-each=5 --workers=2 --retries=0 --reporter=list,json \
+  --output=/tmp/b4-lagfix-f7-isolated-results
+```
+
+| Engine | Zähler/Fuß/Chip | Inlinks | Fixture-Prüfungen | Gesamt |
+|---|---|---|---|---|
+| Chromium | **5/5** | **5/5** | **10/10** | **20/20** |
+| WebKit | **5/5** | **5/5** | **10/10** | **20/20** |
+
+**40/40 bestanden**, Exit 0, 17,1 min (1027 s einschließlich Runner-Ende).
+Alle 20 Live-Lag-Attachments enthalten **0 Lag-Verletzungen** (Fuß, aktiver Chip und Inlinks).
+Je Live-Lauf mindestens 193 geprüfte Proben im Zufluss und 90 im ereignisfreien Schlussfenster;
+mindestens 198 echte Recorder-Takte im Zufluss und 89 im Schlussfenster. Kein leerer Nachweis.
+Die 180 weiteren URLs wurden über 61,2–62,5 s beobachtet, mit unverändertem Metering 3 URL/s;
+keine verringerte Fixture oder Last. Anlauf, laufender Zufluss, letzte URL ohne weiteres
+URL-Ereignis und exakter Schlussstand werden vom unveränderten Test geprüft.
+
+| Engine / Prüfung | Rechnerfaktor | tatsächlich verwendete Lag-Grenze |
+|---|---|---|
+| Chromium / Zähler | 1,005–1,010 | 2022–2158 ms |
+| Chromium / Inlinks | 1,005–1,010 | 3072–3267 ms |
+| WebKit / Zähler | 1,200 | 2400–2600 ms |
+| WebKit / Inlinks | 1,200 | 3600–3900 ms |
+
+Rohdaten `/tmp/b4-lagfix-f7-isolated.json`, Auswertung
+`/tmp/b4-lagfix-f7-isolated-evidence.json`, Protokoll
+`/tmp/b4-lagfix-f7-isolated.log`, Exitcode/Dauer
+`/tmp/b4-lagfix-f7-isolated-summary.txt`, Affinität
+`/tmp/b4-lagfix-f7-isolated-affinity.txt`. Der grüne Nachweis gilt für dieses Zwei-CPU-Setup.
+Die zusätzliche Konkurrenz mehrerer Pakete auf demselben Paar 0/1 bleibt mit **35/40**
+ausgewiesen; dafür wird keine grüne Abnahme behauptet. Es wurden keine fremden Prozesse
+umgebunden oder angehalten und keine Produktänderungen nur zur Umgehung dieser Störung gemacht.
+
 ### Zwischenlauf und Störungen
 
 Ein erster Nachher-Versuch überlappte die eigenen Clippy-/Workspace-/Frontend-Gates.
@@ -87,7 +133,7 @@ Das ist ein zusätzlicher langer Browser-/Scheduling-Stillstand; die Beobachtung
 belegt dessen Ursprung nicht. Keine Testgrenze geändert. Serie für die Untersuchung
 unterbrochen: 5 bestanden, 1 fehlgeschlagen, 2 unterbrochen, 32 nicht ausgeführt.
 Protokoll `/tmp/b4-lagfix-f7.log`, Attachment/Trace `/tmp/b4-lagfix-f7-results/`,
-extrahiert `/tmp/b4-lagfix-first-fix-f7.json`. Die vollständige Serie wird ohne eigene
+extrahiert `/tmp/b4-lagfix-first-fix-f7.json`. Die vollständige Serie wurde ohne eigene
 parallel laufende Gates wiederholt; das parallele fremde Paket ist nicht angehalten worden.
 
 Vollständige zusätzliche Serie auf CPU 0/1: **35/40**, Chromium **20/20**, WebKit
@@ -98,8 +144,8 @@ im Worktree `m3-ldtests` waren ebenfalls auf CPU 0/1 gebunden (nur lesend geprü
 `lscpu` zeigt: CPU 0 und 1 sind SMT-Geschwister desselben physischen Kerns. Auch CPU
 2 und 3 bilden ein solches Paar, mit identischer logischer CPU-Anzahl und SMT-Struktur.
 Die Samples allein trennen OS-Zuteilung und Produktausführung nicht; die Fehler werden
-nicht als behoben oder ungültig erklärt. Deshalb wird die gesamte unveränderte Serie
-fünfmal je Engine auf CPU **2/3** wiederholt, ohne das fremde Paket anzuhalten oder
+nicht als behoben oder ungültig erklärt. Deshalb wurde die gesamte unveränderte Serie
+fünfmal je Engine auf CPU **2/3** wiederholt (Ergebnis oben), ohne das fremde Paket anzuhalten oder
 Tests, Intervall, Last, Budgets und Workerzahl zu ändern. Damit werden konkurrierende
 Pakete auf demselben SMT-Paar als zusätzliche Störgröße vermieden.
 
@@ -128,7 +174,8 @@ zwei Durchgänge in Reihenfolge Vorher → Nachher. Vorher: `UpperTable.tsx` aus
 `13ab61539`; Nachher: Produktstand `0e76f34c3`. Beide getrennt gebaut, dieselbe
 Release-Bridge (Rust unverändert), Fixture und Messwerkzeug unverändert. Eigener Port 14791,
 `--workers=2`; pro Messlauf tatsächlich ein Test/Worker. Die Renderlast-Messung läuft wie
-im ursprünglichen Bericht auf dem Server ohne die Zwei-Kern-Begrenzung; nur F7 nutzt CPU 0/1.
+im ursprünglichen Bericht auf dem Server ohne die Zwei-CPU-Begrenzung. F7 nutzt je zwei
+logische CPUs: 0/1 in den Interferenzläufen, 2/3 im abgeschlossenen Nachweis.
 
 Hauptthread-Belegung in % (verspätete 10-ms-Timer), Werte Durchgang 1 · 2:
 
@@ -167,7 +214,7 @@ Tabelle `/tmp/b4-lagfix-perf-summary.json`, Exitcodes/Dauern
 | Workspace-Test | **4414 bestanden, 0 fehlgeschlagen, 51 vorhandene Ignorierungen**, 612 Ergebnisgruppen, Exit 0 |
 | `scripts/check-neutral.sh` | Exit 0, keine Fundstellen |
 | bestehende Playwright-Specs | letzter vollständiger Lauf **60/60**, Chromium **30/30**, WebKit **30/30**, 8,8 min, Exit 0 |
-| F7, fünf Wiederholungen je Engine auf zwei Kernen | folgt |
+| F7, fünf Wiederholungen je Engine auf zwei logischen CPUs | **40/40**, je Engine 5 Zähler- und 5 Inlinks-Läufe plus Fixture-Prüfungen, CPU 2/3, Exit 0 |
 
 Einziger Fehler im ersten vollständigen Browser-Lauf: geschützter Test
 `livedetail-detail.spec.ts:198`, Selbstkontrolle des Teststimulus an Zeile 227:
@@ -196,8 +243,28 @@ Logs `/tmp/b4-lagfix-{npm-ci-final,typecheck-final,vitest-final,fmt-final,clippy
 ## Fremde Dateien
 
 Keine fremden Änderungen übernommen. Temporäre unabhängige Reproduktion und Instrumentierung
-wie oben; werden am Ende entfernt. Kurzzeitig vorbereitete Diagnose-Marker in
+wie oben; am Ende aus dem Worktree entfernt und unter `/tmp/b4-lagfix-repro/` gesichert. Kurzzeitig vorbereitete Diagnose-Marker in
 `crates/os-app/src/session/feed.rs` und `crates/os-app/src/views/mod.rs` wurden vor einem
 Diagnoselauf byteidentisch zurückgenommen; keine Kernänderung übernommen. Eine separate
 Bridge-Kompilation bestätigte den wiederhergestellten Stand. Keine fremden Quellen oder
 Tests committet. Mess-Builds und Logs bleiben ausschließlich unter `/tmp/b4-lagfix-*`.
+
+## Abschluss
+
+**PAKET FERTIG für das dokumentierte Zwei-CPU-Setup (CPU 2/3).** Ursache, Produktfix,
+Fixture-Regression, wechselnder Renderlast-Vergleich und fünf komplette unveränderte
+Reproduktionen je Engine sind nachgewiesen. Der zusätzliche kontendierte Lauf auf CPU 0/1
+ist mit seinen fünf Fehlern ausdrücklich erhalten; eine Freigabe für mehrere Pakete auf
+demselben SMT-Paar wird daraus nicht abgeleitet.
+
+Produktänderungen: `f3756100e` (Zähler unabhängig von Zeilenwechseln und Fixture-Test),
+`0e76f34c3` (bekannten „All“-Nenner erhalten, zusätzliche Fixture). Keine Kern-/Schema-/
+Abhängigkeitsänderung, kein bestehender Test angepasst. Der Bericht enthält auch die roten
+Zwischenstände und deren Rohdaten, statt nur den letzten grünen Lauf auszuweisen.
+
+Nach allen Tests entfernt und auf Abwesenheit geprüft: `target/`, `node_modules/`,
+`apps/desktop/node_modules/`, temporäres `apps/desktop/e2e/lagfix-repro/`. Rohdaten, unveränderte
+Repro-Kopien, Hashes und eigener Auswerter verbleiben unter `/tmp/b4-lagfix-*`; Manifest
+`/tmp/b4-lagfix-final-manifest.json`. Keine eigenen Bridge-/Fixture-Prozesse mehr aktiv.
+Nur vier eigene versionierte Pfade geändert (UpperTable, LiveViewTotal, Fixture-Test, Bericht).
+Kein Push.
