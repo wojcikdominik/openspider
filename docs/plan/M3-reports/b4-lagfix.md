@@ -90,6 +90,25 @@ Protokoll `/tmp/b4-lagfix-f7.log`, Attachment/Trace `/tmp/b4-lagfix-f7-results/`
 extrahiert `/tmp/b4-lagfix-first-fix-f7.json`. Die vollständige Serie wird ohne eigene
 parallel laufende Gates wiederholt; das parallele fremde Paket ist nicht angehalten worden.
 
+Vollständige zusätzliche Serie auf CPU 0/1: **35/40**, Chromium **20/20**, WebKit
+**15/20**, Dauer 23,6 min, Exit 1; keine Retries/Skips. WebKit: drei Zähler- und zwei
+Inlinks-Läufe rot. Ein Zählerbefund zeigt 52 statt ≥53 bei 2580 ms; Recorder-Pausen
+bis 3364 ms, ein weiterer Lauf bis 6141 ms. Parallel laufende fremde Bridge-Prozesse
+im Worktree `m3-ldtests` waren ebenfalls auf CPU 0/1 gebunden (nur lesend geprüft).
+`lscpu` zeigt: CPU 0 und 1 sind SMT-Geschwister desselben physischen Kerns. Auch CPU
+2 und 3 bilden ein solches Paar, mit identischer logischer CPU-Anzahl und SMT-Struktur.
+Die Samples allein trennen OS-Zuteilung und Produktausführung nicht; die Fehler werden
+nicht als behoben oder ungültig erklärt. Deshalb wird die gesamte unveränderte Serie
+fünfmal je Engine auf CPU **2/3** wiederholt, ohne das fremde Paket anzuhalten oder
+Tests, Intervall, Last, Budgets und Workerzahl zu ändern. Damit werden konkurrierende
+Pakete auf demselben SMT-Paar als zusätzliche Störgröße vermieden.
+
+Rohdaten `/tmp/b4-lagfix-f7-final.json`, Auswertung
+`/tmp/b4-lagfix-f7-contended-summary.json`, Traces
+`/tmp/b4-lagfix-f7-final-results/`, Affinitäts-/SMT-Nachweis
+`/tmp/b4-lagfix-cpu-evidence.txt`. Der Name „final“ in diesen temporären Dateien
+bezeichnet den ersten vollständig ausgeführten Nachher-Lauf, nicht einen grünen Abschluss.
+
 Eigene Instrumentierungsprobleme: Die erste Diagnose wurde vor dem erneuten `alpha.open()`
 installiert und dadurch verworfen; korrigierter Lauf lieferte das oben ausgewertete Protokoll.
 Eine spätere, unbenutzte Diagnose-Erweiterung verletzte TypeScript `unknown` im Catch;
