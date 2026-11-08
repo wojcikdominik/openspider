@@ -1,0 +1,32 @@
+2026-11-08 12:15:06.202 system_profiler[90111:8818959] hw.cpufamily: 0xda33d83d
+Hardware:
+
+    Hardware Overview:
+
+      Model Name: Mac mini
+      Model Identifier: Mac14,3
+      Model Number: Z16K000FAD/A
+      Chip: Apple M2
+      Total Number of Cores: 8 (4 Performance and 4 Efficiency)
+      Memory: 16 GB
+      System Firmware Version: 18000.161.10
+      OS Loader Version: 18000.161.10
+      Activation Lock Status: Enabled
+
+Software:
+
+    System Software Overview:
+
+      System Version: macOS 26.6.2 (25G83)
+      Kernel Version: Darwin 25.6.0
+      Boot Mode: Normal
+      Secure Virtual Memory: Enabled
+      System Integrity Protection: Enabled
+      Time since boot: 5 Tage, 16 Stunden und 47 Minuten
+
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+v24.16.0
+rustc 1.99.0 (b940084d7 2026-09-28)
+99fd41ea8a5b9f9738d43c2cd6ab90e41f7ccb89
