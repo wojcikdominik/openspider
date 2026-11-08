@@ -20,7 +20,7 @@ Nutzerentscheidung 05.11.2026, ergänzt 06.11.2026: Die Notes (`docs/release/not
 
 ## Versionen
 
-- Eine Beta pro Woche bis 1.0. Ausnahme (Nutzerentscheidung 06.11.2026): beta.3 einmalig am Freitag, 06.11.2026, weil alle beta.3-Pakete gemergt und `main` grün waren; danach beta.4 am 12.11.2026, beta.5 am 19.11.2026 usw. im normalen Rhythmus.
+- Eine Beta pro Woche bis 1.0. Ausnahme (Nutzerentscheidungen 06.11. und 08.11.2026): beta.3 einmalig am Montag, 09.11.2026 – ursprünglich für Freitag, 06.11., geplant, verschoben für den Fix der Crawl-Datei-Beschädigung und ergänzt um B4-LIVEDETAIL; danach beta.4 am 12.11.2026, beta.5 am 19.11.2026 usw. im normalen Rhythmus.
 - Fällt eine Woche ohne nennenswerte Änderungen aus, entfällt das Release; der Rhythmus bleibt.
 
 ## Hotfixes außerhalb des Rhythmus
