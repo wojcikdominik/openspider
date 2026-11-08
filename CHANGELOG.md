@@ -4,7 +4,7 @@
 
 - Frühe Beta für SEO-Agenturen in Vorbereitung. Plattform-Smoke, Archiv-Kompatibilität und noch offene M2-Parität bleiben vor der Freigabe zu prüfen.
 
-## [1.0.0-beta.3] - 2026-11-06
+## [1.0.0-beta.3] - 2026-11-09
 
 Faster crawls, Chromium on demand, one-click agent connections and a report for checking deployments.
 
