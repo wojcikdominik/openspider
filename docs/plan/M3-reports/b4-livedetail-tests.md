@@ -551,7 +551,7 @@ aller unveränderten Produktassertions. Begonnene Serienläufe vor der abschlie�
 Renderzeit wurden beendet und zählt nicht zum Endnachweis. Kein Produktfehler wurde
 dafür durch eine gelockerte Assertion ausgeblendet.
 
-Nachweise und Endstatus folgen nach den Läufen.
+Die abgeschlossenen Nachweise und der Endstatus stehen in den folgenden Abschnitten.
 
 ### Gegenproben Runde 2
 
@@ -661,8 +661,8 @@ auf denselben beiden Kernen, ebenfalls nice 10. Daneben läuft das fremde Paket 
 | 1 | WebKit | 28 / 1 | 658 (10:58) | F7 |
 | 2 | Chromium | 28 / 1 | 560 (9:20) | F7 |
 | 2 | WebKit | 24 / 5 | 1327 (22:07) | F7, F8, drei Timeouts |
-| Zusatzlast | Chromium | ausstehend | – | – |
-| Zusatzlast | WebKit | ausstehend | – | – |
+| Zusatzlast | Chromium | 28 / 1 | 584 (9:44) | F7 |
+| Zusatzlast | WebKit | 28 / 1 | 739 (12:19) | F7 |
 
 Die regulären Läufe sind vollständig: **108/116 grün**, acht rote Tests. Viermal F7,
 einmal F8 und drei Timeouts in unveränderten Tests: Spaltendialog (120 s),
@@ -684,3 +684,54 @@ Zusätzliche reine Diagnostik mit der alten 2-s-Grenze (keine zweite Pass/Fail-P
 liegt in `/tmp/b4-r2-secondary-evidence.jsonl`: auch darüber hinausgehender Zähler-Lag
 ist im aktuellen Stand nachgewiesen, z. B. Chromium/Lauf 2 bei +60 310 ms Footer 169
 statt mindestens 173 aus einem **2114,5 ms** alten Crawlstand.
+
+
+### Endauswertung und Abschluss Runde 2
+
+**Alle sechs angeforderten vollständigen Engine-Läufe abgeschlossen: 164/174 grün,
+10/174 rot.** Chromium **84/87**, WebKit **80/87**. Die zusätzliche Lastrunde besteht
+**56/58** Prüfungen. Fehler insgesamt: **6 × F7**, **1 × F8**, **3 × Timeout** in den
+unveränderten Dialog-/Memo-Tests. F8 und die drei Timeouts treten ausschließlich in der
+zweiten regulären WebKit-Runde auf; alle betreffenden Tests bestehen auch den späteren
+zusätzlichen Lastlauf. Das ersetzt oder entwertet die roten Ergebnisse nicht.
+Die Nachweisserie dauert zusammen 4377 s (72:57 min).
+
+Das 12-Minuten-Ziel wird in **vier von sechs** Engine-Läufen eingehalten. Alle Chromium-
+Läufe liegen bei 509–584 s. WebKit/Lauf 2 überschreitet es um **607 s**, WebKit/Zusatzlast
+um **19 s**. Die Lastgeneratoren waren zeitlich begrenzt und sind beendet; kein eigener
+`yes`-Prozess bleibt aktiv.
+
+Alle sechs F7-Traces enthalten das **vor den Assertions** geschriebene `live-lag`,
+alle mit exakt **1000 ms** Grenze. Sie enthalten 127–462 echte Recorder-Takte während
+Zufluss und 53–74 im Schlussfenster. Keines der sechs unmutierten Schlussfenster zeigt
+einen Lag-Verstoß. Das erklärt **F6 weiterhin nicht für behoben**; die explizite Mutation
+zeigt den Fehler im ereignisfreien Schlussfenster. F7 umfasst in WebKit/Lauf 2 zusätzlich
+einen Anlaufverstoß (0 statt ≥4); sein Attachment enthält auch 88 spätere Lag-Verstöße.
+Die übrigen fünf F7-Tests erreichen die nachgelagerten Pause-/Endprüfungen.
+
+**Stimulus: 6/6 vollständige Auswahlwechsel-Prüfungen grün.** Reine Ereigniszeiten
+23,1–173,0 ms, jeweils unter der unveränderten 800-ms-Vorbedingung; separat gemessene
+Gesamtdauer einschließlich React-Commits 642,4–1588,0 ms. Die Produkt-Zeitprüfung misst
+weiterhin die gesamte Dauer ab Markierung und besteht in allen sechs Läufen. Keine
+Produktassertion wurde zum Beheben der Stimulusvorbedingung gelockert.
+
+Endauswertung `/tmp/b4-r2-final-summary.json`, Rohkennwerte und alte 2-s-Vergleichs-
+diagnostik `/tmp/b4-r2-{lag,secondary}-evidence.jsonl`. Die Gesamtzahlen wurden aus
+allen sechs abgeschlossenen Protokollen gezählt; jede Runde enthält exakt 29 Tests.
+Die acht erwartungsgemäß roten Mutationsläufe und die korrigierten Vorläufe sind darin
+nicht mitgezählt.
+
+**Fremde Dateien:** keine. Gegen `6f669f9ad` sind ausschließlich Acceptance-Dateien und
+dieser Bericht geändert. Kein Produktcode, keine CI-Konfiguration, keine Lockdatei und
+keine Abhängigkeit geändert. Der eigene Vite-Server wurde beendet. `target/`,
+`apps/desktop/node_modules` und `node_modules` sind gelöscht und ihr Fehlen ist geprüft.
+Nur eigene Pfade wurden mit Bereichspräfix und Co-Author-Trailer committet; kein Push.
+
+**PAKET OFFEN.** Die vier beauftragten Teständerungs-/Dokumentationspunkte und die
+Nachweisserie sind erledigt. Der Endnachweis ist über die erlaubten F7-Fehler hinaus rot:
+F8, drei unveränderte Timeout-Fälle und die WebKit-Laufzeitüberschreitungen bleiben zur
+Einordnung offen. Nächster Schritt: Orchestrator übernimmt diese Befunde zur getrennten
+Reproduktion/Einordnung unter dokumentierter gleichzeitiger Last; die bestehenden
+Spec-Fragen **S1/S2** zu Dev-Schwellen werden dabei nicht durch einen geratenen Wert
+beantwortet. F7 bleibt beim parallelen Produktpaket `m3/lagfix`. Weder Budgets noch Last
+werden zum Erzielen eines grünen Ergebnisses reduziert.
