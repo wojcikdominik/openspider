@@ -645,3 +645,42 @@ Port 14733 wird weiterverwendet. Parallel sind zwei Bridge-Prozesse aus dem frem
 Worktree `m3-lagfix` mit derselben CPU-Affinität **0/1** nachgewiesen (Momentaufnahme
 `/tmp/b4-r2-concurrent-processes.json`). Das belegt Fremdlast, ohne daraus die Ursache
 von F8 oder den Dialog-Timeouts abzuleiten.
+
+### Vollständige Nachweisserie Runde 2
+
+Alle `livedetail-*.spec.ts` außer `budget`: **29 Tests je Engine**, einschließlich der
+überführten Bestandsprüfungen und beider Fixture-Prüfungen; keine doppelte schwächere
+Lag-Prüfung. Je Engine zwei vollständige reguläre Läufe und ein vollständiger zusätzlicher
+Lastlauf, `OS_E2E_PORT=14733`, `taskset -c 0,1`, `--workers=2 --retries=0`.
+Der zusätzliche Lastlauf verwendet eine mit `timeout 3600s` begrenzte `yes`-CPU-Schleife
+auf denselben beiden Kernen, ebenfalls nice 10. Daneben läuft das fremde Paket weiter.
+
+| Lauf | Engine | grün / rot | Sekunden | Fehler |
+|---|---|---|---|---|
+| 1 | Chromium | 28 / 1 | 509 (8:29) | F7 |
+| 1 | WebKit | 28 / 1 | 658 (10:58) | F7 |
+| 2 | Chromium | 28 / 1 | 560 (9:20) | F7 |
+| 2 | WebKit | 24 / 5 | 1327 (22:07) | F7, F8, drei Timeouts |
+| Zusatzlast | Chromium | ausstehend | – | – |
+| Zusatzlast | WebKit | ausstehend | – | – |
+
+Die regulären Läufe sind vollständig: **108/116 grün**, acht rote Tests. Viermal F7,
+einmal F8 und drei Timeouts in unveränderten Tests: Spaltendialog (120 s),
+Tabkonfigurationsdialog (120 s), Änderung der oberen Tabellenspalten
+(`livedetail-memo.spec.ts:154`, 150 s). Diese drei Fälle bestehen alle vorigen
+vollständigen Engine-Läufe. Die letzte WebKit-Runde überschreitet das 12-Minuten-Ziel
+um **607 s (10:07 min)**; die anderen drei regulären Läufe bleiben darunter.
+Keine Runtime-Obergrenze wurde dafür angehoben, kein Test entfernt oder wiederholt,
+um einen roten Lauf zu ersetzen. Die zweite WebKit-Runde bleibt Teil der Gesamtwertung.
+
+Format und Clippy wurden nach Fertigstellung des Stimulusmoduls nochmals ausgeführt,
+beide Exit 0: `/tmp/b4-r2-{fmt-end,clippy-end}.log`. Nach dem fachlichen Teststand
+`b212ddaa3` entfernt `45c92dc02` lediglich eine leere Schlusszeile der Fixture-Spec;
+keine funktionale Änderung während der Nachweisserie.
+
+Einzelprotokolle `/tmp/b4-r2-suite-<Lauf>-<Engine>.log`, Exitcodes und Sekundenwerte
+`/tmp/b4-r2-suite-summary`, Fehler-Traces in den entsprechenden `-results/`-Ordnern.
+Zusätzliche reine Diagnostik mit der alten 2-s-Grenze (keine zweite Pass/Fail-Prüfung)
+liegt in `/tmp/b4-r2-secondary-evidence.jsonl`: auch darüber hinausgehender Zähler-Lag
+ist im aktuellen Stand nachgewiesen, z. B. Chromium/Lauf 2 bei +60 310 ms Footer 169
+statt mindestens 173 aus einem **2114,5 ms** alten Crawlstand.
