@@ -33,7 +33,6 @@ import {
   startGated,
   stopRecorder,
   urlIdOf,
-  urlIdsOf,
   waitCrawled,
   type Sample,
 } from "./livedetail-support";
@@ -282,15 +281,21 @@ test("holding an arrow key leads to few detail requests and ends on the focused 
     };
   });
   gate.meter(3, 20);
-  // Schnelle Auswahlwechsel (Pfeiltaste gedrückt halten): acht Wechsel der Fokuszeile unmittelbar hintereinander im selben Takt des
-  // Seitenkontexts – unabhängig von der Geschwindigkeit des Rechners liegen sie damit innerhalb der Entprellung von 100 ms (UI-145).
-  // Die Auswahl wird wie von der oberen Tabelle über die Übergabeschnittstelle des Detailfensters veröffentlicht.
-  const ids = await urlIdsOf(page, Array.from({ length: 8 }, (_, i) => `${base}/page-${i + 1}.html`));
-  await page.evaluate(async (ids) => {
-    const { setDetailSelection } = await import(/* @vite-ignore */ String("/src/features/detail/frame/selection.ts"));
-    for (const id of ids) setDetailSelection({ urlIds: [id], focus: id, topTab: "Response Codes" });
-  }, ids);
+  // Schnelle Auswahlwechsel (Pfeiltaste gedrückt halten): acht echte ArrowDown-Tastenereignisse am Grid der oberen Tabelle, ohne Timer
+  // und ohne Protokoll-Roundtrips im selben Takt des Seitenkontexts (Helfer `rapidArrows`, jedes Ereignis mit eigenem React-Commit
+  // wie eine diskrete Nutzereingabe). Unabhängig von der Rechnergeschwindigkeit liegen sie damit innerhalb der Entprellung von
+  // 100 ms (UI-145); die Auswahl entsteht über die realen Key-Handler der Tabelle (UI-012), nicht über die Übergabeschnittstelle.
+  await page.evaluate(async () => { await import(/* @vite-ignore */ String("/e2e/acceptance/livedetail-key-stimulus.ts")); });
+  await upperGrid(page).focus();
+  const { stimulusMs, elapsedMs } = await page.evaluate(async () => {
+    const { rapidArrows } = await import(/* @vite-ignore */ String("/e2e/acceptance/livedetail-key-stimulus.ts"));
+    return rapidArrows(document.activeElement!, 8) as { stimulusMs: number; elapsedMs: number };
+  });
+  await test.info().attach("arrow-stimulus", { body: JSON.stringify({ stimulusMs, elapsedMs, count: 8 }), contentType: "application/json" });
+  console.log(`[livedetail] arrow stimulus: ${stimulusMs.toFixed(1)} ms for 8 keys; including React commits ${elapsedMs.toFixed(1)} ms`);
+  expect(stimulusMs, "Testvorbedingung: acht Tastendrücke innerhalb von weniger als 100 ms × 8").toBeLessThan(800);
   const target = `${base}/page-8.html`;
+  await expect.poll(() => selectedUpper(page), { message: "acht Pfeiltasten ab der Startseite enden auf page-8" }).toEqual([target]);
   await expect.poll(async () => {
     const d = await readDetail(page);
     return d ? `${d.rowcount}:${d.rows[0]?.cells[2]}` : "";
