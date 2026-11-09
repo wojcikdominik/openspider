@@ -57,7 +57,18 @@ keine Tippfehlerwarnungen; sie zählen weiterhin nicht zu M2.
 
 Zulässige C9-Platzhalter werden an Paketbesitz, Ort, Quell- und Zielwelle geprüft
 und bleiben im Status `open`. Gültige Zurückstellungen (`M3:`, `M4:`, `M5:`,
-`P2:`, `Klärung K2-<Zahl>`) sind `deferred`; Benchmarks sind neutral.
+`P2:`, `Klärung K2-<Zahl>`, `Klärung K3-<Zahl>`, für Tests der M3-Pakete nach M3.md D7
+genau `Manuell: <ID> – Protokoll M3-Q03` mit optionalem Zusatz in Klammern) sind `deferred`;
+Benchmarks sind neutral.
+
+Bedingte Skips (M2.md Regel 5 und K2-102, B4-M2GATE): Ein Frontend-Test mit `test.skip(bedingung, grund)` ohne gültigen
+Grund ist keine Zurückstellung, wenn er lief. Ein JUnit-`skipped` zählt nur als belegt, wenn ein
+anderes Browserprojekt (`hostname` der Suite) denselben Test mit `ok` ausweist; lief er überall `ok`,
+wurde nie übersprungen. Kein Laufzeitergebnis, `ok` nur im eigenen Projekt (andere Template-Instanz
+oder andere Datei desselben Projekts) oder ein Fehlschlag lassen den Ignore ungültig. `M2:`-Gründe,
+C9-Platzhalter und leere Gründe nimmt die Regel nie aus. Die Statusdatei listet die anerkannten
+Fälle mit ihren Läufen unter `conditional_skips`. Ein bedingter Skip, dessen Bedingung keine Engine-, Plattform- oder
+Fähigkeitsprüfung ist, verstößt gegen K2-63 (die Regel prüft die Bedingung nicht, das Review schon).
 `M2:`-Altgründe in Dateien ausschließlich noch nicht gemergter Besitzer werden
 als „Altgrund, Besitzer M2-xx“ in `legacy_ignores` samt Warnung ausgegeben.
 Der Vorbau-Besitz aus Welle 0 tritt dabei hinter die Fachbesitzer ab Welle 1
@@ -76,7 +87,7 @@ Marker verschiedener Kommentarzeilen werden nicht zwischen IDs übertragen.
 Ausnahmen aus Abschnitt 9, einschließlich AMP (K2-22), zählen nicht.
 
 Die deterministische Statusdatei enthält `specs`, `extra`, `appendix_b`,
-`placeholders`, `legacy_ignores`, `required_packages`, `failed_tests`,
+`placeholders`, `legacy_ignores`, `conditional_skips`, `required_packages`, `failed_tests`,
 `blocking_specs` und `blocking_appendix_b`. Ein fehlender Testlauf
 liefert keine Gutschriften. Frische Paritätsbelege können wie in M1 über
 `--parity-report`/`--evidence` ergänzt werden; vorhandenes `verified` bleibt nur

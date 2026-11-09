@@ -72,6 +72,15 @@ pub fn valid_defer_reason(reason: &str) -> bool {
     {
         return true;
     }
+    // M3.md D7 (B4-M2GATE): Tests der M3-Pakete, die nur manuell laufen können, tragen genau
+    // `Manuell: <Spec-ID> – Protokoll M3-Q03`; erlaubt ist danach nur ein Zusatz in Klammern.
+    if let Some(rest) = r.strip_prefix("Manuell: ") {
+        let id: String = rest.chars().take_while(|c| !c.is_whitespace()).collect();
+        return scan::is_spec_id(&id)
+            && rest[id.len()..]
+                .strip_prefix(" – Protokoll M3-Q03")
+                .is_some_and(|tail| tail.is_empty() || tail.starts_with(" ("));
+    }
     // K3-01: M3-Klärungen (`Klärung K3-<Zahl>`) sind wie M2-Klärungen gültig.
     ["Klärung K2-", "Klärung K3-"].iter().any(|prefix| {
         r.strip_prefix(prefix).is_some_and(|tail| {
@@ -242,6 +251,42 @@ fn c9(file: &str, reason: &str, packages: &[Package]) -> bool {
         })
 }
 
+/// B4-M2GATE (Fable-Prüfung B4-M2CLOSE, Punkt 4): Ein bedingter Skip (`test.skip(bedingung, grund)`) ohne gültigen
+/// Zurückstellungsgrund ist keine Zurückstellung, wenn der Test lief: Ein JUnit-`skipped` zählt nur als belegt, wenn
+/// ein **anderes** Browserprojekt denselben Test mit `ok` ausweist. Ohne Laufzeitergebnis, ohne `ok`, mit `ok` nur im
+/// eigenen Projekt oder mit einem Fehlschlag bleibt der Ignore ungültig. `M2:`-Gründe, C9-Platzhalter und leere
+/// Gründe nimmt die Regel nie aus (B2). Rückgabe: die Läufe als Beleg für die Statusdatei.
+fn conditional_skip_proven(
+    reason: &str,
+    runs: Option<&Vec<(String, results::Outcome)>>,
+) -> Option<Vec<Value>> {
+    let r = reason.trim();
+    if r.is_empty() || r.starts_with("M2:") || placeholder_target(r).is_some() {
+        return None;
+    }
+    let runs = runs.filter(|runs| !runs.is_empty())?;
+    let ok_in = |project: &str| {
+        runs.iter()
+            .any(|(p, o)| p != project && *o == results::Outcome::Ok)
+    };
+    let proven = runs.iter().all(|(project, outcome)| match outcome {
+        results::Outcome::Ok => true,
+        results::Outcome::Ignored(_) => ok_in(project),
+        results::Outcome::Failed => false,
+    }) && runs.iter().any(|(_, o)| *o == results::Outcome::Ok);
+    proven.then(|| {
+        runs.iter()
+            .map(|(project, outcome)| {
+                json!({"project": project, "result": match outcome {
+                    results::Outcome::Ok => "ok",
+                    results::Outcome::Failed => "failed",
+                    results::Outcome::Ignored(_) => "skipped",
+                }})
+            })
+            .collect()
+    })
+}
+
 #[derive(Debug, Serialize)]
 struct AppendixEntry {
     status: Status,
@@ -385,13 +430,23 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
     if let Some(p) = &args.junit {
         test_results.extend(results::parse_junit(&std::fs::read_to_string(p)?)?);
     }
+    // B4-M2GATE: Laufzeitergebnisse je Frontend-Test und Browserprojekt für die Regel zu bedingten Skips.
+    let mut frontend_runs: BTreeMap<(String, String), Vec<(String, results::Outcome)>> =
+        BTreeMap::new();
     for p in &args.frontend_junit {
-        test_results.extend(frontend::read_junit(
-            root,
-            p,
-            &frontend_scans,
-            &mut warnings,
-        )?);
+        for (result, project) in frontend::read_junit(root, p, &frontend_scans, &mut warnings)? {
+            if let results::BinaryRef::Nextest {
+                kind: results::NextestKind::Test(file),
+                ..
+            } = &result.binary
+            {
+                frontend_runs
+                    .entry((file.clone(), result.path.clone()))
+                    .or_default()
+                    .push((project, result.outcome.clone()));
+            }
+            test_results.push(result);
+        }
     }
     // Alte Statusdateien anderer Meilensteine geben keine M2-Paritätsgutschrift.
     let previous: Option<Value> = args
@@ -440,6 +495,7 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
     report.ignored_without_valid_reason.clear();
     let mut placeholders = Vec::new();
     let mut legacy_ignores = Vec::new();
+    let mut conditional_skips = Vec::new();
     for entry in report.specs.values_mut().chain(report.extra.values_mut()) {
         if entry
             .note
@@ -476,6 +532,13 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
             continue;
         };
         if is_benchmark_reason(reason) || valid_defer_reason(reason) {
+            continue;
+        }
+        if let Some(runs) =
+            conditional_skip_proven(reason, frontend_runs.get(&(t.file.clone(), name.clone())))
+        {
+            conditional_skips.push(json!({"file": t.file, "test": name, "line": t.line,
+                "reason": reason, "spec_ids": t.ids, "runs": runs}));
             continue;
         }
         if !args.gate && c9(&t.file, reason, &packages) {
@@ -648,6 +711,7 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
     doc["appendix_b"] = json!(appendix);
     doc["placeholders"] = json!(placeholders);
     doc["legacy_ignores"] = json!(legacy_ignores);
+    doc["conditional_skips"] = json!(conditional_skips);
     doc["required_packages"] = json!(packages
         .iter()
         .filter(|p| p.required(args))
@@ -695,6 +759,10 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
     for name in &failed_tests {
         println!("  FAILED {name}");
     }
+    println!(
+        "Bedingte Skips mit ok in einem anderen Browserprojekt (keine Zurückstellung): {}",
+        conditional_skips.len()
+    );
     println!(
         "Anhang B: {} (ID, Paket)-Einträge, {appendix_open} blockierend offen",
         appendix.values().map(BTreeMap::len).sum::<usize>()

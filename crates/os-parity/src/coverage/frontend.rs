@@ -486,12 +486,14 @@ fn matches_file(source: &str, reported: &str) -> bool {
             || reported.ends_with(&format!("/{source}")))
 }
 
+/// Liefert je zugeordnetem Fall das Ergebnis und das Browserprojekt (`hostname` der Suite, bei vitest leer).
+/// Das Projekt braucht die Regel für bedingte Skips in `m2.rs` (B4-M2GATE).
 pub(crate) fn read_junit(
     root: &Path,
     path: &Path,
     scans: &BTreeMap<String, FileScan>,
     warnings: &mut Vec<String>,
-) -> Result<Vec<TestResult>, ParityError> {
+) -> Result<Vec<(TestResult, String)>, ParityError> {
     let xml = std::fs::read_to_string(path)?;
     let mut out = Vec::new();
     // Playwright-Retries: der letzte Eintrag derselben Datei/Suite und desselben
@@ -524,15 +526,18 @@ pub(crate) fn read_junit(
         }
         if candidates.len() == 1 {
             let (file, test) = candidates[0];
-            out.push(TestResult {
-                binary: BinaryRef::Nextest {
-                    package: format!("frontend/{file}"),
-                    kind: NextestKind::Test(file.clone()),
+            out.push((
+                TestResult {
+                    binary: BinaryRef::Nextest {
+                        package: format!("frontend/{file}"),
+                        kind: NextestKind::Test(file.clone()),
+                    },
+                    path: test.name.clone(),
+                    outcome: case.outcome.clone(),
+                    block,
                 },
-                path: test.name.clone(),
-                outcome: case.outcome.clone(),
-                block,
-            });
+                case.project.clone(),
+            ));
         } else {
             warnings.push(format!("Frontend-JUnit {}: {:?} / {:?} nicht eindeutig zuordenbar ({} Kandidaten); keine Gutschrift", path.display(), case.file, case.name, candidates.len()));
         }

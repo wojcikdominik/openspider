@@ -387,8 +387,11 @@ async fn unsupported_platform_reports_and_refuses_download() {
 
 /// Manuelle Prüfung der echten Archive: lädt das Archiv der Versionsdatei für `OPENSPIDER_K01_PLATFORM`
 /// (`mac-arm64`, `mac-x64`, `win64`) über den App-Transport, prüft SHA-256 und entpackt es.
+/// Kann in keiner Testsuite laufen: externes Netz (M2.md 7, „kein Test spricht ein externes Netz an“), ca. 200 MB je
+/// Plattform und eine Plattformwahl per Umgebungsvariable. Dieselbe Logik gegen den lokalen Mock prüfen
+/// `os-render/tests/provision_download.rs` und die übrigen Tests dieser Datei; Erstlauf 03.11.2026 in `M3-reports/k01.md`.
 #[tokio::test]
-#[ignore = "Klärung K3-01: manuell, OUT-260 – Protokoll M3-Q03 (lädt ca. 200 MB von storage.googleapis.com)"]
+#[ignore = "Manuell: OUT-260 – Protokoll M3-Q03 (echte Chrome-for-Testing-Archive über externes Netz, ca. 200 MB je Plattform)"]
 async fn real_archive_from_versions_file() {
     let platform = std::env::var("OPENSPIDER_K01_PLATFORM")
         .ok()

@@ -913,3 +913,188 @@ fn historical_m1_pdf_exceptions_do_not_verify_m2_content() {
             .contains(&json!("ONPAGE-142")));
     }
 }
+
+// B4-M2GATE (Fable-Prüfung B4-M2CLOSE, Punkt 4): keine Spec-ID (M2-Q01 ist Infrastruktur, siehe Dateikopf).
+// Ein bedingter Skip ohne gültigen Grund ist nur dann keine Zurückstellung, wenn ein anderes Browserprojekt denselben
+// Test mit `ok` ausweist. Skip überall, `ok` nur im eigenen Projekt, Fehlschlag oder kein Ergebnis bleiben ungültig;
+// `M2:`-Gründe nimmt die Regel nie aus.
+#[test]
+fn conditional_skip_counts_only_with_ok_in_another_project() {
+    use std::collections::BTreeSet;
+    let mut f = Fixture::new();
+    f.append(
+        "apps/desktop/e2e/table/table.spec.ts",
+        r#"
+// spec: UI-003
+test(`Skalierung ${factor}`, async ({ browserName }) => {
+  test.skip(browserName !== 'chromium', 'Skalierung prüft die Abnahme mit Chromium');
+});
+test('nur mit WebGL', async ({ page }) => {
+  test.skip(!(await webgl(page)), 'WebGL 2 nicht verfügbar');
+});
+test('alter Grund', async ({ browserName }) => {
+  test.skip(browserName !== 'chromium', 'M2: alter Grund');
+});
+"#,
+    );
+    let skip = |name: &str, reason: &str| {
+        format!(
+            r#"<testcase name="{name}" classname="table/table.spec.ts"><properties><property name="skip" value="{reason}"/></properties><skipped/></testcase>"#
+        )
+    };
+    let ok = |name: &str| format!(r#"<testcase name="{name}" classname="table/table.spec.ts"/>"#);
+    let suite = |project: &str, cases: &[String]| {
+        format!(
+            r#"<testsuite name="table/table.spec.ts" hostname="{project}">{}</testsuite>"#,
+            cases.concat()
+        )
+    };
+    let scale = "Skalierung prüft die Abnahme mit Chromium";
+    let base = f.args.frontend_junit.clone();
+    // Je Element eine eigene JUnit-Datei (wie die Matrix-Jobs der CI).
+    let mut run = |files: &[Vec<String>]| {
+        f.args.frontend_junit = base.clone();
+        for (n, suites) in files.iter().enumerate() {
+            let p = f.dir.path().join(format!("conditional-{n}.xml"));
+            std::fs::write(&p, format!("<testsuites>{}</testsuites>", suites.concat())).unwrap();
+            f.args.frontend_junit.push(p);
+        }
+        let (passed, doc) = f.check();
+        let names = |key: &str| -> BTreeSet<String> {
+            doc[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| e["test"].as_str().unwrap().to_string())
+                .collect()
+        };
+        (
+            passed,
+            names("ignored_without_valid_reason"),
+            names("conditional_skips"),
+            doc,
+        )
+    };
+    let set = |names: &[&str]| names.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
+    let all = ["Skalierung ${factor}", "nur mit WebGL", "alter Grund"];
+
+    // Chromium ok, WebKit übersprungen; WebGL lief überall. Nur der M2:-Grund bleibt ungültig.
+    let (passed, bad, proven, doc) = run(&[vec![
+        suite(
+            "chromium",
+            &[
+                ok("Skalierung 1.25"),
+                ok("Skalierung 2"),
+                ok("nur mit WebGL"),
+                ok("alter Grund"),
+            ],
+        ),
+        suite(
+            "webkit",
+            &[
+                skip("Skalierung 1.25", scale),
+                skip("Skalierung 2", scale),
+                ok("nur mit WebGL"),
+                skip("alter Grund", "M2: alter Grund"),
+            ],
+        ),
+    ]]);
+    assert!(!passed);
+    assert_eq!(bad, set(&["alter Grund"]), "{doc:#}");
+    assert_eq!(proven, set(&["Skalierung ${factor}", "nur mit WebGL"]));
+    let entry = doc["conditional_skips"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["test"] == "Skalierung ${factor}")
+        .unwrap();
+    assert_eq!(entry["reason"], scale);
+    assert_eq!(entry["spec_ids"], serde_json::json!(["UI-003"]));
+    assert_eq!(entry["runs"].as_array().unwrap().len(), 4);
+
+    // Nur WebKit, überall übersprungen: kein Beleg.
+    let (passed, bad, proven, _) = run(&[vec![suite(
+        "webkit",
+        &[
+            skip("Skalierung 1.25", scale),
+            skip("nur mit WebGL", "WebGL 2 nicht verfügbar"),
+            skip("alter Grund", "M2: alter Grund"),
+        ],
+    )]]);
+    assert!(!passed);
+    assert_eq!(bad, set(&all));
+    assert!(proven.is_empty());
+
+    // ok nur im eigenen Projekt (andere Template-Instanz bzw. andere Datei desselben Projekts) zählt nicht.
+    let (_, bad, _, _) = run(&[
+        vec![suite(
+            "chromium",
+            &[
+                ok("Skalierung 1.25"),
+                skip("Skalierung 2", scale),
+                skip("nur mit WebGL", "WebGL 2 nicht verfügbar"),
+            ],
+        )],
+        vec![suite("chromium", &[ok("nur mit WebGL")])],
+    ]);
+    assert!(
+        bad.contains("Skalierung ${factor}") && bad.contains("nur mit WebGL"),
+        "{bad:?}"
+    );
+
+    // Fehlschlag im anderen Projekt ist kein Beleg (und bleibt selbst ein Fehler).
+    let (passed, bad, proven, doc) = run(&[vec![
+        suite("chromium", &[r#"<testcase name="Skalierung 1.25" classname="table/table.spec.ts"><failure/></testcase>"#.to_string()]),
+        suite("webkit", &[skip("Skalierung 1.25", scale)]),
+    ]]);
+    assert!(!passed);
+    assert!(bad.contains("Skalierung ${factor}") && proven.is_empty());
+    assert!(!doc["failed_tests"].as_array().unwrap().is_empty());
+
+    // Ohne Laufzeitergebnis bleiben alle drei ungültig.
+    let (_, bad, proven, _) = run(&[vec![suite("chromium", &[])]]);
+    assert_eq!(bad, set(&all));
+    assert!(proven.is_empty());
+}
+
+// B4-M2GATE (Fable-Prüfung B4-M2CLOSE, Punkt 5): keine Spec-ID (M2-Q01 ist Infrastruktur, siehe Dateikopf).
+// M3.md D7 erlaubt für nur manuell ausführbare Tests genau `Manuell: <ID> – Protokoll M3-Q03`; jede freiere Form
+// bleibt ungültig, auch im Fixture-Lauf.
+#[test]
+fn d7_manual_reason_is_valid_only_in_its_exact_form() {
+    use os_parity::coverage::m2::valid_defer_reason;
+    for reason in [
+        "Manuell: OUT-260 – Protokoll M3-Q03",
+        "Manuell: OUT-260 – Protokoll M3-Q03 (echte Archive, externes Netz)",
+    ] {
+        assert!(valid_defer_reason(reason), "{reason}");
+    }
+    for reason in [
+        "Manuell: OUT-260",
+        "Manuell: – Protokoll M3-Q03",
+        "Manuell: out-260 – Protokoll M3-Q03",
+        "Manuell: OUT-260 - Protokoll M3-Q03",
+        "Manuell: OUT-260 – Protokoll M3-Q02",
+        "Manuell: OUT-260 – Protokoll M3-Q03, später",
+        "Manuell: OUT-260 – Protokoll M3-Q035",
+        "manuell: OUT-260 – Protokoll M3-Q03",
+        "Manuell OUT-260 – Protokoll M3-Q03",
+    ] {
+        assert!(!valid_defer_reason(reason), "{reason}");
+    }
+    let f = Fixture::new();
+    f.append(
+        "crates/alpha/tests/check.rs",
+        "\n#[test]\n#[ignore = \"Manuell: OUT-260 – Protokoll M3-Q03 (lädt echte Archive)\"]\nfn manual_ok() {}\n\
+         #[test]\n#[ignore = \"Manuell: OUT-260\"]\nfn manual_bad() {}\n",
+    );
+    let (ok, doc) = f.check();
+    assert!(!ok);
+    let bad: Vec<_> = doc["ignored_without_valid_reason"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["test"].as_str().unwrap())
+        .collect();
+    assert_eq!(bad, ["manual_bad"], "{doc:#}");
+}
