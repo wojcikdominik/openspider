@@ -7,6 +7,7 @@ update-disabled-settings = Die Update-Prüfung ist in den Einstellungen deaktivi
 update-disabled-missing-key = Die Update-Prüfung ist nicht verfügbar, weil der Signaturschlüssel fehlt.
 update-disabled-invalid-key = Die Update-Prüfung ist nicht verfügbar, weil der Signaturschlüssel ungültig ist.
 update-disabled-unavailable = Die Update-Prüfung ist in diesem Build nicht verfügbar.
+update-disabled-unknown-installer = Automatische Updates sind für diese Installation nicht möglich, weil nicht sicher erkannt wurde, ob OpenSpider per MSI oder per Setup installiert wurde. Bitte laden Sie neue Versionen manuell herunter: https://github.com/wojcikdominik/openspider/releases/latest
 update-failed = Das Update konnte nicht abgeschlossen werden. Bitte erneut versuchen.
 update-version = Version { $version }
 update-notes = Release-Notes

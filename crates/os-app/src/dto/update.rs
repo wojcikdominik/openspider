@@ -10,6 +10,8 @@ pub enum DisableReason {
     MissingPublicKey,
     InvalidPublicKey,
     NotImplemented,
+    // Windows: Installationsart (MSI/NSIS) nicht erkannt; die UI verweist auf den manuellen Download.
+    UnknownInstaller,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
