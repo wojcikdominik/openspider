@@ -1745,7 +1745,7 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 - **Eingaben/Konfiguration:** `--help`; `--help export-tabs`, `--help bulk-export`, `--help save-report`, `--help export-custom-summary` listen alle gültigen Namen der jeweiligen Kategorie (aus derselben Registry wie die UI; Syntax wie Referenz); `--version`. Kurzformen `--list-exports` / `--list-reports` siehe OUT-203.
 - **Akzeptanzkriterien:**
   - [ ] `--help export-tabs` listet jeden `Tab:Filter`, eine Zeile je Eintrag, maschinenlesbar mit `--json`.
-  - [ ] `--version` gibt `openspider <semver> (<git-hash>, <os>-<arch>)` aus.
+  - [ ] `--version` gibt `openspider <semver> (<git-hash>, <os>-<arch>)` aus; mit Build-Nummer (UI-127, Nutzerentscheidung 09.11.2026) `openspider <semver> (Build <n>, <git-hash>, <os>-<arch>)`.
   - [ ] Liste ist vollständig: Registry-Test vergleicht Anzahl mit UI-Filterregistry.
   - [ ] `--help` listet alle Flags gruppiert (Quelle, Konfiguration, Vergleich, APIs, Exporte, OS-Erweiterungen); OS-Erweiterungen sind als solche markiert (übernommen aus CRAWL-135).
 - **Testfixture:** Golden-Ausgabe `tests/golden/out-cli/help_export_tabs.txt`.
