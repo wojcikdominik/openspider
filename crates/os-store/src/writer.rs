@@ -501,12 +501,38 @@ pub fn checkpoint_within<T>(
     }
     BUSY_DEADLINE.with(|d| d.set(Some(std::time::Instant::now() + wait)));
     let guard = Restore(conn);
-    conn.busy_handler(Some(bounded_busy))?;
+    set_bounded_busy(conn)?;
     let value = conn.query_row(sql, [], row)?;
     drop(guard);
     // The restore in the guard cannot report errors; check the normal timeout explicitly.
     conn.busy_timeout(BUSY_TIMEOUT)?;
     Ok(value)
+}
+
+/// Installiert [`bounded_busy`] direkt über die C-Schnittstelle. Seit rusqlite 0.38 verlangt
+/// `Connection::busy_handler` `&mut Connection` (es legt eine Closure in den Client-Daten der Verbindung ab); die
+/// Aufrufer von [`checkpoint_within`] halten die Verbindung aber nur geteilt (Crawl-Datei, Analyse). Verhalten wie mit
+/// rusqlite 0.37: ein Funktionszeiger ohne Nutzdaten, den `busy_timeout` wieder ersetzt.
+fn set_bounded_busy(conn: &Connection) -> rusqlite::Result<()> {
+    unsafe extern "C" fn callback(
+        _data: *mut std::ffi::c_void,
+        attempts: std::ffi::c_int,
+    ) -> std::ffi::c_int {
+        std::ffi::c_int::from(std::panic::catch_unwind(|| bounded_busy(attempts)).unwrap_or(false))
+    }
+    // SAFETY: `handle()` ist der gültige Zeiger dieser offenen Verbindung; der Rückruf ist eine statische Funktion
+    // ohne Nutzdaten und fängt Panics ab, bevor sie die C-Grenze erreichen.
+    let rc = unsafe {
+        rusqlite::ffi::sqlite3_busy_handler(conn.handle(), Some(callback), std::ptr::null_mut())
+    };
+    if rc == rusqlite::ffi::SQLITE_OK {
+        Ok(())
+    } else {
+        Err(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rc),
+            None,
+        ))
+    }
 }
 
 fn wal_checkpoint(conn: &Connection) -> Result<(), StoreError> {

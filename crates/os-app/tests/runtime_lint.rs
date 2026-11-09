@@ -106,7 +106,7 @@ fn write_fixture(dir: &Path, lib: &str) {
     let manifest = format!(
         "[package]\nname = \"lint-fixture\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n\
          [lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n\
-         rusqlite = {{ version = \"0.37\", features = [\"bundled\", \"collation\"] }}\n\
+         rusqlite = {{ version = \"0.41\", features = [\"bundled\", \"collation\"] }}\n\
          os-store = {{ path = '{}' }}\n",
         os_store.display().to_string().replace('\\', "/")
     );

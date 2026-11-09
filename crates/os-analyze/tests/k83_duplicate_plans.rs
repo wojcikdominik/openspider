@@ -272,6 +272,34 @@ fn correlated_scan_of_urls(plan: &[(i64, i64, String)]) -> Option<String> {
         .map(|(_, _, d)| d.clone())
 }
 
+/// Schaltet die EXISTS-to-JOIN-Optimierung von SQLite für diese Verbindung ab (B4-DEPSEC). Seit dem gebündelten
+/// SQLite 3.54 (rusqlite 0.41) wandelt der Planer ein `EXISTS` als oberstes `AND`-Glied in einen Join mit
+/// automatischem Index um; die Gegenprobe sähe dann keine korrelierte Unterabfrage mehr und prüfte die Erkennung nicht.
+/// Die Maske ist die Konstante `SQLITE_ExistsToJoin` aus `sqliteInt.h` (kein stabiles API): ändert SQLite sie, schlägt
+/// die Gegenprobe fehl, statt leer durchzulaufen.
+fn without_exists_to_join(conn: &rusqlite::Connection) {
+    const SQLITE_EXISTS_TO_JOIN: u32 = 0x4000_0000;
+    use rusqlite::ffi;
+    let mut flags: std::ffi::c_int = 0;
+    // SAFETY: gültiger Verbindungszeiger; GETOPT schreibt genau einen `int`, OPTIMIZATIONS liest ein `u32`.
+    unsafe {
+        let db = conn.handle();
+        assert_eq!(
+            ffi::sqlite3_test_control(
+                ffi::SQLITE_TESTCTRL_GETOPT,
+                db,
+                &mut flags as *mut std::ffi::c_int
+            ),
+            ffi::SQLITE_OK
+        );
+        ffi::sqlite3_test_control(
+            ffi::SQLITE_TESTCTRL_OPTIMIZATIONS,
+            db,
+            flags as u32 | SQLITE_EXISTS_TO_JOIN,
+        );
+    }
+}
+
 fn without_the_five_indexes(file: &CrawlFile) {
     for index in WRITE_PHASE_DROPPED {
         file.conn()
@@ -392,6 +420,7 @@ fn the_check_would_have_caught_the_old_formulation() {
         "mit Index: {with:?}"
     );
     without_the_five_indexes(&file);
+    without_exists_to_join(file.conn());
     let without = plan_of(&file);
     assert!(
         correlated_scan_of_urls(&without).is_some(),

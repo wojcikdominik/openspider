@@ -225,7 +225,6 @@ fn evaluate(path: &Path, sql: &str, options: &Value) -> Result<Value, String> {
         }
         let columns = stmt
             .column_names()
-            .iter()
             .map(|s| s.to_string())
             .collect::<Vec<_>>();
         let mut rows = stmt.query([]).map_err(err)?;

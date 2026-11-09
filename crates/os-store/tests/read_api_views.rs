@@ -398,7 +398,7 @@ fn dump_views(path: &Path) -> String {
     for (view, sql) in queries {
         out.push_str(&format!("## {view}\n"));
         let mut stmt = conn.prepare(sql).unwrap();
-        let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+        let names: Vec<String> = stmt.column_names().map(|s| s.to_string()).collect();
         out.push_str(&names.join("|"));
         out.push('\n');
         let mut rows = stmt.query([]).unwrap();
