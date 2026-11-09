@@ -212,6 +212,11 @@ Jede Funktion unten nennt den Fixture-Namen und die Routen, die das Verhalten pr
 - [CRAWL-143 Kontextmenü der Crawl-Verwaltung: Wirkung auf den Crawl-Zustand](#crawl-143-kontextmenü-der-crawl-verwaltung-wirkung-auf-den-crawl-zustand) · P1
 - [CRAWL-144 Vergleichsmodus: Detailansichten (Links, Issues, gerenderte Seite)](#crawl-144-vergleichsmodus-detailansichten-links-issues-gerenderte-seite) · P1 → OUT-149
 
+**Nachtrag 09.11.2026: Funktionen für 1.x (nach 1.0)**
+- [CRAWL-148 Relative Sitemap-Angaben bei manueller Eingabe](#crawl-148-relative-sitemap-angaben-bei-manueller-eingabe) · P1
+- [CRAWL-149 Host-Pause bei Nichtantwort](#crawl-149-host-pause-bei-nichtantwort) · P1
+- [CRAWL-150 Rendering: Warten auf Netzwerkruhe](#crawl-150-rendering-warten-auf-netzwerkruhe) · P1
+
 **Q.** [Offene Punkte / zu verifizieren](#q-offene-punkte--zu-verifizieren)
 
 **R.** [Quellen](#r-quellen)
@@ -947,6 +952,7 @@ Jede Funktion unten nennt den Fixture-Namen und die Routen, die das Verhalten pr
   - [ ] Doppelte Angabe derselben Sitemap (manuell + robots.txt) führt zu genau einem Abruf.
   - [ ] Eine spät entdeckte Sitemap (z. B. erst aus einer Kind-Sitemap) blockiert den Crawl nicht (Referenz-Fix).
 - **Testfixture:** `crawl-sitemaps` (manuelle Angabe `/extra-sitemap.xml`, nicht in robots.txt).
+- **Nachtrag 09.11.2026 (1.x):** Manuell eingetragene Sitemaps dürfen relativ sein und werden gegen die Start-URL aufgelöst; verworfene Einträge werden gemeldet statt stillschweigend übergangen. Führend dafür ist CRAWL-148.
 
 ### CRAWL-060 Sitemap-Parser
 - **Priorität:** P1
@@ -1197,6 +1203,7 @@ Gemeinsame Regeln: Ein Limit von 0 oder leer bedeutet „unbegrenzt“, sofern n
   - [ ] Die Wartezeit beginnt mit dem `load`-Ereignis; eine Seite, deren `load` nie feuert, wird nach Antwort-Timeout + AJAX-Timeout abgebrochen und mit dem bis dahin vorliegenden DOM verarbeitet.
   - [ ] Wert ist auf Zehntelsekunden einstellbar.
 - **Testfixture:** `crawl-js/delayed.html?ms=2000`, `/never-load.html`.
+- **Verweis (Nachtrag 09.11.2026):** Alternative Warte-Strategie „Netzwerkruhe“ als Option: CRAWL-150 (1.x); die feste Wartezeit bleibt Standard.
 
 ### CRAWL-081 Viewport und Geräte-Voreinstellungen
 - **Priorität:** P1
@@ -1932,6 +1939,7 @@ Gemeinsame Regeln: Umschreibungen gelten ausschließlich für URLs, die **währe
 ### CRAWL-136 Geplante Crawls
 - **Priorität:** P1
 - **Verweis:** siehe OUT-160 (führend). Crawl-seitig gilt nur, dass ein geplanter Lauf aus dem Block OUT-160 bis OUT-171 ein CLI-Prozess ohne Oberfläche ist und daher nicht pausiert, sondern nur abgebrochen werden kann (OUT-171), während Pausieren und Fortsetzen nach CRAWL-126 nur interaktiv bzw. per `--resume` möglich sind.
+- **Nachtrag 09.11.2026 (1.x):** Ab OUT-286 lassen sich laufende geplante und per CLI gestartete Läufe über die Crawl-Verwaltung pausieren und fortsetzen, sofern der Besitzerprozess erreichbar ist. Der Satz oben gilt bis zur Umsetzung von OUT-286 und danach nur noch für Besitzerprozesse ohne Steuerkanal.
 
 ### CRAWL-137 Oberflächensprache
 - **Priorität:** P0
@@ -2082,10 +2090,92 @@ Diese Punkte sind in der öffentlichen Doku nicht eindeutig. Sie werden per Blac
 
 ### CRAWL-146  adaptive Drosselung je Host
 - **Priorität:** P1
-- **Beschreibung:**  adaptive Drosselung je Host – `speed.adaptive_throttle` (Default an): 429/503 mit `Retry-After` (Sekunden oder HTTP-Datum, gekappt auf 300 s) → Host pausiert mindestens so lange; ohne `Retry-After` verdoppelt sich der Mindestabstand des Hosts (Start 1 s, höchstens 60 s), nach 20 erfolgreichen Antworten halbiert er sich bis 0; Zustand „Gedrosselt“ als Notice im Tick.
+- **Beschreibung:**  adaptive Drosselung je Host – `speed.adaptive_throttle` (Default an): 429/503 mit `Retry-After` (Sekunden oder HTTP-Datum, gekappt auf 300 s) → Host pausiert mindestens so lange; ohne `Retry-After` verdoppelt sich der Mindestabstand des Hosts (Start 1 s, höchstens 60 s), nach 20 erfolgreichen Antworten halbiert er sich bis 0; Zustand „Gedrosselt“ als Notice im Tick. Hosts, die gar nicht mehr antworten (nur Verbindungsfehler und Zeitüberschreitungen), behandelt CRAWL-149 (Nachtrag 09.11.2026, 1.x).
 - **Testfixture:** lokale Host-Antworten mit simulierter Uhr.
 
 ### CRAWL-147  Auto-Tempo
 - **Priorität:** P1
 - **Beschreibung:**  Auto-Tempo – `speed.auto` (Default aus): AIMD je Host über die Parallelität, Start 1, +1 je 10 erfolgreiche Antworten mit Antwortzeit < 1,5 × gleitender Median (höchstens `min(threads, max_per_host)`), Halbierung bei 429/503/Timeout oder Antwortzeit > 3 × Median; wirkt nicht, wenn `max_urls_per_sec` gesetzt ist. Vorrang des Abstands: max(Crawl-delay, Retry-After, adaptiver Abstand, 1/`max_urls_per_sec`).
 - **Testfixture:** lokale Host-Antworten mit simulierter Uhr.
+
+---
+
+## Nachtrag 09.11.2026: Funktionen für 1.x (nach 1.0)
+
+Die folgenden Einträge sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerentscheidung 09.11.2026)** ohne Paritätsbezug. Sie gehören unabhängig von ihrer Priorität zum Meilenstein **1.x (nach 1.0)** (Zuordnung `README.md`, Meilensteinzuordnung). Bestehende Einträge bleiben gültig; wo sie berührt werden, steht dort ein Verweis.
+
+### CRAWL-148 Relative Sitemap-Angaben bei manueller Eingabe
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** In „Diese Sitemaps crawlen“ (CRAWL-059, Schlüssel `sitemaps.urls`) dürfen Einträge relativ angegeben werden, z. B. `/sitemap.xml` oder `sitemaps/news.xml`. Sie werden beim Crawl-Start gegen die Start-URL aufgelöst (WHATWG-URL-Auflösung wie bei Links, CRAWL-002). So lässt sich ein Profil für mehrere Websites oder für Staging und Produktion verwenden, ohne die Sitemap-Liste anzupassen. Bisher wurden solche Einträge stillschweigend verworfen.
+- **Eingaben/Konfiguration:** Textfeld wie CRAWL-059, eine Angabe pro Zeile. Absolute Angaben (`http`/`https` mit Host) bleiben unverändert; alle anderen nicht leeren Zeilen gelten als relativ. Basis ist die Start-URL nach Ergänzung des Schemas (OUT-182) und vor Weiterleitungen (die Sitemap gehört zur eingegebenen Website, nicht zu einem Weiterleitungsziel).
+- **Ausgabe:** Wie CRAWL-058/059. Die aufgelöste URL steht im Sitemaps-Bereich mit Herkunft `config`; der Konfigurationsdialog zeigt unter dem Feld je relativer Zeile die aufgelöste Adresse als Vorschau, sobald eine Start-URL eingegeben ist.
+- **Akzeptanzkriterien:**
+  - [ ] Start-URL `https://site.test/shop/`, Einträge `/sitemap.xml` und `extra.xml` → abgerufen werden `https://site.test/sitemap.xml` und `https://site.test/shop/extra.xml` (Request-Log).
+  - [ ] Ein relativer und ein absoluter Eintrag, die auf dieselbe URL zeigen, führen zu genau einem Abruf (Regel aus CRAWL-059).
+  - [ ] Listenmodus (keine Start-URL): Relative Einträge werden nicht abgerufen; der Crawl startet trotzdem, und das Crawl-Log sowie die Statusleiste nennen je verworfenem Eintrag „relative Sitemap-Angabe ohne Start-URL: <Eintrag>“. Ein CLI-Lauf schreibt dieselbe Warnung auf stderr (Exit-Code unverändert).
+  - [ ] Einträge mit anderem Schema (`ftp:`, `file:`) und unparsebare Zeilen werden weiterhin verworfen, jetzt aber mit derselben Warnung statt stillschweigend.
+  - [ ] Die gespeicherte Konfiguration (OUT-221) enthält den relativen Eintrag unverändert; aufgelöst wird nur zur Laufzeit. Ein mit demselben Profil gestarteter Crawl auf `https://andere.test/` ruft `https://andere.test/sitemap.xml` ab.
+  - [ ] Die per relativer Angabe gefundenen Sitemaps verhalten sich wie absolut eingetragene: Einreihung nach CRAWL-059, Include/Exclude, robots.txt und Limits gelten.
+- **Testfixture:** `crawl-sitemaps` (CRAWL-058) mit zusätzlicher Startseite `/shop/` und Sitemap `/shop/extra.xml`; Listenmodus-Fall mit `out-list-order` (06).
+
+### CRAWL-149 Host-Pause bei Nichtantwort
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Antwortet ein Host über eine einstellbare Zeit überhaupt nicht mehr, pausiert OpenSpider die Abrufe an diesen Host, statt dessen gesamte Warteschlange in kurzer Zeit als „keine Antwort“ abzuarbeiten. Typische Ursachen sind eine Firewall, die den Crawler nach einigen Anfragen sperrt, ein überlasteter Server oder ein Ausfall der eigenen Internetverbindung. „Nichtantwort“ heißt: Jeder Abruf endet ohne HTTP-Antwort mit `Connection Timeout`, `Connection Refused`, `Connection Error` oder `DNS Lookup Failed` (Statustexte nach ONPAGE-065). Jede HTTP-Antwort, auch 4xx/5xx, zählt als Antwort; auf solche Antworten reagieren CRAWL-096/097 (Wiederholung) und CRAWL-146/147 (Drosselung). `TLS Error`, `Malformed` und robots-bedingte Sperren lösen keine Host-Pause aus, weil sie sich durch Warten nicht ändern.
+- **Eingaben/Konfiguration:** Konfiguration → Geschwindigkeit, Gruppe „Nicht antwortende Hosts“ (Schlüssel `speed.unresponsive.*`):
+  - `enabled` – Host-Pause aktiv (Standard an).
+  - `after_s` – Zeitfenster ohne jede Antwort, nach dem der Host als nicht antwortend gilt (Standard 60 s, Bereich 10–3.600).
+  - `min_failures` – Mindestzahl aufeinanderfolgender Fehlschläge des Hosts im Fenster (Standard 5, Bereich 1–100). Beide Bedingungen müssen erfüllt sein; ein Fehlschlag zählt erst nach Ausschöpfen der Wiederholungen aus CRAWL-097.
+  - `auto_resume` – automatische Wiederaufnahme (Standard an).
+  - `probe_interval_s` – Abstand der Prüfabrufe während der Pause: Start 30 s, nach jedem erfolglosen Prüfabruf verdoppelt, höchstens 600 s.
+  - `max_pause_min` – Höchstdauer einer Host-Pause (Standard 30 min, 0 = unbegrenzt). Danach gibt der Crawl den Host auf (siehe unten).
+  - Die Gruppe gehört zu den Einstellungen, die während einer Pause änderbar sind (CRAWL-126).
+- **Verhalten (OS-Festlegung):**
+  - **Erkennung:** Sobald für einen Host beide Schwellen erreicht sind, startet keine neue Anfrage an diesen Host mehr; laufende Anfragen werden zu Ende geführt. Die Abrufe, die im Erkennungsfenster ohne Antwort endeten (höchstens `min_failures` + Threads), werden nicht als `No Response` gespeichert, sondern wieder vorne in die Warteschlange des Hosts gestellt, damit ein kurzer Ausfall keine Fehlerzeilen hinterlässt. Abrufe vor dem Fenster bleiben gespeichert.
+  - **Andere Hosts** laufen weiter (Threads und Tempo-Regeln unverändert).
+  - **Crawl-Pause:** Sind alle Hosts mit offener Warteschlange gleichzeitig pausiert (typisch: eigene Verbindung weg), wechselt der gesamte Crawl in den Zustand „Pausiert – keine Antwort“. Die Warteschlange wird dabei wie bei CRAWL-126 dauerhaft gespeichert; der Prozess bleibt aktiv und führt die Prüfabrufe aus.
+  - **Prüfabruf:** ein einzelner Abruf der nächsten wartenden URL des Hosts. Liefert er irgendeine HTTP-Antwort, endet die Pause: Die Antwort wird regulär gespeichert, der Host startet mit Parallelität 1 und Mindestabstand 1 s neu (Auto-Tempo und adaptive Drosselung nach CRAWL-146/147 übernehmen ab dort). Prüfabrufe zählen zu den Grenzen aus CRAWL-113/145.
+  - **Ohne automatische Wiederaufnahme** gibt es keine Prüfabrufe; die Pause endet nur per Klick.
+  - **Aufgeben:** Ist `max_pause_min` erreicht oder klickt der Nutzer „Host aufgeben“, werden alle wartenden URLs des Hosts mit ihrem letzten Fehlerstatus (ersatzweise `Connection Error`) als `No Response` gespeichert, ohne erneuten Abruf; der Crawl läuft mit den übrigen Hosts weiter bzw. endet regulär. Dasselbe gilt im CLI-Betrieb, damit ein unbeaufsichtigter Lauf nicht unbegrenzt wartet; ist `max_pause_min = 0`, gilt im CLI-Betrieb trotzdem 60 min.
+- **Ausgabe:**
+  - Statusleiste (UI-013): Hinweis „Host pausiert: <host> antwortet nicht (seit <mm:ss>, nächste Prüfung in <s> s)“, bei mehreren Hosts „<n> Hosts pausiert“ mit Liste im Tooltip; bei Crawl-Pause Zustand „Pausiert – keine Antwort“.
+  - Banner über der Tabelle mit den Schaltflächen „Jetzt prüfen“ (sofortiger Prüfabruf), „Fortsetzen“ (Pause sofort aufheben, ohne Prüfabruf), „Host aufgeben“; bei mehreren Hosts je Host über das Menü des Banners.
+  - Crawl-Ereignisse (`crawl_events`) `host_paused`, `host_resumed`, `host_abandoned` mit Host, Zeitpunkt, Dauer und Anzahl der zurückgestellten URLs; sichtbar im Crawl-Log und auswertbar für AGENT-022.
+  - CLI: Zeile auf stderr bei jedem Ereignis; `--progress json` (OUT-205) erhält das Feld `paused_hosts` (Anzahl) und während einer Crawl-Pause die Phase `paused`.
+- **Akzeptanzkriterien:**
+  - [ ] Fixture-Host, der nach 10 erfolgreichen Antworten alle Verbindungen ablehnt: Mit Standardwerten startet nach Erkennung (≥ 60 s und ≥ 5 Fehlschläge, simulierte Uhr) keine reguläre Anfrage mehr an diesen Host; die Zahl der als `Connection Refused` gespeicherten URLs ist 0; ein zweiter Host im selben Crawl wird weiter abgerufen.
+  - [ ] Nimmt der Host nach 3 min wieder an, endet die Pause mit dem nächsten Prüfabruf (Prüfabrufe nach 30, 60, 120 s; simulierte Uhr), und die zurückgestellten URLs werden gecrawlt; das Ergebnis entspricht dem eines Crawls ohne Ausfall (URL-Menge, Statuscodes, Tiefen).
+  - [ ] Ein Host, der durchgehend 503 liefert, wird nicht pausiert (er antwortet); es gelten CRAWL-096/146.
+  - [ ] Alle Hosts antworten nicht (Netz der Testumgebung getrennt): Zustand „Pausiert – keine Antwort“; die Crawl-Datei hat den Stand eines pausierten Crawls (Warteschlange gespeichert); nach Wiederherstellen des Netzes läuft der Crawl ohne Nutzeraktion weiter.
+  - [ ] `auto_resume = false`: keine Prüfabrufe (Request-Log); „Fortsetzen“ hebt die Pause auf.
+  - [ ] Nach `max_pause_min` (Testwert 5 min) bzw. nach „Host aufgeben“ sind alle wartenden URLs des Hosts als `No Response` mit Statustext gespeichert, ohne Abruf; der Crawl endet regulär.
+  - [ ] `enabled = false`: Verhalten wie vor diesem Eintrag (alle Abrufe enden als `No Response`).
+  - [ ] Die Ereignisse `host_paused`/`host_resumed`/`host_abandoned` stehen mit Host und Dauer in `crawl_events`; der CLI-Fortschritt enthält `paused_hosts`.
+- **Testfixture:** `crawl-retries` (CRAWL-097) erweitert um den Steuerendpunkt eines zweiten Hosts `down.site.test` (Modi: annehmen, ablehnen, Verbindung hängen lassen; umschaltbar per Test); simulierte Uhr wie CRAWL-146.
+
+### CRAWL-150 Rendering: Warten auf Netzwerkruhe
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Zusätzliche Warte-Strategie für das JavaScript-Rendering (CRAWL-078) neben der festen AJAX-Wartezeit (CRAWL-080). Statt nach `load` immer gleich lang zu warten, übernimmt OpenSpider das DOM, sobald die Seite eine Zeit lang ruhig ist: keine offenen Netzwerkanfragen und keine Arbeit im Event-Loop. Schnelle Seiten werden dadurch früher fertig, langsam nachladende Seiten bekommen bis zu einer Obergrenze mehr Zeit.
+- **Eingaben/Konfiguration:** Spider › Rendering:
+  - `rendering.wait_strategy` ∈ {`fixed` (Standard, Verhalten CRAWL-080), `network_idle`}.
+  - `rendering.idle_window_ms` – Ruhefenster (Standard 500 ms, Bereich 100–5.000).
+  - `rendering.idle_max_s` – Obergrenze ab `load` (Standard 10 s, Bereich 1–60).
+  - `rendering.idle_ignore_open_s` – Anfragen, die länger als diese Zeit offen sind, zählen nicht mehr als offen (Standard 2 s), damit Dauerverbindungen (Long-Polling, Streaming) die Ruhe nicht verhindern.
+  - Bei `network_idle` ist das Feld „AJAX-Timeout“ ausgegraut (Tooltip nennt die Strategie). Der Wechsel der Strategie ist während der Pause erlaubt (keine Änderung des Rendering-Modus im Sinn von CRAWL-077).
+- **Definition „ruhig“ (OS-Festlegung):** Gemessen ab dem `load`-Ereignis gilt die Seite als ruhig, wenn während des gesamten Ruhefensters gleichzeitig gilt:
+  1. **Netzwerk:** keine offene Anfrage des Dokuments und seiner Frames, ausgenommen WebSocket- und EventSource-Verbindungen sowie Anfragen, die länger als `idle_ignore_open_s` offen sind;
+  2. **Event-Loop:** keine DOM-Änderung (Beobachtung aller Mutationen im Dokument) und keine Hauptthread-Aufgabe über 50 ms.
+  Wird die Ruhe nicht bis `idle_max_s` erreicht, wird das DOM zu diesem Zeitpunkt übernommen. Feuert `load` nie, gilt wie in CRAWL-080 Antwort-Timeout + `idle_max_s`.
+- **Ausgabe:** Gerenderte Felder wie CRAWL-078. Zusätzlich im JavaScript-Tab (TECH-101) die Spalten `Render Wait (ms)` (tatsächliche Wartezeit ab `load`) und `Render Wait Result` ∈ {`Idle`, `Max Reached`, `Fixed`}; Filter „Render Wait Limit Reached“ im JavaScript-Tab (kein Befund, nicht im Issues-Tab).
+- **Akzeptanzkriterien:**
+  - [ ] `crawl-js/delayed.html?ms=2000` (Inhalt per Anfrage 2 s nach `load`) → Inhalt vorhanden; `Render Wait (ms)` liegt zwischen 2.000 und 2.000 + Ruhefenster + 300.
+  - [ ] Seite mit drei nacheinander ausgelösten Anfragen à 400 ms → Inhalt aller drei vorhanden.
+  - [ ] Statische Seite ohne Nachladen → `Render Wait (ms)` ≤ Ruhefenster + 300 ms und `Result = Idle`; Durchschnitt über `crawl-js` deutlich unter der festen Wartezeit (Messung im Test: Summe der Wartezeiten < 50 % der Summe mit `fixed`, 5 s).
+  - [ ] Seite mit Abfrage alle 200 ms (endlos) → DOM nach `idle_max_s` übernommen, `Result = Max Reached`, im Filter „Render Wait Limit Reached“.
+  - [ ] Seite mit offener WebSocket-Verbindung und sonst ohne Aktivität → `Result = Idle`.
+  - [ ] Seite, deren Skript 3 s nach `load` alle 100 ms das DOM ändert (Uhr-Animation) → `Max Reached`; mit `idle_max_s = 4` wird das DOM nach 4 s übernommen.
+  - [ ] `wait_strategy = fixed` verhält sich byte-gleich wie vor diesem Eintrag (Regressionstest CRAWL-080); die neuen Spalten zeigen dann `Fixed` und die feste Wartezeit.
+- **Testfixture:** `crawl-js` (CRAWL-077) mit neuen Seiten `chain3.html`, `polling.html`, `websocket.html`, `clock.html`, `static.html`.
+- **Offene Frage (Nutzer):** Soll `network_idle` später Standard werden? Vorschlag: Option, Standard bleibt `fixed` bis ein Paritäts- und Laufzeitvergleich auf realen Websites vorliegt (gerenderte Inhalte gleich oder besser, Gesamtdauer kürzer).

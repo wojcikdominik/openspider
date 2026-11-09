@@ -15,6 +15,47 @@ Sammelstelle für Funktionen, die bewusst **nach 1.0** kommen. Ausspezifiziert w
 | R9 | Crawl-Qualität aus Autonomo: Indexierungsregeln mit „gewollt“-Ausnahmen, Fallenwächter, Soft-404-Probe | Abgleich Autonomo 16.10. | Kandidat für 1.x |
 | R7 | Erweiterte Struktur- und Linkanalysen (siehe Abschnitt Audisto) | Abgleich Audisto 16.10. | Kandidat für 1.x |
 | R10 | Teams: Crawls im Team teilen – Stufe 1 Team-Ordner (frei), Stufe 2 OpenSpider Teams über evnxt-Account (bezahlt); gecrawlt wird weiter lokal | Nutzer 09.11. | `docs/spec/11-teams.md` (Entwurf) |
+| R11 | Funktionsideen 1.x (JSON-Profile, Crawl-Diagnose per MCP, eigene Dashboards, konfigurierbare Issues, Social-Tab, Markdown u. a.) | Nutzer 09.11. | ausspezifiziert, siehe Abschnitt „Nachtrag 09.11.2026“ unten |
+
+## Nachtrag 09.11.2026: Funktionsideen 1.x
+
+Nutzerentscheidung 09.11.2026: 16 Funktionsideen werden als OpenSpider-Festlegungen in die Spec aufgenommen (`docs/spec/README.md`, Meilensteinzuordnung). Meilenstein ist „1.x (nach 1.0)“, nur INTEG-190 gehört zu M4. Nicht aufgenommen: Dateinamen-Muster für Exporte (Nutzerentscheidung). Aufwand grob: klein ≈ ein Paket von wenigen Tagen, mittel ≈ ein bis zwei Wochen, groß ≈ mehrere Pakete.
+
+| ID | Titel | Priorität | Aufwand |
+|---|---|---|---|
+| OUT-288 | Konfigurationsprofile auch als JSON | P1 | klein |
+| AGENT-022 | Crawl-Diagnose (MCP-Werkzeug, Klasse `read`) | P1 | mittel |
+| UI-150 | Eigene Dashboards | P2 | groß |
+| UI-151 | Konfigurierbare Issues (ersetzt den P2-Teil von UI-063) | P1 | mittel |
+| INTEG-085 | Links nach Position nicht verfolgen | P1 | mittel |
+| CRAWL-149 | Host-Pause bei Nichtantwort | P1 | mittel |
+| TECH-320 | Social-Metadaten erfassen, Tab „Social“ | P1 | mittel |
+| TECH-321 | Open-Graph-Filter | P1 | klein |
+| TECH-322 | Card-Filter (X/Twitter) | P1 | klein |
+| TECH-323 | Social-Bilder: Abruf, Status und Maße | P1 | mittel |
+| ONPAGE-182 | Image-Filter Missing Title Attribute | P2 | klein |
+| TECH-090 | Filter „Self Reference Only“ (hreflang) | P1 | klein |
+| TECH-091 | Filter „Hreflang Language Differs From HTML Lang“ | P1 | klein |
+| TECH-147 | Filter „Pages With Empty Anchor Tags“ | P1 | klein |
+| OUT-286 | Geplante und per CLI gestartete Läufe pausieren und fortsetzen | P1 | groß |
+| OUT-287 | CLI-Verwaltung von Crawls und Projekten | P1 | mittel |
+| CRAWL-148 | Relative Sitemap-Angaben bei manueller Eingabe | P1 | klein |
+| OUT-289 | Seiten als Markdown: Ansicht, Bulk-Export und MCP | P1 | mittel |
+| UI-149 | Suche in der Overview | P1 | klein |
+| CRAWL-150 | Rendering: Warten auf Netzwerkruhe | P1 | mittel |
+| INTEG-190 | Prompts auch bei leerer Eingabe senden (M4) | P2 | klein |
+| UI-152 | Weitere Sprachen: Türkisch und Niederländisch (Community) | P2 | klein (Übersetzung extern) |
+
+Offene Fragen an den Nutzer (vor der Planung zu klären; Vorschläge in den Einträgen):
+1. **CRAWL-150:** Soll „Netzwerkruhe“ später Standard werden? Vorschlag: vorerst Option, Standard bleibt die feste Wartezeit bis zu einem Vergleich auf realen Websites.
+2. **OUT-286 / AGENT-020:** Dürfen die MCP-Werkzeuge `pause_crawl`/`resume_crawl` fremde Crawls über den neuen Steuerkanal steuern? Vorschlag: ja, nur mit freigegebener Klasse `crawl`.
+3. **OUT-286:** Höchstdauer einer Pause bei geplanten und CLI-Läufen (Vorschlag 24 h, danach beendet sich der Prozess, der Crawl bleibt pausiert).
+4. **INTEG-190:** Gilt „auch bei leerer Eingabe senden“ nur für die Prompts aus 04 (Vorschlag) oder auch für Decision-Fragen und Vorschläge aus 08?
+5. **ONPAGE-182:** Einverstanden, dass „Bild ohne title“ ab Werk nicht im Issues-Tab erscheint (Katalogfeld `default_enabled = false`, einschaltbar über UI-151)?
+6. **TECH-323:** Grenzwerte für Social-Bilder bestätigen: mindestens 200 × 200 px, empfohlen 1200 × 630 px, höchstens 5 MiB.
+7. **CRAWL-149:** Standardwerte bestätigen (60 s ohne Antwort und 5 Fehlschläge, Höchstdauer 30 min) und dass Abrufe aus dem Erkennungsfenster wieder eingereiht statt als `No Response` gespeichert werden.
+8. **OUT-287:** Die App-Verwaltung erhält dabei die bisher fehlende Aktion „Projekt löschen“ (nur leere Projekte bzw. mit ausdrücklicher Bestätigung samt Crawls) – einverstanden?
+9. **AGENT-022:** Soll die Crawl-Diagnose auch in der App sichtbar werden (z. B. Hilfe → Crawl-Diagnose)? Vorschlag: später, gleiche Kernfunktion.
 
 ## Geschäftsmodell (Entscheidung Nutzer 16.10.2026): Open Core
 

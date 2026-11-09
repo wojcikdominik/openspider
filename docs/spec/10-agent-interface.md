@@ -7,7 +7,7 @@ Grundsätze:
 - **Sicher per Voreinstellung:** nur lesend, nur Loopback, Inhalte gecrawlter Seiten sind nicht vertrauenswürdige Daten.
 - **Kontextsparsam:** Werkzeuge liefern Zusammenfassungen, Seiten und Zähler statt Rohdaten-Massen.
 
-Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, STDIO, lesend) = AGENT-001, -003, -004, -005, -010, -011, -012, -013; **M2** = AGENT-002, -014, -015, -020, -021, -040, -041, -042, -043; **M3** (Installer/Release 1.0) bringt keine neuen AGENT-IDs; **M4** (KI-bezogen, nach Release 1.0) = AGENT-030, dessen DataForSEO-Hüllen erst mit **M5** (09) verfügbar sind. Die Zuordnung folgt `docs/ARCHITECTURE.md` und der Meilensteintabelle in `README.md`. Abschnittsüberschriften nennen keine Meilensteine.
+Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, STDIO, lesend) = AGENT-001, -003, -004, -005, -010, -011, -012, -013; **M2** = AGENT-002, -014, -015, -020, -021, -040, -041, -042, -043; **M3** (Installer/Release 1.0) bringt keine neuen AGENT-IDs; **M4** (KI-bezogen, nach Release 1.0) = AGENT-030, dessen DataForSEO-Hüllen erst mit **M5** (09) verfügbar sind. **1.x (nach 1.0, Nachtrag 09.11.2026)** = AGENT-022 sowie das Format `markdown` von AGENT-017 (OUT-289). Die Zuordnung folgt `docs/ARCHITECTURE.md` und der Meilensteintabelle in `README.md`. Abschnittsüberschriften nennen keine Meilensteine.
 
 **Testfixture-Konvention:** Basis-Fixture aller MCP-Tests ist `out-basic-site` aus 06 (Anhang A dort; Verzeichnis `tests/fixtures/out-basic-site/`). Ein eigenes Fixture `basic` gibt es nicht; ein bereits angelegtes Verzeichnis `tests/fixtures/basic` ist darauf umzubenennen.
 
@@ -139,6 +139,42 @@ Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, ST
   - [ ] Die Zeilen mit `changes=true` sind identisch mit `--save-report "Crawl Changes"` derselben zwei Crawls (Fixture `out-b3-diff`).
 - **Testfixture:** zwei Crawls von `os-testsite` (Ausgangs- und geänderte Fassung, Fixture-Paar aus OUT-140 ff.); für `changes` `tests/fixtures/out-b3-diff`.
 
+### AGENT-022 Crawl-Diagnose (Nachtrag 09.11.2026)
+- **Priorität:** P1
+- **Werkzeugklasse:** `read` (AGENT-003)
+- **Meilenstein:** 1.x (nach 1.0) – OS-Festlegung, Nutzerentscheidung 09.11.2026.
+- **Beschreibung:** `diagnose_crawl(crawl_id, host?, max_findings? = 8, lang? = "en")` fasst für einen Crawl die wichtigsten Ursachen von Crawl-Problemen zusammen, erklärt sie und schlägt Abhilfen vor. Der Agent erhält in einem Aufruf eine priorisierte Antwort auf „Warum ist der Crawl unvollständig oder fehlerhaft?“, statt viele Tabs und Filter einzeln abzufragen. Das Werkzeug liest nur die Crawl-Datei (URLs, Antwortstatus, robots.txt-Zeilen, Crawl-Ereignisse, Rendering-Daten, wirksame Konfiguration) und löst weder Abrufe noch Änderungen aus. Es funktioniert auch für laufende und pausierte Crawls (Stand zum Zeitpunkt des Aufrufs, `state` in der Antwort).
+- **Befundkatalog (OS-Festlegung, Mindestumfang; Schwellen gelten je Crawl bzw. mit `host` je Host):**
+
+  | Code | Befund | Auslöser |
+  |---|---|---|
+  | `start_url_failed` | Start-URL nicht abrufbar | Start-URL ohne Antwort, 4xx/5xx oder robots-gesperrt |
+  | `robots_blocked` | robots.txt sperrt Inhalte | ≥ 5 % der internen URLs oder ≥ 20 URLs `Blocked by Robots.txt` |
+  | `robots_unreachable` | robots.txt nicht abrufbar | Host wegen robots.txt-Fehler gesperrt (CRAWL-100) |
+  | `connection_errors` | Verbindungsfehler | ≥ 2 % bzw. ≥ 10 URLs mit `Connection Refused`, `Connection Error` oder `DNS Lookup Failed` |
+  | `timeouts` | Zeitüberschreitungen | ≥ 2 % bzw. ≥ 10 URLs mit `Connection Timeout` |
+  | `host_error_rate` | hohe Fehlerquote eines Hosts | Host mit ≥ 20 Abrufen und ≥ 10 % 4xx/5xx/keine Antwort |
+  | `throttled` | Drosselung durch den Server | 429/503-Antworten, Zustand „Gedrosselt“ (CRAWL-097/146) oder Host-Pausen (CRAWL-149); Angabe der gedrosselten Gesamtdauer |
+  | `auth_required` | Zugriff verweigert | ≥ 5 % bzw. ≥ 10 URLs mit 401/403 |
+  | `redirect_chains` | Weiterleitungsketten und -schleifen | ≥ 1 Schleife oder ≥ 10 Ketten mit mehr als einer Weiterleitung |
+  | `render_failures` | Rendering-Fehler | Status „Rendering fehlgeschlagen“ (CRAWL-078), `load` nie ausgelöst (CRAWL-080) oder Wartegrenze erreicht (CRAWL-150) bei ≥ 1 % bzw. ≥ 5 Seiten |
+  | `blocked_resources` | gesperrte Ressourcen beim Rendern | ≥ 1 Seite in TECH-102 |
+  | `limit_reached` | Crawl durch Limit beendet | Endgrund URL-, Tiefen- oder Zeitlimit, mit Größe der Restwarteschlange |
+  | `scope_excluded` | viele ausgeschlossene Ziele | ≥ 20 % der gefundenen Ziele durch Include/Exclude, Positionsregeln (INTEG-085) oder Bereichsgrenzen übersprungen |
+
+  Jeder Befund nennt Kennzahlen (Anzahl, Anteil, betroffene Hosts), bis zu 3 Beispiel-URLs, Tab und Filter (bzw. den Report), mit denen `query_urls` (AGENT-011) die vollständige Liste liefert, eine Erklärung und eine Liste von Abhilfen. Abhilfen verweisen auf konkrete Einstellungen mit ihrem Schlüssel (z. B. `speed.threads` senken, `robots.mode`, Authentifizierungsprofil, `rendering.ajax_timeout_s` bzw. `rendering.wait_strategy`, `limits.max_urls`), schlagen aber keine Umgehung von Sperren des Website-Betreibers vor (kein Rat, robots.txt zu ignorieren, ohne den Hinweis, dass dafür die Erlaubnis des Betreibers nötig ist).
+- **Ausgabe:** `{crawl_id, state, summary: {urls_crawled, urls_failed, duration_s, end_reason}, findings: [{code, severity: "high"|"medium"|"low", title, metrics, examples, query: {tab, filter} | {report}, explanation, suggestions: [{text, setting?}]}], omitted}`. Sortierung nach Schwere (`high` vor `medium` vor `low`), dann nach Anzahl betroffener URLs. Schwere (Festlegung): `high`, wenn der Befund die Start-URL betrifft oder ≥ 20 % der internen URLs; `medium` ab 5 %; sonst `low`. `omitted` nennt die Zahl weiterer Befunde jenseits von `max_findings`. Titel, Erklärungen und Abhilfen sind eigene OpenSpider-Texte als Kernressource in de und en (wie UI-065); URLs, Hosts und Header-Werte stehen im Untrusted-Datenblock (AGENT-004).
+- **Akzeptanzkriterien:**
+  - [ ] Kontextsparsam: Antwort mit Standardwerten höchstens 8.000 Zeichen; `max_findings` 1–20 (sonst Fehler mit gültigem Bereich); keine Liste länger als 3 Beispiel-URLs.
+  - [ ] Für jeden Befund liefert `query_urls` mit dem genannten Tab/Filter genau die gemeldete Anzahl (bzw. der Report die genannten Zeilen).
+  - [ ] Diagnose-Fixture (siehe unten) liefert genau die Codes `robots_blocked`, `redirect_chains`, `host_error_rate`, `timeouts`, `throttled` und `render_failures` mit den erwarteten Zahlen; ein fehlerfreier Crawl von `out-basic-site` liefert eine leere Befundliste und eine Zusammenfassung.
+  - [ ] `host = "b.diag.test"` beschränkt Kennzahlen und Befunde auf diesen Host; unbekannter Host → MCP-Fehler mit Liste der Hosts des Crawls (höchstens 20).
+  - [ ] Kein Netzwerkzugriff während des Aufrufs (Request-Log des Fixture-Servers unverändert); die Crawl-Datei bleibt unverändert.
+  - [ ] Seiteninhalte mit eingebetteter Anweisung (`agent-injection`) erscheinen nur im markierten Datenblock; Erklärungen und Abhilfen enthalten keine Texte aus gecrawlten Seiten.
+  - [ ] Laufender Crawl: Antwort mit `state = running` und Hinweis, dass Zahlen vorläufig sind.
+  - [ ] Unbekannte `crawl_id` → MCP-Fehler mit Hinweis auf `list_crawls`.
+- **Testfixture:** `tests/fixtures/agent-diagnose/` (Szenario in `os-testsite`): Host `a.diag.test` mit robots.txt-Sperre für `/intern/` (30 verlinkte URLs), 12 Weiterleitungsketten und einer Schleife; Host `b.diag.test` mit 25 % 500er-Antworten und Zeitüberschreitungen; Host `c.diag.test` mit 429 ab 2 Anfragen/s; zwei Seiten, deren Rendering abbricht; dazu `out-basic-site` (06) als Negativfall und `agent-injection` für AGENT-004.
+
 ---
 
 ## C. Werkzeuge (steuernd)
@@ -160,6 +196,7 @@ Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, ST
   - [ ] Antworten über `max_chars` (Standard 50.000) werden gekürzt mit Hinweis (AGENT-005).
   - [ ] Bilder/Binärdaten werden nicht geliefert (Meldung mit Content-Type).
 - **Testfixture:** `out-basic-site` (06) einmal mit, einmal ohne gespeichertes HTML; eine Seite mit eingebettetem Prompt-Injection-Text im Body.
+- **Verweis (Nachtrag 09.11.2026):** Zusätzliches Format `markdown` (1.x); Umwandlungsregeln und Kriterien führend in OUT-289.
 
 ### AGENT-018 Screenshot einer URL
 - **Priorität:** P2
@@ -191,7 +228,7 @@ Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, ST
 - **Akzeptanzkriterien:**
   - [ ] Gleiches Ergebnis wie gleichwertiger CLI-Aufruf (aus OUT-285).
   - [ ] Läuft die Desktop-App, erscheint ein per MCP gestarteter Crawl dort live.
-  - [ ] **OS-Festlegung Fremdprozess-Crawls (Entscheidung (Fable-Empfehlung) vom 13.10.2026):** Ein von einem anderen Prozess (CLI, MCP über STDIO) gestarteter Crawl erscheint in der App live, aber nur lesend: Die App erkennt ihn über die Crawl-Verwaltung und den Heartbeat und zeigt „gestartet von <cli|mcp-stdio> (PID <n>) – Steuerung nur dort“; Pause/Stopp/Threads sind deaktiviert. Dafür schreibt die Engine `owner_kind` (`app`|`cli`|`mcp-stdio`) und `owner_pid` in die Crawl-Metadaten. Über den In-App-HTTP-MCP-Server gestartete Crawls laufen im App-Prozess und sind voll steuerbar. Kooperative Steuerung fremder Prozesse ist nicht Teil von M2.
+  - [ ] **OS-Festlegung Fremdprozess-Crawls (Entscheidung (Fable-Empfehlung) vom 13.10.2026):** Ein von einem anderen Prozess (CLI, MCP über STDIO) gestarteter Crawl erscheint in der App live, aber nur lesend: Die App erkennt ihn über die Crawl-Verwaltung und den Heartbeat und zeigt „gestartet von <cli|mcp-stdio> (PID <n>) – Steuerung nur dort“; Pause/Stopp/Threads sind deaktiviert. Dafür schreibt die Engine `owner_kind` (`app`|`cli`|`mcp-stdio`) und `owner_pid` in die Crawl-Metadaten. Über den In-App-HTTP-MCP-Server gestartete Crawls laufen im App-Prozess und sind voll steuerbar. Kooperative Steuerung fremder Prozesse ist nicht Teil von M2. (Nachtrag 09.11.2026: Pausieren und Fortsetzen fremder CLI- und STDIO-Crawls aus der App über einen Steuerkanal regelt OUT-286, 1.x; ob die MCP-Werkzeuge diesen Kanal nutzen dürfen, ist dort als offene Frage vermerkt.)
   - [ ] Overrides nur für eine dokumentierte Liste sicherer Optionen (Limits, Tiefe, Include/Exclude, User-Agent, Rendering); Proxy/Auth/Custom JS nur über gespeicherte Profile.
   - [ ] **OS-Festlegung Zielschutz (SSRF):** Per MCP gestartete Crawls lehnen standardmäßig Ziele ab, die auf Loopback (`127.0.0.0/8`, `::1`), private Netze (`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), Link-local (`169.254/16`, `fe80::/10`), CGNAT (`100.64/10`) oder unspezifizierte Adressen auflösen. Geprüft wird nach der DNS-Auflösung bei jeder Verbindung (auch nach Weiterleitungen und für Ressourcen), sodass DNS-Rebinding nicht umgeht. Freigabe nur über die Einstellung „Private Ziele für MCP-Crawls erlauben“ (App/Konfigurationsdatei, Standard aus, nicht per MCP/Override änderbar). Crawls aus App und CLI sind davon nicht betroffen. Test: `start_crawl("http://127.0.0.1:<fixture-port>/")` → MCP-Fehler; Weiterleitung einer erlaubten Fixture-URL auf `169.254.169.254` → Ziel mit Status „Blocked (private target)“, kein Request.
 

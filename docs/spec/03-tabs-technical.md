@@ -31,6 +31,7 @@ ID-Blöcke (Lücken sind Absicht, damit später eingefügt werden kann):
 | TECH-250 … 279 | Accessibility |
 | TECH-280 … 299 | Validation |
 | TECH-300 … 319 | Change Detection |
+| TECH-320 … 339 | Social (Nachtrag 09.11.2026, 1.x) |
 
 ## Inhaltsverzeichnis
 
@@ -121,6 +122,8 @@ ID-Blöcke (Lücken sind Absicht, damit später eingefügt werden kann):
 - TECH-087 Hreflang crawlen, externe Domains als intern (CDN-Liste) (P1)
 - TECH-088 Hreflang-Reports (Bulk-Exporte je Problemtyp) (P1, Verweis → OUT-091 … OUT-096)
 - TECH-089 Untere Detailansicht „URL Details“ mit Bestätigungsstatus je Annotation (P1)
+- TECH-090 Filter „Self Reference Only“ (P1, Nachtrag 09.11.2026, 1.x)
+- TECH-091 Filter „Hreflang Language Differs From HTML Lang“ (P1, Nachtrag 09.11.2026, 1.x)
 
 **JavaScript**
 - TECH-100 Vergleich Original-HTML vs. gerendertes HTML (Grundlage) (P1)
@@ -157,6 +160,7 @@ ID-Blöcke (Lücken sind Absicht, damit später eingefügt werden kann):
 - TECH-144 Link-Präferenzen (Schwellwerte, Anchor-Liste) (P0)
 - TECH-145 „% of Total“ und Link Score als Spalten (P1)
 - TECH-146 Aggregierte Ankertext-Ansicht („Anchors“) in Inlinks/Outlinks (P1)
+- TECH-147 Filter „Pages With Empty Anchor Tags“ (P1, Nachtrag 09.11.2026, 1.x)
 
 **AMP**
 - TECH-160 AMP-Erkennung und Crawl-Optionen (P2)
@@ -238,6 +242,12 @@ ID-Blöcke (Lücken sind Absicht, damit später eingefügt werden kann):
 - TECH-308 Automatischer Crawl-Vergleich („Auto Compare Crawls“) für geplante und CLI-Crawls (P1, Verweis → OUT-152)
 - TECH-309 Elementfilter „Canonical“ (P1, Nutzerentscheidung 04.11.2026)
 - TECH-310 Elementfilter „Redirect Target“ (P1, Nutzerentscheidung 04.11.2026)
+
+**Social (Nachtrag 09.11.2026, 1.x)**
+- TECH-320 Social-Metadaten erfassen, Tab „Social“: Population und Spalten (P1)
+- TECH-321 Open-Graph-Filter (P1)
+- TECH-322 Card-Filter (X/Twitter) (P1)
+- TECH-323 Social-Bilder: Abruf, Status und Maße (P1)
 
 **Anhang A:** Offene Punkte, Festlegungen und Paritätsabweichungen, die gegen Golden-Exporte zu prüfen sind.
 **Anhang B:** Rubrik und Begründung der Issue-Einstufungen.
@@ -905,7 +915,7 @@ Begriffe: Eine **Annotation** ist ein Paar (Code, URL) auf Seite P. Die **Annota
 - **Priorität:** P0
 - **Beschreibung:** Übersicht aller URLs mit hreflang-Bezug.
 - **Eingaben/Konfiguration:** „Store Hreflang“ (TECH-070), „Crawl Hreflang“ (TECH-087), für Sitemap-hreflang zusätzlich „Crawl Linked XML Sitemaps“ (TECH-210) oder eine direkt angegebene Sitemap.
-- **Ausgabe (Spalten/Filter/Export):** `Address`, `Title 1`, `Occurrences` (Anzahl Annotationen gesamt), `HTML hreflang 1..n` (Code), `HTML hreflang 1..n URL`, `HTTP hreflang 1..n`, `HTTP hreflang 1..n URL`, `Sitemap hreflang 1..n`, `Sitemap hreflang 1..n URL`. Spaltenreihenfolge pro Index: Code, dann URL. Filter TECH-073 bis TECH-086 plus „All“ (14 Filter + All). Untere Detailansicht TECH-089. Standardspalten am Ende: `Indexability`, `Indexability Status`.
+- **Ausgabe (Spalten/Filter/Export):** `Address`, `Title 1`, `Occurrences` (Anzahl Annotationen gesamt), `HTML hreflang 1..n` (Code), `HTML hreflang 1..n URL`, `HTTP hreflang 1..n`, `HTTP hreflang 1..n URL`, `Sitemap hreflang 1..n`, `Sitemap hreflang 1..n URL`. Spaltenreihenfolge pro Index: Code, dann URL. Filter TECH-073 bis TECH-086 plus „All“ (14 Filter + All). (Nachtrag 09.11.2026, 1.x: zusätzlich Filter TECH-090/TECH-091 und Spalten `HTML Lang`, `Hreflang Self Code`.) Untere Detailansicht TECH-089. Standardspalten am Ende: `Indexability`, `Indexability Status`.
 - **Akzeptanzkriterien:**
   - [ ] Population: interne HTML-2xx-Seiten (K-56, vorher 200) und interne Nicht-HTML-2xx-URLs mit HTTP-hreflang; URLs mit Sitemap-hreflang, soweit sie diese Bedingung erfüllen. Gecrawlte hreflang-Ziele ohne 2xx sind keine eigene Zeile; sie erscheinen nur in TECH-074 und dessen Export (K2-85, SQ-03; vorher Teil der Population).
   - [ ] Abhängigkeit von der Konfiguration:
@@ -1034,6 +1044,7 @@ Begriffe: Eine **Annotation** ist ein Paar (Code, URL) auf Seite P. Die **Annota
   - [ ] Bedingung: Annotationsmenge nicht leer und keine Annotation mit URL = Seiten-URL.
   - [ ] Eine x-default-Annotation auf die eigene URL zählt als Selbstreferenz.
 - **Testfixture:** `hreflang/noself/en/` mit Annotationen nur auf `/de/` und `/fr/`.
+- **Verweis (Nachtrag 09.11.2026):** Den umgekehrten Fall (nur Selbstreferenz, kein Alternate) meldet TECH-090; den Widerspruch zwischen Selbstcode und `<html lang>` TECH-091.
 
 ### TECH-083 Filter „Not Using Canonical“
 - **Priorität:** P1
@@ -1099,6 +1110,36 @@ Begriffe: Eine **Annotation** ist ein Paar (Code, URL) auf Seite P. Die **Annota
   - [ ] Bei abgeschnittenen Annotationen (TECH-004) zeigt die Ansicht oben den Hinweis „N weitere Annotationen nicht ausgewertet“.
   - [ ] Mehrfachauswahl im oberen Tab → Zeilen aller gewählten URLs, mit zusätzlicher erster Spalte `Address`.
 - **Testfixture:** `tests/fixtures/tech/hreflang/`: `/en/` mit Annotationen auf sich selbst (`Self`), `/de/` (`Confirmed`), `/fr/` (`Missing`), `/it/` (404 → `Non-200`), `/nl/` (bei Crawl Hreflang aus → `Not Crawled`), `/es/` (noindex → `Noindex`), `/pt/?ref=1` (canonicalisiert → `Non-Canonical`); Golden-Export der unteren Ansicht.
+
+### TECH-090 Filter „Self Reference Only“ (Nachtrag 09.11.2026)
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0) – OS-Festlegung, Nutzerentscheidung 09.11.2026, ohne Paritätsbezug.
+- **Beschreibung:** Seite, deren hreflang-Annotationen nur auf sie selbst verweisen: Es gibt eine Selbstreferenz, aber kein Alternate. Eine solche Gruppe aus einer einzigen Seite hat keine Wirkung; häufig fehlen die Alternates wegen eines Vorlagenfehlers (z. B. Sprachumschalter liefert nur die aktuelle Sprache).
+- **Abgrenzung zu TECH-082:** TECH-082 meldet Seiten **mit** Alternates, aber **ohne** Selbstreferenz; dieser Filter meldet Seiten **mit** Selbstreferenz, aber **ohne** Alternate. Beide Mengen sind disjunkt; eine Seite ohne jede Annotation steht in keinem der beiden (sondern in TECH-085).
+- **Eingaben/Konfiguration:** –
+- **Ausgabe (Spalten/Filter/Export):** Filter „Self Reference Only“ im Tab Hreflang; Einstufung: Warnung / Niedrig (UI-063: `T-W2`, `P-L1`; kann bei einsprachigen Websites mit generierter Annotation gewollt sein und richtet keinen Schaden an).
+- **Akzeptanzkriterien:**
+  - [ ] Bedingung: Annotationsmenge nicht leer, mindestens eine Annotation mit URL = Seiten-URL (Vergleich nach TECH-002) und kein Alternate (keine Annotation mit URL ≠ Seiten-URL).
+  - [ ] `en` → self und `x-default` → self → im Filter (beides zeigt auf die Seite selbst).
+  - [ ] `en` → self und `de` → `/de/` → nicht im Filter.
+  - [ ] Nur `de` → `/de/` (ohne Selbstreferenz) → nicht hier, sondern in TECH-082.
+  - [ ] Quellen werden vereinigt: Selbstreferenz im HTML und Alternate nur in der Sitemap → nicht im Filter.
+  - [ ] Abgeschnittene Annotationsmengen (TECH-004) werden mit den gespeicherten Annotationen bewertet.
+- **Testfixture:** `tests/fixtures/tech/hreflang/selfonly/`: `a.html` (nur Selbstreferenz), `b.html` (Selbstreferenz + x-default auf sich), `c.html` (Selbstreferenz + `/de/`), `d.html` (nur `/de/`), `e.html` (Selbstreferenz im HTML, Alternate in `sitemap-selfonly.xml`).
+
+### TECH-091 Filter „Hreflang Language Differs From HTML Lang“ (Nachtrag 09.11.2026)
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0) – OS-Festlegung, Nutzerentscheidung 09.11.2026, ohne Paritätsbezug.
+- **Beschreibung:** Die Sprache, mit der sich eine Seite in ihrer hreflang-Selbstreferenz ausweist (Selbstcode), widerspricht der Sprachangabe im `lang`-Attribut des `<html>`-Elements. Meist ist eine der beiden Angaben aus einer Vorlage kopiert und nicht angepasst worden.
+- **Eingaben/Konfiguration:** –
+- **Ausgabe (Spalten/Filter/Export):** Filter „Hreflang Language Differs From HTML Lang“ im Tab Hreflang; zusätzliche Spalten `HTML Lang` (Rohwert) und `Hreflang Self Code`. Einstufung: Warnung / Mittel (UI-063: `T-W2`, `P-M1`; Suchmaschinen werten vorrangig hreflang aus, ein Widerspruch deutet aber auf eine falsch zugeordnete Sprachversion hin).
+- **Akzeptanzkriterien:**
+  - [ ] Verglichen wird nur der primäre Sprach-Subtag (BCP 47, vor dem ersten `-` bzw. `_`), ohne Groß-/Kleinschreibung; Region und Schrift werden nicht verglichen: Selbstcode `en-GB` und `lang="en-US"` → nicht im Filter; `de-AT` und `lang="en"` → im Filter.
+  - [ ] Sprachangabe der Seite: `<html lang>`, bei fehlendem `lang` das Attribut `xml:lang` (gleiche Regel wie ONPAGE-153).
+  - [ ] Nicht bewertet (nicht im Filter): Seite ohne Selbstreferenz (dafür TECH-082), Selbstcode nur `x-default`, fehlendes oder leeres `lang`, ungültiger Selbstcode (dafür TECH-080).
+  - [ ] Mehrere Selbstreferenzen mit verschiedenen Sprachen: Es gilt der Selbstcode nach der Begriffsdefinition dieses Abschnitts (der erste); die übrigen meldet TECH-081.
+  - [ ] Ein ungültiger `lang`-Wert (z. B. `lang="english"`) wird wörtlich als Subtag verglichen und damit gemeldet, sofern er nicht zum Selbstcode passt.
+- **Testfixture:** `tests/fixtures/tech/hreflang/lang/`: `en-gb.html` (`en-GB`, `lang="en-US"`), `de-at.html` (`de-AT`, `lang="en"`), `xml-lang.html` (nur `xml:lang="fr"`, Selbstcode `fr`), `no-lang.html`, `english.html` (`lang="english"`, Selbstcode `en`).
 
 ---
 
@@ -1270,7 +1311,7 @@ Alle Funktionen dieses Abschnitts setzen den Rendering-Modus „JavaScript“ vo
 - **Priorität:** P0
 - **Beschreibung:** Interne Linkstruktur je Seite: Tiefe, Ein- und Ausgänge, Link Score.
 - **Eingaben/Konfiguration:** Link-Präferenzen (TECH-144).
-- **Ausgabe (Spalten/Filter/Export):** `Address`, `Indexability`, `Indexability Status`, `Crawl Depth`, `Link Score`, `Inlinks`, `Unique Inlinks`, `Unique JS Inlinks`, `% of Total`, `Outlinks`, `Unique Outlinks`, `Unique JS Outlinks`, `External Outlinks`, `Unique External Outlinks`, `Unique External JS Outlinks`. Filter TECH-132 bis TECH-143 plus „All“.
+- **Ausgabe (Spalten/Filter/Export):** `Address`, `Indexability`, `Indexability Status`, `Crawl Depth`, `Link Score`, `Inlinks`, `Unique Inlinks`, `Unique JS Inlinks`, `% of Total`, `Outlinks`, `Unique Outlinks`, `Unique JS Outlinks`, `External Outlinks`, `Unique External Outlinks`, `Unique External JS Outlinks`. Filter TECH-132 bis TECH-143 plus „All“. (Nachtrag 09.11.2026, 1.x: zusätzlich Spalte `Empty Anchor Tags` und Filter TECH-147.)
 - **Akzeptanzkriterien:**
   - [ ] Population: interne HTML-Seiten mit Status 2xx (K-56, vorher 200; `% of Total` mit demselben Nenner wie ONPAGE-015).
   - [ ] `Inlinks` = Anzahl aller eingehenden Hyperlinks (inkl. Mehrfachlinks derselben Quelle); `Unique Inlinks` = Anzahl verschiedener Quellseiten. Self-Links zählen nicht (Festlegung, entspricht Standardanzeige).
@@ -1335,6 +1376,7 @@ Alle Funktionen dieses Abschnitts setzen den Rendering-Modus „JavaScript“ vo
   - [ ] `<a href="/x"><img src="a.png" alt=""></a>` → zählt. `<a href="/x"><img alt="Logo"></a>` → zählt nicht.
   - [ ] Links in `<area>` ohne `alt` zählen.
 - **Testfixture:** `links/no-anchor.html`.
+- **Verweis (Nachtrag 09.11.2026):** Leere `<a>`-Elemente je Seite, auch extern und nicht verfolgt, meldet TECH-147 (Abgrenzung dort).
 
 ### TECH-136 Filter „Non-Descriptive Anchor Text In Internal Outlinks“
 - **Priorität:** P1
@@ -1461,6 +1503,23 @@ Alle Funktionen dieses Abschnitts setzen den Rendering-Modus „JavaScript“ vo
   - [ ] [P2] „Groß-/Kleinschreibung zusammenfassen“ an → Gruppierungsschlüssel ist der normalisierte Text nach Unicode-Case-Folding (vollständig, sprachunabhängig; „STRASSE“ und „Straße“ fallen zusammen); angezeigt wird die häufigste Schreibweise der Gruppe, bei Gleichstand die in Unicode-Codepunktfolge kleinste **(OS-Festlegung)**. Fixture: „Produkte“ und „produkte“ bilden eine Gruppe „Produkte“ mit `Links = 5`; `% of Links` und Sortierung werden über die zusammengefassten Gruppen berechnet; Klick auf die Gruppe zeigt die Einzellinks beider Schreibweisen. Ausgeschaltet gilt unverändert die case-sensitive Gruppierung oben; der Export enthält die Ansicht im jeweils aktiven Modus.
 - **Testfixture:** `tests/fixtures/tech/links/anchors/`: Zielseite `/target` mit Inlinks „Produkte“ (3×, von 3 Seiten), „produkte“ (1×), „Mehr“ (2× von derselben Seite), einem Bild-Link mit Alt „Logo“, einem leeren Link, einem nofollow-Link „Produkte“ und einem Self-Link „Produkte“. Erwartung Standard: „Produkte“ `Links = 4`, `Unique Sources = 4` (inkl. nofollow, ohne Self-Link); mit „Nofollow ausschließen“ `Links = 3`.
 
+### TECH-147 Filter „Pages With Empty Anchor Tags“ (Nachtrag 09.11.2026)
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0) – OS-Festlegung, Nutzerentscheidung 09.11.2026, ohne Paritätsbezug.
+- **Beschreibung:** Seiten mit mindestens einem leeren Link-Element: ein `<a href>`, das weder Text noch ein Bild mit Alt-Text enthält. Solche Links (z. B. Symbol-Links, deren Symbol per CSS kommt) geben Suchmaschinen keinen Ankertext und sind ohne zusätzliche Auszeichnung für Screenreader namenlos.
+- **Abgrenzung zu TECH-135:** TECH-135 bewertet die gespeicherten **internen Outlinks** (Link-Datensätze), schließt `<area>` ein und richtet sich nach den Crawl-Einstellungen (nur erfasste Links). Dieser Filter bewertet die **Elemente** im HTML der Seite: alle `<a>` mit `href`, intern und extern, auch nofollow und nicht verfolgte Links (z. B. ausgeschlossene Ziele oder Positionsregeln nach INTEG-085), aber kein `<area>`. Eine Seite, die wegen eines leeren `<a>` in TECH-135 steht, steht auch hier; umgekehrt kommen hier Seiten hinzu, deren leere Links nur extern oder nicht erfasst sind. Die Barrierefreiheitsregel `link-name` (TECH-253) bleibt eigenständig: Sie berücksichtigt `aria-label`, `aria-labelledby` und `title`, dieser Filter nicht.
+- **Eingaben/Konfiguration:** –
+- **Ausgabe (Spalten/Filter/Export):** Filter „Pages With Empty Anchor Tags“ im Tab Links; Spalte `Empty Anchor Tags` (Anzahl der leeren `<a>`-Elemente der Seite); in den unteren Outlinks die Filteroption „Leeres Link-Element“. Einstufung: Chance / Niedrig (wie TECH-135; UI-063: `T-O2`, `P-L1`).
+- **Akzeptanzkriterien:**
+  - [ ] Leer ist ein `<a href>`, wenn sein Ankertext nach TECH-131 nach Trim leer ist **und** kein enthaltenes `<img>` einen nicht leeren `alt` hat.
+  - [ ] `<a href="/x"></a>`, `<a href="/x">   </a>`, `<a href="/x"><img src="i.png" alt=""></a>`, `<a href="/x"><img src="i.png"></a>`, `<a href="/x"><span class="icon"></span></a>` → leer.
+  - [ ] `<a href="/x">Mehr</a>`, `<a href="/x"><img alt="Logo"></a>` → nicht leer.
+  - [ ] `<a href="/x" aria-label="Warenkorb"></a>` und `<a href="/x" title="Warenkorb"></a>` → leer (Festlegung: Ankertext für Suchmaschinen fehlt; die Barrierefreiheit prüft `link-name`).
+  - [ ] Externer Link und `rel="nofollow"`-Link ohne Text → zählen. `<a>` ohne `href` (Sprungmarke) und `<area>` → zählen nicht.
+  - [ ] Im Rendering-Modus wird das gerenderte HTML bewertet (Linkherkunft nach CRAWL-079); ein Link, der erst per JavaScript Text erhält, ist nicht leer.
+  - [ ] `Empty Anchor Tags` zählt Elemente, nicht Ziele: zwei leere Links auf dasselbe Ziel → 2.
+- **Testfixture:** `tests/fixtures/tech/links/empty-anchors.html` mit allen Fällen oben; `empty-anchors-js.html` (Text per Skript ergänzt).
+
 ---
 
 ## AMP
@@ -1558,6 +1617,7 @@ Alle Funktionen dieses Abschnitts setzen den Rendering-Modus „JavaScript“ vo
   - [ ] Präfixe (`prefix="schema: https://schema.org/"`, `typeof="schema:Product"`) werden aufgelöst.
   - [ ] Verschachtelung über `property` + `typeof` am selben Element.
   - [ ] Nur schema.org-Vokabular wird typisiert; andere Vokabulare (z. B. Open Graph `og:`) werden ignoriert (Festlegung).
+  - **Nachtrag 09.11.2026 (1.x):** Das gilt weiterhin für den Tab Structured Data. Open-Graph- und Card-Angaben werden seitdem im eigenen Tab „Social“ ausgewertet (TECH-320 ff.); „ignoriert“ heißt hier nur noch: nicht als strukturierte Daten typisiert.
 - **Testfixture:** `sd/rdfa-*.html`: Organization mit vocab, Product mit Präfix, Event verschachtelt mit Place.
 
 ### TECH-183 Tab „Structured Data“: Population und Spalten
@@ -2368,6 +2428,97 @@ Change Detection ist Teil des Vergleichsmodus. Auswahl der Crawls, Rollentausch,
   - [ ] Längere Kette mit gleichem ersten Ziel → keine Änderung dieses Elements für die Start-URL (Ketten: Report OUT-154).
 - **Testfixture:** `tests/fixtures/out-b3-diff`: `/rt` leitet in v1 auf `/end1.html`, in v2 auf `/end2.html` (gelistet); `/moved.html` wird in v2 zur Weiterleitung (gelistet); `/c1` behält das Ziel `/c2` bei längerer Kette (nicht gelistet).
 
+## Social (Nachtrag 09.11.2026)
+
+Neuer Tab für die Vorschau-Metadaten, mit denen soziale Netzwerke und Messenger geteilte Links darstellen: Open Graph (`og:*`) und X-/Twitter-Cards (`twitter:*`). Alle Einträge dieses Abschnitts sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerentscheidung 09.11.2026)** ohne Paritätsbezug und gehören zum Meilenstein **1.x (nach 1.0)**. Paritätsvergleiche schließen Tab, Spalten und Filter aus. Die Einstufungen folgen UI-063; weil die Wirkung außerhalb der eigenen Website liegt, ist die Dringlichkeit nach `P-L2` durchweg **Niedrig**.
+
+Begriffe: Der **wirksame Wert** einer Card-Angabe ist der `twitter:*`-Wert, ersatzweise der entsprechende Open-Graph-Wert (`twitter:title` ← `og:title`, `twitter:description` ← `og:description`, `twitter:image` ← `og:image`), weil verbreitete Plattformen so zurückfallen. Das **Social-Bild** einer Seite ist das erste `og:image` und, falls abweichend, das wirksame `twitter:image`.
+
+### TECH-320 Social-Metadaten erfassen, Tab „Social“: Population und Spalten
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Liest je Seite die `<meta>`-Elemente im `<head>` mit `property` oder `name` beginnend mit `og:` bzw. `twitter:` (Attributnamen ohne Beachtung der Groß-/Kleinschreibung; `property` und `name` werden für beide Präfixe akzeptiert, weil beide Schreibweisen verbreitet sind). Bei mehrfach vorhandenen Eigenschaften gilt der erste Wert; Strukturangaben wie `og:image:width` gehören zum unmittelbar davor stehenden `og:image`. Die Social-Bilder werden zusätzlich abgerufen (TECH-323). Meta-Elemente außerhalb des `<head>` werden nicht ausgewertet (Festlegung; Vorschau-Dienste lesen den Kopf).
+- **Eingaben/Konfiguration:** Spider › Extraktion: „Social-Metadaten erfassen“ (`extraction.social`, Standard an), „Social-Bilder prüfen“ (`extraction.social_images`, Standard an). Grenzwerte unter Voreinstellungen (`social.*`, TECH-323).
+- **Ausgabe (Spalten/Filter/Export):** Tab „Social“ in der Gruppe „Inhalte“ direkt nach „Structured Data“ (UI-004). Spalten: `Address`, `Indexability`, `Indexability Status`, `OG Title`, `OG Description`, `OG Type`, `OG URL`, `OG Image`, `OG Image Width`, `OG Image Height` (deklarierte Werte), `OG Site Name`, `OG Locale`, `Twitter Card`, `Twitter Title`, `Twitter Description`, `Twitter Image`, `Twitter Site`, `Social Image Status Code`, `Social Image Content Type`, `Social Image Size` (Bytes im Export, KB in der Oberfläche wie ONPAGE-171), `Social Image Dimensions (WxH)` (tatsächliche Maße). Filter TECH-321 bis TECH-323 plus „All“. Tab-Export nach OUT-020; Bulk-Export „Social: All Social Images“ (`Address`, `Image URL`, `Source` = `og`/`twitter`, `Status Code`, `Content Type`, `Size`, `Dimensions (WxH)`).
+- **Akzeptanzkriterien:**
+  - [ ] Population: interne HTML-Seiten mit Status 200; mit ausgeschalteter Erfassung ist der Tab leer und zeigt den Hinweis „Social-Metadaten erfassen ist aus“ (Kennzeichen „Voraussetzung fehlt“, UI-006).
+  - [ ] `<meta property="og:title" content="A">` und `<meta name="og:title" content="A">` ergeben beide `OG Title` = A; `<meta name="twitter:card">` und `<meta property="twitter:card">` ebenso.
+  - [ ] Zwei `og:title` → `OG Title` = erster Wert. `og:image` A mit `og:image:width` 800 und danach `og:image` B → `OG Image` = A, `OG Image Width` = 800.
+  - [ ] Relative Werte in `og:url`/`og:image` werden für Spalten und Abruf nach TECH-002 aufgelöst; der Rohwert bleibt für TECH-321 erhalten.
+  - [ ] HTML-Entities werden dekodiert, Leerraum am Rand entfernt; leere `content`-Werte gelten als nicht vorhanden.
+  - [ ] Meta-Elemente im `<body>` bleiben unberücksichtigt.
+  - [ ] Im Rendering-Modus wird das gerenderte HTML ausgewertet (wie die übrigen Kopfdaten).
+  - [ ] Die Strukturdaten-Erfassung (TECH-182) bleibt unverändert: `og:`-Angaben erscheinen dort weiterhin nicht.
+- **Testfixture:** `tests/fixtures/tech/social/`: `full.html` (vollständige Angaben beider Arten), `name-attr.html`, `multiple.html`, `relative.html`, `body-meta.html`, `rendered.html` (Angaben per Skript eingefügt).
+
+### TECH-321 Open-Graph-Filter
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Prüft die vier Pflichtangaben des Open-Graph-Protokolls (`og:title`, `og:type`, `og:image`, `og:url`) und die Form der URL-Angaben.
+- **Eingaben/Konfiguration:** –
+- **Ausgabe (Spalten/Filter/Export):** Spalte `Missing OG Properties` (kommagetrennt in der Reihenfolge title, type, image, url). Filter:
+  - „Open Graph Missing“ – keine einzige `og:`-Angabe. Einstufung: Chance / Niedrig (`T-O2`, `P-L2`).
+  - „Open Graph Incomplete“ – mindestens eine, aber nicht alle vier Pflichtangaben. Einstufung: Fehler / Niedrig (`T-I2`, `P-L2`).
+  - „Open Graph Relative URL“ – `og:url` oder `og:image` ist nicht absolut (`http`/`https` mit Host); das Protokoll verlangt absolute Adressen. Einstufung: Fehler / Niedrig (`T-I2`, `P-L2`).
+- **Akzeptanzkriterien:**
+  - [ ] Seite ohne `og:` → nur „Open Graph Missing“; Seite mit allen vier → in keinem der drei Filter (sofern absolut).
+  - [ ] Seite mit `og:title` und `og:image` → „Open Graph Incomplete“, `Missing OG Properties` = `type, url`.
+  - [ ] `og:image` = `/img/share.jpg` → „Open Graph Relative URL“; für den Bildabruf (TECH-323) wird die aufgelöste URL verwendet. Protokollrelatives `//cdn.test/a.jpg` zählt ebenfalls als nicht absolut.
+  - [ ] „Open Graph Missing“ und „Open Graph Incomplete“ schließen sich aus.
+- **Testfixture:** `tests/fixtures/tech/social/og-*.html` (keine, vollständig, teilweise, relativ, protokollrelativ).
+
+### TECH-322 Card-Filter (X/Twitter)
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Prüft Art und Vollständigkeit der Card-Angaben unter Berücksichtigung der wirksamen Werte.
+- **Eingaben/Konfiguration:** –
+- **Ausgabe (Spalten/Filter/Export):** Spalte `Missing Card Properties`. Pflichtangaben je Card-Art (Festlegung):
+
+  | `twitter:card` | Pflicht (wirksame Werte) |
+  |---|---|
+  | `summary` | Titel |
+  | `summary_large_image` | Titel, Bild |
+  | `player` | Titel, `twitter:player`, `twitter:player:width`, `twitter:player:height` |
+  | `app` | mindestens eine `twitter:app:id:*`-Angabe |
+
+  Filter:
+  - „Twitter Card Missing“ – kein `twitter:card`. Einstufung: Warnung / Niedrig (`T-W2`, `P-L2`; die Darstellung hängt dann vom Rückfallverhalten der Plattform ab).
+  - „Twitter Card Invalid Type“ – Wert nicht in {`summary`, `summary_large_image`, `player`, `app`} (Vergleich ohne Groß-/Kleinschreibung). Einstufung: Fehler / Niedrig (`T-I2`, `P-L2`).
+  - „Twitter Card Incomplete“ – gültige Art, aber eine Pflichtangabe fehlt. Einstufung: Fehler / Niedrig (`T-I2`, `P-L2`).
+- **Akzeptanzkriterien:**
+  - [ ] `twitter:card = summary_large_image` mit `og:title` und `og:image`, ohne `twitter:title`/`twitter:image` → in keinem Filter (Rückfall).
+  - [ ] `summary_large_image` ohne jedes Bild → „Twitter Card Incomplete“, `Missing Card Properties` = `image`.
+  - [ ] `twitter:card = large` → nur „Twitter Card Invalid Type“ (Vollständigkeit wird bei ungültiger Art nicht bewertet).
+  - [ ] Seite ohne `twitter:card`, aber mit vollständigem Open Graph → „Twitter Card Missing“.
+- **Testfixture:** `tests/fixtures/tech/social/card-*.html` (je Card-Art vollständig und unvollständig, Rückfall auf og, ungültige Art, fehlende Art).
+
+### TECH-323 Social-Bilder: Abruf, Status und Maße
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Jedes Social-Bild wird abgerufen, um Status, Format, Dateigröße und tatsächliche Maße zu prüfen. Der Abruf ist ein **Hilfsabruf**: Er erscheint nicht als Zeile in Internal/External/Images und zählt nicht zu `Total URLs Encountered` (UI-061), nutzt aber User-Agent, Header, Authentifizierung, Proxy, robots.txt-Regeln und Tempogrenzen des Crawls; Weiterleitungen werden bis zur Grenze aus CRAWL-072 verfolgt. Ist dieselbe URL im Crawl bereits als Bild abgerufen worden, wird die vorhandene Antwort verwendet. Jede Bild-URL wird je Crawl höchstens einmal abgerufen. Externe Bild-URLs werden ebenfalls abgerufen, weil Social-Bilder oft auf CDNs liegen.
+- **Eingaben/Konfiguration:** „Social-Bilder prüfen“ (TECH-320). Voreinstellungen (Festlegung mit Begründung):
+  - `social.image_min_px` = 200 – kleinste Kantenlänge; darunter zeigen verbreitete Plattformen gar kein Vorschaubild, sondern nur Text.
+  - `social.image_recommended` = 1200 × 630 – empfohlene Mindestmaße für große Vorschauen (`og:image` und `summary_large_image`); das entspricht dem verbreiteten Seitenverhältnis 1,91 : 1 und bleibt auf hochauflösenden Bildschirmen scharf. Für `summary`-Cards gilt nur die Mindestgröße.
+  - `social.image_max_bytes` = 5 MiB – darüber lehnen verbreitete Plattformen Vorschaubilder ab oder laden sie nicht in angemessener Zeit.
+  - Unterstützte Formate: JPEG, PNG, GIF, WebP. SVG und andere Formate werden von den meisten Vorschau-Diensten nicht dargestellt.
+- **Ausgabe (Spalten/Filter/Export):** Spalten aus TECH-320. Filter:
+  - „Social Image Not 200“ – Endstatus nach Weiterleitungen ≠ 200, keine Antwort oder durch robots.txt gesperrt. Einstufung: Fehler / Niedrig (`T-I1`, `P-L2`).
+  - „Social Image Unsupported Format“ – Status 200, aber Inhaltstyp (nach Magic-Bytes, ersatzweise `Content-Type`) kein unterstütztes Format. Einstufung: Warnung / Niedrig (`T-W2`, `P-L2`).
+  - „Social Image Below Minimum Size“ – Breite oder Höhe < `image_min_px`. Einstufung: Warnung / Niedrig (`T-W2`, `P-L2`).
+  - „Social Image Below Recommended Size“ – Mindestgröße erfüllt, aber für eine große Vorschau Breite < 1200 oder Höhe < 630. Einstufung: Chance / Niedrig (`T-O1`, `P-L2`).
+  - „Social Image Over 5 MB“ – Dateigröße > `image_max_bytes` (Filtername folgt dem eingestellten Wert). Einstufung: Warnung / Niedrig (`T-W2`, `P-L2`).
+- **Akzeptanzkriterien:**
+  - [ ] Bild mit 404 → „Social Image Not 200“; Bild mit 301 auf ein 200-Bild → nicht; durch robots.txt gesperrtes Bild → „Not 200“ mit Statustext `Blocked by Robots.txt`, kein Abruf.
+  - [ ] PNG 1200×630 → in keinem Größenfilter; PNG 600×315 → „Below Recommended Size“; PNG 150×150 → nur „Below Minimum Size“.
+  - [ ] `summary`-Card mit eigenem `twitter:image` 300×300 und ohne `og:image` → in keinem Größenfilter.
+  - [ ] SVG mit Status 200 → „Unsupported Format“, Maße leer, kein Größenfilter.
+  - [ ] Bild mit 6 MiB → „Over 5 MB“; die Datei wird höchstens bis `image_max_bytes` + 1 Byte gelesen, wenn `Content-Length` fehlt.
+  - [ ] Maße werden aus den Kopfdaten des Bildformats bestimmt, nicht aus `og:image:width/height`; abweichende deklarierte Werte ändern das Ergebnis nicht.
+  - [ ] Dasselbe Bild auf 100 Seiten → genau 1 Abruf (Request-Log); ein bereits als Bild gecrawltes Bild → 0 zusätzliche Abrufe.
+  - [ ] `Total URLs Encountered` und die Zeilenzahl von Internal/External sind mit und ohne „Social-Bilder prüfen“ gleich.
+  - [ ] „Social-Bilder prüfen“ aus → keine Bildabrufe; die fünf Filter zeigen das Kennzeichen „Voraussetzung fehlt“.
+- **Testfixture:** `tests/fixtures/tech/social/images/`: `ok-1200x630.png`, `small-600x315.png`, `tiny-150x150.png`, `square-300x300.png`, `logo.svg`, `big-6mb.jpg` (generiert), `/moved.jpg` (301), `/missing.jpg` (404), robots-gesperrtes `/private/share.jpg`, externes Bild auf `cdn.social.test`.
+
 ---
 
 ## Anhang A: Offene Punkte, Festlegungen und Paritätsabweichungen (gegen Golden-Exporte prüfen)
@@ -2477,6 +2628,8 @@ Die Einstufungen sind eine eigenständige OpenSpider-Bewertung nach den folgende
 | TECH-083 | Not Using Canonical | Fehler / Hoch | Annotation zeigt auf nicht-kanonische Variante (b); Hoch. |
 | TECH-084 | Missing X-Default | Warnung / Niedrig | Optionales Merkmal (Niedrig). |
 | TECH-086 | Outside \<head> (Hreflang) | Fehler / Hoch | Angabe außerhalb des Heads wird ignoriert (a); Hoch. |
+| TECH-090 | Self Reference Only | Warnung / Niedrig | Wirkungslos, aber unschädlich und bei einsprachigen Vorlagen gewollt möglich; Hinweis auf fehlende Alternates (Niedrig). Nachtrag 09.11.2026. |
+| TECH-091 | Hreflang Language Differs From HTML Lang | Warnung / Mittel | Beide Angaben gültig, eine davon vermutlich falsch; kann eine falsche Sprachversion im Suchergebnis begünstigen (Mittel). Nachtrag 09.11.2026. |
 | TECH-102 | Pages With Blocked Resources | Warnung / Hoch | Kann gewollt sein; unvollständiges Rendering kann Inhalte unsichtbar machen (Hoch). |
 | TECH-103 | Contains JavaScript Links | Warnung / Mittel | Gültig; Entdeckung hängt vom Rendern ab (Mittel). |
 | TECH-104 | Contains JavaScript Content | Warnung / Mittel | Gültig; Inhalt hängt vom Rendern ab (Mittel). |
@@ -2493,6 +2646,7 @@ Die Einstufungen sind eine eigenständige OpenSpider-Bewertung nach den folgende
 | TECH-134 | Internal Nofollow Outlinks | Warnung / Niedrig | Gültig; geringe Wirkung (Niedrig). |
 | TECH-135 | Internal Outlinks With No Anchor Text | Chance / Niedrig | Verbesserungspotenzial (Niedrig). |
 | TECH-136 | Non-Descriptive Anchor Text In Internal Outlinks | Chance / Niedrig | Verbesserungspotenzial (Niedrig). |
+| TECH-147 | Pages With Empty Anchor Tags | Chance / Niedrig | Wie TECH-135: Verbesserungspotenzial ohne Fehlfunktion (Niedrig). Nachtrag 09.11.2026. |
 | TECH-137 | Pages With High External Outlinks | Warnung / Niedrig | Kann gewollt sein; geringe Wirkung (Niedrig). |
 | TECH-138 | Pages With High Internal Outlinks | Warnung / Niedrig | Kann gewollt sein; Signalverdünnung gering (Niedrig). |
 | TECH-139 | Follow & Nofollow Internal Inlinks To Page | Warnung / Niedrig | Inkonsistente, aber gültige Verlinkung (Niedrig). |
@@ -2532,6 +2686,13 @@ Die Einstufungen sind eine eigenständige OpenSpider-Bewertung nach den folgende
 | TECH-289 | HTML Document Over 2MB | Fehler / Hoch | Grenze der Verarbeitung durch Suchmaschinen (c); Inhalte am Ende gehen verloren (Hoch). |
 | TECH-290 | Resource Over 2MB | Fehler / Hoch | Wie TECH-289 für Ressourcen; Rendering unvollständig (Hoch). |
 | TECH-291 | High Carbon Rating | Chance / Niedrig | Nachhaltigkeit/Effizienz (Chance); keine direkte SEO-Wirkung (Niedrig). |
+| TECH-321 | Open Graph Missing | Chance / Niedrig | Vorschau beim Teilen verbesserbar; Wirkung außerhalb der Website (Niedrig). Nachtrag 09.11.2026. |
+| TECH-321 | Open Graph Incomplete, Open Graph Relative URL | Fehler / Niedrig | Pflichtangabe fehlt bzw. Form ungültig (a); Wirkung außerhalb der Website (Niedrig). |
+| TECH-322 | Twitter Card Missing | Warnung / Niedrig | Darstellung hängt vom Rückfallverhalten der Plattform ab (Niedrig). |
+| TECH-322 | Twitter Card Invalid Type, Twitter Card Incomplete | Fehler / Niedrig | Ungültige Art bzw. Pflichtangabe fehlt (a); Niedrig. |
+| TECH-323 | Social Image Not 200 | Fehler / Niedrig | Verweisziel unbrauchbar (b); Vorschau ohne Bild (Niedrig). |
+| TECH-323 | Social Image Unsupported Format, Below Minimum Size, Over 5 MB | Warnung / Niedrig | Bild vorhanden, Darstellung hängt von der Plattform ab (Niedrig). |
+| TECH-323 | Social Image Below Recommended Size | Chance / Niedrig | Empfehlungsbereich unterschritten (Niedrig). |
 
 ---
 
