@@ -174,12 +174,18 @@ pub async fn snapshot(
 }
 
 pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
-    refresh_aligned(app, s, app.tick_due()).await
+    refresh_aligned(app, s, app.tick_due(), false).await
 }
 
 /// Like [`refresh`] with the caller's decision whether this poll belongs to a due tick (UI-018, B4-LAGFIX2): the
 /// session loop decides once, so the write of counted URLs, the row publication and the tick use the same answer.
-pub(super) async fn refresh_aligned(app: &App, s: &SessionInfo, due: bool) -> Result<(), CmdError> {
+/// `ended`: the crawl has just ended in this poll; its final rows are published at once.
+pub(super) async fn refresh_aligned(
+    app: &App,
+    s: &SessionInfo,
+    due: bool,
+    ended: bool,
+) -> Result<(), CmdError> {
     let service = app.ext::<SessionService>();
     // The entry is created here, so concurrent first refreshes share its notice state (`Cursor::delays`).
     let mut old = service
@@ -488,10 +494,11 @@ pub(super) async fn refresh_aligned(app: &App, s: &SessionInfo, due: bool) -> Re
     // the due tick, rows still follow after two intervals.
     let interval = Duration::from_millis(u64::from(app.live_interval_ms()));
     if old.pending.is_some()
-        && old.rows_at.is_none_or(|t| {
-            let elapsed = now.saturating_sub(t);
-            elapsed >= interval && (elapsed >= interval * 2 || due)
-        })
+        && (ended
+            || old.rows_at.is_none_or(|t| {
+                let elapsed = now.saturating_sub(t);
+                elapsed >= interval && (elapsed >= interval * 2 || due)
+            }))
     {
         let change = old.pending.take().expect("pending change");
         let listeners = service

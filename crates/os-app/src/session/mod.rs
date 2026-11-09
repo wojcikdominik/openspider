@@ -105,10 +105,18 @@ pub fn init(app: &App) {
             // session is active (`delivers_ticks`); control commands send their own acknowledgement, and
             // while they hold the mutation lock `poll` returns at once.
             let due = app.tick_due();
-            if let Err(e) = poll_aligned(&app, due).await {
-                tracing::warn!(error = ?e, "Session poll failed");
+            let ended = match poll_aligned(&app, due).await {
+                Ok(ended) => ended,
+                Err(e) => {
+                    tracing::warn!(error = ?e, "Session poll failed");
+                    false
+                }
+            };
+            if ended {
+                // The final rows of an ended crawl follow its end status promptly (≥ 100 ms, PERF-004).
+                app.expedite_tick();
             }
-            if due {
+            if due || ended {
                 crate::views::settle(&app, settle_budget(sent.elapsed())).await;
                 app.flush_tick();
                 sent = tokio::time::Instant::now();
@@ -144,14 +152,15 @@ pub fn state(app: &App, key: &CrawlKey, state: CrawlState) {
 }
 
 pub async fn poll(app: &App) -> Result<(), CmdError> {
-    poll_aligned(app, app.tick_due()).await
+    poll_aligned(app, app.tick_due()).await.map(|_| ())
 }
 
-/// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`).
-async fn poll_aligned(app: &App, due: bool) -> Result<(), CmdError> {
+/// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`). `Ok(true)`:
+/// a crawl ended in this poll and its final rows were published.
+async fn poll_aligned(app: &App, due: bool) -> Result<bool, CmdError> {
     let service = app.ext::<SessionService>();
     let Ok(_guard) = service.mutation.try_lock() else {
-        return Ok(());
+        return Ok(false);
     };
     let cancel = os_model::CancelToken::new();
     *service
@@ -160,6 +169,7 @@ async fn poll_aligned(app: &App, due: bool) -> Result<(), CmdError> {
         .unwrap_or_else(|p| p.into_inner()) = Some(cancel.clone());
     let result = crate::runtime::with_cancel(cancel, async {
         let mut seen = std::collections::HashSet::new();
+        let mut ended = false;
         for s in app.sessions().all() {
             if !seen.insert(s.key.clone()) {
                 continue;
@@ -174,9 +184,10 @@ async fn poll_aligned(app: &App, due: bool) -> Result<(), CmdError> {
             if finished {
                 control::settle(app, &s, None).await?;
             }
-            feed::refresh_aligned(app, &s, due).await?;
+            feed::refresh_aligned(app, &s, due || finished, finished).await?;
+            ended |= finished;
         }
-        Ok(())
+        Ok(ended)
     })
     .await;
     service
