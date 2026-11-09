@@ -1511,7 +1511,7 @@ Führung: Dieser Abschnitt ist führend für den Vergleichsablauf (Auswahl, Klas
 - **Priorität:** P1
 - **Beschreibung:** Exporte aus der Vergleichsansicht enthalten die Vergleichsinformation.
 - **Ausgabe:** Zusätzlich zu den Spalten des Current-Crawls die Spalte `Comparison Status` (`Added`/`New`/`Removed`/`Missing`/`Unchanged`), bei aktivem URL-Mapping die Spalte `Previous Address` (übernommen aus TECH-306) und für Change-Detection-Ansichten die `Previous …`-Spalten (Spaltennamen gemäß TECH-301) **(OS-Festlegung)**. Detail-Exporte von Inlinks/Outlinks tragen `Link Change`, `Crawl`, `Previous Anchor` (OUT-149).
-  - **OS-Festlegung (Orchestrator, 09.11.2026):** Die Spaltennamen in Exportdateien bleiben kanonisch (`Comparison Status`, `Previous Address`); nur die Anzeige in der Oberfläche ist übersetzt (de: „Vergleichsstatus“, „Vorherige Adresse“; en: wie kanonisch, OUT-142).
+  - **OS-Festlegung (Orchestrator, 09.11.2026):** Die Spaltennamen in Exportdateien bleiben kanonisch (`Comparison Status`, `Previous Address`); nur die Anzeige in der Oberfläche ist übersetzt (de: „Vergleichsstatus“, „Vorherige Adresse“; en: wie kanonisch, OUT-142). In Exportdateien stehen `Comparison Status` und `Previous Address` nach den Spalten des Current-Crawls (anders als in der Tabellenanzeige, wo sie direkt nach `Address` folgen, OUT-142).
 - **Akzeptanzkriterien:**
   - [ ] Export „Response Codes:Client Error (4xx)“ mit Unterfilter „Removed“ enthält die behobene 404 mit `Comparison Status`=Removed.
   - [ ] Bulk-Exporte und Reports beziehen sich auf den Current-Crawl.
