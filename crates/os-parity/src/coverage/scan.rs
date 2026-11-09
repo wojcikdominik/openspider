@@ -292,7 +292,7 @@ pub fn is_spec_id(t: &str) -> bool {
 }
 
 /// Wertet den Text eines Zeilenkommentars aus (`" spec: CRAWL-014, CRAWL-017 [M2]"`).
-/// Liefert die IDs und ob ein `[M2]`/`[M3]`-Hinweis dabeisteht.
+/// Liefert die IDs und ob ein Meilenstein-Hinweis (`[M2]` … `[M5]`) dabeisteht.
 pub fn parse_spec_comment(text: &str) -> Option<(Vec<String>, bool)> {
     let t = text.trim_start_matches('/').trim();
     let head = t.get(..5)?;
@@ -308,7 +308,8 @@ pub fn parse_spec_comment(text: &str) -> Option<(Vec<String>, bool)> {
             continue;
         }
         let flag = tok.trim_matches(['[', ']']);
-        if matches!(flag, "P1" | "M2" | "M3") && tok != flag {
+        // M3-Q01: `[M4]`/`[M5]` (Teilkriterien aus `extra_spec_ids`, M4.md E7, M5.md G6) wie `[M3]`.
+        if matches!(flag, "P1" | "M2" | "M3" | "M4" | "M5") && tok != flag {
             deferred |= flag != "P1";
             continue;
         }
@@ -321,9 +322,10 @@ pub fn parse_spec_comment(text: &str) -> Option<(Vec<String>, bool)> {
     (!ids.is_empty()).then_some((ids, deferred))
 }
 
-/// Anhang-B-Markierungen eines einzelnen Spec-Kommentars.
+/// Markierungen eines einzelnen Spec-Kommentars: `[P1]`/`[M2]` für Anhang B (M2), `[M3]` … `[M5]` für die
+/// Teilkriterien der Meilensteine M3–M5 (M3-Q01). Jede Auswertung fragt nur ihren eigenen Marker ab.
 pub fn criterion_markers(text: &str) -> Vec<String> {
-    ["P1", "M2"]
+    ["P1", "M2", "M3", "M4", "M5"]
         .into_iter()
         .filter(|m| text.contains(&format!("[{m}]")))
         .map(str::to_string)
@@ -583,6 +585,15 @@ mod tests {
         assert_eq!(
             parse_spec_comment(" spec: OUT-001: Titel"),
             Some((vec!["OUT-001".into()], false))
+        );
+        // M3-Q01: [M4]/[M5] beenden die ID-Liste nicht mehr und gelten als Meilenstein-Hinweis.
+        assert_eq!(
+            parse_spec_comment(" spec: AI-012 [M5], AI-013 [M4]"),
+            Some((vec!["AI-012".into(), "AI-013".into()], true))
+        );
+        assert_eq!(
+            criterion_markers(" spec: UI-004 [M4]"),
+            vec!["M4".to_string()]
         );
         assert_eq!(parse_spec_comment(" spec: kein Id"), None);
         assert_eq!(parse_spec_comment(" etwas anderes CRAWL-001"), None);
