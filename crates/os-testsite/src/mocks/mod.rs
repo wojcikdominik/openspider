@@ -16,6 +16,7 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 
 pub mod ahrefs;
+pub mod ai;
 /// Chromium-Archiv mit Range-Unterstützung (M3-K01); nicht in der Registry, das Archiv erzeugt der Test.
 pub mod chromium;
 pub mod common;
@@ -50,7 +51,7 @@ pub trait MockApi: Send + Sync {
 
 /// Alle Mocks, die bereits eine Umsetzung haben, in fester Reihenfolge.
 pub fn registry() -> Vec<Arc<dyn MockApi>> {
-    [
+    let mut mocks: Vec<Arc<dyn MockApi>> = [
         oauth::mock(),
         ga4::mock(),
         gsc::mock(),
@@ -63,7 +64,13 @@ pub fn registry() -> Vec<Arc<dyn MockApi>> {
     ]
     .into_iter()
     .flatten()
-    .collect()
+    .collect();
+    mocks.extend(
+        ai::AiMock::fixtures()
+            .expect("valid AI answer fragments")
+            .registrations(),
+    );
+    mocks
 }
 
 /// Laufender Mock-Server: ein Listener auf `127.0.0.1`, die Mocks unter `/<name>`.

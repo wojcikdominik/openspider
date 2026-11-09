@@ -1,0 +1,188 @@
+{
+  "host": "ai.test",
+  "pages": [
+    {
+      "url": "/",
+      "mock_id": "home",
+      "status": 200,
+      "indexable": true,
+      "file": "index.html"
+    },
+    {
+      "url": "/categories/1",
+      "mock_id": "category-1",
+      "status": 200,
+      "indexable": true,
+      "file": "categories/1.html"
+    },
+    {
+      "url": "/categories/2",
+      "mock_id": "category-2",
+      "status": 200,
+      "indexable": true,
+      "file": "categories/2.html"
+    },
+    {
+      "url": "/categories/3",
+      "mock_id": "category-3",
+      "status": 200,
+      "indexable": true,
+      "file": "categories/3.html"
+    },
+    {
+      "url": "/products/1",
+      "mock_id": "product-1",
+      "status": 200,
+      "indexable": true,
+      "file": "products/1.html"
+    },
+    {
+      "url": "/products/2",
+      "mock_id": "product-2",
+      "status": 200,
+      "indexable": true,
+      "file": "products/2.html"
+    },
+    {
+      "url": "/products/3",
+      "mock_id": "product-3",
+      "status": 200,
+      "indexable": true,
+      "file": "products/3.html"
+    },
+    {
+      "url": "/products/4",
+      "mock_id": "product-4",
+      "status": 200,
+      "indexable": true,
+      "file": "products/4.html"
+    },
+    {
+      "url": "/products/5",
+      "mock_id": "product-5",
+      "status": 200,
+      "indexable": true,
+      "file": "products/5.html"
+    },
+    {
+      "url": "/guides/1",
+      "mock_id": "guide-1",
+      "status": 200,
+      "indexable": true,
+      "file": "guides/1.html"
+    },
+    {
+      "url": "/guides/2",
+      "mock_id": "guide-2",
+      "status": 200,
+      "indexable": true,
+      "file": "guides/2.html"
+    },
+    {
+      "url": "/guides/3",
+      "mock_id": "guide-3",
+      "status": 200,
+      "indexable": true,
+      "file": "guides/3.html"
+    },
+    {
+      "url": "/health",
+      "mock_id": "health",
+      "status": 200,
+      "indexable": true,
+      "file": "health.html"
+    },
+    {
+      "url": "/contact",
+      "mock_id": "contact",
+      "status": 200,
+      "indexable": true,
+      "file": "contact.html"
+    },
+    {
+      "url": "/legal",
+      "mock_id": "legal",
+      "status": 200,
+      "indexable": true,
+      "file": "legal.html"
+    },
+    {
+      "url": "/gone",
+      "mock_id": "soft-404",
+      "status": 200,
+      "indexable": true,
+      "file": "gone.html"
+    },
+    {
+      "url": "/placeholder",
+      "mock_id": "placeholder",
+      "status": 200,
+      "indexable": true,
+      "file": "placeholder.html"
+    },
+    {
+      "url": "/wrong-title",
+      "mock_id": "wrong-title",
+      "status": 200,
+      "indexable": true,
+      "file": "wrong-title.html"
+    },
+    {
+      "url": "/wrong-description",
+      "mock_id": "wrong-description",
+      "status": 200,
+      "indexable": true,
+      "file": "wrong-description.html"
+    },
+    {
+      "url": "/english",
+      "mock_id": "english",
+      "status": 200,
+      "indexable": true,
+      "file": "english.html"
+    },
+    {
+      "url": "/french",
+      "mock_id": "french",
+      "status": 200,
+      "indexable": true,
+      "file": "french.html"
+    },
+    {
+      "url": "/search",
+      "mock_id": "search",
+      "status": 200,
+      "indexable": true,
+      "file": "search.html"
+    },
+    {
+      "url": "/noindex",
+      "mock_id": "noindex",
+      "status": 200,
+      "indexable": false,
+      "file": "noindex.html"
+    },
+    {
+      "url": "/error",
+      "mock_id": "error",
+      "status": 404,
+      "indexable": false,
+      "file": "error.html"
+    },
+    {
+      "url": "/redirect",
+      "mock_id": "redirect",
+      "status": 301,
+      "indexable": false,
+      "file": "redirect.html"
+    }
+  ],
+  "images": [
+    "/images/pack.png",
+    "/images/trail.jpg",
+    "/images/boots.webp",
+    "/images/decoration.gif",
+    "/images/forest.png",
+    "/images/map.svg"
+  ]
+}
