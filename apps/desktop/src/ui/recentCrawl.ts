@@ -75,8 +75,3 @@ export function recentCrawlTitle(meta: RecentCrawlMeta | undefined, lang: string
   const date = crawlDate(meta.startedAt, lang);
   return date ? `${label} – ${date}` : label;
 }
-
-/** One-line menu label: the readable title, or for an unknown crawl the path shortened in the middle. */
-export function recentMenuLabel(path: string, meta: RecentCrawlMeta | undefined, lang: string): string {
-  return recentCrawlTitle(meta, lang) ?? middleEllipsis(path);
-}

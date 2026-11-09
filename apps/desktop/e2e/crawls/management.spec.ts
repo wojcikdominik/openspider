@@ -149,6 +149,23 @@ test("typing reaches the create project, rename and move forms and enables Apply
   await expect.poll(() => calls("crawls.move")).toEqual([{ ids: ["0199f000-0000-7000-8000-000000000001"], project: "Kunde C" }]);
 });
 
+// B4-PROJDLG: Mod+F works in the whole management dialog, also while the dialog itself has focus right after opening;
+// inside a form opened on top of it the key stays with the form.
+// spec: OUT-228
+test("Mod+F focuses the search while the management dialog itself has focus, not from inside a form", async ({ page }) => {
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("role"))).toBe("dialog");
+  await page.keyboard.press("ControlOrMeta+f");
+  const search = page.getByRole("searchbox");
+  await expect(search).toBeFocused();
+  await page.keyboard.type("beta", { delay: 20 });
+  await expect(search).toHaveValue("beta");
+  await page.getByRole("button", { name: "Create project", exact: true }).click();
+  const field = page.getByRole("dialog", { name: "Create project", exact: true }).getByRole("textbox", { name: "Name", exact: true });
+  await expect(field).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+f");
+  await expect(field).toBeFocused();
+});
+
 // B4-PROJDLG: Escape closes only the form, focus returns to its trigger inside the still open management dialog.
 // spec: UI-124
 test("Escape in a form closes only the form and returns focus to its trigger", async ({ page }) => {

@@ -17,7 +17,7 @@ import { showHelp, useHelp } from "./state";
 import { client } from "../../ipc/client";
 import { chooseFile } from "./files";
 import { installMenuContexts } from "./menuContexts";
-import { loadRecent, normalizeRecent, updateRecent } from "./recent";
+import { loadRecent, normalizeRecent, onRecentChanged, updateRecent } from "./recent";
 import { openFeedback } from "./feedback";
 
 /** Registrierung und Abmeldung sind fenstergebunden; verspätete Antworten ändern kein geschlossenes Fenster. */
@@ -125,6 +125,7 @@ export function installMainMenus(): () => void {
     if (next.crawl?.phase !== prev.crawl?.phase || next.crawl?.crawlId !== prev.crawl?.crawlId || next.mcp !== prev.mcp || next.analysis?.running !== prev.analysis?.running) rebuild();
     if (next.crawl?.phase !== prev.crawl?.phase || next.crawl?.crawlId !== prev.crawl?.crawlId || next.analysis !== prev.analysis) void refreshCatalog();
   }));
+  offs.push(onRecentChanged(() => { void reloadRecent().catch(error); }));
   offs.push(usePrefs.subscribe(rebuild));
   offs.push(onActionRegistryChanged(rebuild));
   offs.push(useMainMode.subscribe((next) => { modeRevision++; state.mode = next.mode; rebuild(); }));
