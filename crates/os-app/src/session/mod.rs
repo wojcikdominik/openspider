@@ -65,6 +65,9 @@ pub const TICK_SETTLE_UNTIL: Duration = Duration::from_millis(1000);
 pub const TICK_SETTLE_RANGE: (Duration, Duration) =
     (Duration::from_millis(100), Duration::from_millis(500));
 
+/// Wait of the tick that carries the end status of a crawl for its final table rows (UI-018 „nach Crawl-Ende exakt“).
+pub const TICK_SETTLE_ENDED: Duration = Duration::from_millis(1000);
+
 /// Wait budget of a due tick whose previous tick went out `since` ago (see [`TICK_SETTLE_UNTIL`]).
 pub fn settle_budget(since: Duration) -> Duration {
     TICK_SETTLE_UNTIL
@@ -117,7 +120,12 @@ pub fn init(app: &App) {
                 app.expedite_tick();
             }
             if due || ended {
-                crate::views::settle(&app, settle_budget(sent.elapsed())).await;
+                let budget = if ended {
+                    TICK_SETTLE_ENDED
+                } else {
+                    settle_budget(sent.elapsed())
+                };
+                crate::views::settle(&app, budget).await;
                 app.flush_tick();
                 sent = tokio::time::Instant::now();
             }

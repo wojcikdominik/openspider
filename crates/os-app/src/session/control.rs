@@ -531,7 +531,11 @@ pub async fn settle(app: &App, s: &SessionInfo, action: Option<bool>) -> Result<
     }
     let summary = result?;
     feed::settled(app, s, &p);
-    app.flush_tick();
+    // A control command acknowledges at once. A crawl that ended by itself (`action` None, from the session
+    // poll) sends its end status together with its final table rows from the session loop (UI-018, B4-LAGFIX2).
+    if action.is_some() {
+        app.flush_tick();
+    }
     let event = match summary.state {
         CrawlState::Paused => CrawlEvent::Paused(s.key.clone()),
         _ if action == Some(true) => CrawlEvent::Stopped(s.key.clone()),
