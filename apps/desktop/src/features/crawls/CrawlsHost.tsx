@@ -45,6 +45,11 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   const [error, setError] = useState<{ text: string; path?: string; kind?: "info" | "error" } | null>(null);
   const [recent, setRecent] = useState(readRecent);
   const [form, setForm] = useState<Form | null>(null);
+  const formInput = useRef<HTMLInputElement>(null);
+  const formKind = form?.kind ?? null;
+  // B4-PROJDLG: native `autoFocus` fires while the form's focus scope is not registered yet, so the dialog took focus
+  // back and typing right after opening went nowhere. Focus (and select) the field once the form is mounted instead.
+  useEffect(() => { if (formKind) { formInput.current?.focus(); formInput.current?.select(); } }, [formKind]);
   const [deletion, setDeletion] = useState<CrawlListing[] | null>(null);
   const [pendingOpen, setPendingOpen] = useState<OpenRequest | null>(null);
   const [active, setActive] = useState<{ handle: OpHandle; repair: boolean } | null>(null);
@@ -76,7 +81,15 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
     };
     // Restore before paint/key input; a deferred animation frame can lose Escape on WebKit.
     keepFocus();
-    const onFocusOut = () => queueMicrotask(keepFocus);
+    // B4-PROJDLG: only when focus really falls to nothing. A click into a field fires `focusout` with the field as
+    // `relatedTarget` before the field is focused; a native click runs this microtask in between, and refocusing the
+    // dialog there cancels the click's focus, so typing never reached the field. An element removed together with a
+    // closing form is left to the form's focus restoration (back to its trigger).
+    const onFocusOut = (e: FocusEvent) => {
+      if (e.relatedTarget) return;
+      const target = e.target;
+      queueMicrotask(() => { if (!(target instanceof Node) || target.isConnected) keepFocus(); });
+    };
     document.addEventListener("focusout", onFocusOut);
     return () => { mounted = false; document.removeEventListener("focusout", onFocusOut); };
   }, [open, disabled]);
@@ -308,7 +321,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
     </Dialog>
     <Dialog title={t(`crawls-${form?.kind ?? "rename"}`)} isOpen={!!form} onOpenChange={v => !v && setForm(null)} footer={<DialogFooter okLabel={t("crawls-apply")} cancelLabel={t("ui-dialog-cancel")} okDisabled={disabled || (!form?.value.trim() && form?.kind !== "move")} onOk={submitForm} onCancel={() => setForm(null)} />}>
       {form?.error && <Banner kind="error">{form.error}</Banner>}
-      <label>{t(form?.kind === "move" ? "crawls-target-project" : "crawls-col-name")}<input autoFocus disabled={disabled} value={form?.value ?? ""} list={form?.kind === "move" ? "crawls-project-options" : undefined} onChange={e => setForm(f => f && ({ ...f, value: e.target.value, error: undefined }))} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitForm(); } }} /></label>
+      <label>{t(form?.kind === "move" ? "crawls-target-project" : "crawls-col-name")}<input ref={formInput} disabled={disabled} value={form?.value ?? ""} list={form?.kind === "move" ? "crawls-project-options" : undefined} onChange={e => setForm(f => f && ({ ...f, value: e.target.value, error: undefined }))} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitForm(); } }} /></label>
       <datalist id="crawls-project-options">{projectList.map(p => <option key={p.id} value={p.name} />)}</datalist>
       {form?.kind === "move" && <p>{t("crawls-move-help")}</p>}
     </Dialog>
