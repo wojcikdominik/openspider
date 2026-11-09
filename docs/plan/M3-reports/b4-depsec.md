@@ -121,19 +121,104 @@ Alle MCP-Tests (Rust und Playwright, siehe 3) sind unverändert grün, auch Stat
 - **Pragmas** (`journal_mode`, `synchronous`, `wal_autocheckpoint`, `wal_checkpoint(PASSIVE|TRUNCATE)`,
   `journal_size_limit`, `cache_size`, `temp_store`, `threads`, `busy_timeout`, `application_id`, `user_version`,
   `data_version`, `query_only`, `foreign_keys`, `integrity_check`, `table_info`): In den Release-Notes von 3.51 bis 3.54
-  steht für keines eine Änderung. Alle Tests dazu sind grün.
+  steht für keines eine Änderung. Alle Tests dazu sind grün. **Korrektur (Nachtrag A1):** Die Pragmas sind unverändert,
+  das Sperrverhalten des Unix-VFS aber nicht; die Release-Notes erwähnen das nicht. Siehe Abschnitt 3a.
 - **Kompilieroptionen:** `libsqlite3-sys` 0.39 lässt für `bundled` nur `SQLITE_ENABLE_MEMORY_MANAGEMENT` weg.
   `sqlite3_release_memory` nutzen wir nicht.
 - **VFS-Header-Lesen** (`open.rs`, `read_vfs`/`read_header`): `header_reads_agree_for_short_empty_foreign_and_real_files`
   und `immutable_opens_paths_with_special_characters_without_companions` sind grün.
 - **Sperr- und WAL-Tests:** `wal_live_owner` 11/11, `listing_live_owner` 8/8, `wal_live_owner_app` 7/7,
-  `registry_management` 15/15, `pause_merge` 4/4, `fix_wal_checkpoint` 1/1.
+  `registry_management` 15/15, `pause_merge` 4/4, `fix_wal_checkpoint` 1/1. Unter 3.54 sind diese Tests allein aber
+  kein vollständiger Wächter mehr für den B4-LISTFIX-Fix: Die neue Weiche in SQLite verdeckt den Schaden, siehe 3a.
+  Seit dem Nachtrag hat `wal_live_owner` 12 Tests.
 - **Alte Crawl-Dateien (OUT-255, Fixture-Archiv):** `compat_archive` in os-store, os-cli, os-model und os-app, zusammen
   11 Tests grün. Das Dateiformat von SQLite ist rückwärtskompatibel; 3.54 ändert kein Standardformat.
 - **Weitere Hinweise aus den Release-Notes:** 3.53 rundet Fließkomma → Text standardmäßig auf 17 statt 15 Stellen.
   Kein Golden, kein Export und kein Paritätsvergleich hat sich dadurch geändert (Paritätslauf 218/218). 3.54 ruft den
   Autorisierer auch für Funktionen in `DEFAULT`-Klauseln auf; `readonly_sql` erlaubt nur `SELECT`, nicht betroffen.
   3.54 setzt unter Windows mindestens Vista voraus; unsere Mindestversion ist höher.
+
+## 3a. Nachtrag (Auflage A1): Sperrverhalten des Unix-VFS in SQLite 3.54
+
+Geprüft am Quelltext (`os_unix.c` im Amalgamat von `libsqlite3-sys` 0.35.0 gegen 0.39.1, `diff` der Abschnitte):
+
+- **Neue Weiche `unixIsSharingShmNode`.** `unixLock` lehnt eine RESERVED- oder EXCLUSIVE-Sperre jetzt mit
+  `SQLITE_BUSY` ab, wenn die Verbindung eine `-shm` offen hat und ein anderer Prozess dort eine Sperre auf dem DMS-Byte
+  hält. Geprüft wird mit `F_GETLK`, also nur gegen fremde Prozesse. Im WAL-Modus braucht SQLite diese Sperren auf der
+  Hauptdatei nur beim Schließen der letzten Verbindung (Zurückführen, `-wal`/`-shm` löschen), beim Verlassen des
+  WAL-Modus und im Modus `locking_mode=EXCLUSIVE`. Der Kommentar im Quelltext nennt als Anlass ausdrücklich verlorene
+  Sperren durch ein „rogue close(open(dbFile))“. Das ist genau das beta.3-Szenario aus B4-LISTFIX: Der Besitzer verliert
+  seine POSIX-Sperren auf der Hauptdatei, die Sperren auf der `-shm` behält er aber, denn das ist eine andere Datei.
+  Eine fremde Verbindung, die sich beim Schließen für die letzte hält, bekommt jetzt `SQLITE_BUSY` und lässt `-wal`/`-shm`
+  liegen, statt sie zurückzuführen und zu löschen.
+- **Für uns eine zweite Verteidigungslinie.** Die erste bleibt unser Fix: Kopf über das VFS lesen, Verwaltung nur
+  lesend. Nebenwirkung laut Quelltext: Hält ein fremder Prozess die `-shm`, kann die letzte Verbindung nicht aufräumen
+  und `PRAGMA journal_mode=DELETE` nicht ausführen. Wir verlassen den WAL-Modus nie (`profile.rs` setzt nur `WAL`).
+  Liegengebliebene `-wal`/`-shm` gab es neben lesender Verwaltung schon vorher (B4-LISTFIX, Nebenwirkungen).
+- **Blockierende Sperren (`osSetPosixAdvisoryLock` mit `iBusyTimeout`):** Der Platzhalter ist umgebaut. Bisher wurde
+  jede Millisekunde neu versucht, jetzt gibt es außerhalb von `SQLITE_TEST` einen einzigen nicht blockierenden Versuch.
+  Der Code existiert nur mit `SQLITE_ENABLE_SETLK_TIMEOUT`; `libsqlite3-sys` setzt das nicht. Das Gleiche gilt für das
+  Steuerkommando `SQLITE_FCNTL_LOCK_TIMEOUT`, das wir nicht benutzen. **Bei uns nicht wirksam.**
+- **Zusätzliches `fsync` unter Apple:** Auf MSDOS-Dateisystemen (FAT/exFAT, etwa USB-Sticks) schreibt SQLite in eine
+  leere Datei ein Byte `S`, um die Inode-Nummer stabil zu machen, und ruft jetzt danach `fsync` auf. Betrifft nur
+  macOS bei einer neuen, leeren Crawl-Datei auf einem solchen Datenträger: ein Sync mehr beim Anlegen. Schlägt er fehl,
+  kommt `SQLITE_IOERR_FSYNC` statt eines stillen Weiterlaufens.
+- **Sonst im Unix-VFS:** `mremap`-Pfad und `-shm`-Größen mit 64 Bit gerechnet, Diagnose `SQLITE_FCNTL_FILESTAT` (nur
+  mit `SQLITE_DEBUG`/`SQLITE_ENABLE_FILESTAT`, bei uns aus), Auswahl der Temp-Verzeichnisse neu, `O_TMPFILE` für
+  Temp-Dateien. Für unsere Sperren ohne Bedeutung.
+
+**Gegenprobe B4-LISTFIX unter 3.54 (F2).** Auf dem Server habe ich `read_header` probeweise wieder über `std::fs`
+gelesen. Das war nur lokal und ist nicht committet; danach habe ich zurückgesetzt und per Prüfsumme verglichen.
+
+- `the_owner_process_keeps_its_locks_when_it_reads_or_lists_its_own_file` ist mit dem alten Lesepfad jetzt **grün**.
+  Unter 3.50 war er rot. Auch die übrigen 10 Tests in `wal_live_owner` bleiben grün. Die neue Weiche in SQLite verdeckt
+  den Schaden also: Der fremde Schreiber bekommt beim Schließen `SQLITE_BUSY` und räumt nicht auf. Unser Fix wäre
+  damit unbewacht.
+- **Neuer Test** `the_owner_process_still_holds_its_shared_lock_after_reading_and_listing_its_own_file`
+  (`crates/os-store/tests/wal_live_owner.rs`, nur Unix). Der Besitzer öffnet, liest, listet und prüft seine Datei im
+  eigenen Prozess. Danach fragt ein zweiter Prozess per `F_GETLK` den SHARED-Bereich der Hauptdatei ab (`0x4000_0002`,
+  510 Bytes) und erwartet eine Lesesperre mit der PID des Besitzers. Zur Gegenprobe läuft dieselbe Abfrage vorher
+  einmal und sieht die Sperre. Mit dem alten Lesepfad ist der Test **3 von 3 Läufen rot** („Der Besitzer hat seine
+  gemeinsame Sperre verloren“, `left: None`), mit dem VFS-Lesepfad grün. Damit bewacht er unseren Fix unabhängig vom
+  Verhalten von SQLite.
+
+## 3b. Folgepunkte aus der Fable-Prüfung
+
+- **F1, Fixture für RUSTSEC-2026-0459** (`crates/os-store/tests/compat_archive.rs`,
+  `a_foreign_wal_with_a_smaller_page_size_yields_no_stale_memory_and_fails_the_check`, `// spec: OUT-255`).
+  Ausgangspunkt ist die Archivdatei `schema-v5` mit Seitengröße 4096. Daneben erzeugt der Test eine gültige `-wal`
+  mit Seitengröße 1024 (Kopf, Salze, Prüfsummen) und einem Commit-Frame für die Wurzelseite von `urls`. Kein Binär-Blob
+  im Repo. Vor jedem Lesen füllt er freigegebenen Heap-Speicher mit einer Markierung. Ergebnis unter 3.54:
+  - kein Panic;
+  - beide Leseläufe liefern dasselbe Ergebnis, und keine Markierung taucht auf (die Seite ist ab Byte 1024 genullt,
+    `memset` in `sqlite3WalReadFrame`);
+  - `integrity_check` ist falsch, `files::verify` meldet `Corrupt`;
+  - Öffnen mit Schreibrechten scheitert mit `DatabaseCorrupt`;
+  - Hauptdatei und `-wal` bleiben byte-gleich.
+
+  **Gegenprobe mit altem SQLite:** Dasselbe Dateipaar mit dem System-SQLite 3.46.1 des Servers (Python, nur Prototyp)
+  liefert „Rowid 76 out of order“. Die Fixture hat zwei Zeilen; die falsche Rowid stammt aus nicht initialisiertem
+  Speicher.
+
+  **Befund, Entscheidung offen:** „Sauber scheitern“ gilt unter 3.54 nur teilweise. Lesend öffnen und `SELECT` laufen
+  **ohne Fehler** und liefern für die überdeckte Seite Zeilen aus Nullen und Spalten-Defaults (2 Zeilen, `id` 0). Erst
+  `integrity_check`/`files::verify` und das Öffnen mit Schreibrechten erkennen die Beschädigung. Speicherinhalt kommt
+  nicht mehr heraus; das war der Kern des Advisorys. Eine eigene Ablehnung beim Öffnen wäre ein kleiner Zusatzcode und
+  ist von keiner Spec gedeckt: Seitengröße im Kopf der `-wal` gegen den Dateikopf vergleichen und mit
+  `StoreError::Corrupt` abweisen. Nicht umgesetzt, bitte entscheiden.
+- **F2:** siehe 3a.
+- **F3, direkter Test für `set_bounded_busy`** (`crates/os-store/src/writer.rs`, Modul `bounded_busy_tests`,
+  `// spec: CRAWL-126`). Ein Leser hält einen älteren Stand.
+  - `checkpoint_within_waits_for_the_deadline_then_restores_the_busy_timeout`: `checkpoint_within` mit 300 ms
+    Frist wartet mindestens die Frist und gibt deutlich unter 3 s auf (der Busy-Timeout wären 5 s) mit `busy = 1`.
+    Danach meldet `PRAGMA busy_timeout` wieder 5000, auch wenn er vorher auf 0 stand. Die Frist ist zurückgesetzt, und
+    ohne Leser läuft der nächste Checkpoint durch.
+  - `the_bounded_handler_gives_up_at_once_without_a_deadline`: Nach `set_bounded_busy` meldet `PRAGMA busy_timeout` 0,
+    der Handler ist also gesetzt. Ohne Frist gibt er sofort auf statt nach 5 s.
+- **F4:** `runtime_lint.rs` liest die Versionsanforderung von `rusqlite` aus dem Workspace-`Cargo.toml`
+  (`workspace_rusqlite_version`), statt sie fest einzutragen.
+- **F6:** `.github/workflows/integrations.yml` läuft jetzt auch bei Änderungen an `Cargo.lock` und `Cargo.toml`, für
+  `push` und `pull_request`.
 
 ## 4. Tests (Build-Server `openspider-build`, Worktree `m3-depsec`)
 
@@ -150,6 +235,18 @@ Alle Rust-Läufe mit `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO
 | `npm run -w apps/desktop test` | CSS-Lint ok, Vitest 122 Dateien, 1039 Tests bestanden |
 | Playwright MCP-Suite `e2e/mcp` (`dialog`, `bridge` mit echter `os-app-bridge`), `--workers=1 --retries=0` | Chromium 12/12 (10,6 min), WebKit 12/12 (10,9 min) |
 | Playwright `beta/n04-mcp.spec.ts` (echte Bridge) | Chromium 1/1, WebKit 1/1 |
+
+**Nachtrag (A1, F1–F6), Server, gezielt:**
+
+| Befehl | Ergebnis |
+|---|---|
+| `cargo fmt --all --check` | OK |
+| `cargo clippy --workspace --all-targets -- -D warnings` | OK |
+| `cargo test -p os-store -p os-app --no-fail-fast` | 885 bestanden, 0 fehlgeschlagen, 13 ignoriert, 155 Suiten, darunter `wal_live_owner` 12/12, `wal_live_owner_app` 7/7, `registry_management` 15/15, `compat_archive` (os-store) 4/4, `runtime_lint` 3/3, `bounded_busy_tests` 2/2 |
+| Gegenprobe F2 (`read_header` über `std::fs`, nur Server) | neuer Sperrtest 3 von 3 Läufen rot, alle übrigen 11 Tests von `wal_live_owner` grün (siehe 3a) |
+
+Der Workspace-Test wurde nicht wiederholt: Geändert sind nur Tests in os-store und os-app sowie ein Pfadfilter der CI.
+Nach dem Lint-Fix (`as_chunks` in `compat_archive.rs`) liefen clippy und `compat_archive` noch einmal, beide OK.
 
 `cargo fmt`, `cargo deny check` und `cargo clippy` liefen am Endstand noch einmal, alle OK. Ein Zwischenlauf des
 Workspace-Tests brach ab, weil `disk-guard` bei 20 GB freiem Platz unveränderte Test-Binaries gelöscht hatte, die
