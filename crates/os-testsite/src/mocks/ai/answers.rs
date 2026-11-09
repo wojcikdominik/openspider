@@ -47,29 +47,32 @@ impl AnswerBook {
             .into_iter()
             .filter(|p| p.extension().is_some_and(|e| e == "json"))
         {
-            let fragment: UniqueMap<UniqueMap<Value>> =
-                serde_json::from_slice(&std::fs::read(&path)?)?;
-            for (id, entries) in fragment.0 {
-                for (question, answer) in entries.0 {
-                    if book
-                        .0
-                        .entry(id.clone())
-                        .or_default()
-                        .insert(question.clone(), answer)
-                        .is_some()
-                    {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            format!(
-                                "Duplicate MOCK-ID {id}, question/task {question} in {}",
-                                path.display()
-                            ),
-                        ));
-                    }
+            book.merge(&std::fs::read(&path)?, &path)?;
+        }
+        Ok(book)
+    }
+    fn merge(&mut self, bytes: &[u8], source: &Path) -> io::Result<()> {
+        let fragment: UniqueMap<UniqueMap<Value>> = serde_json::from_slice(bytes)?;
+        for (id, entries) in fragment.0 {
+            for (question, answer) in entries.0 {
+                if self
+                    .0
+                    .entry(id.clone())
+                    .or_default()
+                    .insert(question.clone(), answer)
+                    .is_some()
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "Duplicate MOCK-ID {id}, question/task {question} in {}",
+                            source.display()
+                        ),
+                    ));
                 }
             }
         }
-        Ok(book)
+        Ok(())
     }
     pub(crate) fn answer(&self, input: &Value, question: &str) -> Value {
         marker(&input.to_string(), "MOCK-ID:")
@@ -153,4 +156,37 @@ pub fn embedding(text: &str, dimensions: usize) -> Vec<f64> {
         v.iter_mut().for_each(|x| *x /= norm);
     }
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // spec: INTEG-019 [M4]
+    #[test]
+    fn fixture_fragment_collisions_and_repeated_json_keys_are_errors() {
+        let path = crate::fixtures_root()
+            .join("ai")
+            .join("mock-answers.d")
+            .join("base.json");
+        let base = std::fs::read(&path).unwrap();
+        let mut book = AnswerBook::default();
+        book.merge(&base, &path).unwrap();
+        assert!(book
+            .merge(&base, &path)
+            .unwrap_err()
+            .to_string()
+            .contains("Duplicate MOCK-ID"));
+        let mut book = AnswerBook::default();
+        book.merge(&base, &path).unwrap();
+        book.merge(br#"{"home":{"different-question":42}}"#, &path)
+            .unwrap();
+        assert_eq!(
+            book.answer(&json!("MOCK-ID:home"), "different-question"),
+            42
+        );
+        assert!(book.merge(br#"{"extra":{"q":1,"q":2}}"#, &path).is_err());
+        assert!(book
+            .merge(br#"{"extra":{"q":1},"extra":{"q":2}}"#, &path)
+            .is_err());
+    }
 }

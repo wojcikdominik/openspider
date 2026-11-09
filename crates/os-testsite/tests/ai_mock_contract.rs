@@ -618,7 +618,7 @@ async fn batch_files_polling_partial_and_expired_are_provider_shaped() {
 }
 // spec: INTEG-019 [M4]
 #[tokio::test]
-async fn per_url_markers_timeout_delay_and_fragment_collisions() {
+async fn per_url_markers_timeout_and_delay() {
     let (_, s) = server().await;
     // Empty X-Scenario is an explicit override; omit it to test the page marker.
     let mut stream = TcpStream::connect(s.addr()).await.unwrap();
@@ -640,28 +640,6 @@ async fn per_url_markers_timeout_delay_and_fragment_collisions() {
     )
     .await
     .is_err());
-    // Each test gets an isolated directory without adding a crate dependency.
-    let dir = std::env::temp_dir().join(format!("openspider-ai-fragments-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let base = std::fs::read(
-        os_testsite::fixtures_root()
-            .join("ai")
-            .join("mock-answers.d")
-            .join("base.json"),
-    )
-    .unwrap();
-    std::fs::write(dir.join("a.json"), &base).unwrap();
-    std::fs::write(dir.join("b.json"), &base).unwrap();
-    assert!(AnswerBook::load(&dir)
-        .err()
-        .unwrap()
-        .to_string()
-        .contains("Duplicate MOCK-ID"));
-    std::fs::write(dir.join("b.json"), r#"{"home":{"different-question":42}}"#).unwrap();
-    assert!(AnswerBook::load(&dir).is_ok());
-    std::fs::write(dir.join("b.json"), r#"{"extra":{"q":1,"q":2}}"#).unwrap();
-    assert!(AnswerBook::load(&dir).is_err());
-    std::fs::remove_dir_all(dir).unwrap();
 }
 // spec: INTEG-019 [M4]
 #[tokio::test]
