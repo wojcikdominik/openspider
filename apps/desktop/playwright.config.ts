@@ -10,8 +10,10 @@ const wanted = (process.env.OS_E2E_PROJECTS ?? "chromium,webkit").split(",").map
 const PERF = /viz[\\/]perf\.spec\.ts$/;
 // Visual snapshots require the dedicated platform/scale configuration. Node tests of the U31 perf harness
 // (`e2e/perf/**/*.test.mjs`, `*.nodetest.mts`) run under `node --test`, not in `npm run e2e`.
+// Exception (B4-M2GATE, UI-121 [P1], K2-79): `visual/language.spec.ts` takes no screenshots and needs no scale factor;
+// it runs in E2E-A so that the community-language checks of the visual suite have a CI result on every platform.
 const PERF_NODE_TESTS = [/perf[\\/].*\.test\.mjs$/, /\.nodetest\.mts$/];
-const MAIN_IGNORE = [PERF, /visual[\\/]/, ...PERF_NODE_TESTS];
+const MAIN_IGNORE = [PERF, /visual[\\/](?!language\.spec\.ts$)/, ...PERF_NODE_TESTS];
 const engines = [
   { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
   { name: "webkit", use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 800 } } },
