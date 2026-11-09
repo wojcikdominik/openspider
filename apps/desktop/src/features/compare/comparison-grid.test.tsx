@@ -1,7 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createClient, setClient } from "../../ipc/client";
-import { setLanguage } from "../../i18n";
+import { getT, setLanguage } from "../../i18n";
+import { comparisonCsv } from "./export";
+import { classLabel } from "./labels";
 import { ComparisonTable } from "./ComparisonTable";
 import { ComparisonLinks } from "./ComparisonLinks";
 import { ComparisonDetail } from "./ComparisonDetail";
@@ -123,8 +125,25 @@ it("shows the tab's ordinary columns with catalog kinds and localized headers, t
   // OS-Festlegung 09.11.2026 (OUT-142): „Vergleichsstatus“ directly after Address; Title 1 Length is hidden by default as in the normal mode.
   await waitFor(() => expect(within(grid).getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Adresse", "Vergleichsstatus", "Statuscode"]));
   // UI-007: numbers keep their type (formatted and right-aligned by the grid), not stringified text.
-  await waitFor(() => expect(within(grid).getAllByRole("gridcell").map(c => c.textContent)).toEqual(["https://site.test/start", "Unchanged", "200"]));
+  // OUT-142 (OS-Festlegung 09.11.2026): the status value is shown in the UI language …
+  await waitFor(() => expect(within(grid).getAllByRole("gridcell").map(c => c.textContent)).toEqual(["https://site.test/start", "Unverändert", "200"]));
   expect(fixture.core.calls.filter(c => c.cmd === "view.rows").at(-1)?.args).toMatchObject({ columns: ["Address", "Status Code"] });
+  // … while the export keeps the canonical English value.
+  expect(await comparisonCsv(useComparison.getState().query, ["Address", "Status Code"])).toBe("Address,Status Code,Comparison Status\r\nhttps://site.test/start,200,Unchanged\r\n");
+});
+
+// spec: OUT-142
+// spec: UI-121
+it("localizes every comparison status value in the display only", () => {
+  const values = ["Added", "New", "Removed", "Missing", "Unchanged"];
+  const source = new ComparisonSource({ viewId: "comparison", version: 1, offset: 0, total: values.length, columns: ["Address", "Comparison Status"],
+    cells: values.map(v => [`https://site.test/${v}`, v]), rowKeys: values.map((_, i) => i + 1), side: "Current", filtersEnabled: true }, async () => { throw new Error("no rows"); });
+  expect(values.map((_, row) => source.getCell(1, row))).toEqual(values);
+  return setLanguage("de").then(() => {
+    source.statusLabel = value => classLabel(getT(), value);
+    expect(values.map((_, row) => source.getCell(1, row))).toEqual(["Hinzugefügt", "Neu", "Entfernt", "Fehlend", "Unverändert"]);
+    expect(source.getCell(0, 0)).toBe("https://site.test/Added");
+  });
 });
 
 // spec: OUT-142

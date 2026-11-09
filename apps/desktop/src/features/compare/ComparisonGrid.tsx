@@ -13,6 +13,7 @@ import { currentPlatform } from "../../ui/platform";
 import { FONT_STACKS, SIZES, resolveTokens } from "../../ui/tokens/tokens";
 import { resolveTheme, systemPrefersDark } from "../../ui/tokens/theme";
 import { comparisonRows, type ComparisonPage, type ComparisonQuery, type Side } from "./model";
+import { classLabel } from "./labels";
 import "./compare.css";
 
 /** Columns the comparison adds to the ordinary projection (OUT-142/OUT-151). They are not sortable in the core. */
@@ -79,6 +80,15 @@ export class ComparisonSource extends ViewDataSource {
     });
     this.known = known;
     this.side = first.side; this.filtersEnabled = first.filtersEnabled; this.contentAvailable = first.contentAvailable;
+  }
+  /**
+   * OUT-142 (OS-Festlegung 09.11.2026): the values of `Comparison Status` are shown in the UI language. Only the display
+   * changes; the core filters and sorts, copy and export use the canonical English values.
+   */
+  statusLabel?: (value: string) => string;
+  override getCell(column: number, row: number): ReturnType<ViewDataSource["getCell"]> {
+    const value = super.getCell(column, row);
+    return typeof value === "string" && this.statusLabel && this.columns[column]?.key === "Comparison Status" ? this.statusLabel(value) : value;
   }
   /** The mapped partner of a loaded row in the other crawl (OUT-146), for the detail source (CRAWL-144). */
   partner(key: number): number | null { return this.known.partners.get(key) ?? null; }
@@ -154,6 +164,7 @@ export function ComparisonGrid({ source, columns, onColumnsChange, label, sort, 
   useEffect(() => { if (onSelect) setSelection(selectedKey == null ? SelectionModel.empty() : SelectionModel.empty().select(selectedKey)); }, [selectedKey]);
   const appearance = usePrefs(s => s.appearance);
   const select = (next: SelectionModel) => { setSelection(next); if (next.focus !== undefined) onSelect?.(next.focus); };
+  source.statusLabel = value => classLabel(t, value);
   // UI-121: localized headers as in the ordinary table; canonical names stay the keys (export, sorting, configuration).
   const titles = useMemo(() => Object.fromEntries(source.columns.map(c => [c.key, columnLabel(t, c.key)])), [source, t]);
   return <div className="os-compare-grid-host">

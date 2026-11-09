@@ -45,6 +45,7 @@ compare-class-removed = Entfernt
 compare-class-missing = Fehlend
 compare-class-changed = Geändert
 compare-class-notchanged = Nicht geändert
+compare-class-unchanged = Unverändert
 compare-link-all = Alle
 compare-link-added = Hinzugefügt
 compare-link-removed = Entfernt
