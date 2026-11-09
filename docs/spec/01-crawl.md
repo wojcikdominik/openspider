@@ -2178,4 +2178,4 @@ Die folgenden Einträge sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerent
   - [ ] Seite, deren Skript 3 s nach `load` alle 100 ms das DOM ändert (Uhr-Animation) → `Max Reached`; mit `idle_max_s = 4` wird das DOM nach 4 s übernommen.
   - [ ] `wait_strategy = fixed` verhält sich byte-gleich wie vor diesem Eintrag (Regressionstest CRAWL-080); die neuen Spalten zeigen dann `Fixed` und die feste Wartezeit.
 - **Testfixture:** `crawl-js` (CRAWL-077) mit neuen Seiten `chain3.html`, `polling.html`, `websocket.html`, `clock.html`, `static.html`.
-- **Offene Frage (Nutzer):** Soll `network_idle` später Standard werden? Vorschlag: Option, Standard bleibt `fixed` bis ein Paritäts- und Laufzeitvergleich auf realen Websites vorliegt (gerenderte Inhalte gleich oder besser, Gesamtdauer kürzer).
+- **Entscheidung (Nutzer 09.11.2026):** `network_idle` bleibt vorerst Option, Standard bleibt `fixed` bis ein Paritäts- und Laufzeitvergleich auf realen Websites vorliegt (gerenderte Inhalte gleich oder besser, Gesamtdauer kürzer).

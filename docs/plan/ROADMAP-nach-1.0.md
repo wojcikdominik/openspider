@@ -46,16 +46,16 @@ Nutzerentscheidung 09.11.2026: 16 Funktionsideen werden als OpenSpider-Festlegun
 | INTEG-190 | Prompts auch bei leerer Eingabe senden (M4) | P2 | klein |
 | UI-152 | Weitere Sprachen: Türkisch und Niederländisch (Community) | P2 | klein (Übersetzung extern) |
 
-Offene Fragen an den Nutzer (vor der Planung zu klären; Vorschläge in den Einträgen):
-1. **CRAWL-150:** Soll „Netzwerkruhe“ später Standard werden? Vorschlag: vorerst Option, Standard bleibt die feste Wartezeit bis zu einem Vergleich auf realen Websites.
-2. **OUT-286 / AGENT-020:** Dürfen die MCP-Werkzeuge `pause_crawl`/`resume_crawl` fremde Crawls über den neuen Steuerkanal steuern? Vorschlag: ja, nur mit freigegebener Klasse `crawl`.
-3. **OUT-286:** Höchstdauer einer Pause bei geplanten und CLI-Läufen (Vorschlag 24 h, danach beendet sich der Prozess, der Crawl bleibt pausiert).
-4. **INTEG-190:** Gilt „auch bei leerer Eingabe senden“ nur für die Prompts aus 04 (Vorschlag) oder auch für Decision-Fragen und Vorschläge aus 08?
-5. **ONPAGE-182:** Einverstanden, dass „Bild ohne title“ ab Werk nicht im Issues-Tab erscheint (Katalogfeld `default_enabled = false`, einschaltbar über UI-151)?
-6. **TECH-323:** Grenzwerte für Social-Bilder bestätigen: mindestens 200 × 200 px, empfohlen 1200 × 630 px, höchstens 5 MiB.
-7. **CRAWL-149:** Standardwerte bestätigen (60 s ohne Antwort und 5 Fehlschläge, Höchstdauer 30 min) und dass Abrufe aus dem Erkennungsfenster wieder eingereiht statt als `No Response` gespeichert werden.
-8. **OUT-287:** Die App-Verwaltung erhält dabei die bisher fehlende Aktion „Projekt löschen“ (nur leere Projekte bzw. mit ausdrücklicher Bestätigung samt Crawls) – einverstanden?
-9. **AGENT-022:** Soll die Crawl-Diagnose auch in der App sichtbar werden (z. B. Hilfe → Crawl-Diagnose)? Vorschlag: später, gleiche Kernfunktion.
+Entscheidungen des Nutzers vom 09.11.2026 (alle Vorschläge bestätigt):
+1. **CRAWL-150:** „Netzwerkruhe“ vorerst nur Option; Standard bleibt die feste Wartezeit bis zu einem Vergleich auf realen Websites.
+2. **OUT-286 / AGENT-020:** Die MCP-Werkzeuge `pause_crawl`/`resume_crawl` dürfen fremde Crawls über den neuen Steuerkanal steuern, nur mit freigegebener Klasse `crawl`.
+3. **OUT-286:** Höchstdauer einer Pause bei geplanten und CLI-Läufen 24 h; danach beendet sich der Prozess, der Crawl bleibt pausiert.
+4. **INTEG-190:** „Auch bei leerer Eingabe senden“ gilt nur für die Prompts aus 04, nicht für die Aufgaben aus 08.
+5. **ONPAGE-182:** „Bild ohne title“ erscheint ab Werk nicht im Issues-Tab (Katalogfeld `default_enabled = false`, einschaltbar über UI-151).
+6. **TECH-323:** Grenzwerte für Social-Bilder bestätigt: mindestens 200 × 200 px, empfohlen 1200 × 630 px, höchstens 5 MiB.
+7. **CRAWL-149:** Standardwerte bestätigt (60 s ohne Antwort und 5 Fehlschläge, Höchstdauer 30 min); Abrufe aus dem Erkennungsfenster wieder eingereiht statt als `No Response` gespeichert.
+8. **OUT-287:** Die App-Verwaltung erhält dabei die bisher fehlende Aktion „Projekt löschen“ (nur leere Projekte bzw. mit ausdrücklicher Bestätigung samt Crawls) – bestätigt.
+9. **AGENT-022:** Die Crawl-Diagnose wird später auch in der App sichtbar (z. B. Hilfe → Crawl-Diagnose), gleiche Kernfunktion.
 
 ## Geschäftsmodell (Entscheidung Nutzer 16.10.2026): Open Core
 

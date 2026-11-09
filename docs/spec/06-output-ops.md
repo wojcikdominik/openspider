@@ -2829,7 +2829,7 @@ Die folgenden Einträge sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerent
   - [ ] `--max-pause-h` (Testwert über simulierte Uhr): Nach Ablauf endet der Prozess mit Exit-Code 130, Crawl `Paused`, Historie `Aborted` mit Meldung.
   - [ ] Überlappung „Überspringen, wenn noch aktiv“ (OUT-167): Ein pausierter Lauf verhindert den nächsten Lauf derselben Aufgabe (Historie „Skipped: previous run still active“).
 - **Testfixture:** `out-basic-site` mit großer Verzögerung (wie OUT-171); `out-schedule` für geplante Läufe mit SMTP-Mock; simulierte Uhr für Heartbeat und Höchstdauer.
-- **Offene Frage (Nutzer):** Verhältnis zu AGENT-020 „fremde Crawls nur lesend“ bei MCP: Sollen `pause_crawl`/`resume_crawl` (AGENT-020) über denselben Steuerkanal auch fremde Crawls steuern dürfen (Werkzeugklasse `crawl`)? Vorschlag: ja für den In-App-HTTP-Server (er ist die App) und für STDIO-Server, beides nur mit freigegebener Klasse `crawl`; bis zur Entscheidung antworten die Werkzeuge bei fremden Crawls wie bisher mit Fehler.
+- **Entscheidung (Nutzer 09.11.2026):** `pause_crawl`/`resume_crawl` (AGENT-020) dürfen über denselben Steuerkanal auch fremde Crawls steuern – für den In-App-HTTP-Server (er ist die App) und für STDIO-Server, beides nur mit freigegebener Werkzeugklasse `crawl`. Ohne diese Freigabe antworten die Werkzeuge bei fremden Crawls wie bisher mit Fehler.
 
 ### OUT-287 CLI-Verwaltung von Crawls und Projekten
 - **Priorität:** P1
