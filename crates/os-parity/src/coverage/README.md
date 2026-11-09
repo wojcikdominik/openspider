@@ -119,7 +119,9 @@ unverändert, der gemeinsame Tag-Scan kennt zusätzlich `[M4]`/`[M5]`).
 `// spec: <ID> [M<n>]` in einer Datei, die das Paket besitzt (M3.md D8). Tests derselben ID ohne Marker prüfen
 Kriterien früherer Meilensteine und zählen nicht. Pakete mit `"human": true` belegen Teilkriterien über ihr
 Protokoll (`manual`, nie blockierend). Statusdatei: `partial_criteria` (Paket → ID → Eintrag),
-`blocking_partial_criteria`.
+`blocking_partial_criteria`. Nur für M3 … M5 zählen zusätzlich die Vertragstests der Release-Skripte
+(`tests/release/**/*.test.mjs`, `scripts/release/**/*.test.mjs` ohne `fixtures/`, node:test); ihre JUnit-Dateien
+mit dem Dateipfad als Suite kommen über `--frontend-junit`. `--milestone M2` liest diese Ordner nicht.
 
 **Ignore-Gründe** (M3.md D7, Paket M3-Q01): gültig sind `M<k>:` für spätere Meilensteine, `P2:`,
 `Klärung K3-nn`/`K4-nn`/`K5-nn`, `Manuell:` und `Benchmark` (neutral). Ein Grund `M<n>:` (Zurückstellung auf den

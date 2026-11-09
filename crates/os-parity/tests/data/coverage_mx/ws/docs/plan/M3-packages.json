@@ -8,6 +8,8 @@
    "owns": ["crates/alpha/tests/win.rs"], "depends_on": ["M3-F01"]},
   {"id": "M3-U02", "kind": "package", "wave": 2, "title": "Update-Oberfläche", "spec_ids": ["OUT-251"], "extra_spec_ids": ["UI-002"],
    "owns": ["crates/alpha/tests/pending_m3_u02.rs", "apps/desktop/e2e/upd/**"], "depends_on": ["M3-U01"]},
+  {"id": "M3-R04", "kind": "package", "wave": 2, "title": "Release-Orchestrierung", "spec_ids": [], "extra_spec_ids": ["OUT-273"],
+   "owns": ["tests/release/**"], "depends_on": ["M3-U01"]},
   {"id": "M3-Q03", "kind": "measurement", "wave": 4, "human": true, "title": "Manuelle Prüfungen", "spec_ids": [],
    "extra_spec_ids": ["OUT-225"], "owns": [], "depends_on": ["M3-U02"]},
   {"id": "M3-V02", "kind": "package", "wave": "4b", "title": "Visualisierungen", "spec_ids": ["UI-098"],

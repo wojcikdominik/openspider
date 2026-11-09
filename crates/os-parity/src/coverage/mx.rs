@@ -244,6 +244,43 @@ fn known_ids(root: &Path) -> Result<BTreeSet<String>, ParityError> {
     Ok(ids)
 }
 
+/// Vertragstests der Release-Skripte (node:test, `*.test.mjs` unter `tests/release` und `scripts/release`).
+/// Sie tragen Teilkriterien von R04, P01 und Q02 (`// spec: OUT-261 [M3]`); nur M3 … M5 lesen sie, damit
+/// `--milestone M2` unverändert bleibt. Ergebnisse kommen als JUnit mit dem Dateipfad als Suite (`--frontend-junit`).
+pub const RELEASE_TEST_DIRS: [&str; 2] = ["tests/release", "scripts/release"];
+
+fn release_scans(root: &Path) -> Result<BTreeMap<String, scan::FileScan>, ParityError> {
+    fn walk(
+        root: &Path,
+        rel: &str,
+        out: &mut BTreeMap<String, scan::FileScan>,
+    ) -> Result<(), ParityError> {
+        if !root.join(rel).is_dir() {
+            return Ok(());
+        }
+        let mut entries = std::fs::read_dir(root.join(rel))?.collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let path = format!("{rel}/{name}");
+            if entry.file_type()?.is_dir() {
+                if !matches!(name.as_str(), "node_modules" | "fixtures") {
+                    walk(root, &path, out)?;
+                }
+            } else if name.ends_with(".test.mjs") {
+                let text = std::fs::read_to_string(root.join(&path))?;
+                out.insert(path.clone(), frontend::scan_source(&path, &text));
+            }
+        }
+        Ok(())
+    }
+    let mut out = BTreeMap::new();
+    for dir in RELEASE_TEST_DIRS {
+        walk(root, dir, &mut out)?;
+    }
+    Ok(out)
+}
+
 /// Führt die Abdeckung für Meilenstein `n` (3–5) aus. `Ok(true)` = nichts blockiert.
 pub fn run(args: &CoverageArgs, n: u8) -> Result<bool, ParityError> {
     let root = &args.root;
@@ -311,7 +348,8 @@ pub fn run(args: &CoverageArgs, n: u8) -> Result<bool, ParityError> {
             scans.insert(file.clone(), scan::scan_file(root, &file)?);
         }
     }
-    let frontend_scans = frontend::scan(root)?;
+    let mut frontend_scans = frontend::scan(root)?;
+    frontend_scans.extend(release_scans(root)?);
     let mut target_list = targets::discover_targets(root)?;
     target_list.extend(frontend::targets(&frontend_scans));
     scans.extend(frontend_scans.clone());

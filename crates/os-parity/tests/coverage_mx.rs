@@ -214,7 +214,12 @@ fn m3_gate_requires_all_waves_and_rejects_placeholders_and_legacy_reasons() {
         doc["partial_criteria"]["M3-Q03"]["OUT-225"]["blocking"],
         false
     );
-    assert_eq!(doc["blocking_partial_criteria"], 1);
+    // UI-002 (U02) und OUT-273 (R04, ohne Release-JUnit); OUT-225 von Q03 ist ein Protokoll.
+    assert_eq!(doc["blocking_partial_criteria"], 2);
+    assert_eq!(
+        doc["partial_criteria"]["M3-R04"]["OUT-273"]["blocking"],
+        true
+    );
 
     // Mit Merge-Beleg zählt das bedingte Paket.
     f.args.merged = vec!["X01".into()];
@@ -385,4 +390,27 @@ fn missing_package_list_is_an_error() {
     let f = Fixture::new(Milestone::M5);
     let err = os_parity::coverage::run(&f.args).unwrap_err().to_string();
     assert!(err.contains("M5-packages.json"), "{err}");
+}
+
+// M3-Q01: Vertragstests der Release-Skripte (node:test unter tests/release) belegen Teilkriterien, Fixture-Ordner
+// zählen nicht; ohne JUnit gibt es keine Gutschrift.
+#[test]
+fn release_contract_tests_count_for_partial_criteria() {
+    let mut f = Fixture::new(Milestone::M3);
+    f.args.merged = vec!["R04".into()];
+    let (ok, doc) = f.check();
+    assert!(!ok);
+    let entry = &doc["partial_criteria"]["M3-R04"]["OUT-273"];
+    assert_eq!(entry["status"], "open");
+    assert_eq!(entry["blocking"], true);
+    assert_eq!(entry["tests"].as_array().unwrap().len(), 1, "{entry:#}");
+    assert_eq!(entry["tests"][0]["file"], "tests/release/rel.test.mjs");
+
+    f.args.frontend_junit.push(data().join("release.xml"));
+    let (ok, doc) = f.check();
+    assert!(ok, "{doc:#}");
+    assert_eq!(
+        doc["partial_criteria"]["M3-R04"]["OUT-273"]["status"],
+        "implemented"
+    );
 }
