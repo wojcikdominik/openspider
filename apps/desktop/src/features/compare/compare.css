@@ -1,9 +1,7 @@
-.os-compare-controls, .os-compare-form, .os-compare-rule, .os-compare-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.os-compare-controls, .os-compare-form, .os-compare-rule { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .os-compare-controls { padding: 4px; }
 .os-compare-form label, .os-compare-rule label { display: flex; flex-direction: column; gap: 4px; }
 .os-compare-rule { margin-block: 8px; }
-.os-compare-tabs { overflow: auto; flex-wrap: nowrap; }
-.os-compare-tabs [aria-selected="true"] { font-weight: bold; text-decoration: underline; }
 .os-compare-numbers table { border-collapse: collapse; font-size: 12px; width: 100%; }
 .os-compare-numbers th, .os-compare-numbers td { text-align: start; padding: 4px 8px; border-bottom: 1px solid currentColor; white-space: nowrap; }
 
@@ -32,7 +30,7 @@
 
 /* The shell reserves a single 28px row for tabs. Keep launch controls alongside it. */
 .os-compare-tab-strip { display: flex; height: 100%; align-items: center; gap: 8px; min-width: 0; }
-.os-compare-tab-strip > .u10-top-tabs, .os-compare-tab-strip > .os-compare-tabs { flex: 1; min-width: 0; height: 100%; }
+.os-compare-tab-strip > .u10-top-tabs { flex: 1; min-width: 0; height: 100%; }
 .os-compare-tab-strip > .os-compare-controls { flex: none; flex-wrap: nowrap; padding: 0; }
 .os-compare-tab-strip > .os-compare-controls > span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .os-compare-tab-strip .os-btn { height: 24px; min-height: 24px; padding-block: 0; }
