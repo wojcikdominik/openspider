@@ -140,6 +140,18 @@ fn m3_development_reads_packages_statuses_and_partial_criteria() {
     assert_eq!(parts["M3-U02"]["UI-002"]["blocking"], false);
     assert_eq!(parts["M3-Q03"]["OUT-225"]["status"], "manual");
     assert_eq!(doc["blocking_partial_criteria"], 0);
+    // Informative Sicht je ID ohne Besitzprüfung.
+    let by_id = &doc["partial_criteria_by_id"];
+    assert_eq!(by_id["OUT-269"]["status"], "implemented");
+    assert_eq!(by_id["UI-002"]["status"], "open");
+    assert_eq!(by_id["OUT-225"]["status"], "manual");
+    assert_eq!(
+        by_id["OUT-269"]["files"],
+        serde_json::json!([
+            "apps/desktop/src/features/upd/upd.test.ts",
+            "crates/alpha/tests/check.rs"
+        ])
+    );
 
     // D7-Platzhalter im eigenen pending-File, Altgrund M3: als Warnung, fremde Gründe außerhalb.
     assert_eq!(doc["placeholders"].as_array().unwrap().len(), 1);
@@ -405,6 +417,12 @@ fn release_contract_tests_count_for_partial_criteria() {
     assert_eq!(entry["blocking"], true);
     assert_eq!(entry["tests"].as_array().unwrap().len(), 1, "{entry:#}");
     assert_eq!(entry["tests"][0]["file"], "tests/release/rel.test.mjs");
+
+    // Ohne Besitzprüfung zählt dieselbe Datei; Fixture-Ordner bleiben auch hier außen vor.
+    assert_eq!(
+        doc["partial_criteria_by_id"]["OUT-273"]["files"],
+        serde_json::json!(["tests/release/rel.test.mjs"])
+    );
 
     f.args.frontend_junit.push(data().join("release.xml"));
     let (ok, doc) = f.check();

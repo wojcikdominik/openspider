@@ -644,6 +644,54 @@ pub fn run(args: &CoverageArgs, n: u8) -> Result<bool, ParityError> {
         }
     }
 
+    // Informativ (nicht gewertet): Teilkriterium je ID über alle Dateien, ohne Besitzprüfung. Blockierend bleibt
+    // die Sicht je Paket (Besitzregel wie Anhang B in M2); die Differenz ist eine Planentscheidung.
+    let mut by_id: BTreeMap<String, Value> = BTreeMap::new();
+    for id in packages.iter().flat_map(|p| &p.extra_spec_ids) {
+        if by_id.contains_key(id) {
+            continue;
+        }
+        let tests: Vec<&TestEntry> = entries(&report, id)
+            .iter()
+            .filter(|t| {
+                has_marker(t, id, &marker, &scans)
+                    && !t.ignore_reason.as_deref().is_some_and(is_benchmark_reason)
+            })
+            .collect();
+        let owners: Vec<&String> = packages
+            .iter()
+            .filter(|p| p.extra_spec_ids.contains(id))
+            .map(|p| &p.id)
+            .collect();
+        let status = if tests.iter().any(|t| t.result == TestState::Failed) {
+            PartStatus::Open
+        } else if tests.iter().any(|t| t.result == TestState::Ok) {
+            PartStatus::Implemented
+        } else if !tests.is_empty()
+            && tests.iter().all(|t| {
+                t.result == TestState::Ignored
+                    && t.ignore_reason
+                        .as_deref()
+                        .is_some_and(|r| valid_defer_reason(n, r))
+            })
+        {
+            PartStatus::Deferred
+        } else if packages
+            .iter()
+            .filter(|p| p.extra_spec_ids.contains(id))
+            .all(|p| p.human)
+        {
+            PartStatus::Manual
+        } else {
+            PartStatus::Open
+        };
+        let files: BTreeSet<&str> = tests.iter().map(|t| t.file.as_str()).collect();
+        by_id.insert(
+            id.clone(),
+            json!({"status": status, "packages": owners, "files": files}),
+        );
+    }
+
     let failed_tests: BTreeSet<_> = test_results
         .iter()
         .filter(|t| t.outcome == results::Outcome::Failed)
@@ -686,6 +734,7 @@ pub fn run(args: &CoverageArgs, n: u8) -> Result<bool, ParityError> {
     }
     doc["blocking_specs"] = json!(blocking);
     doc["blocking_partial_criteria"] = json!(parts_blocking);
+    doc["partial_criteria_by_id"] = json!(by_id);
     doc["failed_tests"] = json!(failed_tests);
     doc["passed"] = json!(passed);
     if let Some(out) = &args.write {
@@ -780,6 +829,28 @@ pub fn run(args: &CoverageArgs, n: u8) -> Result<bool, ParityError> {
             .collect();
         println!("  {package}: {}", line.join(", "));
     }
+    let open_by_id: Vec<&String> = by_id
+        .iter()
+        .filter(|(_, v)| v["status"] == "open")
+        .map(|(id, _)| id)
+        .collect();
+    println!(
+        "Teilkriterien [{marker}] je ID ohne Besitzprüfung (informativ, nicht gewertet): {} IDs, offen {}{}",
+        by_id.len(),
+        open_by_id.len(),
+        if open_by_id.is_empty() {
+            String::new()
+        } else {
+            format!(
+                ": {}",
+                open_by_id
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
+    );
     if !out_of_scope.is_empty() {
         println!(
             "Ignores außerhalb von {ms} (Gründe ohne gültiges Präfix, nicht gewertet): {}",

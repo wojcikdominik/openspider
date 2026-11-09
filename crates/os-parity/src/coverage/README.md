@@ -119,7 +119,9 @@ unverändert, der gemeinsame Tag-Scan kennt zusätzlich `[M4]`/`[M5]`).
 `// spec: <ID> [M<n>]` in einer Datei, die das Paket besitzt (M3.md D8). Tests derselben ID ohne Marker prüfen
 Kriterien früherer Meilensteine und zählen nicht. Pakete mit `"human": true` belegen Teilkriterien über ihr
 Protokoll (`manual`, nie blockierend). Statusdatei: `partial_criteria` (Paket → ID → Eintrag),
-`blocking_partial_criteria`. Nur für M3 … M5 zählen zusätzlich die Vertragstests der Release-Skripte
+`blocking_partial_criteria`. Zusätzlich steht in `partial_criteria_by_id` je Zusatz-ID der Status über alle
+Dateien ohne Besitzprüfung (informativ, nicht gewertet; die Besitzregel übernimmt die strenge Auslegung aus
+Anhang B, eine Lockerung wäre eine Planentscheidung). Nur für M3 … M5 zählen zusätzlich die Vertragstests der Release-Skripte
 (`tests/release/**/*.test.mjs`, `scripts/release/**/*.test.mjs` ohne `fixtures/`, node:test); ihre JUnit-Dateien
 mit dem Dateipfad als Suite kommen über `--frontend-junit`. `--milestone M2` liest diese Ordner nicht.
 
