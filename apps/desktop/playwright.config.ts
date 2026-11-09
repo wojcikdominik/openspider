@@ -17,14 +17,24 @@ const NIGHTLY = /acceptance[\\/]livedetail-budget\.spec\.ts$/;
 // (`e2e/perf/**/*.test.mjs`, `*.nodetest.mts`) run under `node --test`, not in `npm run e2e`.
 const PERF_NODE_TESTS = [/perf[\\/].*\.test\.mjs$/, /\.nodetest\.mts$/];
 const MAIN_IGNORE = [PERF, NIGHTLY, /visual[\\/]/, ...PERF_NODE_TESTS];
+// Die beiden Lag-Prüfungen der Abnahme B4-LIVEDETAIL (Tabellenzähler/Chip und Inlinks bei 3 URL/s, UI-018) laufen je Engine über eine
+// Minute Zufluss plus Schlussfenster (zusammen rund 3,5 bis 4 Minuten Worker-Zeit, auf zwei Kernen etwa 2 Minuten der Wanduhrzeit der
+// livedetail-Specs; Messung Runde 3 in docs/plan/M3-reports/b4-livedetail-tests.md). Mit OS_E2E_LAG=split (nur `ui-e2e.yml`) liegen
+// sie in einem eigenen Projekt `<engine>-lag` und fehlen im Hauptprojekt; die CI-Matrix führt dieses Projekt als eigenen Job aus, damit
+// die Schritt-Laufzeit der übrigen Jobs unter dem Limit bleibt. Ohne OS_E2E_LAG (lokal, `spec-coverage-m2.yml`) bleiben beide Tests im
+// Hauptprojekt und es gibt kein `-lag`-Projekt: Es entfällt keine Prüfung, und kein Test läuft doppelt.
+const LAG = /grow at 3 URL\/s with bounded startup and final observation/;
+const LAG_FILES = /acceptance[\\/]livedetail-(live|detail)\.spec\.ts$/;
+const splitLag = process.env.OS_E2E_LAG === "split";
 const engines = [
   { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
   { name: "webkit", use: { ...devices["Desktop Safari"], viewport: { width: 1280, height: 800 } } },
 ];
 const all = engines.flatMap((engine) => [
-  { ...engine, testIgnore: MAIN_IGNORE },
+  { ...engine, testIgnore: MAIN_IGNORE, ...(splitLag ? { grepInvert: LAG } : {}) },
   { name: `${engine.name}-perf`, use: engine.use, testMatch: PERF, dependencies: [engine.name] },
   { name: `${engine.name}-nightly`, use: engine.use, testMatch: NIGHTLY },
+  { name: `${engine.name}-lag`, use: engine.use, testMatch: LAG_FILES, grep: LAG },
 ]);
 
 // Eigener Port je Worktree (OS_E2E_PORT): Auf dem Build-Server laufen Pakete parallel; mit dem festen Port 1420 und
@@ -44,7 +54,12 @@ export default defineConfig({
     trace: "retain-on-failure",
     reducedMotion: "reduce",
   },
-  projects: all.filter((p) => wanted.includes(p.name.replace(/-(perf|nightly)$/, "")) && (!p.name.endsWith("-nightly") || process.env.OS_E2E_NIGHTLY === "1")),
+  projects: all.filter(
+    (p) =>
+      wanted.includes(p.name.replace(/-(perf|nightly|lag)$/, "")) &&
+      (!p.name.endsWith("-nightly") || process.env.OS_E2E_NIGHTLY === "1") &&
+      (!p.name.endsWith("-lag") || splitLag),
+  ),
   webServer: {
     command: `npm run dev -- --port ${port}`,
     url: `http://localhost:${port}`,
