@@ -667,3 +667,80 @@ test('Vorlage für die nächste Version enthält den kurzen Abschnitt im erwarte
   assert.ok(updateNotes(filled, '1.0.0-beta.4').startsWith('- Text'));
   assert.ok(versionNotes(filled, '1.0.0-beta.4').startsWith('Text'));
 });
+
+// Shell body of a named step in any workflow file (same dedent as `step`).
+const stepIn = (file, name) => readFileSync(join(root, '.github/workflows', file), 'utf8').split(`      - name: ${name}\n`)[1]
+  .split('        run: |\n')[1].split('      - ')[0].split('\n\n')[0]
+  .split('\n').map(line => line.startsWith('          ') ? line.slice(10) : line).join('\n');
+
+// spec: UI-127 [M3]
+// spec: OUT-181 [M3]
+test('Build-Nummer: prepare zählt die Commits nur im vollständigen Checkout, alle Bau-Jobs bekommen dieselbe, ohne sie ist der Lauf rot', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'openspider-build-number-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const git = (cwd, ...args) => {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' } });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const repo = join(directory, 'repo');
+  mkdirSync(repo);
+  git(repo, 'init', '-q');
+  for (const n of [1, 2, 3]) git(repo, 'commit', '-q', '--allow-empty', '-m', `c${n}`);
+  const prepare = step('Build-Nummer ermitteln (UI-127)');
+  const run = (cwd, script, env = {}) => spawnSync('bash', ['-c', script], { cwd, encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '', ...env } });
+  const output = join(directory, 'output');
+  let result = run(repo, prepare, { GITHUB_OUTPUT: output });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(output, 'utf8'), 'build_number=3\n');
+  // A shallow checkout would count wrong: the step fails instead.
+  const shallow = join(directory, 'shallow');
+  git(directory, 'clone', '-q', '--depth', '1', `file://${repo}`, shallow);
+  result = run(shallow, prepare, { GITHUB_OUTPUT: join(directory, 'shallow-output'), GITHUB_ACTIONS: 'true' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /::error title=Build-Nummer::Flacher Checkout/);
+  // Without Git (no repository) the release run is red, too.
+  const plain = join(directory, 'plain');
+  mkdirSync(plain);
+  assert.notEqual(run(plain, prepare, { GITHUB_OUTPUT: join(directory, 'plain-output'), GIT_CEILING_DIRECTORIES: directory }).status, 0);
+
+  // Wiring: prepare has the full history and exports the number; every build job gets the same output.
+  const workflow = releaseWorkflow();
+  const prepareJob = workflow.split('\n  prepare:\n')[1].split('\n  macos:\n')[0];
+  assert.match(prepareJob, /fetch-depth: 0/);
+  assert.match(prepareJob, /build_number: \$\{\{ steps\.build\.outputs\.build_number \}\}/);
+  for (const job of ['macos', 'windows']) {
+    const body = workflow.split(`\n  ${job}:\n`)[1].split(/\n  [a-z-]+:\n/)[0];
+    assert.match(body, /build_number: \$\{\{ needs\.prepare\.outputs\.build_number \}\}/, job);
+  }
+  assert.match(workflow.split('\n  linux-core:\n')[1].split('\n  assemble:\n')[0], /OPENSPIDER_BUILD_NUMBER: \$\{\{ needs\.prepare\.outputs\.build_number \}\}/);
+
+  // Reusable build workflows: export the number for cargo; inside the release orchestration an empty one is red.
+  for (const file of ['release-macos.yml', 'release-windows.yml']) {
+    assert.match(readFileSync(join(root, '.github/workflows', file), 'utf8'), /workflow_call:\n    inputs:\n      build_number:\n/, file);
+    const script = stepIn(file, 'Build-Kennung (Hilfe → Über, Debug-Info, Absturzberichte)');
+    const env = join(directory, `${file}.env`);
+    const call = (number, workflowName) => { rmSync(env, { force: true }); return run(directory, script, { BUILD_NUMBER: number, GITHUB_ENV: env, GITHUB_SHA: '0123456789abcdef', GITHUB_WORKFLOW: workflowName }); };
+    result = call('2578', 'Release orchestration');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(env, 'utf8'), 'OPENSPIDER_BUILD=01234567\nOPENSPIDER_BUILD_NUMBER=2578\n', file);
+    result = call('', 'Release orchestration');
+    assert.notEqual(result.status, 0, file);
+    assert.match(result.stdout, /::error title=Build-Nummer::Release-Lauf ohne Build-Nummer/, file);
+    assert.notEqual(call('25a', 'Release orchestration').status, 0, file);
+    // A single manual run of the platform workflow is no release: it builds without a number.
+    assert.equal(call('', file === 'release-macos.yml' ? 'Release macOS' : 'Release Windows').status, 0, file);
+    assert.doesNotMatch(readFileSync(env, 'utf8'), /OPENSPIDER_BUILD_NUMBER/, file);
+  }
+
+  // The Linux CLI of the release must print the number.
+  const check = step('Build-Nummer im CLI prüfen (UI-127)');
+  const cli = join(directory, 'linux-cli');
+  mkdirSync(cli);
+  const fake = version => writeFileSync(join(cli, 'openspider'), `#!/bin/sh\necho "openspider ${version}"\n`, { mode: 0o755 });
+  fake('1.0.0-beta.4 (Build 2578, 0123456789, linux-x86_64)');
+  assert.equal(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '2578' }).status, 0);
+  fake('1.0.0-beta.4 (0123456789, linux-x86_64)');
+  assert.notEqual(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '2578' }).status, 0);
+  assert.notEqual(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '' }).status, 0);
+});
