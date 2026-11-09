@@ -87,6 +87,53 @@ it("asks before recrawling completed data and serializes fast repeated Start act
   expect(calls("crawl.validateStartUrl")).toHaveLength(1);
 });
 
+// spec: UI-003
+// spec: UI-113
+it("starts on Enter in the URL field itself, not during an IME composition or with a modifier (B4-ENTER)", async () => {
+  useSession.getState().applyTick({ ...tick, crawl: { ...tick.crawl!, phase: "completed" } });
+  render(<Header />); enterUrl("next.test");
+  const field = screen.getByLabelText("Start URL");
+  // fireEvent returns false when the handler called preventDefault.
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13, isComposing: true })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 229 })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13, shiftKey: true })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Escape", keyCode: 27 })).toBe(true);
+  // Without suggestions the arrow keys do not hold Enter back.
+  expect(fireEvent.keyDown(field, { key: "ArrowDown", keyCode: 40 })).toBe(true);
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(calls("crawl.validateStartUrl")).toHaveLength(0);
+  // Handled (and the default prevented, so no engine submits the form a second time); completed data asks first.
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  expect(await screen.findByRole("dialog")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+  expect(calls("crawl.start")[0]?.args).toEqual({ source: { kind: "spider", url: "https://next.test/" }, scope: "domain" });
+});
+
+// spec: UI-003
+// spec: UI-113
+it("leaves Enter to the suggestion list after the arrow keys and starts with the next Enter (B4-ENTER)", async () => {
+  core.uiState.state = { header: { history: ["https://old.test/"] } };
+  render(<Header />);
+  await waitFor(() => expect(document.querySelectorAll("datalist option")).toHaveLength(1));
+  enterUrl("old");
+  const field = screen.getByLabelText("Start URL");
+  expect(fireEvent.keyDown(field, { key: "ArrowDown", keyCode: 40 })).toBe(true);
+  // This Enter adopts the highlighted suggestion (native behaviour), it does not start.
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(true);
+  enterUrl("https://old.test/");
+  await act(async () => { await Promise.resolve(); });
+  expect(calls("crawl.validateStartUrl")).toHaveLength(0);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+  expect(calls("crawl.start")[0]?.args).toEqual({ source: { kind: "spider", url: "https://old.test/" }, scope: "domain" });
+  // Arrow keys, then Enter without choosing: the following Enter starts again (no endless swallowing).
+  expect(fireEvent.keyDown(field, { key: "ArrowUp", keyCode: 38 })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+});
+
 // spec: CRAWL-009 [M2]
 it("warns about a missing slash only for folder paths without a filename", () => {
   render(<Header />); enterUrl("https://site.test/blog");

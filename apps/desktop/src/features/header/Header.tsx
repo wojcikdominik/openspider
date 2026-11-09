@@ -19,7 +19,7 @@ import brandLight from "../../assets/brand/mark-light.svg";
 import brandDark from "../../assets/brand/mark-dark.svg";
 import { eventBus } from "../../ipc/events";
 import { reportError } from "../notifications/controller";
-import { missingFolderSlash, normalizeInput, rememberUrl, useHeader } from "./model";
+import { enterStartsCrawl, missingFolderSlash, normalizeInput, rememberUrl, useHeader } from "./model";
 import { closeComparison, useComparison } from "../compare/model";
 import "./header.css";
 
@@ -44,6 +44,8 @@ export function Header() {
   const [guardRequest, setGuardRequest] = useState<StartRequest | null>(null);
   const [threads, setThreads] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  // B4-ENTER: the arrow keys moved into the suggestion list; the next Enter adopts an entry instead of starting.
+  const browsingSuggestions = useRef(false);
   const normalized = normalizeInput(url);
   const normalizedSitemap = normalizeInput(sitemap);
   const sitemapMode = mode === "list" && listKind === "sitemap";
@@ -202,7 +204,21 @@ export function Header() {
       </select></label>
       {mode === "spider" ? <>
         <label className="os-start-url"><span className="os-visually-hidden">{t("header-url")}</span><Globe size={16} aria-hidden="true" /><input ref={input} value={url} list="os-start-history" aria-invalid={!normalized} aria-describedby={!normalized ? "os-url-error" : undefined}
-          onChange={(e) => useHeader.setState({ url: e.target.value })} autoComplete="off" spellCheck={false} /></label>
+          onChange={(e) => { browsingSuggestions.current = false; useHeader.setState({ url: e.target.value }); }}
+          onKeyDown={(e) => {
+            // UI-003/UI-113: Enter = Start. WebKit swallows Enter in a field with suggestions (no keypress, no implicit
+            // submission), so the start is triggered here; preventDefault keeps engines that would also submit from
+            // starting twice.
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") { browsingSuggestions.current = history.length > 0; return; }
+            if (e.key === "Escape") { browsingSuggestions.current = false; return; }
+            if (e.key !== "Enter") return;
+            const starts = enterStartsCrawl(e.nativeEvent, browsingSuggestions.current);
+            if (!e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) browsingSuggestions.current = false;
+            if (!starts) return;
+            e.preventDefault();
+            requestStart();
+          }}
+          onBlur={() => { browsingSuggestions.current = false; }} autoComplete="off" spellCheck={false} /></label>
         <datalist id="os-start-history">{history.map((u) => <option key={u} value={u} />)}</datalist>
         <label className="os-header-scope"><span className="os-visually-hidden">{t("header-scope")}</span><select value={scope} disabled={!allowed || running || resumable} onChange={(e) => useHeader.setState({ scope: e.target.value as StartRequest["scope"] })}>
           <option value="domain">{t("header-domain")}</option><option value="subdomains">{t("header-subdomains")}</option><option value="folder">{t("header-folder")}</option>
