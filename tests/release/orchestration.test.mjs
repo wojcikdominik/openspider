@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { manifests } from '../../scripts/release/manifest.mjs';
 import { checksums } from '../../scripts/release/checksums.mjs';
-import { releaseNotes, releaseBody, checkNotes, versionNotes, withChangelogSection, feedbackLink, notesPath, changelogSection } from '../../scripts/release/notes.mjs';
+import { releaseNotes, releaseBody, checkNotes, versionNotes, withChangelogSection, feedbackLink, notesPath, changelogSection, updateNotes, splitNotesDocument, compareVersions, FIRST_SHORT_NOTES } from '../../scripts/release/notes.mjs';
 import { downloads, isPublished } from '../../scripts/release/assets.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -595,4 +595,75 @@ test('Leichte Ersatzläufe sind billig, SHA-gepinnt und rufen die vorhandenen Pr
     assert.match(generate, /OPENSPIDER_LICENSE_CACHE: \$\{\{ runner\.temp \}\}\/license-texts/, workflow);
     assert.match(text, /path: \$\{\{ runner\.temp \}\}\/license-texts\n          key: license-texts-v1-\$\{\{ hashFiles\('scripts\/release\/licenses\/\*-sources\.json'\) \}\}/, workflow);
   }
+});
+
+// spec: OUT-251 [M3]
+test('Kurze Update-Notes: nur der Abschnitt <!-- update --> geht ins Manifest, Release-Text und CHANGELOG bleiben ausführlich', t => {
+  const short = '- Short one\n- Short **two**\n- Short [three](https://openspider.de/)\n\n### Deutsch\n\n- Kurz eins\n- Kurz **zwei**\n- Kurz [drei](https://openspider.de/)';
+  const detailed = 'Long summary.\n\n- Long point with details\n\n### Deutsch\n\nLange Zusammenfassung.\n\n- Langer Punkt mit Details';
+  const document = `<!-- update -->\n${short}\n<!-- /update -->\n\n${detailed}\n`;
+  const version = '1.0.0-beta.4';
+  assert.equal(FIRST_SHORT_NOTES, version);
+  assert.deepEqual(splitNotesDocument(document.replaceAll('\n', '\r\n')).update, short);
+  assert.equal(updateNotes(document, version), `${short}\n`);
+  assert.equal(versionNotes(document, version), `${detailed}\n`);
+  // Published versions up to beta.3 have no short section: their detailed notes stay the update notes.
+  const beta3 = readFileSync(join(root, 'docs/release/notes/1.0.0-beta.3.md'), 'utf8');
+  assert.equal(updateNotes(beta3, '1.0.0-beta.3'), versionNotes(beta3, '1.0.0-beta.3'));
+  assert.equal(compareVersions('1.0.0-beta.3', '1.0.0-beta.4'), -1);
+  assert.equal(compareVersions('1.0.0-beta.10', '1.0.0-beta.4'), 1);
+  assert.equal(compareVersions('1.0.0-rc.1', '1.0.0-beta.9'), 1);
+  assert.equal(compareVersions('1.0.0', '1.0.0-rc.1'), 1);
+  assert.equal(compareVersions('1.0.1', '1.0.1'), 0);
+  // From beta.4 on the short section is required and checked.
+  assert.throws(() => updateNotes(`${detailed}\n`, version), /Kurze Update-Notes 1\.0\.0-beta\.4 fehlen: .*<!-- update -->/);
+  assert.throws(() => updateNotes(`${detailed}\n`, '1.0.0'), /fehlen/);
+  const broken = [
+    [short.replace('- Short one\n', ''), /Englisch: 2 Punkte/],
+    [short.replace('- Kurz eins', '- Kurz eins\n- 4\n- 5\n- 6\n- 7'), /Deutsch: 7 Punkte/],
+    [short.replace('\n### Deutsch\n', '\n'), /genau eine Zeile ### Deutsch/],
+    [short.replace('- Short one', 'Short one'), /nur einzeilige Listenpunkte/],
+    [short.replace('- Short one', `- ${'x'.repeat(170)}`), /länger als 160 Zeichen/],
+    [short.replace('- Short one', '- TODO'), /Entwurfsmarkierungen/],
+  ];
+  for (const [section, pattern] of broken) {
+    assert.throws(() => updateNotes(`<!-- update -->\n${section}\n<!-- /update -->\n\n${detailed}\n`, version), pattern, String(pattern));
+  }
+  assert.throws(() => updateNotes(`<!-- update -->\n${short}\n\n${detailed}\n`, version), /genau ein Abschnitt/);
+  // CLI end to end: --changelog writes the detailed notes, --check passes, the manifest file gets the short notes,
+  // the release body the detailed ones.
+  const directory = mkdtempSync(join(tmpdir(), 'openspider-short-notes-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  cpSync(join(root, 'scripts/release'), join(directory, 'scripts/release'), { recursive: true });
+  mkdirSync(join(directory, 'docs/release/notes'), { recursive: true });
+  writeFileSync(join(directory, 'docs/release/notes', `${version}.md`), document);
+  writeFileSync(join(directory, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n## [1.0.0-beta.3] - 2026-11-09\n\n- alt\n');
+  const cli = (...args) => spawnSync(process.execPath, ['scripts/release/notes.mjs', ...args], { cwd: directory, encoding: 'utf8' });
+  assert.equal(cli('--changelog', version, '--date', '2026-11-12').status, 0);
+  assert.equal(releaseNotes(readFileSync(join(directory, 'CHANGELOG.md'), 'utf8'), version), `${detailed}\n`);
+  const check = cli('--check', version);
+  assert.equal(check.status, 0, check.stderr);
+  const built = cli(version, 'update-notes.md', '--body', 'release-notes.md', '--repository', 'example/openspider');
+  assert.equal(built.status, 0, built.stderr);
+  assert.equal(readFileSync(join(directory, 'update-notes.md'), 'utf8'), `${short}\n`);
+  const body = readFileSync(join(directory, 'release-notes.md'), 'utf8');
+  assert.equal(body, releaseBody({ version, repository: 'example/openspider', notes: `${detailed}\n` }));
+  assert.doesNotMatch(body, /<!-- update -->|Short one/);
+  // A document without the short section fails the gate before the build.
+  writeFileSync(join(directory, 'docs/release/notes', `${version}.md`), `${detailed}\n`);
+  const missing = cli('--check', version);
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /Kurze Update-Notes 1\.0\.0-beta\.4 fehlen/);
+});
+
+// spec: OUT-251 [M3]
+test('Vorlage für die nächste Version enthält den kurzen Abschnitt im erwarteten Format', () => {
+  const template = readFileSync(join(root, 'docs/release/notes-template.md'), 'utf8');
+  const { update, notes } = splitNotesDocument(template);
+  assert.match(update, /^- .*\n[\s\S]*\n### Deutsch\n\n- /);
+  assert.match(notes, /### Deutsch/);
+  // Filled in (placeholders replaced by text), the template passes the checks.
+  const filled = template.replace(/<(?!!)[^>\n]*>/g, 'Text');
+  assert.ok(updateNotes(filled, '1.0.0-beta.4').startsWith('- Text'));
+  assert.ok(versionNotes(filled, '1.0.0-beta.4').startsWith('Text'));
 });
