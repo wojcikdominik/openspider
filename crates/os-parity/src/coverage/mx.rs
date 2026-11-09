@@ -367,12 +367,13 @@ pub fn run(args: &CoverageArgs, n: u8) -> Result<bool, ParityError> {
         test_results.extend(results::parse_junit(&std::fs::read_to_string(p)?)?);
     }
     for p in &args.frontend_junit {
-        test_results.extend(frontend::read_junit(
-            root,
-            p,
-            &frontend_scans,
-            &mut warnings,
-        )?);
+        // B4-M2GATE: read_junit liefert das Browserprojekt mit (Skip-Regel in m2.rs); hier nur die Ergebnisse.
+        // Ob die Regel für bedingte Skips auch hier gilt, entscheidet M3-Q01 (Folgepunkt).
+        test_results.extend(
+            frontend::read_junit(root, p, &frontend_scans, &mut warnings)?
+                .into_iter()
+                .map(|(result, _project)| result),
+        );
     }
     // Statusdateien anderer Meilensteine geben keine Paritätsgutschrift.
     let previous: Option<Value> = args
