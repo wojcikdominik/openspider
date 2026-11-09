@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { settings } from "../../ipc/settings";
 import { update } from "../../ipc/update";
 import type { UpdateState } from "../../ipc/gen/UpdateState";
 import type { AvailableUpdate } from "../../ipc/gen/AvailableUpdate";
@@ -72,4 +73,17 @@ export async function installUpdate(when: InstallWhen) {
     accept(state);
     if (typeof state === "object" && "ready" in state) useUpdate.setState({ queued: when });
   } catch { accept({ failed: "install" }); }
+}
+
+/**
+ * OUT-251 (Nutzerentscheidung 09.11.2026): "Skip this version" remembers the version in the app settings
+ * (`updates.skipped_version`); automatic checks then stay silent until a newer version appears. A manual check still shows it.
+ */
+export async function skipVersion(version: string) {
+  useUpdate.setState({ open: false });
+  try { await settings.set({ patch: { updates: { skippedVersion: version } } }); } catch { /* The next automatic check asks again. */ }
+}
+/** "Remind me later": only closes; the next regular check (at most once per 24 h, OUT-250) reports the update again. */
+export function remindLater() {
+  useUpdate.setState({ open: false });
 }
