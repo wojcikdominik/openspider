@@ -1283,6 +1283,37 @@ pub fn start_failure(crawl: &CrawlFile, start_url: &str) -> Option<StartFailure>
     })
 }
 
+/// Sperre der Start-URL per robots.txt `Disallow` (UI-019): robots.txt-URL und treffende Zeile aus der Start-URL-Zeile. Das ist
+/// kein Fehlschlag (CRAWL-128, der Lauf endet als „Abgeschlossen“); die Sperre wegen nicht erreichbarer robots.txt
+/// (`blocked_by_robots_unreachable`) meldet [`start_failure`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartRobotsBlock {
+    /// Die robots.txt, deren Regel die Start-URL sperrt.
+    pub robots_url: String,
+    /// Treffende Zeile, wie sie die Spalte „Gesperrt durch Zeile“ zeigt.
+    pub matched_line: Option<String>,
+}
+
+/// Liest aus der Crawl-Datei, ob die Start-URL per robots.txt gesperrt wurde (Grund `blocked_by_robots` der Start-URL-Zeile).
+pub fn start_robots_block(crawl: &CrawlFile, start_url: &str) -> Option<StartRobotsBlock> {
+    let (robots_url, matched_line): (Option<String>, Option<String>) = crawl
+        .conn()
+        .query_row(
+            "SELECT robots_txt_url, robots_matched_line FROM urls \
+             WHERE url = ?1 AND state = 'done' AND status_code = 0 AND no_response_reason = ?2",
+            [
+                start_url,
+                os_model::NoResponseReason::BlockedByRobots.as_str(),
+            ],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok()?;
+    Some(StartRobotsBlock {
+        robots_url: robots_url?,
+        matched_line,
+    })
+}
+
 fn network_failure(reason: Option<&str>) -> Option<os_model::NoResponseReason> {
     is_network_failure(reason)
         .then(|| reason.and_then(|r| r.parse().ok()))

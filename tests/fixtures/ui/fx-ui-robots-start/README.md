@@ -1,0 +1,1 @@
+Fixture for UI-019 (start URL blocked by robots.txt) and CRAWL-128: `robots.txt` contains `Disallow: /` for all user agents, so a spider crawl that respects robots.txt blocks the start URL `/` and ends as completed (not failed) with the start dialog `start-robots`. With robots.txt ignored, `/` and `/page.html` are crawled. All traffic stays on the local fixture server.

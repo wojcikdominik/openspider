@@ -37,7 +37,9 @@ pub mod writer_thread;
 #[cfg(feature = "testing")]
 pub mod testing;
 
-pub use crawl::{start_crawl, start_failure, CrawlHandle, StartFailure};
+pub use crawl::{
+    start_crawl, start_failure, start_robots_block, CrawlHandle, StartFailure, StartRobotsBlock,
+};
 pub use error::EngineError;
 pub use lifecycle::resume_crawl;
 pub use render_glue::Renderer;
