@@ -152,7 +152,7 @@ const shortNotes = "- **Faster** crawls\n- Skip versions\n- [Guide](https://open
 async function openRelease(state: UpdateState, lang = "en") {
   await setLanguage(lang);
   vi.spyOn(update, "status").mockImplementation(async () => state);
-  vi.spyOn(app, "info").mockResolvedValue({ version: "1.0.0-beta.3", build: "abc", platform: "macos", arch: "aarch64", paths: {} as never });
+  vi.spyOn(app, "info").mockResolvedValue({ version: "1.0.0-beta.3", build: "abc", buildNumber: "2578", platform: "macos", arch: "aarch64", paths: {} as never });
   vi.spyOn(settings, "get").mockResolvedValue({ updates: { check: true, lastCheck: null } } as never);
   act(() => useUpdate.setState({ state, open: true, release: { version: "1.0.0-beta.4", notes: shortNotes, pubDate: null } }));
   render(<UpdateHost />);
@@ -163,7 +163,7 @@ async function openRelease(state: UpdateState, lang = "en") {
 it("shows head, installed version, the notes of the UI language and the actions of a ready update (Nutzerentscheidung 09.11.2026)", async () => {
   await openRelease({ ready: { version: "1.0.0-beta.4" } }, "de");
   const dialog = screen.getByRole("dialog", { name: "Eine neue Version von OpenSpider ist verfügbar!" });
-  expect(dialog).toHaveTextContent("OpenSpider 1.0.0-beta.4 ist verfügbar – Sie haben 1.0.0-beta.3. Möchten Sie die neue Version jetzt installieren?");
+  expect(dialog).toHaveTextContent("OpenSpider 1.0.0-beta.4 ist verfügbar – Sie haben 1.0.0-beta.3 (Build 2578). Möchten Sie die neue Version jetzt installieren?");
   const notes = dialog.querySelector("[data-update-notes]")!;
   expect(notes.querySelector("h3")).toHaveTextContent("OpenSpider 1.0.0-beta.4");
   expect(notes.querySelectorAll("li")).toHaveLength(3);

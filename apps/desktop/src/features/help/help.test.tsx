@@ -132,7 +132,7 @@ it("Hilfe-Aktionen öffnen echte Dialoge; leere Nutzungsstatistik zeigt keinen F
   expect(await screen.findByText("Apache 2.0 license")).toBeVisible();
   expect(screen.getByText("Third-party notices")).toBeVisible();
   const version = await waitFor(() => { const node = document.querySelector('[data-about="version"]'); expect(node).not.toBeNull(); return node!; });
-  expect(version).toHaveTextContent(/Version 0\.1\.0 · Build fixture/);
+  expect(version).toHaveTextContent(/Version 0\.1\.0 · Commit fixture/);
 });
 
 // spec: UI-002
@@ -471,4 +471,15 @@ it("enriches recent fixture paths from the crawl index without changing opening 
   core.uiState = { version: 1, state: { recentCrawls: [{ path: "/fixture/uuid.ospider" }] } };
   core.handlers.set("crawls.list", () => [{ crawl: { file: "/fixture/uuid.ospider", startedAt: "2026-10-29T12:00:00Z", name: "uuid" }, startUrl: "http://127.0.0.1:1234/fixture" }]);
   expect(await loadRecent()).toEqual([{ path: "/fixture/uuid.ospider", label: "http://127.0.0.1:1234/fixture · 2026-10-29" }]);
+});
+
+// spec: UI-127
+it("version with build number reads „1.0.0-beta.3 (Build 2578)“, without number only the version (Nutzerentscheidung 09.11.2026)", async () => {
+  const { versionLabel } = await import("./version");
+  const { makeT } = await import("../../i18n");
+  for (const lang of ["de", "en"]) {
+    expect(versionLabel(makeT(lang), { version: "1.0.0-beta.3", buildNumber: "2578" })).toBe("1.0.0-beta.3 (Build 2578)");
+    expect(versionLabel(makeT(lang), { version: "1.0.0-beta.3", buildNumber: null })).toBe("1.0.0-beta.3");
+    expect(versionLabel(makeT(lang), { version: "1.0.0-beta.3" })).toBe("1.0.0-beta.3");
+  }
 });

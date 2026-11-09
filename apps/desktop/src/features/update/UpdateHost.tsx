@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useLanguageStore, useT } from "../../i18n";
 import { app } from "../../ipc/app";
+import type { AppInfo } from "../../ipc/gen/AppInfo";
 import { settings } from "../../ipc/settings";
 import { update } from "../../ipc/update";
 import { useSession } from "../../state/session";
@@ -8,6 +9,7 @@ import { registerAction } from "../../ui/actions";
 import { Button, Checkbox, Dialog } from "../../ui/primitives";
 import { currentPlatform, type Platform } from "../../ui/platform";
 import { isTauri } from "../../ipc/transport/tauri";
+import { versionLabel } from "../help/version";
 import { NoteMarkdown, notesForLanguage } from "./notes";
 import { acceptPolled, CHECK_TIMEOUT, checkUpdates, downloadUpdate, installUpdate, remindLater, skipVersion, useUpdate, withTimeout } from "./state";
 import brandLight from "../../assets/brand/mark-light.svg";
@@ -42,13 +44,13 @@ export function UpdateHost() {
     void update.status().then(state => { if (live) acceptPolled(state); }).catch(() => {});
     return () => { live = false; };
   }, []);
-  const [installed, setInstalled] = useState<string | null>(null);
+  const [info, setInfo] = useState<AppInfo | null>(null);
   const [auto, setAuto] = useState<boolean | null>(null);
   useEffect(() => {
     if (!open) return;
     let live = true;
     // Best effort: without an answer the head names only the new version and the checkbox stays disabled.
-    void Promise.resolve().then(() => app.info()).then(info => { if (live) setInstalled(info.version); }).catch(() => {});
+    void Promise.resolve().then(() => app.info()).then(answer => { if (live) setInfo(answer); }).catch(() => {});
     void Promise.resolve().then(() => settings.get()).then(dto => { if (live) setAuto(dto.updates.check); }).catch(() => {});
     return () => { live = false; };
   }, [open]);
@@ -89,6 +91,8 @@ export function UpdateHost() {
   // (checking, up to date, disabled by environment/key/installer) shows only its status.
   // A ready download whose release details are not in this window (e.g. opened from a status poll) still offers its actions.
   const shown = release ?? (object && "ready" in object ? { version: object.ready.version, notes: "", pubDate: null } : null);
+  // UI-127: the installed version with build number, the new one without (the manifest does not carry it).
+  const installed = info ? versionLabel(t, info) : null;
   const showRelease = !!shown && state !== "checking" && state !== "upToDate" && (disabled === null || disabled === "settings");
   const status = <div aria-live="polite" className="os-update-status">
     {state === "checking" && <p>{t("update-checking")}</p>}
