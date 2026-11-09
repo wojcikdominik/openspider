@@ -35,10 +35,22 @@ keyboard actions use JavaScript and cannot verify NSMenu accelerator routing.
 If native posting is unavailable, S3 fails explicitly. The table is a fixture
 endpoint for the production dispatcher, not an implementation of the later grid.
 
-On Windows build without `e2e-webdriver`, install `tauri-driver` 2.1.0, and put a
-WebView2-compatible `msedgedriver` on PATH (`setup-windows.ps1` in CI). Then run
+On Windows build without `e2e-webdriver`, but with the test-only `TAURI_CONFIG` that
+`ui-e2e-b.yml` sets in the step "Build Windows app": msedgedriver hands
+`--remote-debugging-port=0` to WebView2 through `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`,
+which the app ignores because wry passes its own additional browser arguments through the
+API ("DevToolsActivePort file doesn't exist"; a WebView2 policy value is ignored as well).
+The override adds the flag (plus wry's default `--disable-features=...`) to both windows.
+WebViews of one data directory need identical arguments, so in this build the settings
+window exists hidden from startup and `openSettingsWindow` shows it; the product
+configuration is unchanged. Put a WebView2-compatible `msedgedriver` on PATH
+(`setup-windows.ps1` in CI). Then run
 `node apps/desktop/e2e-b/run.mjs target/debug/openspider-desktop.exe s3`. The runner
-starts `tauri-driver` on two free ports and connects WebdriverIO directly to it.
+starts `msedgedriver` itself (`--verbose`, log `msedgedriver.log` in the output folder)
+and connects WebdriverIO with the capabilities `tauri-driver` would build
+(`browserName: webview2`, `ms:edgeOptions.binary`); there is no retry, a failed session
+records the app/WebView2 command lines in `report.processes`. `S02_WINDOWS_DRIVER=tauri`
+selects `tauri-driver` 2.1.0 (`cargo install tauri-driver --version 2.1.0 --locked`) instead.
 The runner invokes `focus-windows.ps1` without showing a console window. It
 identifies the target by its exact executable path, restores it, requests foreground
 permission and temporarily attaches the input threads around `SetForegroundWindow`.
@@ -73,6 +85,12 @@ node --test apps/desktop/e2e-b/measurement.test.mjs apps/desktop/e2e-b/readiness
 
 A Windows run of the corrected runner and an unlocked macOS GUI run are still
 required. Actual evidence and outstanding gates live in `docs/plan/M2-spikes/`.
+
+`app.requestQuit` with a `confirm` decision broadcasts the `app-quit-confirmation`
+notice, which opens the quit dialog (same kernel entry as the native close). The smoke
+therefore closes the window first, while no dialog is open, and reads the quit decision
+afterwards from the same running crawl (cause of the red nightlies since 22.10.2026:
+`docs/plan/M3-reports/nightly-b.md`).
 
 ## M2-U32
 

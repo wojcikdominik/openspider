@@ -140,10 +140,24 @@ try {
   const port = await freePort();
   const env = { OPENSPIDER_HOME: home, OPENSPIDER_SECRET_STORE: "memory", TAURI_WEBDRIVER_PORT: String(port) };
   if (process.platform === "win32") {
-    child(process.env.TAURI_DRIVER ?? "tauri-driver", ["--port", String(port), "--native-port", String(await freePort())], env);
-    await until(async () => (await fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) })).ok, "tauri-driver");
-    browser = await remote({ hostname: "127.0.0.1", port, logLevel: "error", connectionRetryCount: 0,
-      capabilities: { "tauri:options": { application: binary } } });
+    const capabilities = { browserName: "webview2", "ms:edgeOptions": { binary, webviewOptions: {} } };
+    // The runner talks to msedgedriver itself with the capabilities tauri-driver would build (`browserName: webview2`,
+    // `ms:edgeOptions.binary`): tauri-driver only maps these and hides the native driver's output, while the verbose
+    // msedgedriver log is the evidence when the session cannot be created. S02_WINDOWS_DRIVER=tauri selects tauri-driver.
+    // The WebView2 remote-debugging flag comes from the test build (TAURI_CONFIG in ui-e2e-b.yml), see README.
+    const useTauriDriver = process.env.S02_WINDOWS_DRIVER === "tauri";
+    if (useTauriDriver) child(process.env.TAURI_DRIVER ?? "tauri-driver", ["--port", String(port), "--native-port", String(await freePort())], env);
+    else child(process.env.EDGE_DRIVER ?? "msedgedriver", [`--port=${port}`, "--verbose", `--log-path=${join(output, "msedgedriver.log")}`], env);
+    await until(async () => (await fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(1000) })).ok, "windows webdriver");
+    try {
+      browser = await remote({ hostname: "127.0.0.1", port, logLevel: "error", connectionRetryCount: 0,
+        capabilities: useTauriDriver ? { "tauri:options": { application: binary } } : capabilities });
+    } catch (e) {
+      try { report.processes = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+        "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'openspider|msedgewebview2' -and $_.CommandLine -notmatch 'type=(renderer|gpu-process|utility|crashpad)' } | Select-Object Name,ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Depth 3"],
+        { encoding: "utf8", windowsHide: true, timeout: 20_000 }).slice(0, 5000); } catch (err) { report.processes = String(err); }
+      throw e;
+    }
   } else {
     if (guiLaunch) {
       const bundle = join(home, "S02.app");
@@ -266,32 +280,46 @@ try {
     await check("separate settings window", async () => {
       const before = await browser.getWindowHandles();
       await evaluate("window.s02.settings()");
-      const handles = await until(async () => { const h = await browser.getWindowHandles(); return h.length > before.length && h; }, "settings window");
-      const settings = handles.find(h => !before.includes(h));
-      await browser.switchToWindow(settings);
-      await until(() => browser.execute("return window.__osRuntime?.label === 'settings' && document.body.innerText.length > 0"), "settings content");
+      // The Windows test build creates the (hidden) settings window at startup (see ui-e2e-b.yml), so it may already be among
+      // the handles; find it by its label instead of by a new handle.
+      let settings;
+      await until(async () => {
+        for (const handle of await browser.getWindowHandles()) {
+          if (handle === before[0]) continue;
+          await browser.switchToWindow(handle);
+          report.settingsProbe = [...(report.settingsProbe ?? []).slice(-8), await browser.execute("return {label: window.__osRuntime?.label ?? null, href: location.href, text: document.body.innerText.length, ready: document.readyState}").catch(e => String(e))];
+          if (await browser.execute("return window.__osRuntime?.label === 'settings' && document.body.innerText.length > 0").catch(() => false)) { settings = handle; return true; }
+        }
+        await browser.switchToWindow(before[0]);
+        return false;
+      }, "settings window");
+      // Outside the Windows test build the settings window is created at runtime: it must be a new window.
+      if (process.platform !== "win32") assert.ok(!before.includes(settings), "settings window must be a new window");
       await evaluate("import('/spikes/probe.ts').then(m => { window.s02 = m; })");
       const value = await evaluate("window.s02.snapshot()");
       assert.equal(value.transport, "tauri");
       assert.equal(value.shell.visible, true);
       assert.equal(value.shell.minimized, false);
       await browser.switchToWindow(before[0]);
-      return value;
+      return { ...value, handle: settings };
     });
     // spec: UI-113, OUT-232
-    await check("app.requestQuit confirms a running fixture crawl", async () => {
+    // N01b: app.requestQuit itself opens the "Quit OpenSpider?" confirmation (the kernel broadcasts the
+    // app-quit-confirmation notice for every confirm decision; CI screenshot of the failed run), so the window close is
+    // judged first, while no dialog is open; the quit decision is read afterwards from the same running crawl.
+    const dialogOpen = () => browser.execute("return !!document.querySelector('[role=alertdialog], [role=dialog], dialog[open]')");
+    await check("closing during a running fixture crawl asks before quitting", async () => {
       if (!report.crawlStart) await startFixture();
+      assert.equal(await dialogOpen(), false);
+      await evaluate("window.s02.close()");
+      await until(dialogOpen, "quit confirmation");
+      return await browser.execute("return document.querySelector('[role=alertdialog], [role=dialog], dialog[open]').textContent");
+    });
+    await check("app.requestQuit confirms a running fixture crawl", async () => {
       report.quitDecision = await evaluate("window.s02.requestQuit()");
       assert.equal(report.quitDecision.kind, "confirm");
       assert.ok(report.quitDecision.reasons.includes("crawl"));
       return report.quitDecision;
-    });
-    await check("closing during a running fixture crawl asks before quitting", async () => {
-      assert.equal(report.quitDecision?.kind, "confirm", "Requires a running crawl and confirmation decision");
-      assert.equal(await browser.execute("return !!document.querySelector('[role=alertdialog], [role=dialog], dialog[open]')"), false);
-      await evaluate("window.s02.close()");
-      await until(() => browser.execute("return !!document.querySelector('[role=alertdialog], [role=dialog], dialog[open]')"), "quit confirmation");
-      return await browser.execute("return document.querySelector('[role=alertdialog], [role=dialog], dialog[open]').textContent");
     });
     if (mode === "u32") {
       // spec: UI-001
