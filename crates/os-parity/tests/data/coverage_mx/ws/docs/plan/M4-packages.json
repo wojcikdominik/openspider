@@ -1,0 +1,4 @@
+[
+  {"id": "M4-F02", "kind": "package", "wave": "0b", "title": "KI-Vorbau", "spec_ids": ["AI-001"], "extra_spec_ids": ["UI-004"],
+   "owns": ["crates/alpha/tests/check.rs"], "depends_on": ["M3-F01"]}
+]

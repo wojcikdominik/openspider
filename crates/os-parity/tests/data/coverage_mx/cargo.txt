@@ -1,0 +1,15 @@
+     Running tests/check.rs (target/debug/deps/check-abcd)
+test update_check ... ok
+test signature_later ... ignored, M4: Signaturkette erst mit dem KI-Paket
+test proxy ... ok
+test proxy_crawl ... ok
+test proxy_m2_criterion ... ignored, Klärung K2-12: Kriterium aus M2
+test settings_key ... ok
+test help_menu_legacy ... ignored, M3: Nach Updates suchen ab M3
+test foreign_reason ... ignored, irgendein Grund
+test ai_tab_m4 ... ok
+test team_draft ... ok
+     Running tests/pending_m3_u02.rs (target/debug/deps/pending_m3_u02-abcd)
+test install_after_download ... ignored, wartet auf M3-U01
+     Running tests/win.rs (target/debug/deps/win-abcd)
+test windows_arm_smoke ... ignored, Manuell: OUT-263 – Protokoll M3-Q03

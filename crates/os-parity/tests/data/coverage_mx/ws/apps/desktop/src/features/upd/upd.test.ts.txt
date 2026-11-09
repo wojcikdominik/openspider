@@ -1,0 +1,7 @@
+import { describe, test } from 'vitest';
+describe('Update', () => {
+  // spec: OUT-250
+  test('zeigt den Hinweis', () => {});
+  // spec: OUT-269 [M3]
+  test('nutzt den Proxy', () => {});
+});

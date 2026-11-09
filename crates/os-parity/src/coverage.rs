@@ -22,11 +22,15 @@
 //! M2 (--milestone M2): zusätzlich TS-Tags und vitest-/Playwright-JUnit, Messpakete,
 //! M2-Ignore-Gründe und Anhang B je (ID, Paket). Entwicklung verlangt ausgewählte gemergte Pakete;
 //! --gate verlangt alle Wellen ohne Platzhalter und ohne deferred Pflicht-IDs. Siehe Modul `m2`.
+//!
+//! M3 … M5 (--milestone M3|M4|M5, M3-Q01): dieselben Quellen über `docs/plan/M<n>-packages.json`,
+//! Teilkriterien `[M<n>]` je Paket statt Anhang B, Ignore-Gründe nach M3.md D7. Siehe Modul `mx`.
 
 pub mod evidence;
 pub mod frontend;
 pub mod m2;
 pub mod merged;
+pub mod mx;
 pub mod results;
 pub mod scan;
 pub mod targets;
@@ -51,6 +55,28 @@ pub enum Milestone {
     /// M2 einschließlich Frontend und Anhang B.
     #[value(name = "M2")]
     M2,
+    /// M3 (Release 1.0) über `docs/plan/M3-packages.json`, Teilkriterien `[M3]` (M3-Q01).
+    #[value(name = "M3")]
+    M3,
+    /// M4 (KI) über `docs/plan/M4-packages.json`, Teilkriterien `[M4]`.
+    #[value(name = "M4")]
+    M4,
+    /// M5 (DataForSEO) über `docs/plan/M5-packages.json`, Teilkriterien `[M5]`.
+    #[value(name = "M5")]
+    M5,
+}
+
+impl Milestone {
+    /// Nummer des Meilensteins (1 … 5).
+    pub fn number(self) -> u8 {
+        match self {
+            Milestone::M1 => 1,
+            Milestone::M2 => 2,
+            Milestone::M3 => 3,
+            Milestone::M4 => 4,
+            Milestone::M5 => 5,
+        }
+    }
 }
 
 /// Argumente von `os-parity coverage`.
@@ -59,16 +85,16 @@ pub struct CoverageArgs {
     /// Meilenstein; ohne --packages wird dessen kanonische Paketliste gelesen.
     #[arg(long, value_enum, default_value = "M1")]
     pub milestone: Milestone,
-    /// M2-Abnahme: alle Wellen, keine Platzhalter, alle Pflicht-IDs implementiert.
+    /// Abnahme (M2 … M5): alle Wellen, keine Platzhalter, alle Pflicht-IDs implementiert.
     #[arg(long)]
     pub gate: bool,
-    /// M2-Entwicklung: Pakete bis einschließlich dieser Welle als gemergt behandeln (Standard 0).
+    /// Entwicklung (M2 … M5): Pakete bis einschließlich dieser Welle als gemergt behandeln (Standard 0).
     #[arg(long, default_value_t = 0)]
     pub wave: u32,
-    /// M2-Entwicklung: zusätzliche gemergte Paket-IDs, z. B. --merged D12,U10.
+    /// Entwicklung (M2 … M5): zusätzliche gemergte Paket-IDs, z. B. --merged D12,U10.
     #[arg(long, value_delimiter = ',')]
     pub merged: Vec<String>,
-    /// M2-Entwicklung: Merge-Historie der Hauptlinie (`git log <main> --format='%H%x09%s'`); daraus erkannte
+    /// Entwicklung (M2 … M5): Merge-Historie der Hauptlinie (`git log <main> --format='%H%x09%s'`); daraus erkannte
     /// Pakete gelten zusätzlich zu `--merged` als gemergt (Regeln in `coverage/merged.rs`).
     #[arg(long)]
     pub merged_log: Option<PathBuf>,
@@ -84,7 +110,7 @@ pub struct CoverageArgs {
     /// JUnit-XML aus `cargo nextest` (Alternative oder Ergänzung zu `--test-output`).
     #[arg(long)]
     pub junit: Option<PathBuf>,
-    /// Statusdatei (z. B. docs/plan/M2-status.json).
+    /// Statusdatei (z. B. docs/plan/M2-status.json bzw. M3-status.json).
     #[arg(long)]
     pub write: Option<PathBuf>,
     /// Wurzel des Repositories (enthält `crates/` und `tests/`).
@@ -648,8 +674,11 @@ pub fn run(args: &CoverageArgs) -> Result<bool, ParityError> {
         }
     }
 
-    if args.milestone == Milestone::M2 {
-        return m2::run(args);
+    match args.milestone {
+        Milestone::M1 => {}
+        Milestone::M2 => return m2::run(args),
+        // M3-Q01: generisch über docs/plan/M<n>-packages.json.
+        m @ (Milestone::M3 | Milestone::M4 | Milestone::M5) => return mx::run(args, m.number()),
     }
     let packages = args
         .packages

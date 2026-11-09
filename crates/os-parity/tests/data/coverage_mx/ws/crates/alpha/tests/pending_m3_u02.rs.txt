@@ -1,0 +1,4 @@
+// spec: OUT-251
+#[test]
+#[ignore = "wartet auf M3-U01"]
+fn install_after_download() {}
