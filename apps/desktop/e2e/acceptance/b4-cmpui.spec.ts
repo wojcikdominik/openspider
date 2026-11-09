@@ -223,6 +223,9 @@ function parseCsv(text: string): string[][] {
 test.describe("Vergleichsmodus gegen den echten Kern", () => {
   let bridge: AlphaBridge;
   let site: { server: Server; port: number };
+  // B4-CMPUI2 (A7, teardown only): the home this run prepared is removed afterwards; a given OS_CMPUI_HOME or a home
+  // prepared by an earlier run stays.
+  let preparedHome: string | undefined;
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(420_000);
     const home = process.env.OS_CMPUI_HOME ?? join(tmpdir(), `os-cmpui-${process.ppid}`);
@@ -238,6 +241,7 @@ test.describe("Vergleichsmodus gegen den echten Kern", () => {
       version = 2;
       await crawlOnce(page, `http://127.0.0.1:${site.port}/`);
       writeFileSync(join(home, "prepared"), "ok");
+      preparedHome = home;
     } finally {
       await page.close();
     }
@@ -245,6 +249,7 @@ test.describe("Vergleichsmodus gegen den echten Kern", () => {
   test.afterAll(async () => {
     await bridge?.stop();
     await new Promise<void>((ok) => (site ? site.server.close(() => ok()) : ok()));
+    if (preparedHome) rmSync(preparedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(RECORDER);
