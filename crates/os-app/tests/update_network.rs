@@ -421,3 +421,51 @@ async fn skipping_follows_semver_order_including_pre_releases() {
         );
     }
 }
+
+// spec: OUT-251
+// spec: OUT-250
+#[tokio::test]
+async fn switching_automatic_checks_off_keeps_a_visible_release_downloadable() {
+    use os_app::{
+        commands::update::{run_check_with_context, UpdateService},
+        runtime::CallCtx,
+        update::{DisableReason, UpdateState},
+        App, AppConfig,
+    };
+    let (_site, dir, ctx) = fixture().await;
+    let app = App::new(AppConfig::new(dir.path())).unwrap();
+    assert!(matches!(
+        run_check_with_context(&app, true, ctx).await,
+        UpdateState::Available(_)
+    ));
+    // The background download failed; the dialog shows the release with "Download in background".
+    let service = app.ext::<UpdateService>();
+    *service.state.lock().unwrap() = UpdateState::Failed("download".into());
+    app.dispatch(
+        CallCtx::for_window("main"),
+        "update.set_auto",
+        serde_json::json!({"check": false}),
+    )
+    .await
+    .unwrap();
+    assert!(!app.settings_snapshot().updates.check);
+    assert_eq!(
+        *service.state.lock().unwrap(),
+        UpdateState::Failed("download".into())
+    );
+    assert!(service.manifest.lock().unwrap().is_some(), "manifest kept");
+    // Without a known release the setting still disables checks at once.
+    let other = tempfile::tempdir().unwrap();
+    let idle = App::new(AppConfig::new(other.path())).unwrap();
+    idle.dispatch(
+        CallCtx::for_window("main"),
+        "update.set_auto",
+        serde_json::json!({"check": false}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        *idle.ext::<UpdateService>().state.lock().unwrap(),
+        UpdateState::Disabled(DisableReason::Settings)
+    );
+}
