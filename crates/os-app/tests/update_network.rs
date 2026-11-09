@@ -312,6 +312,10 @@ async fn skipped_version_is_silent_for_automatic_checks_but_shown_by_a_manual_ch
     use os_app::{commands::update::run_check_with_context, update::UpdateState, App, AppConfig};
     let (site, dir, ctx) = fixture().await;
     let app = App::new(AppConfig::new(dir.path())).unwrap();
+    // Later contexts talk to this site, so they trust its CA (each fixture has its own).
+    let ca = dir.path().join("ca.pem").to_string_lossy().into_owned();
+    let trust_first_site =
+        |ctx: &mut UpdateContext| ctx.network.trusted_certificates = vec![ca.clone()];
     let UpdateState::Available(offered) = run_check_with_context(&app, true, ctx).await else {
         panic!("fixture offers an update");
     };
@@ -326,6 +330,7 @@ async fn skipped_version_is_silent_for_automatic_checks_but_shown_by_a_manual_ch
     assert!(persisted.contains("skipped_version"), "{persisted}");
     let (_, _automatic_dir, mut automatic) = fixture().await;
     automatic.endpoint = format!("{}/latest.json", site.https_base_url());
+    trust_first_site(&mut automatic);
     assert_eq!(
         run_check_with_context(&skipping, false, automatic).await,
         UpdateState::UpToDate
@@ -339,6 +344,7 @@ async fn skipped_version_is_silent_for_automatic_checks_but_shown_by_a_manual_ch
     // A manual check (Hilfe → „Nach Updates suchen“) still reports it.
     let (_, _manual_dir, mut manual) = fixture().await;
     manual.endpoint = format!("{}/latest.json", site.https_base_url());
+    trust_first_site(&mut manual);
     assert!(matches!(
         run_check_with_context(&skipping, true, manual).await,
         UpdateState::Available(found) if found.version == offered.version
@@ -352,6 +358,7 @@ async fn skipped_version_is_silent_for_automatic_checks_but_shown_by_a_manual_ch
         .unwrap();
     let (_, _later_dir, mut automatic) = fixture().await;
     automatic.endpoint = format!("{}/latest.json", site.https_base_url());
+    trust_first_site(&mut automatic);
     assert!(matches!(
         run_check_with_context(&later, false, automatic).await,
         UpdateState::Available(_)
