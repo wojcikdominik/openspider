@@ -123,3 +123,18 @@ Kein Rust geändert, daher kein Workspace-`cargo test`.
 | `docs/spec/01-crawl.md` | Spec | CRAWL-127 Akzeptanzkriterium |
 
 `apps/desktop/src/features/compare/` wurde nicht angefasst.
+
+## Nachtrag: fehlende Crawl-Datei als `NotFound` (Kern-Fix aus `m3/b4-cmpui`)
+
+- Prüfung: Die Verwaltung behandelt `NotFound` schon direkt (`missing = err.code === "NotFound"`). Der Eintrag
+  wird aus beiden Listen entfernt (lokale Liste und `uistate` per `updateRecent`), der Hinweis
+  „<Pfad>: The file was not found.“ erscheint. Das gilt für die Liste in der Verwaltung und für Datei →
+  `crawls.recent`, die über dieselbe Funktion `openNow` laufen. `file.recent` (`help/install.ts`) entfernt bei
+  `NotFound` ebenfalls mit Hinweis `u04-recent-missing`. Es war **kein Fix nötig**.
+- Der Kommentar in `CrawlsHost.tsx` ist angepasst. Der Ausweg über `Io` und die Dateiprüfung bleibt für
+  ältere Kerne erhalten und ist harmlos.
+- Neuer Test in `crawls.test.tsx`: „removes a recent entry the core reports as NotFound with its path …“. Der
+  Fehler hat die Form des Kerns (`err-file-not-found` mit `path`). Geprüft werden das Entfernen, der
+  Hinweistext und dass `desktop.check` nicht aufgerufen wird. Der Test ist auf diesem Branch allein grün.
+  **Kein Test braucht beide Branches.** Den Kern-Fix habe ich nicht nachgebaut.
+- Lauf: `npm run -w apps/desktop typecheck && npm run -w apps/desktop test` mit 124 Dateien / 1 058 Tests grün.

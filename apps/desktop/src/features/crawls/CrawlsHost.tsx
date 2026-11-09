@@ -177,8 +177,9 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
       }
       const path = args.kind === "path" ? args.path : rows.find(r => r.crawl.crawlId === args.crawlId)?.crawl.file;
       let missing = err.code === "NotFound";
-      // Path canonicalization currently reports a missing file as Io. Verify it through the
-      // read-only file adapter before removing history; permissions and schema errors remain.
+      // CRAWL-127: the core reports a missing file as NotFound (with its path), which removes the entry with a hint.
+      // Older cores reported it as Io; such an Io is verified through the read-only file adapter before removing
+      // history. Permission and schema errors keep the entry.
       if (err.code === "Io" && path) {
         try { await desktop.check(path); } catch (checkError) { missing = toCmdError(checkError).code === "NotFound"; }
       }

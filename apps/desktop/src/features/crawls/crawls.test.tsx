@@ -228,6 +228,19 @@ it("removes a missing recent file only on NotFound, and retains schema/permissio
   expect(readRecent()).toEqual(["/denied.ospider"]);
 });
 
+// spec: CRAWL-127
+it("removes a recent entry the core reports as NotFound with its path, shows the hint and needs no file check", async () => {
+  // Shape of the core error for a vanished file (crawl.open canonicalization, branch m3/b4-cmpui).
+  writeRecent(["/gone/Alpha.ospider", "/fixture/Beta.ospider"]);
+  fixture.core.handlers.set("crawl.open", args => { throw new IpcError(localError("NotFound", "err-file-not-found", { path: (args as { path: string }).path })); });
+  const check = vi.spyOn(fixture.desktop, "check");
+  await mount(); click("/gone/Alpha.ospider");
+  await waitFor(() => expect(readRecent()).toEqual(["/fixture/Beta.ospider"]));
+  expect(screen.getByRole("alert")).toHaveTextContent("/gone/Alpha.ospider: The file was not found.");
+  expect(screen.queryByRole("button", { name: "/gone/Alpha.ospider" })).toBeNull();
+  expect(check).not.toHaveBeenCalled();
+});
+
 // spec: OUT-230 [M2]
 it("offers recovery only for corruption and reports the new file and row loss after OpHandle completion", async () => {
   fixture.core.handlers.set("crawl.open", () => { throw new IpcError(localError("Store", "err-crawl-corrupt")); });
