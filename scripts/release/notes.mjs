@@ -71,6 +71,9 @@ export function updateNotes(text, version) {
   }
   const fail = message => { throw new Error(`Kurze Update-Notes ${version} (${notesPath(version)}): ${message}`); };
   if (/\b(?:TODO|STUB)\b|Entwurfshinweis/.test(update)) fail('Entwurfsmarkierungen (TODO/STUB/Entwurfshinweis)');
+  // Raw HTML and inline comments never belong into the manifest: older clients show the text unrendered.
+  const html = update.split('\n').find(line => /<!--|<[a-z]/i.test(line));
+  if (html) fail(`kein HTML und keine Kommentare im kurzen Abschnitt, gefunden: ${JSON.stringify(html)}`);
   const lines = update.split('\n');
   const marker = lines.flatMap((line, i) => line.trim() === '### Deutsch' ? [i] : []);
   if (marker.length !== 1) fail('genau eine Zeile ### Deutsch zwischen englischer und deutscher Liste erwartet');
@@ -83,6 +86,25 @@ export function updateNotes(text, version) {
     if (long) fail(`${language}: Punkt länger als ${SHORT_LINE_MAX} Zeichen, bitte kürzen: ${JSON.stringify(long)}`);
   }
   return `${update}\n`;
+}
+
+// Warnings for the short update notes: clients up to 1.0.0-beta.3 show the manifest text unrendered, so Markdown
+// emphasis and links appear there as `**…**` and `[…](…)`. Allowed, but reported (B4-UPDDLG A4).
+export function updateNotesWarnings(text) {
+  const { update } = splitNotesDocument(text);
+  if (update === null) return [];
+  const warnings = [];
+  if (/\*\*|__/.test(update)) warnings.push('Fettdruck (**…**) im kurzen Abschnitt: Clients bis 1.0.0-beta.3 zeigen die Sternchen roh');
+  if (/\]\(/.test(update)) warnings.push('Link [Text](URL) im kurzen Abschnitt: Clients bis 1.0.0-beta.3 zeigen ihn als rohen Markdown-Text');
+  return warnings;
+}
+
+function reportWarnings(version) {
+  for (const warning of updateNotesWarnings(readFileSync(notesPath(version), 'utf8'))) {
+    console.warn(`Warnung Update-Notes ${version}: ${warning}`);
+    if (process.env.GITHUB_ACTIONS === 'true') console.log(`::warning title=Update-Notes::${warning}`);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n**Update-Notes (Warnung):** ${warning}\n`);
+  }
 }
 
 // Validates the detailed notes of a document (the short update section removed): not empty, no level-1/2 headings
@@ -202,6 +224,7 @@ function main() {
     const [version] = positionals;
     if (values.check) {
       checkNotes({ version });
+      reportWarnings(version);
       console.log(`Release-Notes ${version}: ${notesPath(version)} vorhanden und gleich dem CHANGELOG-Eintrag, kurze Update-Notes gültig`);
     } else {
       const notes = readFileSync(notesPath(version), 'utf8');
@@ -212,6 +235,7 @@ function main() {
     if (!output || positionals.length !== 2 || values.date) throw new Error(usage);
     if (values.repository && !values.body) throw new Error('--repository nur zusammen mit --body');
     const notes = checkNotes({ version });
+    reportWarnings(version);
     // OUT-251: the update manifests get only the short update notes; the release text the detailed ones.
     writeFileSync(output, updateNotes(readFileSync(notesPath(version), 'utf8'), version));
     if (values.body) writeFileSync(values.body, releaseBody({ version, repository: values.repository, notes }));

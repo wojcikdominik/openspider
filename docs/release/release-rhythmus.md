@@ -39,7 +39,7 @@ Nutzerentscheidung 09.11.2026 (OUT-251, B4-UPDDLG): Der Update-Dialog der App ze
 Regeln (`notes.mjs --check` bricht sonst vor dem Bauen ab):
 
 - Die Zeilen `<!-- update -->` und `<!-- /update -->` stehen allein auf ihrer Zeile, genau einmal je Datei, am besten ganz oben.
-- Dazwischen: englische Liste, eine Zeile `### Deutsch`, deutsche Liste. Je Sprache 3 bis 6 Punkte, jeder Punkt eine Zeile „- …“ mit höchstens 160 Zeichen. Fettdruck und Links (`[Text](https://…)`) sind erlaubt; Links öffnen im Standardbrowser.
+- Dazwischen: englische Liste, eine Zeile `### Deutsch`, deutsche Liste. Je Sprache 3 bis 6 Punkte, jeder Punkt eine Zeile „- …“ mit höchstens 160 Zeichen. Kein HTML und keine Kommentare (Fehler). Fettdruck und Links (`[Text](https://…)`) sind erlaubt, `notes.mjs` meldet sie aber als Warnung (Actions-Warnung und Run-Zusammenfassung): Clients bis 1.0.0-beta.3 zeigen den Text roh, also mit `**` und `[…](…)`. Schlichter Text ist für diese Clients besser. In neueren Clients öffnen Links im Standardbrowser.
 - Nur dieser Abschnitt landet als `notes` in `latest.json`/`latest-beta.json` (`notes.mjs <Version> <Update-Notes>` schreibt ihn in die Datei, die `manifest.mjs` liest). Release-Text (OUT-261) und CHANGELOG-Eintrag bestehen aus dem Rest der Datei, den ausführlichen Notes; `notes.mjs --changelog` übernimmt den kurzen Abschnitt nicht.
 - Fehlt der Abschnitt ab 1.0.0-beta.4, ist der Release-Lauf rot. Bis 1.0.0-beta.3 (bereits veröffentlicht) bleiben die Dateien unverändert; ihr Manifest trug die ausführlichen Notes.
 - Die App wählt die Sprache wie beim Neuigkeiten-Dialog (OUT-257): deutsche Oberfläche → deutscher Teil, jede andere → englischer Teil.

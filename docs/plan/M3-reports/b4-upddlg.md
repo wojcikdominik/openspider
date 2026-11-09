@@ -152,8 +152,30 @@ Gates (Server, Abnahmedateien des Testagenten nur temporär ausgecheckt, danach 
 | Playwright `e2e/update` (Chromium + WebKit) | 42/42 |
 | Playwright Abnahme `e2e/acceptance/b4-upddlg.spec.ts` (Chromium) | 48/48 |
 
+## Nachzug nach der Freigabe (Branch `m3/upddlg2` ab `main` `5805f4bb`)
+
+Fable hat mit 89 Punkten freigegeben, ohne Muss-Auflage. Die Folgepunkte:
+
+- **A3:** Wird „Automatisch nach Updates suchen“ im Dialog ausgeschaltet, während ein Release bekannt ist (verfügbar, Download fehlgeschlagen, lädt oder bereit), bleiben Zustand und Manifest erhalten (`set_auto` in `crates/os-app/src/commands/update.rs`). „Im Hintergrund herunterladen“ funktioniert danach weiter; ohne bekanntes Release gilt wie bisher sofort „deaktiviert“. Test `update_network::switching_automatic_checks_off_keeps_a_visible_release_downloadable`.
+- **A4:** `updateNotes` lehnt im kurzen Abschnitt rohes HTML und Kommentare ab (`<!--`, `<` + Buchstabe; „< 5 s“ bleibt erlaubt). Fettdruck und Links bleiben erlaubt, `notes.mjs --check` und der Bau melden sie als Actions-Warnung und in der Run-Zusammenfassung (`updateNotesWarnings`), weil Clients bis beta.3 den Text roh zeigen. `release-rhythmus.md` beschreibt die Regel. Test in `tests/release/orchestration.test.mjs`.
+- **A5:** UI-127 nennt die Hash-Zeile der Debug-Info „Commit“.
+- **A6:** `docs/release/checkliste-release.md`: Punkte „kurzer Update-Abschnitt vorhanden“ und „Build-Nummer der Run-Zusammenfassung = `git rev-list --count <Kandidaten-Commit>`“.
+- **A7:** `crates/os-cli/build.rs` ruft Git im Paketverzeichnis aus `CARGO_MANIFEST_DIR` auf und findet die Workspace-Wurzel darüber, wie `os-model/build.rs`.
+- **A8** (Website-Handbuch) bleibt für die Website-Woche liegen. `docs/release/notes/1.0.0-beta.4.md` ist bewusst nicht angelegt (Kandidatentag).
+
+Gates (Server, 09.11.2026):
+
+| Gate | Ergebnis |
+|---|---|
+| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` | Exit 0 |
+| os-app gezielt: `update_network` (inkl. A3-Test) und Abnahme `acceptance_upddlg` | 12/12 und 8/8 |
+| `cargo test -p os-cli` | 232 bestanden, 0 fehlgeschlagen |
+| typecheck, `npm run -w apps/desktop test` | Exit 0; 127 Dateien, 1.102 Tests grün |
+| `node --test scripts/release/*.test.mjs tests/release/orchestration.test.mjs` | 58/59; einzig der bekannte L01-Archivtest (scheitert auch auf `main`) |
+| Playwright `e2e/update` (Chromium) | 21/21 |
+
 ## Abschluss
 
-**PAKET FERTIG** – Stand `0178ec33` auf `m3/upddlg` (13 Commits ab `17689124`), kein Push.
+**PAKET FERTIG** – Paket und Nachbesserung nach der Abnahme bis `00ff11dc` auf `m3/upddlg` (17 Commits ab `17689124`), lokal in `main` gemergt als `5805f4bb` (mit den Abnahmetests aus `m3/t-upddlg`). Der Nachzug A3–A7/A9 liegt auf `m3/upddlg2`, Hash siehe Meldung an den Orchestrator. Kein Push.
 
-Merge-Schluss: Das ganze Paket einschließlich Build-Nummer ist fertig und grün, der Termin Di 18:00 wackelt nicht. Wenn die Build-Nummer trotzdem getrennt werden soll, sind das die Commits `551a8c25`, `665f750c`, `2ef8392e`, `91ca6165`, `d284cf17` und der Anteil von `a2e68713` (dieser setzt die Dialog-Commits voraus). Für den Release Mittwoch beachten: Ab beta.4 braucht `docs/release/notes/1.0.0-beta.4.md` den kurzen Abschnitt, sonst ist `prepare` rot. Vorlage: `docs/release/notes-template.md`.
+Für den Release Mittwoch: Ab beta.4 braucht `docs/release/notes/1.0.0-beta.4.md` den kurzen Abschnitt, sonst ist `prepare` rot (Vorlage `docs/release/notes-template.md`). Die Build-Nummer in der Run-Zusammenfassung gegen `git rev-list --count <Kandidaten-Commit>` prüfen (Checkliste).

@@ -89,7 +89,15 @@ fn set_auto<'a>(app: &'a App, _: CallCtx, args: Value) -> BoxFuture<'a, CmdResul
         let _guard = service.gate.lock().await;
         app.settings()
             .apply_patch(&serde_json::json!({"updates":{"check":args.check}}))?;
+        // B4-UPDDLG (A3): switching automatic checks off from the update dialog keeps a known release (available,
+        // failed download, downloading or ready): its manifest stays, so "Download in background" still works.
+        let release_known = service
+            .manifest
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_some();
         if !args.check
+            && !release_known
             && !matches!(
                 *service.state.lock().unwrap_or_else(|p| p.into_inner()),
                 crate::update::UpdateState::Ready(_)
