@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getT, i18n, useLanguageStore, useT } from "../../i18n";
+import { DEFAULT_LANGUAGE, getT, i18n, useLanguageStore, useT, type I18n } from "../../i18n";
 import { openConfig } from "../config/frame/store";
 import { auth } from "../../ipc/auth";
 import { config } from "../../ipc/config";
@@ -25,6 +25,18 @@ export async function notifyCompletion(title: string, body: string): Promise<voi
 const completion = (n: Notice) => n.code === "crawl-completed" || n.code === "analysis-completed";
 const pacing = (n: Notice) => n.code === "crawl-throttled" || n.code === "crawl-throttle-cleared";
 const modal = (n: Notice) => !completion(n) && !pacing(n) && (n.level === "error" || n.level === "warning");
+/** UI-019/CRAWL-128: the core names the error class of an unreachable start URL (or its robots.txt) in `reason`. */
+const UNREACHABLE = new Set(["start-dns", "start-connection", "start-timeout", "start-tls"]);
+export const isStartUnreachable = (n: Notice | undefined): boolean => !!n && UNREACHABLE.has(n.code) && typeof n.args.reason === "string";
+
+/** Main text of a notice; a language without the key (es/fr/it before B4-LANG) falls back to English, not to the raw code. */
+export function noticeMessage(catalog: I18n, lang: string, notice: Notice): string {
+  const has = (key: string) => catalog.has(lang, key) || catalog.has(DEFAULT_LANGUAGE, key);
+  const noticeKey = `notice-${notice.code === "low-disk" ? "disk-low" : notice.code}`;
+  if (has(noticeKey)) return catalog.translate(lang, noticeKey, notice.args);
+  if (has(notice.code)) return catalog.translate(lang, notice.code, notice.args);
+  return catalog.translate(lang, "notify-error", { code: String(notice.args.errorCode ?? notice.code) });
+}
 
 /** Serial dialogs, immediate errors, and rare live announcements; numeric ticks never enter the live region. */
 export function Notifications() {
@@ -47,13 +59,8 @@ export function Notifications() {
   const authKey = `${useSession.getState().crawl?.crawlId ?? ""}:${host}:${realm}`;
   const secureHost = normalizeInput(host);
   const needsHttpConsent = secureHost?.startsWith("http:") === true;
-  let message = "";
-  if (current) {
-    const noticeKey = `notice-${current.code === "low-disk" ? "disk-low" : current.code}`;
-    if (i18n.has(lang, noticeKey)) message = t(noticeKey, current.args);
-    else if (i18n.has(lang, current.code)) message = t(current.code, current.args);
-    else message = t("notify-error", { code: String(current.args.errorCode ?? current.code) });
-  }
+  const message = current ? noticeMessage(i18n, lang, current) : "";
+  const unreachable = isStartUnreachable(current);
 
   useEffect(() => {
     for (const n of notices) {
@@ -106,8 +113,13 @@ export function Notifications() {
       {[["speed.threads", "notify-reduce-threads"], ["rendering.mode", "notify-disable-rendering"], ["extraction.store_html", "notify-disable-html"]].map(([anchor, label]) => <Button key={anchor} onPress={() => openConfig({ anchor })}>{t(label!)}</Button>)}
     </Banner></div>}
     <ToastRegion label={t("notify-title")} />
-    <Dialog title={t(isAuth ? "notify-auth-title" : "notify-title")} isOpen={!!current} isDismissable={!busy} onOpenChange={(open) => { if (!open) cancelDialog(); }}>
+    <Dialog title={t(isAuth ? "notify-auth-title" : unreachable ? "notify-unreachable-title" : "notify-title")} isOpen={!!current} isDismissable={!busy} onOpenChange={(open) => { if (!open) cancelDialog(); }}>
       <p>{message}</p>
+      {unreachable && <>
+        <p data-testid="notify-cause">{t("notify-cause", { cause: t(`notify-reason-${String(current!.args.reason)}`, undefined, { fallback: String(current!.args.reason) }) })}</p>
+        <p>{t(current!.args.robots === true ? "notify-unreachable-robots" : "notify-unreachable-url", { url: String(current!.args.url ?? current!.args.startUrl ?? "") })}</p>
+        <p>{t("notify-unreachable-state")}</p>
+      </>}
       {current?.args.detail != null && <details><summary>{t("notify-details")}</summary><pre>{String(current.args.detail)}</pre></details>}
       {current?.args.status != null && <p>{t("notify-status", { status: String(current.args.status) })}</p>}
       {current?.args.path != null && <p>{String(current.args.path)} · {t("notify-free", { free: String(current.args.freeBytes ?? "–") })}</p>}
