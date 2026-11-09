@@ -18,9 +18,10 @@ deshalb nur zwei vorhandene App-Einstellungen:
 
 Der Mock (`tests/install/mockupdate.py`) ist ein Proxy, der nur `CONNECT` zu den GitHub-Hosts annimmt und TLS
 selbst mit einem Zertifikat der Test-CA beendet. Jedes andere Ziel und jede Klartext-Anfrage bekommt 403
-und landet im Protokoll (`mock-log.jsonl`); es gibt keine Weiterleitung ins Internet. Die Test-CA entsteht im
-Job `prepare` (ECDSA P-256, 7 Tage, CA-Schlüssel nach dem Signieren gelöscht) und gilt nur in den
-Testprofilen dieses Laufs. Der Updater-Signierschlüssel wird nirgends gebraucht: Das N+1-Paket ist im
+und landet im Protokoll (`mock-log.jsonl`); es gibt keine Weiterleitung ins Internet. Die Test-CA erzeugt
+der Treiber in jedem Matrix-Job mit `openssl` in einem temporären Ordner außerhalb des Ergebnisordners
+(ECDSA P-256, 7 Tage, CA-Schlüssel nach dem Signieren gelöscht); sie wird nicht hochgeladen und gilt nur im
+Testprofil dieses Jobs. Der Updater-Signierschlüssel wird nirgends gebraucht: Das N+1-Paket ist im
 Release-Lauf signiert worden, die Matrix prüft nur.
 
 Szenarien:
@@ -39,15 +40,22 @@ Szenarien:
 |---|---|---|---|
 | macOS arm64 (DMG) | `macos-15` | Universal-DMG → `/Applications` | Nachbildung (Abschnitt 4) |
 | macOS x64 (DMG) | `macos-15-intel` | Universal-DMG → `/Applications` | Nachbildung |
-| Windows x64 NSIS | `windows-latest` | `…_x64-setup.exe /S` (pro Benutzer) | echte App, Tauri-Updater |
-| Windows x64 MSI | `windows-latest` | `msiexec /i … /qn` (pro Rechner) | echte App, Tauri-Updater |
-| Windows 11 ARM NSIS | `windows-11-arm` | x64-Setup unter Emulation | echte App, Tauri-Updater |
+| Windows x64 NSIS | `windows-latest` | `…_x64-setup.exe /S` (pro Benutzer) | Versuch echte App (**unbelegt, wahrscheinlich nicht erreichbar**), sonst Nachbildung |
+| Windows x64 MSI | `windows-latest` | `msiexec /i … /qn` (pro Rechner) | wie NSIS |
+| Windows 11 ARM NSIS | `windows-11-arm` | x64-Setup unter Emulation | wie NSIS |
 
-Unter Windows steuert die Matrix die installierte Release-App über die DevTools-Schnittstelle von WebView2
-(`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=…`, derselbe Weg wie `msedgedriver`) und
-ruft dieselben IPC-Befehle auf wie der Update-Dialog (`update.check`, `update.download`,
-`update.install {when: "now"}`). Download, Signaturprüfung, Installer-Aufruf und Neustart sind der echte
-Tauri-Updater der Release-App.
+**Windows-Steuerweg (Q-13): unbelegt, wahrscheinlich nicht erreichbar.** Die Matrix versucht, die installierte
+Release-App über die DevTools-Schnittstelle von WebView2 zu steuern
+(`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=…`) und dieselben IPC-Befehle aufzurufen wie
+der Update-Dialog. Das Paket M3-nightly-b („Ursache 2“, `docs/plan/M3-reports/nightly-b.md`) hat in acht
+Diagnoseläufen belegt, dass wry diese Variable mit eigenen Zusatzargumenten überschreibt; der Debug-Port kam
+dort nur über `TAURI_CONFIG` in einem **Testbuild** an. Für die signierte Release-App gibt es diesen Weg nicht,
+einen anderen tragfähigen Steuerweg ohne Produktänderung kennt das Paket nicht. Q-13 erhält dann den Status
+`unbelegt` (kein Fehlschlag des Jobs), **W-02 aus dem Nutzerprotokoll wird Pflicht**, und die Zeile läuft mit
+der Nachbildung weiter: signierten N+1-Installer über den Mock laden, Signatur mit dem in N eingebetteten
+Schlüssel prüfen, still über N installieren (`/S` bzw. `msiexec /i … /qn`; der Tauri-Updater ruft den
+Installer mit anderen Argumenten auf). Erst wenn ein Lauf Q-13 bis Q-17 auf dem echten Weg grün zeigt, gelten
+sie unter Windows als automatisch belegt.
 
 ## 3 Prüfungen je Zeile
 
@@ -65,11 +73,11 @@ Tauri-Updater der Release-App.
 | Q-10 | App-Start mit abgeschalteter Prüfung: 20 s kein Request | OUT-250, OUT-253 |
 | Q-11 | App-Start: Prüfung über Proxy und Test-CA, nur Version/OS/Arch, `updates.last_check` gespeichert, kein Download ohne Zustimmung | OUT-250, OUT-269, OUT-270 |
 | Q-12 | Zweiter App-Start innerhalb von 24 h: keine Prüfung | OUT-250 |
-| Q-13 | Windows: Release-App über DevTools steuerbar · macOS: `Hand` | OUT-251 |
-| Q-14 | Windows: App lehnt Manifest mit HTTP-Artefakt ab · macOS: manipuliertes Paket über den Mock geladen und abgelehnt (Nachbildung) | OUT-252 |
-| Q-15 | Windows: App lädt das manipulierte Paket, verwirft es (Zustand `failed`), Installation unverändert · macOS: `anderswo` | OUT-252 |
-| Q-16 | Windows: N+1 prüfen, herunterladen, „Jetzt installieren und neu starten“, alte App beendet sich · macOS: Archiv laden, Signatur prüfen, Bundle austauschen (Nachbildung) | OUT-251, OUT-252 |
-| Q-17 | Windows: Installer schreibt N+1, App startet neu · macOS: N+1 startet am selben Ort, Drosselung bleibt | OUT-251 |
+| Q-13 | Release-App steuerbar · Windows: Versuch über DevTools, **unbelegt, wahrscheinlich nicht erreichbar** · macOS: `Hand` (M-02) | OUT-251 |
+| Q-14 | Echter Weg (nur wenn Q-13 grün): App lehnt Manifest mit HTTP-Artefakt ab · Nachbildung: manipuliertes Paket über den Mock geladen und abgelehnt | OUT-252 |
+| Q-15 | Echter Weg: App lädt das manipulierte Paket, verwirft es, Installation unverändert · Nachbildung: `unbelegt` (nur Rust-Test gegen Mock) | OUT-252 |
+| Q-16 | Echter Weg: N+1 prüfen, herunterladen, „Jetzt installieren und neu starten“ · Nachbildung: Paket laden, Signatur prüfen, Bundle austauschen (macOS) bzw. Installer still über N (Windows) | OUT-251, OUT-252 |
+| Q-17 | Echter Weg: Installer schreibt N+1, App startet neu · Nachbildung: N+1 startet am selben Ort, Drosselung bleibt | OUT-251 |
 | Q-18 | Version N+1 am **ursprünglichen** Installationsort, CLI mit aktualisiert | OUT-251 |
 | Q-19 | OS-Signatur nach dem Update gültig | OUT-252, OUT-265, OUT-266 |
 | Q-20 | Crawl von N mit N+1 geöffnet, Export bytegleich (normalisiert wie der Installations-Smoke) | OUT-255 |
@@ -88,7 +96,8 @@ Ergebnisse: Artefakt `install-update-<zeile>` (`report.json`, `report.md`, `mock
 | Punkt | Warum | Stattdessen |
 |---|---|---|
 | macOS: Update-Dialog bedienen und Bundle-Austausch **durch den Tauri-Updater** | Release-Builds haben keinen WebDriver (`e2e-webdriver` nur in Testbuilds), WKWebView keinen DevTools-Port; ein UI-Klick ohne Webdriver ist auf dem Runner nicht verlässlich möglich (Bedienungshilfen-Freigabe) | Nachbildung Q-14/Q-16/Q-17 (gleicher Download-Weg, gleiche Signaturprüfung, gleicher Austausch am selben Ort); echter Klickweg **M-02** |
-| Windows: Klickweg über Menü und Dialog-Schaltflächen | IPC statt Klick (gleiche Befehle) | **W-02** |
+| Windows: Update durch den Tauri-Updater der Release-App (Q-13 bis Q-17 echter Weg) | Steuerweg unbelegt, wahrscheinlich nicht erreichbar (wry überschreibt die WebView2-Argumente, M3-nightly-b) | Nachbildung; **W-02 Pflicht** |
+| Windows: Klickweg über Menü und Dialog-Schaltflächen | selbst mit Steuerweg nur IPC statt Klick | **W-02** |
 | Update bei laufendem Crawl („Nach Crawl-Ende installieren“, kein Neustart) | braucht einen Crawl in der App; Zustand deckt `update_install_flow`/`update_crawl` | **M-02, W-02** |
 | Neuigkeiten-Dialog nach dem Update (OUT-257) | UI | **M-03, W-03** |
 | Zuletzt geöffneter Crawl wieder offen, Aufgaben zeigen auf N+1 | UI bzw. Planer | **M-04, M-05, W-04** |
@@ -103,6 +112,8 @@ Voraussetzung: zwei Läufe von „Release orchestration“ mit dem Artefakt `rel
 signierte Updater-Artefakte haben (`release-reports/updater-status.txt` = „signierte Updater-Artefakte“,
 `latest.json` in `release-assets`). N darf ein Tag-Lauf oder ein Trockenlauf sein; für Q-02 braucht N
 signierte Installer. Beide Versionen müssen im selben Kanal liegen (Beta → Beta/stabil, stabil → stabil).
+Fehlt `latest.json` in N+1, läuft keine Zeile: Der Lauf trägt eine `::warning`-Annotation, und
+`install-update-protocol` enthält „Übersprungen: keine signierten Updater-Artefakte“ – das ist kein Nachweis.
 
 ```bash
 # 1. Lauf-IDs bestimmen (N = zuletzt veröffentlichte Beta, N+1 = Kandidat)
