@@ -1,6 +1,6 @@
 import { loginStatus } from "../config/pages/auth-forms/session";
 import { useEffect, useState } from "react";
-import { useFormat, useT } from "../../i18n";
+import { currentLanguage, i18n, useFormat, useT } from "../../i18n";
 import { useSession, type SessionState } from "../../state/session";
 import { McpMenu } from "./McpMenu";
 import { ProgressBar } from "../../ui/primitives/Feedback";
@@ -22,6 +22,13 @@ export function useStatusSnapshot(): SessionState {
     return () => { off(); clearTimeout(timer); };
   }, []);
   return snapshot;
+}
+
+/** CRAWL-127: the reason of a failed open as one localized sentence, with the file name where the core names it. */
+export function openErrorText(t: (key: string, args?: Record<string, unknown>) => string, args: Record<string, unknown>): string {
+  const key = typeof args.messageKey === "string" ? args.messageKey : undefined;
+  const params = typeof args.args === "object" && args.args !== null ? args.args as Record<string, unknown> : {};
+  return key && i18n.has(currentLanguage(), key) ? t(key, params) : t(`err-code-${String(args.code ?? "internal").toLowerCase()}`);
 }
 
 export function Statusbar() {
@@ -48,8 +55,9 @@ export function Statusbar() {
   return <div className="os-crawl-status" data-testid="crawl-status">
     {openingCrawl && <span role="status" data-testid="crawl-opening">{t("shortcut-crawl-open")}<ProgressBar label={t("shortcut-crawl-open")} /></span>}
     {openError && <div role="alert" data-testid="crawl-open-error">
-      {t(`err-code-${String(openError.args.code ?? "internal").toLowerCase()}`)}{typeof openError.args.detail === "string" ? `: ${openError.args.detail}` : ""}
-      <details><summary>{t("notify-details")}</summary><pre>{JSON.stringify(openError.args)}</pre></details>
+      <span data-testid="crawl-open-error-text">{openErrorText(t, openError.args)}</span>
+      {/* M2-ui-concept 2.6: the technical (English) detail is never part of the sentence; it stays in the details. */}
+      <details><summary>{t("notify-details")}</summary>{typeof openError.args.detail === "string" && <p>{openError.args.detail}</p>}<pre>{JSON.stringify(openError.args)}</pre></details>
     </div>}
     <div className="os-status-scroll" role="group" aria-label={t("status-details")} tabIndex={0}>
     <span>{t("status-mode", { mode: t(`header-${c?.mode ?? chosenMode}`) })}</span>
