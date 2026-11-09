@@ -18,6 +18,7 @@ use store_common::*;
 const CHILD_FILE: &str = "OS_STORE_WAL_TEST_FILE";
 const CHILD_DIR: &str = "OS_STORE_WAL_TEST_DIR";
 const CHILD_WRITE: &str = "OS_STORE_WAL_TEST_WRITE";
+const CHILD_LOCK: &str = "OS_STORE_WAL_TEST_LOCK";
 
 /// Rolle des zweiten Prozesses: liest wie die Crawl-Verwaltung und beendet sich. Ohne Umgebungsvariable keine Wirkung.
 #[test]
@@ -40,6 +41,36 @@ fn second_process_role() {
             .query_row("SELECT COUNT(*) FROM crawl_meta", [], |r| r.get(0))
             .unwrap();
     }
+    // Prüft nur: hält der Elternprozess (der Besitzer) seine gemeinsame Sperre auf der Hauptdatei?
+    #[cfg(unix)]
+    if let Some(file) = std::env::var_os(CHILD_LOCK) {
+        let owner = i32::try_from(std::os::unix::process::parent_id()).unwrap();
+        assert_eq!(
+            shared_lock_holder(Path::new(&file)),
+            Some(owner),
+            "Der Besitzer hat seine gemeinsame Sperre verloren"
+        );
+    }
+}
+
+/// Prozess, der eine Lesesperre auf dem SHARED-Bereich der Hauptdatei hält (`F_GETLK` meldet nur fremde Prozesse). SQLite
+/// (`os_unix.c`) legt die gemeinsame Sperre als Lesesperre auf `SHARED_FIRST` = `PENDING_BYTE` + 2 = 0x4000_0002, 510 Bytes;
+/// im WAL-Modus hält jede offene Verbindung sie bis zum Schließen.
+#[cfg(unix)]
+fn shared_lock_holder(path: &Path) -> Option<i32> {
+    use std::os::fd::AsRawFd;
+    // Dieser Prozess hält selbst keine Sperren auf der Datei; das Schließen hier hebt also nichts auf.
+    let file = std::fs::File::open(path).unwrap();
+    // SAFETY: `flock` ist ein reines C-Struct; Nullwerte sind gültig und werden vor dem Aufruf gesetzt.
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = libc::F_WRLCK as _;
+    lock.l_whence = libc::SEEK_SET as _;
+    lock.l_start = 0x4000_0002;
+    lock.l_len = 510;
+    // SAFETY: gültiger Deskriptor und ein gültiger Zeiger auf `flock`, wie `F_GETLK` ihn erwartet.
+    let rc = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETLK, &mut lock) };
+    assert_eq!(rc, 0, "F_GETLK: {}", std::io::Error::last_os_error());
+    (i32::from(lock.l_type) != libc::F_UNLCK).then_some(lock.l_pid)
 }
 
 fn in_second_process(var: &str, value: &Path) {
@@ -148,6 +179,29 @@ fn the_owner_process_keeps_its_locks_when_it_reads_or_lists_its_own_file() {
     assert_eq!(listed.crawls.len(), 1, "{:?}", listed.skipped);
     os_store::files::verify(&path).unwrap();
     in_second_process(CHILD_WRITE, &path);
+    assert_owner_intact(file, &path);
+}
+
+// Sperrerhalt direkt (B4-DEPSEC): Seit SQLite 3.54 verweigert eine fremde Verbindung das Aufräumen, solange ein anderer
+// Prozess Sperren auf `-shm` hält (`unixIsSharingShmNode`), auch wenn der Besitzer seine Sperren auf der Hauptdatei verloren
+// hat. Der Test darüber bliebe dann auch ohne unseren Lesepfad des Kopfs grün. Hier prüft ein zweiter Prozess per `F_GETLK`,
+// dass der Besitzer seine gemeinsame Sperre auf der Hauptdatei nach allen Lesewegen im eigenen Prozess noch hält.
+// spec: CRAWL-125
+// spec: OUT-228
+// spec: AGENT-020
+#[cfg(unix)]
+#[test]
+fn the_owner_process_still_holds_its_shared_lock_after_reading_and_listing_its_own_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let (file, path) = owner(dir.path());
+    // Gegenprobe der Prüfung selbst: Die Sperre ist vorher sichtbar.
+    in_second_process(CHILD_LOCK, &path);
+    drop(CrawlFile::open(&path, OpenMode::ReadOnly).unwrap());
+    registry::read_listing(&path).unwrap();
+    let listed = Manager::open(dir.path()).unwrap().list().unwrap();
+    assert_eq!(listed.crawls.len(), 1, "{:?}", listed.skipped);
+    os_store::files::verify(&path).unwrap();
+    in_second_process(CHILD_LOCK, &path);
     assert_owner_intact(file, &path);
 }
 

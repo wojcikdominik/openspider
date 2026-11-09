@@ -1744,3 +1744,87 @@ fn insert_serp_seeds(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod bounded_busy_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// Datei im WAL-Modus mit nicht zurückgeführten Frames und eine zweite Verbindung, die einen älteren Stand hält:
+    /// `wal_checkpoint(TRUNCATE)` muss auf sie warten.
+    fn held_reader(dir: &Path) -> (Connection, Connection) {
+        let path = dir.join("busy.sqlite");
+        let owner = Connection::open(&path).unwrap();
+        owner
+            .execute_batch(
+                "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;
+                 CREATE TABLE t(a); INSERT INTO t VALUES (1);",
+            )
+            .unwrap();
+        let reader = Connection::open(&path).unwrap();
+        reader.execute_batch("BEGIN").unwrap();
+        let _: i64 = reader
+            .query_row("SELECT COUNT(*) FROM t", [], |r| r.get(0))
+            .unwrap();
+        owner.execute_batch("INSERT INTO t VALUES (2)").unwrap();
+        (owner, reader)
+    }
+
+    fn busy_timeout_ms(conn: &Connection) -> i64 {
+        conn.pragma_query_value(None, "busy_timeout", |r| r.get(0))
+            .unwrap()
+    }
+
+    // Der begrenzte Handler ist aktiv (es wird gewartet), gibt nach der Frist auf statt nach dem Busy-Timeout, und danach
+    // gilt wieder der normale Busy-Timeout von 5 s.
+    // spec: CRAWL-126
+    #[test]
+    fn checkpoint_within_waits_for_the_deadline_then_restores_the_busy_timeout() {
+        let dir = tempfile::tempdir().unwrap();
+        let (owner, reader) = held_reader(dir.path());
+        owner.busy_timeout(Duration::ZERO).unwrap();
+        assert_eq!(busy_timeout_ms(&owner), 0);
+        let wait = Duration::from_millis(300);
+        let t = Instant::now();
+        let busy = checkpoint_within(&owner, wait, "PRAGMA wal_checkpoint(TRUNCATE)", |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap();
+        let elapsed = t.elapsed();
+        assert_eq!(busy, 1, "der Leser hält den Checkpoint auf");
+        assert!(elapsed >= wait, "Handler aktiv: {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_secs(3),
+            "Frist statt Busy-Timeout: {elapsed:?}"
+        );
+        assert_eq!(busy_timeout_ms(&owner), 5_000);
+        assert!(BUSY_DEADLINE.with(|d| d.get()).is_none());
+        drop(reader);
+        let busy = checkpoint_within(&owner, wait, "PRAGMA wal_checkpoint(TRUNCATE)", |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap();
+        assert_eq!(busy, 0, "ohne Leser läuft der Checkpoint durch");
+    }
+
+    // Ohne Frist gibt der Handler sofort auf: installiert ist wirklich `bounded_busy`, nicht der Busy-Timeout.
+    // spec: CRAWL-126
+    #[test]
+    fn the_bounded_handler_gives_up_at_once_without_a_deadline() {
+        let dir = tempfile::tempdir().unwrap();
+        let (owner, _reader) = held_reader(dir.path());
+        assert_eq!(busy_timeout_ms(&owner), 5_000);
+        set_bounded_busy(&owner).unwrap();
+        // `sqlite3_busy_handler` setzt den Busy-Timeout der Verbindung auf 0.
+        assert_eq!(busy_timeout_ms(&owner), 0);
+        let t = Instant::now();
+        let busy: i64 = owner
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(busy, 1);
+        assert!(t.elapsed() < Duration::from_secs(1), "{:?}", t.elapsed());
+        // Der Wiederherstellungsweg von `checkpoint_within` ersetzt den Handler wieder durch 5 s.
+        owner.busy_timeout(BUSY_TIMEOUT).unwrap();
+        assert_eq!(busy_timeout_ms(&owner), 5_000);
+    }
+}
