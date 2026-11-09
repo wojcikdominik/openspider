@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileName, middleEllipsis, recentCrawlTitle, RECENT_PATH_MAX, splitPath } from "./recentCrawl";
+import { fileName, formatCrawlDate, middleEllipsis, recentCrawlTitle, RECENT_PATH_MAX, splitPath } from "./recentCrawl";
 
 const mac = "/Users/dominikwojcik/Library/Application Support/de.openspider.app/crawls/01a18894-1234-7000-8000-bbfe3c06b178.ospider";
 const win = "C:\\Users\\Dominik\\AppData\\Roaming\\de.openspider.app\\crawls\\Kunde A\\shop.example.com 2026-11-09.ospider";
@@ -53,5 +53,28 @@ describe("recentCrawlTitle", () => {
     expect(recentCrawlTitle({ ...meta, name: " " }, "de")).toBe("www.caloone.de – 09.11.2026, 14:32");
     expect(recentCrawlTitle({ name: "Shop", startedAt: null }, "de")).toBe("Shop");
     expect(recentCrawlTitle(undefined, "de")).toBeUndefined();
+  });
+});
+
+// spec: CRAWL-127
+describe("formatCrawlDate", () => {
+  it("joins separately formatted date and time with a comma, independent of the engine's combined format", () => {
+    // Simulates WebKit on macOS: a combined dateStyle + timeStyle format would read „Oct 1, 2026 at 12:00 PM“.
+    const requested: Intl.DateTimeFormatOptions[] = [];
+    const webkitMac = (_lang: string, options: Intl.DateTimeFormatOptions) => {
+      requested.push(options);
+      const text = options.dateStyle && options.timeStyle ? "Oct 1, 2026 at 12:00 PM" : options.dateStyle ? "Oct 1, 2026" : "12:00 PM";
+      return { format: () => text };
+    };
+    expect(formatCrawlDate("2026-10-01T12:00:00", "en", webkitMac)).toBe("Oct 1, 2026, 12:00 PM");
+    expect(requested.some(options => options.dateStyle && options.timeStyle)).toBe(false);
+    expect(formatCrawlDate("", "en", webkitMac)).toBe("");
+    expect(formatCrawlDate("not a date", "en", webkitMac)).toBe("");
+  });
+
+  it("uses the same composition with the real formatter in both languages", () => {
+    expect(formatCrawlDate("2026-11-09T14:32:00", "de")).toBe("09.11.2026, 14:32");
+    expect(formatCrawlDate("2026-11-09T14:32:00", "en")).toMatch(/^Nov 9, 2026, 2:32\sPM$/);
+    expect(formatCrawlDate("2026-11-09T14:32:00", "en")).not.toContain(" at ");
   });
 });

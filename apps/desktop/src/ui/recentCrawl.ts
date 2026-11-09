@@ -54,14 +54,25 @@ function host(url: string | null | undefined): string {
   try { return new URL(url).host; } catch { return url; }
 }
 
-const dateFormats = new Map<string, Intl.DateTimeFormat>();
-function crawlDate(value: string | null | undefined, lang: string): string {
+type DateFormatFactory = (lang: string, options: Intl.DateTimeFormatOptions) => Pick<Intl.DateTimeFormat, "format">;
+const dateFormats = new Map<string, Pick<Intl.DateTimeFormat, "format">>();
+const intlFormat: DateFormatFactory = (lang, options) => {
+  const key = `${lang}|${JSON.stringify(options)}`;
+  let format = dateFormats.get(key);
+  if (!format) dateFormats.set(key, (format = new Intl.DateTimeFormat(lang, options)));
+  return format;
+};
+
+/**
+ * Date and time of a crawl as `<date>, <time>` in the UI language. Date and time are formatted separately and joined
+ * here: a combined `dateStyle` + `timeStyle` format differs between engines (WebKit on macOS writes
+ * „Oct 1, 2026 at 12:00 PM“, Chromium „Oct 1, 2026, 12:00 PM“), so menu and management would differ per platform.
+ */
+export function formatCrawlDate(value: string | null | undefined, lang: string, make: DateFormatFactory = intlFormat): string {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  let format = dateFormats.get(lang);
-  if (!format) dateFormats.set(lang, (format = new Intl.DateTimeFormat(lang, { dateStyle: "medium", timeStyle: "short" })));
-  return format.format(date);
+  return `${make(lang, { dateStyle: "medium" }).format(date)}, ${make(lang, { timeStyle: "short" }).format(date)}`;
 }
 
 /**
@@ -72,6 +83,6 @@ export function recentCrawlTitle(meta: RecentCrawlMeta | undefined, lang: string
   if (!meta) return undefined;
   const label = meta.name?.trim() || host(meta.startUrl);
   if (!label) return undefined;
-  const date = crawlDate(meta.startedAt, lang);
+  const date = formatCrawlDate(meta.startedAt, lang);
   return date ? `${label} – ${date}` : label;
 }
