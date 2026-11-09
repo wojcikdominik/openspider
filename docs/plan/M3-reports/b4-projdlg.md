@@ -81,10 +81,8 @@ Fokus-Rückgabe schlägt fehl. Mit dem Fix sind sie grün.
   `minmax(0, 1fr)`, `box-sizing`).
 - **Menü:** Native Menüs können Text nicht messen und haben keine Tooltips (`MenuItemSpec` kennt keinen). Sie
   zeigen deshalb eine Zeile `Name – Datum Uhrzeit`. Unbekannte Crawls zeigen den Pfad, auf höchstens 64 Zeichen
-  in der Mitte gekürzt (**feste Grenze**). Datei → enthält **zwei** gleichnamige Untermenüs „Zuletzt geöffnet“:
-  `file.recent` aus `ui/menu/contributions/main.ts` (Labels aus `help/recent.ts` `loadRecent`) und
-  `crawls.recent` aus `CrawlsHost.tsx`. Beide nutzen jetzt dieselbe Hilfsfunktion. Ob eines davon entfallen
-  soll, ist eine **offene Produktfrage**.
+  in der Mitte gekürzt (**feste Grenze**). Das zunächst doppelte Untermenü ist seit dem Nachtrag „Abnahme“ (unten)
+  auf eines reduziert.
 - **Datenquelle:** Ist die Verwaltung offen, kommen die Daten aus ihren Zeilen. Ist sie geschlossen, liefert
   eine Index-Abfrage `crawls.list` (die gleiche Abfrage, die `loadRecent` schon nutzt) die Daten. Sie läuft
   einmal bei Änderung der Liste bzw. des Crawl-Zustands, keine Abfrage je Datei und kein Backend-Eingriff.
@@ -115,11 +113,88 @@ Kein Rust geändert, daher kein Workspace-`cargo test`.
 
 | Datei | Bereich | Änderung |
 |---|---|---|
-| `apps/desktop/src/features/help/recent.ts` | Hilfe/Menü (u04) | Label über `recentCrawlTitle` |
+| `apps/desktop/src/features/help/recent.ts` | Hilfe/Menü (u04) | Label über `recentCrawlTitle`; `onRecentChanged` (Nachtrag Abnahme) |
 | `apps/desktop/src/features/help/help.test.tsx` | Hilfe/Menü (u04) | Erwartung an das neue Label |
+| `apps/desktop/src/features/help/install.ts` | Hilfe/Menü (u04) | lädt „Zuletzt geöffnet“ bei `onRecentChanged` neu (Nachtrag Abnahme) |
 | `apps/desktop/src/ui/menu/contributions/main.ts` | Menü | unbekannte Pfade per `middleEllipsis` |
 | `apps/desktop/e2e/beta/n04-live.spec.ts` | Beta-Live-E2E | Regex für das Label (nicht ausgeführt) |
 | `apps/desktop/e2e/tasks/tasks.spec.ts` | Planung | neuer Tipp-Test |
 | `docs/spec/01-crawl.md` | Spec | CRAWL-127 Akzeptanzkriterium |
 
 `apps/desktop/src/features/compare/` wurde nicht angefasst.
+
+## Nachtrag: fehlende Crawl-Datei als `NotFound` (Kern-Fix aus `m3/b4-cmpui`)
+
+- Prüfung: Die Verwaltung behandelt `NotFound` schon direkt (`missing = err.code === "NotFound"`). Der Eintrag
+  wird aus beiden Listen entfernt (lokale Liste und `uistate` per `updateRecent`), der Hinweis
+  „<Pfad>: The file was not found.“ erscheint. Das gilt für die Liste in der Verwaltung und für Datei →
+  `crawls.recent`, die über dieselbe Funktion `openNow` laufen. `file.recent` (`help/install.ts`) entfernt bei
+  `NotFound` ebenfalls mit Hinweis `u04-recent-missing`. Es war **kein Fix nötig**.
+- Der Kommentar in `CrawlsHost.tsx` ist angepasst. Der Ausweg über `Io` und die Dateiprüfung bleibt für
+  ältere Kerne erhalten und ist harmlos.
+- Neuer Test in `crawls.test.tsx`: „removes a recent entry the core reports as NotFound with its path …“. Der
+  Fehler hat die Form des Kerns (`err-file-not-found` mit `path`). Geprüft werden das Entfernen, der
+  Hinweistext und dass `desktop.check` nicht aufgerufen wird. Der Test ist auf diesem Branch allein grün.
+  **Kein Test braucht beide Branches.** Den Kern-Fix habe ich nicht nachgebaut.
+- Lauf: `npm run -w apps/desktop typecheck && npm run -w apps/desktop test` mit 124 Dateien / 1 058 Tests grün.
+
+## Nachtrag: Befunde der unabhängigen Abnahme (`m3/t-projdlg` e9f8d25a)
+
+### 1. „Zuletzt geöffnet“ stand zweimal im Menü Datei
+
+Nach der Code-Lage entfällt die Registrierung in der Verwaltung (`crawls.recent` in `CrawlsHost.tsx`). Es bleibt
+`file.recent` aus `installMainMenus()` (`help/install.ts`, `ui/menu/contributions/main.ts`). Gründe:
+
+- Es sitzt an der Stelle, die die Spec vorsieht (05-ui, Menü Datei: nach „Öffnen“).
+- Es speichert im UI-Zustand des Kerns statt im `localStorage` einer Webview.
+- Es lädt seine Labels beim Start aus dem Index, funktioniert also auch, wenn die Verwaltung nie geöffnet wurde.
+- Es entfernt bei `NotFound` den Eintrag mit Hinweis (`u04-recent-missing`).
+- `n04-live` und `main.test.ts` prüfen schon diese IDs (`recent.N`).
+
+Umsetzung:
+
+- **Eine Liste:** Die Verwaltung liest und schreibt jetzt dieselbe Liste im UI-Zustand (`loadRecent` /
+  `updateRecent`). Öffnen setzt den Eintrag an den Anfang, `NotFound` entfernt ihn.
+- **Änderungsmeldung:** `help/recent.ts` meldet jede Schreibänderung (`onRecentChanged`). Verwaltung und
+  Hauptmenü laden daraufhin neu, ohne auf einen Sitzungswechsel zu warten.
+- **Einmalige Übernahme:** Die frühere lokale Liste (`openspider.recent-crawls.v1`) wird beim ersten Start
+  übernommen, hinter die Einträge im UI-Zustand, ohne Dubletten, höchstens 10. Danach wird der Schlüssel
+  gelöscht. Schlägt das Speichern fehl, bleibt die alte Liste erhalten.
+- **Titel in der Verwaltung:** Name/Domain und Datum aus den frischen Zeilen der offenen Verwaltung, sonst das
+  Label aus dem Index (`loadRecent`). Die zusätzliche eigene Index-Abfrage der Verwaltung ist entfallen.
+- **Spec:** CRAWL-127 ergänzt um „eine gemeinsame Liste, genau ein Untermenü“.
+- **Tests:** `crawls.test.tsx` liest die Liste jetzt aus dem UI-Zustand. Neue Tests: kein zweites Untermenü aus
+  der Verwaltung; einmalige Übernahme der alten Liste mit erneutem Mount ohne Dubletten; Öffnen aus der
+  Verwaltung setzt den Eintrag an den Anfang der gemeinsamen Liste.
+
+### 2. Mod+F, solange der Dialog selbst den Fokus hat
+
+Der Handler hing an `.os-crawls` und sah deshalb keine Tasten, wenn der Fokus auf `section.os-dialog` lag (direkt
+nach dem Öffnen). Jetzt hängt ein Listener am Dokument, solange die Verwaltung offen ist. Mod+F fokussiert die
+Suche, wenn das Ziel im Verwaltungsdialog liegt, auch wenn das Ziel der Dialog selbst ist. In einem Formular
+darüber (eigenes Modal) bleibt Mod+F beim Formular. Der globale Kürzel-Dispatcher ignoriert Tasten bei offenem
+Modal, es gibt also keinen Konflikt. Neuer E2E-Test in `management.spec.ts` (OUT-228).
+
+### Läufe (Server), Abnahmetests nur temporär eingespielt
+
+| Befehl | Ergebnis |
+|---|---|
+| `npm run -w apps/desktop typecheck && npm run -w apps/desktop test` (mit `acceptance-projdlg.test.tsx`) | 1 067 grün, **1 rot** (Abnahmetest, siehe unten); ohne den Abnahmetest alle eigenen Tests grün |
+| `playwright test -c e2e/crawls/playwright.config.ts --workers=1`, Chromium und WebKit | 24 passed |
+| `playwright test e2e/acceptance/b4-projdlg.spec.ts --workers=1`, Chromium und WebKit | 52 passed (inkl. Mod+F, „genau einmal“ in der echten App-Hülle) |
+| `playwright test -c e2e/tasks/playwright.config.ts --workers=1`, Chromium und WebKit | 18 passed |
+
+Die beiden Abnahmedateien wurden danach wieder entfernt und nicht committet.
+
+### Abnahmetest, den ich für falsch halte
+
+Der Test „Menü Datei, Zuletzt geöffnet: bekannter Crawl als „<Name> – <Datum Uhrzeit>“ in einer Zeile“ in
+`acceptance-projdlg.test.tsx` sucht Menüeinträge mit den IDs `crawls.recent.N`. Das sind die Implementierungs-IDs
+des zweiten Untermenüs, das nach dem Abnahmebefund 1 und der Entscheidung des Orchestrators entfällt. Der Test
+widerspricht damit dem Abnahmetest „ein Eintrag erscheint nicht doppelt, das Untermenü ist genau einmal
+vorhanden“: Beide zugleich sind nur mit zwei Untermenüs bzw. mit Verwaltungs-IDs im einzigen Untermenü
+erfüllbar. Er baut das Hauptmenü zudem mit leerer Liste (`fileMenu()`), sodass nur ein zweites Untermenü Einträge
+liefern könnte. Das geforderte Verhalten (bekannter Crawl als „Name – Datum Uhrzeit“ in einer Zeile im Menü
+Datei) prüfen der grüne Abnahmetest „… aus dem Speicher trägt Name/Domain mit Datum und Uhrzeit …“ (IDs
+`recent.N`) sowie `help.test.tsx`. Vorschlag für den Testagenten: dieselbe Prüfung über `recent.N` mit den
+Einträgen aus `loadRecent()`.

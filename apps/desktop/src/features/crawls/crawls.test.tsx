@@ -16,6 +16,10 @@ async function mount(open = true) {
   render(<CrawlsHost desktop={fixture.desktop} />);
   if (open) await screen.findByRole("checkbox", { name: "Select: Alpha" });
 }
+// CRAWL-127: the one recent list lives in the UI state (shared with File → Recently opened).
+const seedRecent = (paths: string[]) => { fixture.core.uiState = { version: 1, state: { recentCrawls: paths.map(path => ({ path })) } }; };
+const stored = () => ((fixture.core.uiState.state as { recentCrawls?: { path: string }[] }).recentCrawls ?? []).map(entry => entry.path);
+const clickRecent = async (name: string) => fireEvent.click(await screen.findByRole("button", { name }));
 const select = (name: string) => fireEvent.click(screen.getByRole("checkbox", { name: `Select: ${name}` }));
 const button = (name: string) => screen.getByRole("button", { name });
 const click = (name: string) => fireEvent.click(button(name));
@@ -219,13 +223,26 @@ it("native dialog cancellation sends no open/import/save/export and recent entri
 
 // spec: CRAWL-127 [M2]
 it("removes a missing recent file only on NotFound, and retains schema/permission failures", async () => {
-  writeRecent(["/missing.ospider", "/denied.ospider"]);
+  seedRecent(["/missing.ospider", "/denied.ospider"]);
   fixture.core.handlers.set("crawl.open", args => { const path = (args as { path: string }).path; throw new IpcError(localError(path.includes("missing") ? "NotFound" : "Permission", "err-not-a-crawl-file")); });
-  await mount(); click("/missing.ospider");
-  await waitFor(() => expect(readRecent()).toEqual(["/denied.ospider"]));
+  await mount(); await clickRecent("/missing.ospider");
+  await waitFor(() => expect(stored()).toEqual(["/denied.ospider"]));
   expect(screen.getByRole("alert")).toHaveTextContent("/missing.ospider");
   click("/denied.ospider"); await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("/denied.ospider"));
-  expect(readRecent()).toEqual(["/denied.ospider"]);
+  expect(stored()).toEqual(["/denied.ospider"]);
+});
+
+// spec: CRAWL-127
+it("removes a recent entry the core reports as NotFound with its path, shows the hint and needs no file check", async () => {
+  // Shape of the core error for a vanished file (crawl.open canonicalization, branch m3/b4-cmpui).
+  seedRecent(["/gone/Alpha.ospider", "/fixture/Beta.ospider"]);
+  fixture.core.handlers.set("crawl.open", args => { throw new IpcError(localError("NotFound", "err-file-not-found", { path: (args as { path: string }).path })); });
+  const check = vi.spyOn(fixture.desktop, "check");
+  await mount(); await clickRecent("/gone/Alpha.ospider");
+  await waitFor(() => expect(stored()).toEqual(["/fixture/Beta.ospider"]));
+  expect(screen.getByRole("alert")).toHaveTextContent("/gone/Alpha.ospider: The file was not found.");
+  expect(screen.queryByRole("button", { name: "/gone/Alpha.ospider" })).toBeNull();
+  expect(check).not.toHaveBeenCalled();
 });
 
 // spec: OUT-230 [M2]
@@ -320,36 +337,41 @@ it("asks to pause before opening another file while a crawl is running", async (
 });
 
 // spec: CRAWL-127
-it("native recent menu labels preserve literal user paths without treating them as translation keys", async () => {
+// spec: UI-002
+it("contributes no second Recently opened submenu; File → Recently opened is the main menu's one list", async () => {
   const { buildMenuModel, flattenItems } = await import("../../ui/menu/build");
-  writeRecent(["/Users/fixture/project-name/Crawl_A.ospider"]);
+  seedRecent(["/fixture/Alpha.ospider"]);
   await mount(false);
-  const menu = buildMenuModel(allMenuContributions(), { platform: "mac", lang: "en", native: true, t: key => key, ctx: {} });
-  const item = menu.menus.flatMap(m => flattenItems(m.items)).find(i => i.id === "crawls.recent.0");
-  expect(item?.label).toBe("/Users/fixture/project-name/Crawl_A.ospider");
+  const items = buildMenuModel(allMenuContributions(), { platform: "mac", lang: "en", native: true, t: key => key, ctx: {} }).menus.flatMap(m => flattenItems(m.items));
+  expect(items.some(item => item.id === "crawls.manage")).toBe(true);
+  expect(items.filter(item => item.id.startsWith("crawls.recent") || item.label === "crawls-recent")).toEqual([]);
 });
 
 // spec: CRAWL-127
-it("labels known recent crawls with name and date from one index listing and shortens unknown paths in the middle", async () => {
-  // OS-Festlegung 09.11.2026: readable recent entries in File → Recently opened.
-  const { buildMenuModel, flattenItems } = await import("../../ui/menu/build");
-  const long = "/Users/fixture/Library/Application Support/de.openspider.app/elsewhere/0199f000-0000-7000-8000-00000000abcd.ospider";
-  writeRecent(["/fixture/Alpha.ospider", long]);
+it("takes the former local recent list over into the UI state once and keeps both views on that one list", async () => {
+  seedRecent(["/ui/first.ospider", "/fixture/Beta.ospider"]);
+  writeRecent(["/fixture/Alpha.ospider", "/fixture/Beta.ospider"]);
   await mount(false);
-  const label = (i: number) => buildMenuModel(allMenuContributions(), { platform: "mac", lang: "en", native: true, t: key => key, ctx: {} })
-    .menus.flatMap(m => flattenItems(m.items)).find(item => item.id === `crawls.recent.${i}`)?.label;
-  await waitFor(() => expect(label(0)).toMatch(/^Alpha – Oct 1, 2026, /));
-  expect(label(1)).toBe("/Users/f…/elsewhere/0199f000-0000-7000-8000-00000000abcd.ospider");
-  expect(calls("crawls.list")).toHaveLength(1);
+  await waitFor(() => expect(stored()).toEqual(["/ui/first.ospider", "/fixture/Beta.ospider", "/fixture/Alpha.ospider"]));
+  expect(readRecent()).toEqual([]);
+  cleanup();
+  render(<CrawlsHost desktop={fixture.desktop} />);
+  act(() => { useCrawlsDialog.setState({ open: true }); });
+  const nav = await screen.findByRole("navigation", { name: "Recently opened" });
+  await waitFor(() => expect(within(nav).getAllByRole("button")).toHaveLength(3));
+  expect(stored()).toEqual(["/ui/first.ospider", "/fixture/Beta.ospider", "/fixture/Alpha.ospider"]);
+  // Opening from the management dialog moves the file to the top of the shared list.
+  fireEvent.click(await within(nav).findByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/fixture\/Alpha\.ospider$/ }));
+  await waitFor(() => expect(stored()).toEqual(["/fixture/Alpha.ospider", "/ui/first.ospider", "/fixture/Beta.ospider"]));
 });
 
 // spec: CRAWL-127
 it("shows recent entries in the management dialog with readable title, middle-shortened path and the full path as tooltip", async () => {
   const long = "C:\\Users\\Fixture\\AppData\\Roaming\\de.openspider.app\\elsewhere\\Outside.ospider";
-  writeRecent(["/fixture/Alpha.ospider", long]);
+  seedRecent(["/fixture/Alpha.ospider", long]);
   await mount();
-  const nav = screen.getByRole("navigation", { name: "Recently opened" });
-  const known = within(nav).getByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/fixture\/Alpha\.ospider$/ });
+  const nav = await screen.findByRole("navigation", { name: "Recently opened" });
+  const known = await within(nav).findByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/fixture\/Alpha\.ospider$/ });
   expect(known.closest("li")).toHaveAttribute("title", "/fixture/Alpha.ospider");
   expect(known).toHaveTextContent(/^Alpha – Oct 1, 2026, .*\/fixture\/Alpha\.ospider$/);
   const unknown = within(nav).getByRole("button", { name: long });
@@ -363,11 +385,11 @@ it("shows recent entries in the management dialog with readable title, middle-sh
 
 // spec: CRAWL-127
 it("confirms missing files after the real core's Io canonicalization error before pruning history", async () => {
-  writeRecent(["/missing.ospider"]);
+  seedRecent(["/missing.ospider"]);
   fixture.core.handlers.set("crawl.open", () => { throw new IpcError(localError("Io", "err-io")); });
   vi.spyOn(fixture.desktop, "check").mockRejectedValue(new IpcError(localError("NotFound", "err-file-not-found")));
-  await mount(); click("/missing.ospider");
-  await waitFor(() => expect(readRecent()).toEqual([]));
+  await mount(); await clickRecent("/missing.ospider");
+  await waitFor(() => expect(stored()).toEqual([]));
   expect(screen.getByRole("alert")).toHaveTextContent("/missing.ospider");
 });
 
@@ -411,19 +433,19 @@ it("opening the already active running file relies on core identity and never as
 
 // spec: CRAWL-127
 it("names the file and distinguishes newer schemas and foreign formats without offering repair or deleting history", async () => {
-  writeRecent(["/fixture/Alpha.ospider"]);
+  seedRecent(["/fixture/Alpha.ospider"]);
   fixture.core.handlers.set("crawl.open", () => { throw new IpcError(localError("Store", "err-crawl-newer-version", { generator: "OpenSpider 99.0", found: 99 })); });
   await mount(); click("Open crawl…");
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Please update OpenSpider"));
   expect(screen.getByRole("alert")).toHaveTextContent("/fixture/Alpha.ospider");
   expect(screen.getByRole("alert")).toHaveTextContent("OpenSpider 99.0");
   expect(screen.queryByRole("button", { name: "Attempt repair" })).toBeNull();
-  expect(readRecent()).toEqual(["/fixture/Alpha.ospider"]);
+  expect(stored()).toEqual(["/fixture/Alpha.ospider"]);
   fixture.core.handlers.set("crawl.open", () => { throw new IpcError(localError("Store", "err-not-a-crawl-file")); });
   click("Open crawl…");
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Not an OpenSpider crawl file"));
   expect(screen.getByRole("dialog", { name: "Manage crawls…" })).toBeVisible();
-  expect(readRecent()).toEqual(["/fixture/Alpha.ospider"]);
+  expect(stored()).toEqual(["/fixture/Alpha.ospider"]);
 });
 
 // spec: OUT-228

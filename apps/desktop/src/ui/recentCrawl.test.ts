@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileName, middleEllipsis, recentCrawlTitle, recentMenuLabel, RECENT_PATH_MAX, splitPath } from "./recentCrawl";
+import { fileName, middleEllipsis, recentCrawlTitle, RECENT_PATH_MAX, splitPath } from "./recentCrawl";
 
 const mac = "/Users/dominikwojcik/Library/Application Support/de.openspider.app/crawls/01a18894-1234-7000-8000-bbfe3c06b178.ospider";
 const win = "C:\\Users\\Dominik\\AppData\\Roaming\\de.openspider.app\\crawls\\Kunde A\\shop.example.com 2026-11-09.ospider";
@@ -53,7 +53,5 @@ describe("recentCrawlTitle", () => {
     expect(recentCrawlTitle({ ...meta, name: " " }, "de")).toBe("www.caloone.de – 09.11.2026, 14:32");
     expect(recentCrawlTitle({ name: "Shop", startedAt: null }, "de")).toBe("Shop");
     expect(recentCrawlTitle(undefined, "de")).toBeUndefined();
-    expect(recentMenuLabel(mac, undefined, "de")).toBe(middleEllipsis(mac));
-    expect(recentMenuLabel(mac, meta, "de")).toBe("caloone.de – 09.11.2026, 14:32");
   });
 });

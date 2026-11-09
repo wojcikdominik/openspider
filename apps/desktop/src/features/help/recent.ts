@@ -7,6 +7,14 @@ import type { RecentEntry } from "../../ui/menu/contributions/main";
 import { recentCrawlTitle } from "../../ui/recentCrawl";
 import { currentLanguage } from "../../i18n";
 
+// CRAWL-127 (OS-Festlegung 09.11.2026): one recent list for the File menu and the crawl management. Writers notify
+// readers, so a crawl opened in one place appears in the other without waiting for a session change.
+const listeners = new Set<() => void>();
+export function onRecentChanged(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
 export function normalizeRecent(value: unknown): RecentEntry[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -37,4 +45,5 @@ export async function loadRecent(): Promise<RecentEntry[]> {
 /** Replay the list operation, rather than a snapshot, after revision conflicts. */
 export async function updateRecent(change: (entries: RecentEntry[]) => RecentEntry[]): Promise<void> {
   await updateUiState(state => ({ ...state, recentCrawls: normalizeRecent(change(normalizeRecent(state.recentCrawls))).map(({ path, label }) => ({ path, ...(label ? { label } : {}) })) }));
+  for (const listener of [...listeners]) listener();
 }
