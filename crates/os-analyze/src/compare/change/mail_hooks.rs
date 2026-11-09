@@ -26,16 +26,30 @@ impl TaskHooks for ComparisonMailHooks {
         let file = os_store::CrawlFile::open(&crawl.path, os_store::OpenMode::ReadOnly)
             .map_err(|e| e.to_string())?;
         let failed = matches!(record.result, RunResult::Failed | RunResult::Aborted);
-        // OUT-281: Ein fehlgeschlagener Lauf hat oft keinen Vergleich (z. B. ein als `Failed` beendeter Crawl, CRAWL-128); die
-        // Fehler-Mail geht dann ohne Änderungstabelle hinaus, statt ganz zu entfallen.
-        let content = os_analyze::compare::change::notification::content(
-            &file,
-            &task.name,
-            task.execution.auto_compare && !failed,
-            task.effective_exports().skip_empty,
-        )
+        // OUT-281: Ein als `Failed` beendeter Crawl (CRAWL-128) wird nicht verglichen; die Fehler-Mail geht ohne Änderungstabelle
+        // hinaus und vermerkt den übersprungenen Vergleich (OS-Festlegung 09.11.2026). Fehlt bei einem anderen Fehlschlag das
+        // Vergleichsergebnis, entfällt nur die Tabelle, nicht die Mail.
+        let crawl_failed = crawl.meta.state == os_model::CrawlState::Failed;
+        let compare = task.execution.auto_compare && !crawl_failed;
+        let build = |compare: bool| {
+            os_analyze::compare::change::notification::content(
+                &file,
+                &task.name,
+                compare,
+                task.effective_exports().skip_empty,
+            )
+        };
+        let content = match build(compare) {
+            Err(_) if failed && compare => build(false),
+            other => other,
+        }
         .map_err(|e| e.to_string())?;
         let (mut text, mut html) = (content.text, content.html);
+        if task.execution.auto_compare && crawl_failed {
+            let skipped = crate::exec::COMPARE_SKIPPED_FAILED;
+            text.push_str(&format!("{skipped}\n"));
+            html.push_str(&format!("<p>{skipped}</p>"));
+        }
         if failed {
             // Fehlermeldung des Laufs (OUT-281) vor dem Überblick.
             let message = record

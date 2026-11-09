@@ -239,19 +239,24 @@ fn task(url: &str, auto_compare: bool, on_success: bool, on_failure: bool) -> Ta
     }
 }
 
-/// Der Lauf bleibt ein gültiges Ergebnis mit Warnung (OUT-182): Exit 0, Historie „Completed with warnings“.
-fn assert_valid_result(run: &TaskRun) {
+/// Den Fehlschlag stuft der Crawl ein (OS-Festlegung 09.11.2026): Historie „Failed“ mit der Fehlermeldung des Crawls, mit und
+/// ohne Auto-Vergleich, nie „Crawl erfolgreich …“. Der Exit-Code bleibt 0 (OUT-182).
+fn assert_failed_crawl(run: &TaskRun) {
     assert_eq!(run.exit, Exit::Ok, "{}", run.summary);
     let record = run.record.as_ref().unwrap();
     assert_eq!(
         record.result,
-        os_sched::history::RunResult::CompletedWithWarnings,
+        os_sched::history::RunResult::Failed,
         "{record:?}"
     );
+    let message = record.message.as_deref().unwrap_or_default();
+    assert!(message.contains("nicht erreichbar"), "{record:?}");
+    assert!(!message.contains("erfolgreich"), "{record:?}");
 }
 
 // Aufgabe ohne Auto-Vergleich (eingebaute Abschlussmail): „bei Erfolg“ aus, „bei Fehlschlag“ an.
 // spec: OUT-281
+// spec: OUT-169
 // spec: CRAWL-128
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn planner_an_unreachable_start_url_sends_the_failure_mail() {
@@ -260,11 +265,16 @@ async fn planner_an_unreachable_start_url_sends_the_failure_mail() {
     let run = planner
         .run(task(&closed_url(), false, false, true), &DefaultHooks)
         .await;
-    assert_valid_result(&run);
+    assert_failed_crawl(&run);
     let messages = mock.messages();
     assert_eq!(messages.len(), 1, "{}", run.summary);
     assert!(
         messages[0].data.contains("[FAILED]"),
+        "{}",
+        messages[0].data
+    );
+    assert!(
+        messages[0].data.contains("nicht erreichbar"),
         "{}",
         messages[0].data
     );
@@ -280,51 +290,99 @@ async fn planner_an_unreachable_start_url_sends_no_success_mail() {
     let run = planner
         .run(task(&closed_url(), false, true, false), &DefaultHooks)
         .await;
-    assert_valid_result(&run);
+    assert_failed_crawl(&run);
     assert!(mock.messages().is_empty(), "{:?}", mock.messages());
 }
 
-// Aufgabe mit Auto-Vergleich (Abschlussmail mit Änderungstabelle, OUT-152): Ein als `Failed` beendeter Crawl lässt sich nicht
-// vergleichen; der Lauf endet deshalb selbst als „Failed“ und die Mail folgt `on_failure`, mit Betreff-Präfix `[FAILED]`.
+// Aufgabe mit Auto-Vergleich (Abschlussmail mit Änderungstabelle, OUT-152): Der fehlgeschlagene Crawl wird nicht verglichen, der
+// Vergleich ist als „übersprungen (Crawl fehlgeschlagen)“ vermerkt; die Mail folgt `on_failure`, Betreff mit `[FAILED]`.
 // spec: OUT-281
 // spec: OUT-152
+// spec: OUT-169
 // spec: CRAWL-128
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn planner_with_auto_compare_treats_a_failed_crawl_as_failure() {
     let mock = smtp().await;
     let planner = Planner::new(&mock);
     let hooks = planner.comparison_hooks(&mock);
-    let failed = |run: &TaskRun| {
-        assert_eq!(
-            run.record.as_ref().unwrap().result,
-            os_sched::history::RunResult::Failed,
-            "{}",
-            run.summary
-        );
-    };
     let run = planner
         .run(task(&closed_url(), true, true, false), &hooks)
         .await;
-    failed(&run);
+    assert_failed_crawl(&run);
+    let record = run.record.as_ref().unwrap();
+    assert!(
+        record
+            .warnings
+            .iter()
+            .any(|w| w == "Auto-Vergleich übersprungen (Crawl fehlgeschlagen)"),
+        "{record:?}"
+    );
+    assert!(
+        !record
+            .warnings
+            .iter()
+            .any(|w| w.contains("auto comparison")),
+        "{record:?}"
+    );
     assert!(mock.messages().is_empty(), "{:?}", mock.messages());
 
     let run = planner
         .run(task(&closed_url(), true, false, true), &hooks)
         .await;
-    failed(&run);
+    assert_failed_crawl(&run);
     let messages = mock.messages();
     assert_eq!(messages.len(), 1, "{}", run.summary);
-    assert!(
-        messages[0]
-            .data
-            .contains("Subject: [FAILED] Nightly: Failed"),
-        "{}",
-        messages[0].data
+    let data = &messages[0].data;
+    assert!(data.contains("Subject: [FAILED] Nightly: Failed"), "{data}");
+    // Fehlermeldung des Crawls und Vermerk statt Änderungstabelle (Umlaut als Quoted-Printable, daher ohne „ü“ geprüft).
+    assert!(data.contains("nicht erreichbar"), "{data}");
+    assert!(data.contains("(Crawl fehlgeschlagen)"), "{data}");
+    assert!(!data.contains("erfolgreich"), "{data}");
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Kommandozeile: Sperre per robots.txt (CRAWL-128, OS-Festlegung 09.11.2026)
+
+// Eine per robots.txt gesperrte Start-URL ist kein Fehlschlag: auch mit `--fail-on-start-error` Exit 0, Warnung mit robots.txt-URL
+// und sperrender Zeile. Eine nicht erreichbare Start-URL endet dagegen weiter mit Exit 3 (OUT-182).
+// spec: OUT-182
+// spec: OUT-204
+// spec: CRAWL-128
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cli_a_robots_block_is_no_start_error() {
+    let site = common::site("ui/fx-ui-robots-start").await;
+    let env = Env::new();
+    let mut args = crawl_args(&format!("{}/", site.base_url()));
+    args.push("--fail-on-start-error".into());
+    let run = env.run_async(args).await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    let expected = format!(
+        "Start-URL {}/ durch robots.txt gesperrt: {}/robots.txt, Zeile 2: Disallow: /",
+        site.base_url(),
+        site.base_url()
     );
-    // Fehlermeldung des Laufs statt Änderungstabelle.
+    assert!(run.stderr.contains(&expected), "{}", run.dump());
+    assert!(!run.stderr.contains("nicht erreichbar"), "{}", run.dump());
+
+    let env = Env::new();
+    let mut args = crawl_args(&closed_url());
+    args.push("--fail-on-start-error".into());
+    let run = env.run_async(args).await;
+    assert_eq!(run.code, 3, "{}", run.dump());
+}
+
+// Die Schlusszeile eines fehlgeschlagenen Crawls nennt dessen Fehler, nicht „Fertig“ (OS-Festlegung 09.11.2026).
+// spec: OUT-182
+// spec: CRAWL-128
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cli_the_final_line_of_a_failed_crawl_names_its_error() {
+    let env = Env::new();
+    let run = env.run_async(crawl_args(&closed_url())).await;
+    assert_eq!(run.code, 0, "{}", run.dump());
     assert!(
-        messages[0].data.contains("Auto-Vergleich fehlgeschlagen"),
+        run.last_line().contains("nicht erreichbar"),
         "{}",
-        messages[0].data
+        run.dump()
     );
+    assert!(!run.last_line().starts_with("Fertig"), "{}", run.dump());
 }

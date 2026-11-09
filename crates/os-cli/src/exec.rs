@@ -159,26 +159,39 @@ async fn run(plan: &Plan, rep: &Arc<Reporter>, signals: &Signals) -> Result<Outc
     let mut crawl_failed = crawled.failed.then(|| "Crawl fehlgeschlagen".to_string());
     // Start-URL erreichbar? (nur neue Spider-Crawls)
     if let (Source::Spider { start_url }, false) = (&plan.source, plan.resume) {
-        if let Some(problem) = start_url_problem(&crawled.path, start_url) {
-            let message = format!(
-                "Start-URL {} nicht erreichbar: {problem}",
+        match start_url_problem(&crawled.path, start_url, crawled.failed) {
+            Some(StartProblem::Unreachable(problem)) => {
+                let message = format!(
+                    "Start-URL {} nicht erreichbar: {problem}",
+                    os_fetch::redact::url(start_url)
+                );
+                if crawled.failed {
+                    crawl_failed = Some(message.clone());
+                }
+                rep.warn(message);
+                if plan.fail_on_start_error {
+                    return Err(CliError::crawl(format!(
+                        "Start-URL nicht erreichbar ({problem}) – Abbruch wegen --fail-on-start-error"
+                    )));
+                }
+            }
+            // CRAWL-128: Eine Sperre per robots.txt ist kein Fehlschlag – Warnung, aber nie Exit 3 durch
+            // `--fail-on-start-error` (OS-Festlegung 09.11.2026).
+            Some(StartProblem::Robots(detail)) => rep.warn(format!(
+                "Start-URL {} durch robots.txt gesperrt: {detail}",
                 os_fetch::redact::url(start_url)
-            );
-            if crawled.failed {
-                crawl_failed = Some(message.clone());
-            }
-            rep.warn(message);
-            if plan.fail_on_start_error {
-                return Err(CliError::crawl(format!(
-                    "Start-URL nicht erreichbar ({problem}) – Abbruch wegen --fail-on-start-error"
-                )));
-            }
+            )),
+            None => {}
         }
     }
 
     let mut failures = 0u32;
     let mut comparison_failed = false;
-    if plan.compare_with_previous {
+    if plan.compare_with_previous && crawled.failed {
+        // Den Fehlschlag stuft der Crawl ein, nicht der Vergleich (OS-Festlegung 09.11.2026): ein als `Failed` beendeter
+        // Crawl wird nicht verglichen und zählt nicht als fehlgeschlagener Vergleich.
+        rep.warn(COMPARE_SKIPPED_FAILED);
+    } else if plan.compare_with_previous {
         match os_analyze::compare::change::auto::run(
             &crawled.path,
             &plan.paths.crawls,
@@ -255,6 +268,24 @@ async fn run(plan: &Plan, rep: &Arc<Reporter>, signals: &Signals) -> Result<Outc
         outcome.crawl_failed = crawl_failed.clone();
         outcome
     };
+    // Ein als `Failed` beendeter Crawl meldet seinen Fehler, nie „Crawl erfolgreich“ (OS-Festlegung 09.11.2026). Exit-Code wie
+    // bisher (OUT-182: 0, bzw. 4 bei fehlgeschlagenen Exporten).
+    if let Some(error) = &crawl_failed {
+        let (exit, message) = if failures > 0 {
+            (
+                Exit::ExportFailed,
+                format!("{error}; {failures} Export(e) fehlgeschlagen ({base})"),
+            )
+        } else if plan.strict && warnings > 0 {
+            (
+                Exit::ExportFailed,
+                format!("{error}; Warnungen mit --strict als Fehler gewertet ({base})"),
+            )
+        } else {
+            (Exit::Ok, format!("{error} ({base})"))
+        };
+        return Ok(crawl_info(Outcome::new(exit, message)));
+    }
     if failures > 0 {
         let message = if comparison_failed {
             format!("Crawl erfolgreich, aber Auto-Vergleich fehlgeschlagen ({base})")
@@ -613,10 +644,38 @@ fn error_count(reader: &mut Option<CrawlFile>, path: &Path) -> Option<u64> {
 }
 
 /// Meldet, wenn die Start-URL keine Antwort lieferte (Statuscode 0).
-fn start_url_problem(path: &Path, start_url: &str) -> Option<String> {
+/// Vermerk, wenn der Auto-Vergleich wegen eines fehlgeschlagenen Crawls entfällt (OS-Festlegung 09.11.2026).
+pub const COMPARE_SKIPPED_FAILED: &str = "Auto-Vergleich übersprungen (Crawl fehlgeschlagen)";
+
+/// Start-URL ohne Antwort (Status 0).
+enum StartProblem {
+    /// Nicht erreichbar bzw. ohne gültige Antwort; mit `--fail-on-start-error` Exit 3 (OUT-182).
+    Unreachable(String),
+    /// Per robots.txt gesperrt und kein Fehlschlag (CRAWL-128): robots.txt-URL und sperrende Zeile bzw. Grund.
+    Robots(String),
+}
+
+fn start_url_problem(path: &Path, start_url: &str, failed: bool) -> Option<StartProblem> {
     let file = CrawlFile::open(path, OpenMode::ReadOnly).ok()?;
+    if let Some(block) = os_engine::start_robots_block(&file, start_url) {
+        let mut detail = os_fetch::redact::url(&block.robots_url);
+        match (block.line_number, block.rule) {
+            (Some(number), Some(rule)) => detail.push_str(&format!(", Zeile {number}: {rule}")),
+            (None, Some(rule)) => detail.push_str(&format!(", Regel: {rule}")),
+            _ => {}
+        }
+        return Some(StartProblem::Robots(detail));
+    }
     let row = queries::url_by_address(file.conn(), start_url).ok()??;
-    (row.status_code == Some(0)).then(|| row.status.unwrap_or_else(|| "keine Antwort".to_string()))
+    if row.status_code != Some(0) {
+        return None;
+    }
+    let status = row.status.unwrap_or_else(|| "keine Antwort".to_string());
+    // Sperre nach der Regel „robots.txt nicht erreichbar“, deren robots.txt aber antwortete (5xx, 429): kein Fehlschlag.
+    if !failed && row.indexability_status == Some(os_model::IndexabilityStatus::BlockedByRobots) {
+        return Some(StartProblem::Robots(status));
+    }
+    Some(StartProblem::Unreachable(status))
 }
 
 // ---------------------------------------------------------------------------------------------------

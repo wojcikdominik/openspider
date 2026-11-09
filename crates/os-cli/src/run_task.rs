@@ -760,6 +760,11 @@ pub async fn run_in(
     let (result, exit) = match outcome.exit {
         Exit::Ok if timeout_hit => (RunResult::CompletedWithWarnings, Exit::Ok),
         _ if timeout_hit => (RunResult::CompletedWithWarnings, Exit::Ok),
+        // Den Fehlschlag stuft der Crawl ein (CRAWL-128, z. B. Start-URL nicht erreichbar): Historie „Failed“, mit und ohne
+        // Auto-Vergleich; der Exit-Code bleibt der des Laufs (OUT-182; OS-Festlegung 09.11.2026).
+        other if outcome.crawl_failed.is_some() && other != Exit::Interrupted => {
+            (RunResult::Failed, other)
+        }
         Exit::Ok if rep.warnings() > 0 => (RunResult::CompletedWithWarnings, Exit::Ok),
         Exit::Ok => (RunResult::Completed, Exit::Ok),
         Exit::Interrupted => (RunResult::Aborted, Exit::Interrupted),
@@ -789,7 +794,8 @@ fn post_phase(
     for warning in hooks.fetch_apis(task, crawl) {
         rep.warn(warning);
     }
-    if task.execution.auto_compare {
+    // Ein fehlgeschlagener Crawl wird nicht verglichen; der Vermerk steht schon im Lauf (`exec::COMPARE_SKIPPED_FAILED`).
+    if task.execution.auto_compare && outcome.crawl_failed.is_none() {
         if let Err(e) = hooks.compare_with_previous(task, crawl) {
             rep.warn(e);
         }
