@@ -100,23 +100,75 @@ Danach wurde der Fix wieder eingespielt und der WebKit-Test erneut ausgeführt: 
 WKWebView. Der Fix greift dort, bevor WebKit das Ereignis bearbeitet, nämlich im DOM-`keydown`. Ein Lauf auf
 macOS-WebKit, über macOS-CI oder im Zieltest der App, steht noch aus.
 
-## Beobachtung außerhalb des Auftrags (nicht geändert)
+## Nachtrag: Fortsetzen per Enter / Mod+Enter (Orchestrator, 09.11.2026)
 
-Laut UI-113 heißt die Zeile „Crawl starten / fortsetzen: Mod+Enter (im URL-Feld auch Enter)“.
-`requestStart()` setzt einen pausierten oder unterbrochenen Crawl aber nicht fort, weil `canStart` bei
-`resumable` falsch ist. Das galt schon vorher für Mod+Enter und für die implizite Übermittlung. Ob Enter bzw.
-Mod+Enter im Zustand „pausiert“ fortsetzen soll, entscheidet der Orchestrator.
+Auslöser war meine Rückfrage: UI-113 nennt „Crawl starten / fortsetzen: Mod+Enter (im URL-Feld auch Enter)“.
+`requestStart()` setzte einen pausierten Crawl aber nicht fort. Der Orchestrator hat entschieden: Im Zustand
+„pausiert“ setzen Enter im URL-Feld und Mod+Enter den Crawl fort, solange die URL unverändert ist. Bei geänderter
+URL läuft der normale Startweg mit Rückfrage. Diese Entscheidung steht jetzt als **OS-Festlegung (Orchestrator,
+09.11.2026)** unter UI-113 in `docs/spec/05-ui.md`.
+
+**Umsetzung** (`Header.tsx`, `model.ts`):
+
+- `requestStart()` ist der gemeinsame Weg für Enter im Feld, Mod+Enter (Aktion `crawl.start`) und „Start“.
+  Bei einem pausierten oder unterbrochenen Crawl (`resumable`) mit unveränderter URL ruft er jetzt
+  `pauseResume()` auf: keine Rückfrage, kein neuer Crawl.
+- Ob die URL geändert ist, entscheidet `startUrlDiffers()` in `model.ts`. Verglichen wird die normalisierte
+  Adresse im Feld mit der normalisierten Start-URL des Crawls. `site.test/blog/` gilt also als gleich zu
+  `https://site.test/blog/`.
+- Nur bei geänderter URL erlaubt `canStart` den Start auch im Zustand `resumable`. Dann laufen Prüfung,
+  Rückfrage „Replace“ und `crawl.start`. Der Kern nimmt den Start bei pausiertem Crawl an (E2E unten).
+- Die Schaltflächen bleiben unverändert: Im Zustand „pausiert“ zeigt die Kopfleiste weiter „Fortsetzen“ statt
+  „Start“.
+
+**Auslegung, bitte bestätigen:** Ein leeres oder ungültiges Feld gilt als **unverändert**, ebenso ein Crawl ohne
+bekannte Start-URL (z. B. ein unterbrochener Crawl ohne `startUrl` im Tick). Enter setzt dann fort und ersetzt
+nichts. Das ist die nicht-destruktive Wahl, und ich habe sie so in die Festlegung geschrieben.
+
+**Mod+Enter im URL-Feld:** Nach der Kontextregel von UI-113 wirken in einem Textfeld nur Esc, Enter, Mod+F und
+F6 global. Mod+Enter wirkt deshalb weiterhin nur außerhalb von Textfeldern, und im URL-Feld ist Enter der Weg.
+Unverändert.
+
+**Tests:**
+
+- **Unit** (`Header.test.tsx`, `// spec: UI-113`, `// spec: UI-003`):
+  - Pausiert: Enter im Feld setzt fort. `runAction("crawl.start")` (Mod+Enter) mit anders geschriebener, aber
+    gleicher URL setzt ebenfalls fort. Ein unterbrochener Crawl ohne Start-URL setzt trotz anderer Eingabe
+    fort. Kein Dialog, kein `crawl.start`, kein `validateStartUrl`.
+  - Pausiert mit geänderter URL: Enter, Rückfrage, „Replace“, dann `crawl.start` mit der neuen URL und kein
+    `resume`.
+- **E2E** (`e2e/header/enter-restart.spec.ts`, zweiter Test, echte Tastatur, Bridge, endlose Fixture wie
+  `header.spec.ts › CRAWL-001`):
+  1. Start per Enter, dann Pause.
+  2. Enter im Feld: Der Crawl läuft weiter, kein Dialog, dieselbe `crawlId`.
+  3. Pause, Fokus raus aus dem Feld, Ctrl+Enter (Plattform per Init-Skript auf Windows gestellt, damit Mod
+     unabhängig vom Host ist): läuft weiter, kein Dialog, dieselbe `crawlId`. Die Start-URL wurde genau einmal
+     geladen.
+  4. Pause, URL geändert, Enter: Rückfrage, „Replace“. Der Kern lädt `/other/`, und es gibt eine neue `crawlId`.
+
+| Lauf (Server, `--workers=1`) | Ergebnis |
+|---|---|
+| `npm run -w apps/desktop typecheck` | grün |
+| `npm run -w apps/desktop test` | CSS-Lint OK, 128 Dateien / 1 132 Tests grün |
+| `e2e/header/playwright.config.ts` Chromium + WebKit (Header, Statusleiste, beide neuen Tests) | 12 passed |
+| `e2e/beta/unreach.spec.ts`, `e2e/keyboard/shortcuts.spec.ts` Chromium + WebKit | 178 passed |
+| **Gegenprobe:** `Header.tsx` auf dem Stand `4953d3a7` (B4-ENTER-Fix ohne Fortsetzen) | Fortsetzen-E2E in Chromium und WebKit **rot** („Expected running, Received paused“ nach Enter), die zwei neuen Unit-Tests **rot** |
+
+Nach der Gegenprobe wurde der Fix wieder eingespielt und der Test erneut ausgeführt: grün. Danach wurde `target/`
+auf dem Server gelöscht.
 
 ## Fremde Dateien (K2-92)
 
 | Datei | Bereich | Änderung |
 |---|---|---|
-| – | – | keine; geändert wurden nur `apps/desktop/src/features/header/{Header.tsx,model.ts,Header.test.tsx}`, `apps/desktop/e2e/header/enter-restart.spec.ts` und dieser Bericht |
+| `docs/spec/05-ui.md` | Spec (UI-113) | OS-Festlegung (Orchestrator, 09.11.2026) zum Fortsetzen per Enter/Mod+Enter, im Auftrag des Orchestrators |
+
+Sonst nur eigene Pfade: `apps/desktop/src/features/header/{Header.tsx,model.ts,Header.test.tsx}`, `apps/desktop/e2e/header/enter-restart.spec.ts`, dieser Bericht.
 
 ## Aufräumen
 
-Auf dem Server sind `target/` im Worktree `b4-enter` und die temporäre Diagnose-Spec gelöscht. Kein `pkill`
+Auf dem Server sind `target/` im Worktree `b4-enter` und die temporären Diagnose-Specs gelöscht. Kein `pkill`
 wurde ausgeführt. Ein Workspace-`cargo test` war nicht nötig, weil kein Rust geändert wurde, also auch kein
 ws-slot.
 
-Branch `m3/b4-enter`, Hash: siehe Abschluss des Auftrags (letzter Commit dieses Berichts).
+Branch `m3/b4-enter`, Hash: letzter Commit dieses Berichts (wird bei der Abgabe gemeldet).
