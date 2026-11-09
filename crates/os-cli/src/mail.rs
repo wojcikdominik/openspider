@@ -21,6 +21,14 @@ pub async fn notify_global(dir: &Path, outcome: &Outcome, rep: &Reporter) {
     } else {
         outcome.crawl_failed.clone()
     };
+    // OUT-152: Entfiel der Auto-Vergleich wegen des Fehlschlags, trägt die Mail den Vermerk statt der Änderungstabelle.
+    let failure = failure.map(|error| {
+        if outcome.compare_skipped {
+            format!("{error}; {}", crate::exec::COMPARE_SKIPPED_FAILED)
+        } else {
+            error
+        }
+    });
     let failed = failure.is_some();
     if !policy.enabled(failed) {
         return;

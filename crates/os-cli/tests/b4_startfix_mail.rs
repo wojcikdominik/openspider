@@ -52,6 +52,21 @@ fn save_account(settings: &std::path::Path, mock: &SmtpMock) {
         .unwrap();
 }
 
+/// Mail-Text ohne weiche Zeilenumbrüche der Quoted-Printable-Kodierung (`=` am Zeilenende), damit lange Zeilen am Stück prüfbar sind.
+fn unfolded(data: &str) -> String {
+    data.replace("=\r\n", "").replace("=\n", "")
+}
+
+/// Die Fehler-Mail nennt Fehlerklasse (in Worten und als Schlüssel) und betroffene Adresse (OUT-281, OS-Festlegung 09.11.2026).
+fn assert_names_class(data: &str, address: &str) {
+    let text = unfolded(data);
+    assert!(
+        text.contains("Verbindung abgelehnt (connection_refused)"),
+        "{text}"
+    );
+    assert!(text.contains(address), "{text}");
+}
+
 fn closed_url() -> String {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     format!(
@@ -90,7 +105,8 @@ fn crawl_args(url: &str) -> Vec<String> {
 async fn cli_an_unreachable_start_url_sends_the_failure_mail_with_exit_0() {
     let mock = smtp().await;
     let env = cli_env(&mock, false, true);
-    let run = env.run_async(crawl_args(&closed_url())).await;
+    let url = closed_url();
+    let run = env.run_async(crawl_args(&url)).await;
     assert_eq!(run.code, 0, "{}", run.dump());
     let messages = mock.messages();
     assert_eq!(messages.len(), 1, "{}", run.dump());
@@ -104,6 +120,59 @@ async fn cli_an_unreachable_start_url_sends_the_failure_mail_with_exit_0() {
         "{}",
         messages[0].data
     );
+    // Standard „robots.txt beachten“: Ursache ist die nicht abrufbare robots.txt der Start-URL.
+    assert_names_class(&messages[0].data, &format!("{url}robots.txt"));
+}
+
+// Exit 3 durch `--fail-on-start-error`: Die Fehler-Mail trägt trotzdem Start-URL, Projekt, Start und Ende (OS-Festlegung
+// 09.11.2026) sowie Fehlerklasse und Adresse.
+// spec: OUT-281
+// spec: OUT-182
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cli_the_failure_mail_with_exit_3_carries_the_crawl_header() {
+    let mock = smtp().await;
+    let env = cli_env(&mock, false, true);
+    let url = closed_url();
+    let mut args = crawl_args(&url);
+    args.extend(["--project-name", "Shop", "--fail-on-start-error"].map(String::from));
+    let run = env.run_async(args).await;
+    assert_eq!(run.code, 3, "{}", run.dump());
+    let messages = mock.messages();
+    assert_eq!(messages.len(), 1, "{}", run.dump());
+    let text = unfolded(&messages[0].data);
+    assert!(text.contains("[FAILED]"), "{text}");
+    for line in [
+        format!("Start-URL: {url}"),
+        "Projekt: Shop".to_string(),
+        "Start: 20".to_string(),
+        "Ende: 20".to_string(),
+    ] {
+        assert!(text.contains(&line), "{line} fehlt: {text}");
+    }
+    assert_names_class(&messages[0].data, &format!("{url}robots.txt"));
+}
+
+// Globale Mail der Kommandozeile mit `--compare-with-previous`: Der fehlgeschlagene Crawl wird nicht verglichen, die Fehler-Mail
+// trägt den Vermerk statt einer Änderungstabelle (OUT-152, OS-Festlegung 09.11.2026).
+// spec: OUT-152
+// spec: OUT-281
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cli_the_failure_mail_of_a_skipped_comparison_carries_the_note() {
+    let mock = smtp().await;
+    let env = cli_env(&mock, false, true);
+    let mut args = crawl_args(&closed_url());
+    args.extend(["--project-name", "Shop", "--compare-with-previous"].map(String::from));
+    let run = env.run_async(args).await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    let messages = mock.messages();
+    assert_eq!(messages.len(), 1, "{}", run.dump());
+    // „ü“ steht Quoted-Printable-kodiert in der Mail; geprüft wird der Rest des Vermerks.
+    let text = unfolded(&messages[0].data);
+    assert!(
+        text.contains("bersprungen (Crawl fehlgeschlagen)"),
+        "{text}"
+    );
+    assert!(!text.contains("Change %"), "{text}");
 }
 
 // Gegenprobe: Nur „bei Erfolg“ an – der fehlgeschlagene Lauf sendet keine Erfolgsmail. Ein per robots.txt gesperrter Start ist
@@ -278,6 +347,7 @@ async fn planner_an_unreachable_start_url_sends_the_failure_mail() {
         "{}",
         messages[0].data
     );
+    assert!(unfolded(&messages[0].data).contains("Verbindung abgelehnt (connection_refused)"));
 }
 
 // Gegenprobe ohne Auto-Vergleich: nur „bei Erfolg“ an – keine Mail für den fehlgeschlagenen Crawl.
@@ -385,4 +455,31 @@ async fn cli_the_final_line_of_a_failed_crawl_names_its_error() {
         run.dump()
     );
     assert!(!run.last_line().starts_with("Fertig"), "{}", run.dump());
+}
+
+// robots.txt antwortet mit 503: Die Regel „robots.txt nicht erreichbar“ sperrt die Start-URL, das ist kein Fehlschlag (Exit 0
+// auch mit `--fail-on-start-error`). Die Warnung nennt robots.txt-URL und Grund, den HTTP-Status (OS-Festlegung 09.11.2026).
+// spec: OUT-182
+// spec: CRAWL-128
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cli_the_warning_for_a_robots_txt_answering_503_names_url_and_status() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("scenario.toml"),
+        "[[route]]\npath = \"/robots.txt\"\nstatus = 503\nbody = \"x\"\n\n[[route]]\npath = \"/\"\nbody = \"x\"\n",
+    )
+    .unwrap();
+    let site = os_testsite::TestSite::start_dir(dir.path(), 0)
+        .await
+        .unwrap();
+    let env = Env::new();
+    let mut args = crawl_args(&format!("{}/", site.base_url()));
+    args.push("--fail-on-start-error".into());
+    let run = env.run_async(args).await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    let expected = format!(
+        "durch robots.txt gesperrt: robots.txt {}/robots.txt nicht abrufbar (Grund: HTTP 503)",
+        site.base_url()
+    );
+    assert!(run.stderr.contains(&expected), "{}", run.dump());
 }
