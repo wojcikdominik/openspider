@@ -31,7 +31,7 @@ export function permissions(rows: CrawlListing[]) {
     compare: rows.length === 2 && !running };
 }
 // Former local recent list of the crawl management (up to beta.3). Since 09.11.2026 the UI state (`help/recent.ts`)
-// holds the one recent list; `takeLegacyRecent` hands the old entries over once.
+// holds the one recent list; the old entries are handed over once and the key is cleared only after that succeeded.
 const recentKey = "openspider.recent-crawls.v1";
 export function readRecent(): string[] {
   try {
@@ -39,10 +39,8 @@ export function readRecent(): string[] {
     return Array.isArray(value) ? [...new Set(value.filter((v): v is string => typeof v === "string"))].slice(0, 10) : [];
   } catch { return []; }
 }
-export function takeLegacyRecent(): string[] {
-  const paths = readRecent();
-  try { localStorage.removeItem(recentKey); } catch { /* nothing to take over */ }
-  return paths;
+export function clearLegacyRecent(): void {
+  try { localStorage.removeItem(recentKey); } catch { /* nothing left to clear */ }
 }
 export function writeRecent(paths: string[]): string[] {
   const next = [...new Set(paths)].slice(0, 10);

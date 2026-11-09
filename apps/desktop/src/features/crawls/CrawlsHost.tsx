@@ -20,7 +20,7 @@ import { Banner, Button, ContextMenu, Dialog, DialogFooter, ProgressBar, Tree } 
 import { fileName, recentCrawlTitle, splitPath } from "../../ui/recentCrawl";
 import type { RecentEntry } from "../../ui/menu/contributions/main";
 import { nativeCrawlDesktop, type CrawlDesktop, type RepairResult } from "./desktop";
-import { cell, columns, openCrawls, permissions, phaseKey, sortRows, takeLegacyRecent, useCrawlsDialog, writeRecent, type Column } from "./model";
+import { cell, clearLegacyRecent, columns, openCrawls, permissions, phaseKey, readRecent, sortRows, useCrawlsDialog, type Column } from "./model";
 import "./crawls.css";
 
 type Form = { kind: "rename" | "move" | "projectCreate" | "projectRename"; ids: string[]; projectId?: string; value: string; error?: string };
@@ -68,12 +68,13 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
     const off = onRecentChanged(() => { void reload(); });
     return () => { live = false; off(); };
   }, [currentCrawl, phase, lang]);
-  // Entries of the former local list (beta.3) are taken over once, after the entries already in the UI state.
+  // Entries of the former local list (beta.3) are taken over once, after the entries already in the UI state. The
+  // old key is cleared only after the UI state was saved; a failed save keeps it for the next start (merge is idempotent).
   useEffect(() => {
-    const legacy = takeLegacyRecent();
+    const legacy = readRecent();
     if (!legacy.length) return;
     void updateRecent(entries => [...entries, ...legacy.filter(path => !entries.some(entry => entry.path === path)).map(path => ({ path }))])
-      .catch(() => { writeRecent(legacy); });
+      .then(clearLegacyRecent, () => undefined);
   }, []);
   const recentTitle = useMemo(() => {
     const index = new Map(rows.map(row => [row.crawl.file, row] as const));

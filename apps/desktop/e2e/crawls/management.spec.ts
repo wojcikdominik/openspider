@@ -188,8 +188,8 @@ test("Escape in a form closes only the form and returns focus to its trigger", a
 // spec: CRAWL-127
 test("recent entries show name and date, shorten long paths in the middle and keep the file name visible", async ({ page }) => {
   const long = "/Users/fixture/Library/Application Support/de.openspider.app/some/deeply/nested/folder/structure/crawls/01a18894-1234-7000-8000-bbfe3c06b178.ospider";
-  await page.evaluate(paths => localStorage.setItem("openspider.recent-crawls.v1", JSON.stringify(paths)), ["/fixture/Alpha.ospider", long]);
-  await page.reload();
+  await page.keyboard.press("Escape");
+  await page.evaluate(paths => window.crawlsFixture.seedRecent(paths), ["/fixture/Alpha.ospider", long]);
   await page.getByRole("button", { name: "Manage", exact: true }).click();
   const nav = page.getByRole("navigation", { name: "Recently opened" });
   const known = nav.getByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/fixture\/Alpha\.ospider$/ });

@@ -1,4 +1,4 @@
-import { currentLanguage, getT } from "../../i18n";
+import { currentLanguage, getT, onLanguageChanged } from "../../i18n";
 import { hasAction, onActionRegistryChanged, registerAction } from "../../ui/actions";
 import { registerMenuContributions } from "../../ui/menu/registry";
 import { mainMenuContributions, type MainMenuState } from "../../ui/menu/contributions/main";
@@ -126,6 +126,8 @@ export function installMainMenus(): () => void {
     if (next.crawl?.phase !== prev.crawl?.phase || next.crawl?.crawlId !== prev.crawl?.crawlId || next.analysis !== prev.analysis) void refreshCatalog();
   }));
   offs.push(onRecentChanged(() => { void reloadRecent().catch(error); }));
+  // CRAWL-127: the recent labels carry a language-dependent date; rebuild them after a language switch.
+  offs.push(onLanguageChanged(() => { void reloadRecent().catch(error); }));
   offs.push(usePrefs.subscribe(rebuild));
   offs.push(onActionRegistryChanged(rebuild));
   offs.push(useMainMode.subscribe((next) => { modeRevision++; state.mode = next.mode; rebuild(); }));
