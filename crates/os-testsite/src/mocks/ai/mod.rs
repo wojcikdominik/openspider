@@ -89,6 +89,14 @@ impl MockApi for Registration {
             _ => None,
         }
     }
+    fn scenario_path(&self) -> &'static str {
+        match self.name {
+            "anthropic" | "openai" => "/v1/models",
+            "openrouter" => "/api/v1/models",
+            "ollama" => "/api/tags",
+            _ => "/log",
+        }
+    }
     fn router(&self) -> Router {
         let provider = self.name.to_string();
         Router::new()

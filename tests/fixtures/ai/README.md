@@ -84,8 +84,8 @@ ermöglichen extensionlose URLs ohne Änderung am allgemeinen Fixture-Server.
 
 `site-partial/` ist bis auf zwei Produktmarker `500-always` und einen Ratgebermarker
 `refusal` identisch. HTTP-Abrufe bleiben erfolgreich; die Marker betreffen erst KI.
-Die kleinen Bilder stammen aus vorhandenen Clean-Room-Fixtures; SVG und GIF sind
-eigene einfache Testbilder.
+Die Bilder sind eigene schematische Testbilder (Rucksack, Weg, Stiefel, Wald,
+Dekoration und Karte), vollständig lokal erzeugt und in PNG/JPEG/WebP/GIF/SVG kodiert.
 
 `pricing-test.json` enthält USD je Million Token, Batch-Rabatt als Anteil,
 Langkontextmultiplikatoren und EU-Zuschlag als Anteil. Es sind ausschließlich die

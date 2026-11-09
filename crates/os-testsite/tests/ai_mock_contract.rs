@@ -651,5 +651,64 @@ async fn per_url_markers_timeout_delay_and_fragment_collisions() {
         .contains("Duplicate MOCK-ID"));
     std::fs::write(dir.join("b.json"), r#"{"home":{"different-question":42}}"#).unwrap();
     assert!(AnswerBook::load(&dir).is_ok());
+    std::fs::write(dir.join("b.json"), r#"{"extra":{"q":1,"q":2}}"#).unwrap();
+    assert!(AnswerBook::load(&dir).is_err());
     std::fs::remove_dir_all(dir).unwrap();
+}
+// spec: INTEG-019 [M4]
+#[tokio::test]
+async fn multipart_upload_and_token_counter_use_real_provider_shapes() {
+    let (_, s) = server().await;
+    let jsonl = r#"{"custom_id":"r1","method":"POST","url":"/v1/responses","body":{"input":"MOCK-ID:home"}}"#;
+    let body=format!("--fixture-boundary\r\nContent-Disposition: form-data; name=\"purpose\"\r\n\r\nbatch\r\n--fixture-boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"batch.jsonl\"\r\nContent-Type: application/jsonl\r\n\r\n{jsonl}\r\n--fixture-boundary--\r\n");
+    let mut stream = TcpStream::connect(s.addr()).await.unwrap();
+    stream.write_all(format!("POST /openai/v1/files HTTP/1.1\r\nHost: openai.mock.test\r\nConnection: close\r\nContent-Type: multipart/form-data; boundary=fixture-boundary\r\nContent-Length: {}\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+    let (raw, _) = common::read_all(&mut stream).await;
+    let uploaded = value(&common::parse(&raw).unwrap());
+    assert_eq!(uploaded["bytes"], jsonl.len());
+    let id = uploaded["id"].as_str().unwrap();
+    assert_eq!(
+        call(
+            &s,
+            "x",
+            "GET",
+            &format!("/openai/v1/files/{id}/content"),
+            "ok",
+            ""
+        )
+        .await
+        .text(),
+        jsonl
+    );
+    let input = json!({"system":"ab","messages":[{"role":"user","content":[{"type":"text","text":"cde"},{"type":"image","source":{"type":"base64","data":"ignore"}}]}]});
+    let counted = value(
+        &call(
+            &s,
+            "x",
+            "POST",
+            "/anthropic/v1/messages/count_tokens",
+            "ok",
+            &input.to_string(),
+        )
+        .await,
+    );
+    assert_eq!(counted["input_tokens"], 87);
+    let r = value(&call(&s, "x", "POST", "/openai/v1/responses", "refusal", "{}").await);
+    assert_eq!(r["usage"]["output_tokens"], 4);
+    let r = value(
+        &call(
+            &s,
+            "x",
+            "POST",
+            "/openai/v1/decisions",
+            "ok",
+            r#"{"input":"abcd","questions":[{"id":"q","type":"predicate","question":"efgh"}]}"#,
+        )
+        .await,
+    );
+    assert_eq!(r["usage"]["input_tokens"], 2);
+    assert_eq!(
+        r["usage"]["output_tokens"],
+        r["answers"].to_string().chars().count().div_ceil(4)
+    );
 }

@@ -1,6 +1,37 @@
 use super::marker;
+use serde::{
+    de::{MapAccess, Visitor},
+    Deserialize, Deserializer,
+};
 use serde_json::{json, Value};
+use std::marker::PhantomData;
 use std::{collections::BTreeMap, io, path::Path};
+
+// Reject repeated JSON keys as well as collisions between fragment files.
+struct UniqueMap<V>(BTreeMap<String, V>);
+impl<'de, V: Deserialize<'de>> Deserialize<'de> for UniqueMap<V> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct MapVisitor<V>(PhantomData<V>);
+        impl<'de, V: Deserialize<'de>> Visitor<'de> for MapVisitor<V> {
+            type Value = UniqueMap<V>;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an object with unique keys")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let mut entries = BTreeMap::new();
+                while let Some((key, value)) = map.next_entry::<String, V>()? {
+                    if entries.insert(key.clone(), value).is_some() {
+                        return Err(serde::de::Error::custom(format!(
+                            "Duplicate MOCK-ID/question key {key}"
+                        )));
+                    }
+                }
+                Ok(UniqueMap(entries))
+            }
+        }
+        deserializer.deserialize_map(MapVisitor(PhantomData))
+    }
+}
 
 /// Fragment format: {"MOCK-ID": {"question-or-task-id": <answer>, "default": <answer>}}.
 #[derive(Default)]
@@ -16,10 +47,10 @@ impl AnswerBook {
             .into_iter()
             .filter(|p| p.extension().is_some_and(|e| e == "json"))
         {
-            let fragment: BTreeMap<String, BTreeMap<String, Value>> =
+            let fragment: UniqueMap<UniqueMap<Value>> =
                 serde_json::from_slice(&std::fs::read(&path)?)?;
-            for (id, entries) in fragment {
-                for (question, answer) in entries {
+            for (id, entries) in fragment.0 {
+                for (question, answer) in entries.0 {
                     if book
                         .0
                         .entry(id.clone())
@@ -83,6 +114,9 @@ pub fn token_count(input: &Value) -> usize {
                     "content",
                     "text",
                     "prompt",
+                    "questions",
+                    "question",
+                    "description",
                 ] {
                     if let Some(v) = o.get(key) {
                         let (c, i) = parts(v);

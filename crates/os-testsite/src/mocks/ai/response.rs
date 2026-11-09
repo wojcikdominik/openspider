@@ -273,10 +273,14 @@ pub(super) fn success(
     } else {
         answer.to_string()
     };
-    let out_tokens = output.chars().count().div_ceil(4);
+    let out_tokens = if refusal {
+        "Fixture refusal".chars().count().div_ceil(4)
+    } else {
+        output.chars().count().div_ceil(4)
+    };
     let mut result = match provider {
         "anthropic" => {
-            json!({"id":"msg_mock","type":"message","role":"assistant","model":input["model"],"content":[{"type":"text","text":output}],"stop_reason":if refusal {"refusal"} else if scenario == "max-tokens" {"max_tokens"} else {"end_turn"},"usage":{"input_tokens":tokens,"output_tokens":out_tokens,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}})
+            json!({"id":"msg_mock","type":"message","role":"assistant","model":input["model"],"content":[{"type":"text","text":if refusal { "Fixture refusal" } else { &output }}],"stop_reason":if refusal {"refusal"} else if scenario == "max-tokens" {"max_tokens"} else {"end_turn"},"usage":{"input_tokens":tokens,"output_tokens":out_tokens,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}})
         }
         "openrouter" => {
             let message = if refusal {
@@ -322,6 +326,10 @@ pub(super) fn success(
             json!({"id":"resp_mock","object":"response","status":"completed","model":input["model"],"output":[{"type":"message","role":"assistant","content":[if refusal { json!({"type":"refusal","refusal":"Fixture refusal"}) } else { json!({"type":"output_text","text":output}) }]}],"usage":{"input_tokens":tokens,"output_tokens":out_tokens,"input_tokens_details":{"cached_tokens":0}}})
         }
     };
+    if path.ends_with("decisions") {
+        result["usage"]["output_tokens"] =
+            json!(result["answers"].to_string().chars().count().div_ceil(4));
+    }
     if scenario == "missing-usage" {
         result.as_object_mut().unwrap().remove("usage");
     }
