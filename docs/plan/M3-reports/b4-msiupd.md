@@ -113,10 +113,15 @@ Bestehende Tests mit `installer: None` verwenden jetzt `Installer::Platform` (`u
 1. **Verhalten bei unbekannter Installationsart.** Die Spec regelt diesen Fall nicht. Umgesetzt ist: Prüfung abgeschaltet
    mit Hinweis, ohne Netzwerkzugriff. Die Alternative wäre, trotzdem zu prüfen und „Version X verfügbar, bitte manuell
    herunterladen“ zu zeigen. Das braucht einen neuen UI-Zustand. Welche Variante soll gelten?
-2. **Automatisches Update bei MSI-Installationen pro Maschine.** `msiexec` braucht Administratorrechte. Ohne sie bricht die
-   Installation nach der UAC-Abfrage ab, und die App zeigt „Update fehlgeschlagen“. OUT-253 nennt Softwareverteilung und
-   `DisableUpdateCheck`, sagt aber nicht, ob eine MSI-Installation ohne Richtlinie selbst installieren soll oder nur auf
-   die neue Version hinweisen soll. Soll das so bleiben?
+2. **Automatisches Update bei MSI-Installationen pro Maschine.** `msiexec` braucht Administratorrechte.
+   *Korrigiert mit B4-RELCHECK (Prüfung Fable):* Der Updater startet `msiexec /i … /passive /promptrestart` per
+   `ShellExecuteW("open")` und beendet die App sofort danach (`tauri-plugin-updater-2.14.1/src/updater.rs:1028-1050`).
+   Die UAC-Abfrage kommt von Windows Installer, nicht von der App. Lehnt der Nutzer sie ab, endet `msiexec` mit 1602
+   (vom Benutzer abgebrochen). Die App ist dann schon beendet und zeigt nichts an, also auch kein „Update
+   fehlgeschlagen“. Die Installation bleibt auf der alten Version. Beim nächsten Start wird das Update erneut angeboten,
+   sobald die Startprüfung wieder läuft (höchstens einmal in 24 Stunden, OUT-250). Sofort geht es über Hilfe → „Nach
+   Updates suchen“. OUT-253 nennt Softwareverteilung und `DisableUpdateCheck`, sagt aber nicht, ob eine MSI-Installation ohne
+   Richtlinie selbst installieren soll oder nur auf die neue Version hinweisen soll. Soll das so bleiben?
 3. **Absicherung im Release-Lauf** (außerhalb dieses Pakets): Patcht der Bundler die Kennung nicht, gibt es nur eine
    Warnung. Vorschlag für den Besitzer von `release-windows.yml` bzw. `verify-windows.ps1`: Die EXE aus beiden Installern
    auf `__TAURI_BUNDLE_TYPE_VAR_MSI` bzw. `…_NSS` prüfen. Damit würde die Lücke schon beim Bau auffallen, nicht erst beim
