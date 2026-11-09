@@ -68,6 +68,10 @@ pub const TICK_SETTLE_RANGE: (Duration, Duration) =
 /// Wait of the tick that carries the end status of a crawl for its final table rows (UI-018 „nach Crawl-Ende exakt“).
 pub const TICK_SETTLE_ENDED: Duration = Duration::from_millis(1000);
 
+/// Longest wait of the end status of a crawl for its exact final count (Overview, Issues, filter counts; UI-018
+/// „nach Crawl-Ende exakt“). A larger crawl whose count takes longer sends it with a later tick.
+pub const TICK_SETTLE_COUNTS: Duration = Duration::from_millis(3000);
+
 /// Wait budget of a due tick whose previous tick went out `since` ago (see [`TICK_SETTLE_UNTIL`]).
 pub fn settle_budget(since: Duration) -> Duration {
     TICK_SETTLE_UNTIL
@@ -126,6 +130,15 @@ pub fn init(app: &App) {
                     settle_budget(sent.elapsed())
                 };
                 crate::views::settle(&app, budget).await;
+                if ended {
+                    // The end status goes out with the exact final count (UI-018, B4-LAGFIX2).
+                    let until = tokio::time::Instant::now() + TICK_SETTLE_COUNTS;
+                    while !crate::commands::sidebar::counts::settled(&app)
+                        && tokio::time::Instant::now() < until
+                    {
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                }
                 app.flush_tick();
                 sent = tokio::time::Instant::now();
             }
