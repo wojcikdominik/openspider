@@ -188,6 +188,14 @@ pub async fn run_check_with_context(
         Err(error) => Err(error),
     };
     let state = match result {
+        // OUT-251 (Nutzerentscheidung 09.11.2026): a skipped version is reported again only by a manual check.
+        Ok(Outcome::Available(manifest))
+            if !manual
+                && context.settings.skipped_version.as_deref()
+                    == Some(manifest.version.to_string().as_str()) =>
+        {
+            UpdateState::UpToDate
+        }
         Ok(Outcome::Available(manifest)) => {
             let state = UpdateState::Available(update::AvailableUpdate {
                 version: manifest.version.to_string(),

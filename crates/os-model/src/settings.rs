@@ -470,12 +470,15 @@ pub struct UpdateSettings {
     pub check: bool,
     /// Letzte Prüfung als ISO-8601-UTC-Zeitstempel; None vor der ersten Prüfung.
     pub last_check: Option<String>,
+    /// OUT-251: version skipped in the update dialog; automatic checks do not report it again.
+    pub skipped_version: Option<String>,
 }
 impl Default for UpdateSettings {
     fn default() -> Self {
         Self {
             check: true,
             last_check: None,
+            skipped_version: None,
         }
     }
 }

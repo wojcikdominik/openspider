@@ -304,3 +304,56 @@ async fn app_reports_unknown_installer_as_disable_reason_without_request() {
     assert!(site.requests().is_empty());
     assert!(app.settings_snapshot().updates.last_check.is_none());
 }
+
+// spec: OUT-251
+// spec: OUT-250
+#[tokio::test]
+async fn skipped_version_is_silent_for_automatic_checks_but_shown_by_a_manual_check() {
+    use os_app::{commands::update::run_check_with_context, update::UpdateState, App, AppConfig};
+    let (site, dir, ctx) = fixture().await;
+    let app = App::new(AppConfig::new(dir.path())).unwrap();
+    let UpdateState::Available(offered) = run_check_with_context(&app, true, ctx).await else {
+        panic!("fixture offers an update");
+    };
+    // "Skip this version" (Nutzerentscheidung 09.11.2026) stores the version in the app settings.
+    let other = tempfile::tempdir().unwrap();
+    let skipping = App::new(AppConfig::new(other.path())).unwrap();
+    skipping
+        .settings()
+        .apply_patch(&serde_json::json!({"updates":{"skippedVersion": offered.version}}))
+        .unwrap();
+    let persisted = std::fs::read_to_string(skipping.settings().path()).unwrap();
+    assert!(persisted.contains("skipped_version"), "{persisted}");
+    let (_, _automatic_dir, mut automatic) = fixture().await;
+    automatic.endpoint = format!("{}/latest.json", site.https_base_url());
+    assert_eq!(
+        run_check_with_context(&skipping, false, automatic).await,
+        UpdateState::UpToDate
+    );
+    assert!(skipping
+        .ext::<os_app::commands::update::UpdateService>()
+        .manifest
+        .lock()
+        .unwrap()
+        .is_none());
+    // A manual check (Hilfe → „Nach Updates suchen“) still reports it.
+    let (_, _manual_dir, mut manual) = fixture().await;
+    manual.endpoint = format!("{}/latest.json", site.https_base_url());
+    assert!(matches!(
+        run_check_with_context(&skipping, true, manual).await,
+        UpdateState::Available(found) if found.version == offered.version
+    ));
+    // A newer version than the skipped one is reported by automatic checks again.
+    let newer = tempfile::tempdir().unwrap();
+    let later = App::new(AppConfig::new(newer.path())).unwrap();
+    later
+        .settings()
+        .apply_patch(&serde_json::json!({"updates":{"skippedVersion": "0.9.0"}}))
+        .unwrap();
+    let (_, _later_dir, mut automatic) = fixture().await;
+    automatic.endpoint = format!("{}/latest.json", site.https_base_url());
+    assert!(matches!(
+        run_check_with_context(&later, false, automatic).await,
+        UpdateState::Available(_)
+    ));
+}
