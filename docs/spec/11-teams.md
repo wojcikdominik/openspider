@@ -97,9 +97,15 @@ Grundsätze:
   - [ ] Geplanter Crawl mit „im Team veröffentlichen“ → nach Abschluss neue Version im Team-Ordner, auch ohne geöffnete App.
   - [ ] MCP ohne `write` → Veröffentlichen-Werkzeug nicht gelistet.
 
+### TEAM-011 Befund-Board (Idee)
+- **Priorität:** P2 (Idee, Nutzer 09.11.2026: „vielleicht erstmal zu weit gedacht“)
+- **Beschreibung:** Ein gemeinsames Board je Team bzw. Domain, auf dem Befunde aus veröffentlichten Crawls gesammelt und besprochen werden (Befund übernehmen, kommentieren, Status offen/erledigt/ignoriert, zuweisen), direkt in OpenSpider statt in fremden Tools. In Stufe 1 als Dateien im Team-Ordner (je Eintrag eine Datei, nur anhängen, keine gemeinsame Datenbank; TEAM-008 gilt), in Stufe 2 als TEAM-052.
+
 ---
 
 ## B. Stufe 2 – OpenSpider Teams (bezahlt, evnxt-Account)
+
+Grundsatz auch hier (Nutzer 09.11.2026): **OpenSpider crawlt nie selbst für Kunden.** Stufe 2 hostet nur die Ablage und die Zusammenarbeit; gecrawlt wird immer auf den Rechnern der Nutzer.
 
 Gemeinsame Regeln: Die Ablage ersetzt den Team-Ordner, die Regeln aus Abschnitt A (Schnappschüsse, TEAM-003, TEAM-006, TEAM-008) gelten unverändert. Daten liegen in der EU, verschlüsselt bei der Übertragung und im Speicher; Auftragsverarbeitungsvertrag für Kunden. OpenSpider funktioniert ohne Anmeldung vollständig weiter.
 
