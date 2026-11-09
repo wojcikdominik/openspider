@@ -137,17 +137,25 @@ it("Verwaltung: ohne Crawl-Namen ersetzt die Domain der Start-URL den Namen", as
 });
 
 // spec: CRAWL-127
-it("Menü Datei, Zuletzt geöffnet: bekannter Crawl als „<Name> – <Datum Uhrzeit>“ in einer Zeile", async () => {
-  writeRecent(["/fixture/Alpha.ospider", "/fixture/Beta.ospider"]);
-  await mount(false);
-  act(() => { useCrawlsDialog.setState({ open: true }); });
-  await screen.findByRole("navigation", { name: "Recently opened" });
-  await waitFor(() => {
-    const labels = flat(fileMenu().items).filter(item => /^crawls\.recent\.\d$/.test(item.id)).map(item => item.label);
-    expect(labels[0]).toMatch(/^Alpha – [A-Z][a-z]{2} \d{1,2}, 2026,? \d{1,2}:\d{2}/);
-    expect(labels[1]).toMatch(/^Beta – [A-Z][a-z]{2} \d{1,2}, 2026,? \d{1,2}:\d{2}/);
-    for (const label of labels) expect(label).not.toContain("\n");
-  });
+it("Menü Datei, Zuletzt geöffnet: bekannter Crawl als „<Name> – <Datum Uhrzeit>“ in einer Zeile, unbekannter Pfad höchstens 64 Zeichen", async () => {
+  // Das einzige Untermenü „Zuletzt geöffnet“ (`file.recent`, Einträge `recent.N`) speist sich aus dem gespeicherten Zustand
+  // und dem Index der Crawl-Verwaltung (`crawls.list`).
+  const core = new MockCore();
+  setClient(createClient(core.transport()));
+  core.uiState = { version: 1, state: { recentCrawls: [{ path: "/fixture/Alpha.ospider" }, { path: "/fixture/Beta.ospider" }, { path: MAC_LONG }] } };
+  core.handlers.set("crawls.list", () => structuredClone(fixtureRows));
+  const entries = await loadRecent();
+  const labels = flat(fileMenu(entries).items).filter(item => /^recent\.\d+$/.test(item.id)).map(item => item.label);
+  expect(labels).toHaveLength(3);
+  expect(labels[0]).toMatch(/^Alpha – [A-Z][a-z]{2} \d{1,2}, 2026,? \d{1,2}:\d{2}/);
+  expect(labels[1]).toMatch(/^Beta – [A-Z][a-z]{2} \d{1,2}, 2026,? \d{1,2}:\d{2}/);
+  for (const label of labels) expect(label).not.toContain("\n");
+  // unbekannter Crawl: gekürzter Pfad, höchstens 64 Zeichen, Dateiende sichtbar
+  expect(labels[2]!.length).toBeLessThanOrEqual(64);
+  expect(labels[2]).toContain("…");
+  expect(labels[2]!.endsWith(FILE.slice(-20))).toBe(true);
+  // geöffnet wird weiter der volle Pfad
+  expect(entries.map(entry => entry.path)).toEqual(["/fixture/Alpha.ospider", "/fixture/Beta.ospider", MAC_LONG]);
 });
 
 // spec: CRAWL-127

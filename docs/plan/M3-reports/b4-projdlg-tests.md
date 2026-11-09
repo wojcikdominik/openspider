@@ -80,3 +80,18 @@ Beide Tests bleiben unverändert rot und sind nicht abgeschwächt.
 - Nicht abgedeckt: Zusammenspiel mit dem echten Kern (Bridge), WKWebView/WebView2 auf den Zielplattformen, Zeilenumbruch im echten Datei-Menü.
 
 Branch `m3/t-projdlg`, Hash siehe letzte Zeile des Commits.
+
+## Nachtrag: zweiter Lauf nach Merge von `m3/b4-projdlg` (46ecf253)
+
+Entscheidung des Orchestrators zu Fehler 1: genau ein Untermenü `file.recent` (Einträge `recent.N`), `crawls.recent` entfällt; zu
+Fehler 2 wurde Strg/Cmd+F umgesetzt. `m3/b4-projdlg` ist in `m3/t-projdlg` gemergt (Merge-Commit c944ccaf, ohne Konflikte).
+
+Geändert wurde ein Test in `acceptance-projdlg.test.tsx`: „Menü Datei, Zuletzt geöffnet: bekannter Crawl als ‚<Name> – <Datum
+Uhrzeit>‘ in einer Zeile“ suchte `crawls.recent.N`. Er liest jetzt `recent.N` des Datei-Menüs, gespeist wie in der App über
+`loadRecent()` (gespeicherter Zustand plus Index `crawls.list`). Prüfstärke unverändert: Name – Datum Uhrzeit für zwei bekannte
+Crawls, einzeilig, für einen unbekannten Mac-Pfad höchstens 64 Zeichen mit „…“ und sichtbarem Dateiende, geöffnet wird der volle Pfad
+(zusätzlich: genau drei Einträge). Alle anderen Tests unverändert.
+
+Ergebnis (Build-Server, `--workers=1`): Typecheck grün; Vitest 10 von 10 grün; Playwright Chromium und WebKit zusammen 52 von 52 grün
+(26 je Browser). Damit sind „Zuletzt geöffnet genau einmal“ (Fehler 1) und „Mod+F fokussiert die Suche“ (Fehler 2) behoben. Es
+bleibt nichts rot.
