@@ -249,3 +249,18 @@ async fn in_a_running_crawl_the_table_total_of_a_tick_contains_every_counted_url
         "total behind the counter of its own tick: {behind:?} of {checked:?}"
     );
 }
+
+// spec: UI-018
+// spec: PERF-004
+// A due tick waits for its table maintenance at most until about one second after the previous tick.
+#[test]
+fn a_due_tick_waits_for_its_maintenance_until_one_second_after_the_previous_tick() {
+    use os_app::session::settle_budget;
+    let ms = Duration::from_millis;
+    assert_eq!(settle_budget(ms(500)), ms(500));
+    assert_eq!(settle_budget(ms(600)), ms(400));
+    assert_eq!(settle_budget(ms(850)), ms(150));
+    assert_eq!(settle_budget(ms(950)), ms(100));
+    assert_eq!(settle_budget(ms(5000)), ms(100));
+    assert_eq!(settle_budget(ms(100)), ms(500));
+}

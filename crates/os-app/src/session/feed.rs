@@ -174,6 +174,12 @@ pub async fn snapshot(
 }
 
 pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
+    refresh_aligned(app, s, app.tick_due()).await
+}
+
+/// Like [`refresh`] with the caller's decision whether this poll belongs to a due tick (UI-018, B4-LAGFIX2): the
+/// session loop decides once, so the write of counted URLs, the row publication and the tick use the same answer.
+pub(super) async fn refresh_aligned(app: &App, s: &SessionInfo, due: bool) -> Result<(), CmdError> {
     let service = app.ext::<SessionService>();
     // The entry is created here, so concurrent first refreshes share its notice state (`Cursor::delays`).
     let mut old = service
@@ -184,9 +190,11 @@ pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
         .or_default()
         .clone();
     let now = app.config().clock.monotonic();
-    if old
-        .last
-        .is_some_and(|t| now.saturating_sub(t) < Duration::from_millis(50))
+    // A due poll always reads: skipping it would send the tick without the table data of its poll (B4-LAGFIX2).
+    if !due
+        && old
+            .last
+            .is_some_and(|t| now.saturating_sub(t) < Duration::from_millis(50))
     {
         return Ok(());
     }
@@ -210,7 +218,6 @@ pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
     // UI-018 (B4-LAGFIX2): in a poll whose tick is due the engine first writes every URL it has counted, so
     // the snapshot below contains them and the table totals of this tick reach the counter of this tick
     // (otherwise up to one writer interval, 100 ms, later and thus one tick late). Read the progress first.
-    let due = app.tick_due();
     let (progress, counted) = s
         .engine
         .as_ref()
@@ -483,7 +490,7 @@ pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
     if old.pending.is_some()
         && old.rows_at.is_none_or(|t| {
             let elapsed = now.saturating_sub(t);
-            elapsed >= interval && (elapsed >= interval * 2 || app.tick_due())
+            elapsed >= interval && (elapsed >= interval * 2 || due)
         })
     {
         let change = old.pending.take().expect("pending change");

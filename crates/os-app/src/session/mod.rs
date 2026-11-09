@@ -57,9 +57,20 @@ impl TickSource for SessionService {
     }
 }
 
-/// Longest wait of a due tick for the view maintenance its poll started (UI-018, B4-LAGFIX2). Measured in the
-/// debug E2E bridge on two shared CPUs: maintenance p99 100–230 ms. A slower run arrives with the next tick.
-pub const TICK_SETTLE_MAX: Duration = Duration::from_millis(250);
+/// A due tick waits for the view maintenance its poll started until at most this long after the previous tick
+/// (UI-018, B4-LAGFIX2), so ticks stay at most about one second apart. Measured in the debug E2E bridge on two
+/// shared CPUs: maintenance median 120–180 ms, p90 260 ms, p99 670 ms. A slower run arrives with the next tick.
+pub const TICK_SETTLE_UNTIL: Duration = Duration::from_millis(1000);
+/// Shortest and longest wait of a due tick for its view maintenance.
+pub const TICK_SETTLE_RANGE: (Duration, Duration) =
+    (Duration::from_millis(100), Duration::from_millis(500));
+
+/// Wait budget of a due tick whose previous tick went out `since` ago (see [`TICK_SETTLE_UNTIL`]).
+pub fn settle_budget(since: Duration) -> Duration {
+    TICK_SETTLE_UNTIL
+        .saturating_sub(since)
+        .clamp(TICK_SETTLE_RANGE.0, TICK_SETTLE_RANGE.1)
+}
 
 /// Does the session loop deliver due ticks (a crawl session was attached)? Other periodic flushers stand back
 /// then, so a tick is sent only after the session's aligned poll (UI-018, B4-LAGFIX2).
@@ -77,6 +88,7 @@ pub fn init(app: &App) {
     app.handle().spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(100));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut sent = tokio::time::Instant::now();
         loop {
             interval.tick().await;
             let Some(app) = weak.upgrade() else { break };
@@ -93,12 +105,13 @@ pub fn init(app: &App) {
             // session is active (`delivers_ticks`); control commands send their own acknowledgement, and
             // while they hold the mutation lock `poll` returns at once.
             let due = app.tick_due();
-            if let Err(e) = poll(&app).await {
+            if let Err(e) = poll_aligned(&app, due).await {
                 tracing::warn!(error = ?e, "Session poll failed");
             }
             if due {
-                crate::views::settle(&app, TICK_SETTLE_MAX).await;
+                crate::views::settle(&app, settle_budget(sent.elapsed())).await;
                 app.flush_tick();
+                sent = tokio::time::Instant::now();
             }
         }
     });
@@ -131,6 +144,11 @@ pub fn state(app: &App, key: &CrawlKey, state: CrawlState) {
 }
 
 pub async fn poll(app: &App) -> Result<(), CmdError> {
+    poll_aligned(app, app.tick_due()).await
+}
+
+/// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`).
+async fn poll_aligned(app: &App, due: bool) -> Result<(), CmdError> {
     let service = app.ext::<SessionService>();
     let Ok(_guard) = service.mutation.try_lock() else {
         return Ok(());
@@ -156,7 +174,7 @@ pub async fn poll(app: &App) -> Result<(), CmdError> {
             if finished {
                 control::settle(app, &s, None).await?;
             }
-            feed::refresh(app, &s).await?;
+            feed::refresh_aligned(app, &s, due).await?;
         }
         Ok(())
     })
