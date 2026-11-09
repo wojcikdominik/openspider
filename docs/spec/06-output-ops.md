@@ -1756,7 +1756,7 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 - **Akzeptanzkriterien:**
   - [ ] URL ohne Schema → `http://` wird ergänzt (wie UI), Hinweis auf stderr.
   - [ ] Ungültige URL → Exit-Code 2 vor Crawlbeginn.
-  - [ ] Start-URL nicht erreichbar → Crawl endet regulär mit 1 URL (No Response), Exit-Code 0, Warnung **(OS-Festlegung:** kein Fehler, weil das ein gültiges Crawlergebnis ist); mit `--fail-on-start-error` Exit-Code 3.
+  - [ ] Start-URL nicht erreichbar → Crawl endet regulär mit 1 URL (No Response), Exit-Code 0, Warnung **(OS-Festlegung:** kein Fehler, weil das ein gültiges Crawlergebnis ist); mit `--fail-on-start-error` Exit-Code 3. Der Zustand in der Verwaltung ist Fehlgeschlagen (CRAWL-128); Exporte und der Analyse-Hook laufen, die Analyse gilt als unvollständig, die App startet keine automatische Analyse (CRAWL-141; Entscheidung Fable, B4-RESUME).
   - [ ] `openspider --crawl https://site.test/ --save-crawl --output-folder X --resolve '*.site.test=127.0.0.1'` mit demselben Profil wie ein UI-Crawl derselben Fixture ergibt dieselbe URL-Menge, dieselben Statuscodes und Tiefen (übernommen aus CRAWL-135; `--resolve` ist OS-Erweiterung, Wirkung CRAWL-123).
 - **Testfixture:** `out-basic-site`.
 

@@ -115,6 +115,12 @@ impl CrawlHandle {
         self.progress.clone()
     }
 
+    /// Ob der Lauf ganz beendet ist (Checkpoint, Writer und Hook erledigt). Der Fortschritt meldet den Endzustand
+    /// schon nach dem dauerhaften Commit; bis hierher kann die Datei noch zusammengeführt werden (AGENT-020).
+    pub fn is_finished(&self) -> bool {
+        self.task.is_finished()
+    }
+
     /// Pausiert den Crawl: keine neuen Abrufe, laufende werden gespeichert, Zustand `Paused`, die
     /// Warteschlange bleibt in der Datei. `wait()` liefert danach die Zusammenfassung (kein Abschluss-Hook).
     pub fn pause(&self) {
@@ -1062,8 +1068,22 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     // Die Hintergrundarbeit hält einen Verweis auf den gemeinsamen Zustand und damit den Writer offen: abwarten.
     while maint.join_next().await.is_some() {}
 
+    // CRAWL-128: Die Start-URL war nicht erreichbar, weiter wurde nichts abgerufen. OUT-182: Das bleibt ein gültiges Ergebnis
+    // mit einer Zeile (kein Fehler des Laufs), der Crawl gilt aber als fehlgeschlagen.
+    let only_one_page = sh
+        .progress
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .crawled()
+        == 1;
+    let start_unreachable = end == End::QueueEmpty
+        && only_one_page
+        && !sh.start_url.is_empty()
+        && start_url_unreachable(&writer, &file, &sh.start_url).await;
+
     // Endzustand
     let (state, reason) = match end {
+        End::QueueEmpty if start_unreachable => (CrawlState::Failed, None),
         End::QueueEmpty => (CrawlState::Completed, Some(EndReason::QueueEmpty)),
         End::LimitReached => (CrawlState::Completed, Some(EndReason::LimitReached)),
         End::Stopped => (CrawlState::Completed, Some(EndReason::Stopped)),
@@ -1076,7 +1096,8 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         tracker.finish(now_mono, state, reason);
         tracker.crawled()
     };
-    publish(&sh, &progress_tx);
+    // Der Endzustand wird erst veröffentlicht, wenn er samt freigegebenem `owner_pid` dauerhaft in der Datei steht
+    // (unten); wer den Zustand aus dem Fortschritt liest, findet die Datei dann schon im selben Stand.
     tracing::info!(%crawl_id, state = state.as_str(), crawled, "Crawl beendet");
     // OUT-240 (K2-61): repeat the summary for independently useful end records.
     tracing::info!(%crawl_id, mode = ?sh.cfg.mode, start_url = %os_fetch::redact::url(&sh.start_url), limits = ?sh.cfg.limits, rendering = ?sh.cfg.rendering.mode, "Crawl-Konfiguration Ende");
@@ -1085,11 +1106,15 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         && sh.cfg.rendering.mode == RenderingMode::Text
         && end != End::Failed
     {
-        sh.writer
-            .flush()
-            .await
-            .map_err(|_| EngineError::Join("Fragment-Basis nicht geschrieben".into()))?;
-        crate::heap(|| crate::fragments::materialize(&file, &sh.writer)).await?;
+        let materialized = match sh.writer.flush().await {
+            Ok(()) => crate::heap(|| crate::fragments::materialize(&file, &sh.writer)).await,
+            Err(_) => Err(EngineError::Join("Fragment-Basis nicht geschrieben".into())),
+        };
+        if let Err(e) = materialized {
+            // Beobachter des Fortschritts erfahren das Ende auch auf diesem Fehlerweg.
+            publish(&sh, &progress_tx);
+            return Err(e);
+        }
     }
 
     let mut last = WriteBatch::default();
@@ -1134,6 +1159,10 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     let mut write_ok = writer.durable().await.is_ok();
     write_ok = write_ok && sh.writer.send(last).await.is_ok();
     write_ok = write_ok && writer.flush().await.is_ok();
+    // AGENT-020, CRAWL-126: Zustand, Endgrund und die Freigabe der Besitzer-Metadaten (`owner_pid`) sind jetzt
+    // dauerhaft; erst danach meldet der Fortschritt den Endzustand (auch bei einem Schreibfehler, damit Beobachter
+    // nicht auf „Running“ stehen bleiben).
+    publish(&sh, &progress_tx);
     write_ok = write_ok && writer.checkpoint().await.is_ok();
 
     let shared_error = sh.error.lock().unwrap_or_else(|p| p.into_inner()).take();
@@ -1177,8 +1206,8 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         }
     }
     // CRAWL-141: Hook nach regulärem Ende, Limit oder Stopp – nach dem Checkpoint, vor der Auflösung von
-    // `wait()`; nie bei Pause oder Fehler.
-    if state == CrawlState::Completed {
+    // `wait()`; nie bei Pause oder Fehler. Die nicht erreichbare Start-URL endet regulär (OUT-182) und liefert Exporte.
+    if state == CrawlState::Completed || start_unreachable {
         if let Some(hook) = hook {
             let s = summary.clone();
             tokio::task::spawn_blocking(move || hook(&s))
@@ -1187,6 +1216,93 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         }
     }
     Ok(summary)
+}
+
+/// Netzfehler ohne Antwort des Hosts (CRAWL-128): DNS, Verbindung verweigert, Timeout, Verbindungsfehler oder TLS. `malformed` hat
+/// geantwortet; Sperre per robots.txt, zu viele Weiterleitungen und der Zielschutz sind keine Nichterreichbarkeit.
+fn is_network_failure(reason: Option<&str>) -> bool {
+    use os_model::NoResponseReason as R;
+    matches!(
+        reason.and_then(|r| r.parse::<R>().ok()),
+        Some(
+            R::DnsLookupFailed
+                | R::ConnectionRefused
+                | R::ConnectionTimeout
+                | R::ResponseTimeout
+                | R::ConnectionError
+                | R::TlsError
+        )
+    )
+}
+
+/// Ursache einer nicht erreichbaren Start-URL (CRAWL-128, UI-019): die Fehlerklasse der Zeile, an der der Abruf am Netz scheiterte.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartFailure {
+    /// Fehlerklasse (`dns_lookup_failed`, `connection_refused`, `connection_timeout`, `response_timeout`, `connection_error`,
+    /// `tls_error`).
+    pub reason: os_model::NoResponseReason,
+    /// Die gescheiterte URL: die Start-URL selbst oder ihre robots.txt.
+    pub url: String,
+    /// Ob die robots.txt-Hilfszeile scheiterte (die Start-URL wurde dann nach der Regel „robots.txt nicht erreichbar“ gesperrt).
+    pub robots: bool,
+}
+
+/// Liest aus der Crawl-Datei, ob und warum die Start-URL nicht erreichbar war: Grund der Start-URL-Zeile, bzw. – sperrt die Regel
+/// „robots.txt nicht erreichbar“ die Start-URL – Grund der robots.txt-Hilfszeile. Antwortete der Host dort mit 5xx oder 429, ist er
+/// erreichbar (`None`). Prüft nicht, ob die Start-URL die einzige abgerufene Seite ist; das entscheidet der Lauf (CRAWL-128).
+pub fn start_failure(crawl: &CrawlFile, start_url: &str) -> Option<StartFailure> {
+    let (reason, robots_url): (Option<String>, Option<String>) = crawl
+        .conn()
+        .query_row(
+            "SELECT no_response_reason, robots_txt_url FROM urls \
+             WHERE url = ?1 AND state = 'done' AND status_code = 0",
+            [start_url],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok()?;
+    if reason.as_deref() != Some(os_model::NoResponseReason::BlockedByRobotsUnreachable.as_str()) {
+        return network_failure(reason.as_deref()).map(|reason| StartFailure {
+            reason,
+            url: start_url.to_owned(),
+            robots: false,
+        });
+    }
+    let robots_url = robots_url?;
+    let robots_reason: Option<String> = crawl
+        .conn()
+        .query_row(
+            "SELECT no_response_reason FROM urls WHERE url = ?1 AND discovered_via = 'robots_txt'",
+            [&robots_url],
+            |r| r.get(0),
+        )
+        .ok()?;
+    network_failure(robots_reason.as_deref()).map(|reason| StartFailure {
+        reason,
+        url: robots_url,
+        robots: true,
+    })
+}
+
+fn network_failure(reason: Option<&str>) -> Option<os_model::NoResponseReason> {
+    is_network_failure(reason)
+        .then(|| reason.and_then(|r| r.parse().ok()))
+        .flatten()
+}
+
+/// Ob die einzige abgerufene Seite die Start-URL ohne Antwort ist, weil sie oder ihre robots.txt am Netz scheiterte ([`start_failure`]).
+async fn start_url_unreachable(writer: &WriterThread, file: &Path, start_url: &str) -> bool {
+    if writer.flush().await.is_err() {
+        return false;
+    }
+    let (file, start_url) = (file.to_path_buf(), start_url.to_owned());
+    tokio::task::spawn_blocking(move || {
+        let crawl = CrawlFile::open(&file, os_store::OpenMode::ReadOnly).ok()?;
+        start_failure(&crawl, &start_url)
+    })
+    .await
+    .ok()
+    .flatten()
+    .is_some()
 }
 
 // K2-61: API work runs off the asynchronous worker threads; SQLite connections stay on that thread.
@@ -1264,6 +1380,35 @@ async fn initialize_apis<F: Fetch>(
         .await
         .map_err(|_| EngineError::Join("API frontier write failed".into()))?;
     Ok(Some(run))
+}
+
+#[cfg(test)]
+mod unreachable_tests {
+    // spec: CRAWL-128
+    #[test]
+    fn only_network_failures_count_as_unreachable() {
+        for reason in [
+            "dns_lookup_failed",
+            "connection_refused",
+            "connection_timeout",
+            "response_timeout",
+            "connection_error",
+            "tls_error",
+        ] {
+            assert!(super::is_network_failure(Some(reason)), "{reason}");
+        }
+        for reason in [
+            "malformed",
+            "blocked_by_robots",
+            "blocked_by_robots_unreachable",
+            "too_many_redirects",
+            "blocked_private_target",
+            "unbekannt",
+        ] {
+            assert!(!super::is_network_failure(Some(reason)), "{reason}");
+        }
+        assert!(!super::is_network_failure(None));
+    }
 }
 
 #[cfg(test)]

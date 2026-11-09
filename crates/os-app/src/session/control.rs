@@ -527,6 +527,9 @@ pub async fn settle(app: &App, s: &SessionInfo, action: Option<bool>) -> Result<
         crate::commands::mail::on_failed(app, &s.key);
     }
     let summary = result?;
+    if summary.state == CrawlState::Failed {
+        notify_start_unreachable(app, s).await;
+    }
     feed::settled(app, s, &p);
     app.flush_tick();
     let event = match summary.state {
@@ -545,6 +548,60 @@ pub async fn settle(app: &App, s: &SessionInfo, action: Option<bool>) -> Result<
         super::analysis::start_operation(app, s.clone(), None, true)?;
     }
     Ok(())
+}
+
+/// UI-019: Ein Lauf endet nur dann regulär als „Fehlgeschlagen“, wenn die Start-URL nicht erreichbar war (CRAWL-128). Der Dialog
+/// nennt die Fehlerklasse aus der Crawl-Datei (Grund der Start-URL-Zeile bzw. der robots.txt-Hilfszeile) statt eines stillen Endes.
+async fn notify_start_unreachable(app: &App, s: &SessionInfo) {
+    let found = app
+        .read_pool()
+        .run(s.key.clone(), |f, _| {
+            Ok(f.meta()?.start_url.and_then(|start| {
+                os_engine::start_failure(f, &start).map(|failure| (start, failure))
+            }))
+        })
+        .await;
+    let notice = match found {
+        Ok(Some((start_url, failure))) => start_unreachable_notice(&start_url, &failure),
+        other => {
+            if let Err(error) = other {
+                tracing::warn!(
+                    ?error,
+                    "Ursache der nicht erreichbaren Start-URL nicht lesbar"
+                );
+            }
+            // Nie still: ohne lesbare Ursache bleibt die allgemeine Fehlermeldung.
+            Notice {
+                level: NoticeLevel::Error,
+                code: "crawl-failed".into(),
+                args: Default::default(),
+            }
+        }
+    };
+    app.push_notice(notice);
+}
+
+/// Meldung zur nicht erreichbaren Start-URL (UI-019): Code nach Fehlerklasse (`start-dns`, `start-connection`, `start-timeout`,
+/// `start-tls`), dazu die Fehlerklasse selbst (`reason`), die gescheiterte URL und ob es die robots.txt war.
+pub fn start_unreachable_notice(start_url: &str, failure: &os_engine::StartFailure) -> Notice {
+    use os_model::NoResponseReason as R;
+    let code = match failure.reason {
+        R::DnsLookupFailed => "start-dns",
+        R::ConnectionTimeout | R::ResponseTimeout => "start-timeout",
+        R::TlsError => "start-tls",
+        _ => "start-connection",
+    };
+    Notice {
+        level: NoticeLevel::Error,
+        code: code.into(),
+        args: [
+            ("startUrl".into(), serde_json::json!(start_url)),
+            ("url".into(), serde_json::json!(failure.url)),
+            ("reason".into(), serde_json::json!(failure.reason.as_str())),
+            ("robots".into(), serde_json::json!(failure.robots)),
+        ]
+        .into(),
+    }
 }
 
 async fn start_apis(

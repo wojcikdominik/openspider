@@ -190,7 +190,7 @@ jobs:
         run: |
           $signed = '${{ steps.signing.outputs.ready }}' -eq 'true'
           ./apps/desktop/src-tauri/windows/smoke.ps1 -BundleDir $env:BUNDLE_DIR -Signed:$signed
-          'NSIS + MSI: stille Installation/Deinstallation, PATH, Startmenü, Dateizuordnung, Aufgaben und Benutzerdaten OK.' >> $env:GITHUB_STEP_SUMMARY
+          'NSIS + MSI: stille Installation/Deinstallation, Bundle-Kennung der App-EXE (NSS/MSI), PATH, Startmenü, Dateizuordnung, Aufgaben und Benutzerdaten OK.' >> $env:GITHUB_STEP_SUMMARY
       - name: Artefakte sammeln
         run: |
           New-Item -ItemType Directory -Force release-artifacts | Out-Null

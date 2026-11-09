@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="tests/release/rel.test.mjs">
+	<testcase name="Linux-Archiv steht im Manifest" time="0.001" classname="test"/>
+</testsuite></testsuites>

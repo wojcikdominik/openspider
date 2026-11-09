@@ -189,8 +189,9 @@ async fn listing(app: &App, args: serde_json::Value) -> CmdResult {
         let own = sessions
             .iter()
             .any(|s| s.key.0 == l.meta.crawl_id.to_string() && s.engine.is_some());
-        let can_resume =
-            l.meta.end_reason != Some(os_model::EndReason::Stopped) && l.can_resume(now);
+        // CRAWL-128: `can_resume` already excludes the end reason `stopped` (shared core rule).
+        let can_resume = l.can_resume(now);
+        let end_reason = l.meta.end_reason.map(|r| r.as_str().to_string());
         let duration_ms = l.duration_ms.or_else(|| {
             l.meta.started_at.map(|start| {
                 let end = l.meta.ended_at.or(l.meta.heartbeat_at).unwrap_or(now);
@@ -231,6 +232,7 @@ async fn listing(app: &App, args: serde_json::Value) -> CmdResult {
             start_url: l.meta.start_url,
             duration_ms,
             can_resume,
+            end_reason,
         });
     }
     if let Some(sort) = query.sort {

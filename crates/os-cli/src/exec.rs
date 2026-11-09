@@ -498,11 +498,8 @@ async fn crawl_phase(
                  dem Freigeben von Platz mit `openspider --load-crawl {id} --resume` fortsetzen"
             )));
         }
-        CrawlState::Failed => {
-            return Err(CliError::crawl(
-                "Der Crawl ist fehlgeschlagen und wurde nicht abgeschlossen",
-            ));
-        }
+        // Ein Lauf endet nur mit nicht erreichbarer Start-URL fehlerfrei als `Failed` (CRAWL-128); das bleibt ein gültiges
+        // Ergebnis mit Warnung, `--fail-on-start-error` entscheidet über den Exit-Code (OUT-182). Andere Fehler sind `Err`.
         _ => {}
     }
     if signals.is_interrupted() {

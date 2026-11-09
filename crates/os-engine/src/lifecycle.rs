@@ -3,7 +3,8 @@
 //!
 //! **Fortsetzen** ([`resume_crawl`]): Zustand und Warteschlange liegen in der Crawl-Datei (`resume.rs`). Der
 //! Aufruf prüft zuerst den Zustand (`Pausiert` und `Unterbrochen` lassen sich fortsetzen, `Abgeschlossen` nur mit
-//! nicht leerer Warteschlange – z. B. nach einem Limit –, `Fehlgeschlagen` und ein lebender Lauf nicht), wendet
+//! nicht leerer Warteschlange – z. B. nach einem Limit –, `Fehlgeschlagen`, ein lebender Lauf und jeder Crawl mit
+//! Endgrund `stopped` nicht: „Gestoppt ist endgültig“, CRAWL-128, AGENT-020), wendet
 //! die geänderte Konfiguration an, verwirft Warteschlangeneinträge, die die Include/Exclude-Regeln jetzt
 //! ausschließen, setzt `owner_kind`/`owner_pid` neu und startet denselben Lauf wie `start_crawl`.
 //!
@@ -13,6 +14,9 @@
 //! der Konfiguration), Crawl-Bereich, Rendering-Modus – [`check_config_change`] weist sie mit „neuer Crawl
 //! nötig“ ab. [`apply_paused_config`] wendet eine Änderung sofort an (Konfigurationsdialog „OK“): sie speichert
 //! die Konfiguration und verwirft passende Warteschlangeneinträge, damit der Zähler „verbleibend“ gleich sinkt.
+//!
+//! **Stoppen ohne laufende Engine** ([`stop_unowned`]): Ein pausierter oder unterbrochener Crawl wird mit einem
+//! dauerhaften Commit endgültig beendet (UI-003 „Stoppen“ aus „Pausiert“, AGENT-020 `stop_crawl`).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -21,8 +25,8 @@ use std::time::Duration;
 
 use os_fetch::Fetch;
 use os_model::{
-    CrawlConfig, CrawlMode, CrawlState, NotCrawledReason, QueueOp, Timestamp, UrlId, UrlState,
-    UrlUpdate, WriteBatch,
+    CrawlConfig, CrawlMode, CrawlState, EndReason, NotCrawledReason, QueueOp, Timestamp, UrlId,
+    UrlState, UrlUpdate, WriteBatch,
 };
 use os_store::{CrawlFile, OpenMode, SqliteSink};
 use os_url::{RuleDecision, RuleSet, Scope};
@@ -31,7 +35,17 @@ use crate::crawl::{self, CrawlHandle, Setup, MAX_THREADS};
 use crate::error::EngineError;
 use crate::frontier::{CrawlScope, COUNTER_EXCLUDED, COUNTER_NOT_INCLUDED};
 use crate::resume::{self, PrimedFetch};
-use crate::types::EngineDeps;
+use crate::types::{CrawlSummary, EngineDeps};
+
+/// Zustandsangabe eines gestoppten Crawls in Ablehnungen (CRAWL-128: CLI, MCP und Engine nennen denselben Hinweis).
+pub const STOPPED_IS_FINAL: &str = "gestoppt – endgültig beendet";
+
+/// Ablehnung für jeden Crawl mit Endgrund `stopped` (CRAWL-128, UI-003, AGENT-020: „Gestoppt ist endgültig“).
+pub fn stopped_error() -> EngineError {
+    EngineError::Invalid(format!(
+        "Der Crawl ist {STOPPED_IS_FINAL} und lässt sich nicht fortsetzen – für weitere URLs einen neuen Crawl starten"
+    ))
+}
 
 /// Ergebnis von [`apply_paused_config`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -235,6 +249,9 @@ fn prepare(
     let file = CrawlFile::open(path, OpenMode::ReadWrite)?;
     let state = ensure_not_running(&file, deps)?;
     let meta = file.meta()?;
+    if meta.end_reason == Some(EndReason::Stopped) {
+        return Err(stopped_error());
+    }
     match state {
         CrawlState::Failed => {
             return Err(EngineError::Invalid(
@@ -544,6 +561,10 @@ pub fn add_urls_to_file(
             "Der Crawl kann keine zusätzlichen URLs aufnehmen".into(),
         ));
     }
+    // Ein gestoppter Crawl wird nicht fortgesetzt (CRAWL-128); eingereihte URLs blieben sonst liegen.
+    if meta.end_reason == Some(EndReason::Stopped) {
+        return Err(stopped_error());
+    }
     let start = meta
         .start_url
         .ok_or_else(|| EngineError::Invalid("Start-URL fehlt".into()))?;
@@ -561,5 +582,68 @@ pub fn add_urls_to_file(
     let mut sink = SqliteSink::open(file.path(), os_store::StorageProfile::Balanced)?;
     sink.write(batch)?;
     sink.checkpoint()?;
+    Ok(summary)
+}
+
+/// Beendet einen pausierten oder unterbrochenen Crawl, den keine Engine abarbeitet, endgültig (UI-003 „Stoppen“ aus
+/// „Pausiert“, AGENT-020 `stop_crawl`, CRAWL-126): ein Commit mit `synchronous = FULL` setzt Zustand `Completed`,
+/// Endgrund `stopped`, `ended_at`/`heartbeat_at` und gibt `owner_pid` frei; die Warteschlange bleibt erhalten. Danach
+/// läuft der Hook wie nach einem regulären Ende (CRAWL-141). Ein laufender oder schon beendeter Crawl wird abgewiesen.
+pub fn stop_unowned(path: &Path, deps: &EngineDeps) -> Result<CrawlSummary, EngineError> {
+    let file = CrawlFile::open(path, OpenMode::ReadWrite)?;
+    let state = ensure_not_running(&file, deps)?;
+    let meta = file.meta()?;
+    if !matches!(state, CrawlState::Paused | CrawlState::Incomplete) {
+        return Err(EngineError::Invalid(format!(
+            "Der Crawl ist bereits beendet ({})",
+            state.as_str()
+        )));
+    }
+    let now = deps.clock.now().to_db();
+    let conn = file.conn();
+    conn.pragma_update(None, "synchronous", "FULL")
+        .map_err(os_store::StoreError::from)?;
+    // Ein atomarer Commit; die Schreibsperre vor dem Schreiben (wie die Stopp-Prüfung der App).
+    conn.execute_batch("BEGIN IMMEDIATE")
+        .map_err(os_store::StoreError::from)?;
+    let written = [
+        ("state", CrawlState::Completed.as_str()),
+        ("end_reason", EndReason::Stopped.as_str()),
+        ("ended_at", now.as_str()),
+        ("heartbeat_at", now.as_str()),
+        ("owner_pid", ""),
+    ]
+    .into_iter()
+    .try_for_each(|(key, value)| file.set_meta(key, value));
+    match written {
+        Ok(()) => conn
+            .execute_batch("COMMIT")
+            .map_err(os_store::StoreError::from)?,
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(e.into());
+        }
+    }
+    // Die Rückführung des WAL ist ein Nachlauf; Leser können sie verzögern (CRAWL-126).
+    let _ = file.checkpoint_and_truncate();
+    let crawled: i64 = file
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM urls WHERE state = 'done' AND discovered_via != 'robots_txt'",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(os_store::StoreError::from)?;
+    drop(file);
+    let summary = CrawlSummary {
+        crawl_id: meta.crawl_id,
+        file: path.to_path_buf(),
+        state: CrawlState::Completed,
+        end_reason: Some(EndReason::Stopped),
+        crawled: crawled.max(0) as u64,
+    };
+    if let Some(hook) = &deps.on_finished {
+        hook(&summary);
+    }
     Ok(summary)
 }

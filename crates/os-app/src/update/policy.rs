@@ -1,7 +1,10 @@
 //! Shared, Tauri-free check policy. Also compiled by the CLI through a source module.
-use super::manifest::{https_url, platform_key, UpdateManifest};
+use super::manifest::{https_url, platform_key, PlatformEntry, UpdateManifest};
 use os_model::settings::{NetworkSettings, UpdateSettings};
-use std::{sync::Mutex, time::Duration};
+use std::{
+    sync::{Mutex, OnceLock},
+    time::Duration,
+};
 pub const USER_AGENT: &str = "OpenSpider-Updater";
 pub const STABLE_ENDPOINT: &str =
     "https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json";
@@ -13,6 +16,87 @@ pub enum Disabled {
     Environment,
     MissingPublicKey,
     InvalidPublicKey,
+    /// Windows: Installationsart (MSI/NSIS) nicht sicher bestimmbar; kein Paket wird angefordert.
+    UnknownInstaller,
+}
+/// Release-Seite für den manuellen Download, wenn kein automatisches Update möglich ist.
+pub const RELEASES_PAGE: &str = "https://github.com/wojcikdominik/openspider/releases/latest";
+
+/// Welches Paket der Update-Kern aus dem Manifest anfordert (OUT-266: MSI pro Maschine, NSIS pro Benutzer).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Installer {
+    /// Plattform ohne Installer-Varianten (macOS): Schlüssel `{os}-{arch}`.
+    Platform,
+    /// MSI-Installation (pro Maschine): Schlüssel `{os}-{arch}-msi`.
+    Msi,
+    /// NSIS-Installation (pro Benutzer): Schlüssel `{os}-{arch}-nsis`.
+    Nsis,
+    /// Windows, Art nicht sicher bestimmbar: keine Anfrage, Hinweis auf manuellen Download.
+    Unknown,
+    /// Nur Verfügbarkeit melden (CLI, installiert nie): irgendein Eintrag dieser Plattform genügt.
+    AnyReportOnly,
+}
+impl Installer {
+    /// Installationsart aus der beim Bau eingebetteten Bundle-Kennung. Der Tauri-Bundler schreibt sie je Paket in
+    /// die ausgelieferte EXE (MSI → `msi`, NSIS → `nsis`); `tauri-plugin-updater` wählt beim Herunterladen mit
+    /// derselben Kennung, Prüfung und Download nutzen also eine Quelle. Fehlt sie oder ist sie fremd (ungepatchter
+    /// Build), gilt unter Windows „unbekannt“. Andere Systeme haben keine Installer-Varianten.
+    pub fn detect(os: &str, bundle_type: Option<&str>) -> Self {
+        if os != "windows" {
+            return Self::Platform;
+        }
+        match bundle_type.map(str::to_ascii_lowercase).as_deref() {
+            Some("msi") => Self::Msi,
+            Some("nsis") => Self::Nsis,
+            _ => Self::Unknown,
+        }
+    }
+    fn suffix(self) -> Option<&'static str> {
+        match self {
+            Self::Msi => Some("msi"),
+            Self::Nsis => Some("nsis"),
+            Self::Platform | Self::Unknown | Self::AnyReportOnly => None,
+        }
+    }
+}
+
+static BUNDLE_TYPE: OnceLock<Option<String>> = OnceLock::new();
+/// Die Desktop-App meldet beim Start die eingebettete Bundle-Kennung (Tauri-frei gekapselt); das CLI tut es nie.
+pub fn register_bundle_type(bundle_type: Option<&str>) {
+    let _ = BUNDLE_TYPE.set(bundle_type.map(str::to_owned));
+}
+fn registered_bundle_type() -> Option<&'static str> {
+    BUNDLE_TYPE.get().and_then(|b| b.as_deref())
+}
+/// Systemname wie im Manifest-Schlüssel (`darwin` statt `macos`).
+fn current_os() -> String {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    }
+    .into()
+}
+/// Text der WARN-Zeile für den Support (B4-RELCHECK), wenn die Installationsart unter Windows unbekannt ist, etwa weil
+/// der Bundler die Kennung nicht in die EXE gepatcht hat. `None`, wenn die Art bekannt ist oder es keine Varianten gibt.
+pub fn unknown_installer_warning(os: &str, bundle_type: Option<&str>) -> Option<String> {
+    (Installer::detect(os, bundle_type) == Installer::Unknown).then(|| {
+        format!(
+            "Installationsart unbekannt: keine MSI- oder NSIS-Kennung in der EXE (gefunden: {}); \
+             automatische Updates sind abgeschaltet, manueller Download: {RELEASES_PAGE}",
+            bundle_type.unwrap_or("keine")
+        )
+    })
+}
+/// Beim Start der Desktop-App, nach dem Einrichten des Logs und nach `register_bundle_type`: eine WARN-Zeile bei
+/// unbekannter Installationsart. Nur Diagnose; die Prüfung schaltet sich unabhängig davon über
+/// `Disabled::UnknownInstaller` ab.
+pub fn log_unknown_installer() {
+    log_installer_diagnosis(&current_os(), registered_bundle_type());
+}
+fn log_installer_diagnosis(os: &str, bundle_type: Option<&str>) {
+    if let Some(message) = unknown_installer_warning(os, bundle_type) {
+        tracing::warn!("{message}");
+    }
 }
 #[derive(Debug)]
 pub enum Outcome {
@@ -27,7 +111,7 @@ pub struct UpdateContext {
     pub current: semver::Version,
     pub os: String,
     pub arch: String,
-    pub installer: Option<String>,
+    pub installer: Installer,
     pub pubkey: String,
     pub settings: UpdateSettings,
     pub disabled_by_environment: bool,
@@ -40,17 +124,14 @@ pub struct UpdateContext {
 impl Default for UpdateContext {
     fn default() -> Self {
         let beta = option_env!("OPENSPIDER_UPDATE_BETA") == Some("1");
+        let os = current_os();
         Self {
             endpoint: if beta { BETA_ENDPOINT } else { STABLE_ENDPOINT }.into(),
             beta,
             current: semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("package SemVer"),
-            os: match std::env::consts::OS {
-                "macos" => "darwin",
-                other => other,
-            }
-            .into(),
+            installer: Installer::detect(&os, registered_bundle_type()),
+            os,
             arch: std::env::consts::ARCH.into(),
-            installer: cfg!(windows).then(|| "nsis".into()),
             pubkey: option_env!("OPENSPIDER_UPDATER_PUBKEY")
                 .unwrap_or("")
                 .into(),
@@ -74,12 +155,40 @@ impl UpdateContext {
             Some(Disabled::MissingPublicKey)
         } else if super::verify::public_key(&self.pubkey).is_err() {
             Some(Disabled::InvalidPublicKey)
+        } else if self.installer == Installer::Unknown {
+            Some(Disabled::UnknownInstaller)
         } else {
             None
         }
     }
-    pub fn target(&self) -> String {
-        platform_key(&self.os, &self.arch, self.installer.as_deref())
+    /// Manifest-Schlüssel des Pakets, das zu dieser Installation passt; `None`, wenn keins angefordert werden darf.
+    pub fn target(&self) -> Option<String> {
+        match self.installer {
+            Installer::Unknown | Installer::AnyReportOnly => None,
+            kind => Some(platform_key(&self.os, &self.arch, kind.suffix())),
+        }
+    }
+    /// Passender Manifest-Eintrag. Kein Rückfall auf ein anderes Installer-Paket: eine MSI-Installation bekommt nie
+    /// das NSIS-Paket und umgekehrt. Nur `AnyReportOnly` (CLI) nimmt irgendeinen Eintrag dieser Plattform.
+    pub fn select<'a>(&self, manifest: &'a UpdateManifest) -> Option<(&'a str, &'a PlatformEntry)> {
+        if self.installer == Installer::AnyReportOnly {
+            let base = platform_key(&self.os, &self.arch, None);
+            return manifest
+                .platforms
+                .iter()
+                .find(|(key, _)| {
+                    key.as_str() == base
+                        || key
+                            .strip_prefix(base.as_str())
+                            .is_some_and(|rest| rest.starts_with('-'))
+                })
+                .map(|(key, entry)| (key.as_str(), entry));
+        }
+        let target = self.target()?;
+        manifest
+            .platforms
+            .get_key_value(&target)
+            .map(|(key, entry)| (key.as_str(), entry))
     }
 }
 /// Five seconds covers DNS, TLS, redirects and response streaming together.
@@ -163,7 +272,7 @@ pub async fn fetch(ctx: &UpdateContext) -> Result<Outcome, String> {
         if !manifest.is_newer_than(&ctx.current) {
             return Ok(Outcome::Current);
         }
-        if !manifest.platforms.contains_key(&ctx.target()) {
+        if ctx.select(&manifest).is_none() {
             return Err("Kein Update für diese Plattform".into());
         }
         Ok(Outcome::Available(manifest))
@@ -384,5 +493,206 @@ mod policy_tests {
         assert_eq!(env_value(Some("")), PolicyValue::Missing);
         assert_eq!(env_value(None), PolicyValue::Missing);
         assert_eq!(env_value(Some("ja")), PolicyValue::Invalid);
+    }
+}
+
+#[cfg(test)]
+mod installer_tests {
+    use super::*;
+
+    const RELEASE: &str = include_str!("../../../../tests/fixtures/update/release-manifest.json");
+    const PUBKEY: &str = include_str!("../../../../tests/fixtures/update/test.key.pub");
+
+    fn release() -> UpdateManifest {
+        serde_json::from_str(RELEASE).unwrap()
+    }
+    fn ctx(os: &str, arch: &str, installer: Installer) -> UpdateContext {
+        UpdateContext {
+            os: os.into(),
+            arch: arch.into(),
+            installer,
+            pubkey: PUBKEY.trim().into(),
+            disabled_by_environment: false,
+            ..Default::default()
+        }
+    }
+    fn selected(ctx: &UpdateContext, manifest: &UpdateManifest) -> Option<(String, String)> {
+        ctx.select(manifest)
+            .map(|(key, entry)| (key.to_owned(), entry.url.clone()))
+    }
+
+    // spec: OUT-262
+    // spec: OUT-253
+    #[test]
+    fn detects_msi_nsis_and_unknown_from_the_embedded_bundle_marker() {
+        // Gemockte Umgebung: die Kennung, die der Bundler je Paket in die EXE schreibt.
+        assert_eq!(Installer::detect("windows", Some("msi")), Installer::Msi);
+        assert_eq!(Installer::detect("windows", Some("MSI")), Installer::Msi);
+        assert_eq!(Installer::detect("windows", Some("nsis")), Installer::Nsis);
+        // Ungepatchter Build, fremde oder leere Kennung: nicht sicher bestimmbar.
+        for marker in [
+            None,
+            Some(""),
+            Some("app"),
+            Some("deb"),
+            Some("exe"),
+            Some("msix"),
+        ] {
+            assert_eq!(
+                Installer::detect("windows", marker),
+                Installer::Unknown,
+                "{marker:?}"
+            );
+        }
+        // Ohne Installer-Varianten (macOS, Linux) spielt die Kennung keine Rolle.
+        for marker in [None, Some("app"), Some("msi")] {
+            assert_eq!(Installer::detect("darwin", marker), Installer::Platform);
+            assert_eq!(Installer::detect("linux", marker), Installer::Platform);
+        }
+        // Die Desktop-App meldet die Kennung beim Start; UpdateContext::default() übernimmt sie.
+        register_bundle_type(Some("msi"));
+        let os = UpdateContext::default().os;
+        assert_eq!(
+            UpdateContext::default().installer,
+            Installer::detect(&os, Some("msi"))
+        );
+    }
+
+    // spec: OUT-262
+    #[test]
+    fn warns_at_startup_only_when_the_windows_installer_is_unknown() {
+        // B4-RELCHECK: Diagnosezeile ohne Kennung (ungepatchter Build) oder mit fremder Kennung.
+        let missing = unknown_installer_warning("windows", None).expect("Warnung ohne Kennung");
+        assert!(missing.contains("gefunden: keine"), "{missing}");
+        assert!(missing.contains(RELEASES_PAGE), "{missing}");
+        let foreign =
+            unknown_installer_warning("windows", Some("app")).expect("Warnung mit fremder Kennung");
+        assert!(foreign.contains("gefunden: app"), "{foreign}");
+        for marker in [Some("msi"), Some("nsis")] {
+            assert_eq!(
+                unknown_installer_warning("windows", marker),
+                None,
+                "{marker:?}"
+            );
+        }
+        for os in ["darwin", "linux"] {
+            assert_eq!(unknown_installer_warning(os, None), None, "{os}");
+        }
+
+        // Die Zeile erscheint auf Stufe WARN, bei bekannter Art gar nicht.
+        #[derive(Clone, Default)]
+        struct Buffer(std::sync::Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Buffer {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(data);
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let logged = |os: &str, marker: Option<&str>| {
+            let buffer = Buffer::default();
+            let writer = buffer.clone();
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(move || writer.clone())
+                .with_ansi(false)
+                .finish();
+            tracing::subscriber::with_default(subscriber, || log_installer_diagnosis(os, marker));
+            let bytes = buffer.0.lock().unwrap().clone();
+            String::from_utf8(bytes).unwrap()
+        };
+        let line = logged("windows", None);
+        assert!(line.contains("WARN"), "{line}");
+        assert!(line.contains("Installationsart unbekannt"), "{line}");
+        assert_eq!(logged("windows", Some("msi")), "");
+        assert_eq!(logged("darwin", None), "");
+    }
+
+    // spec: OUT-262
+    // spec: OUT-261
+    #[test]
+    fn selects_only_the_manifest_entry_of_the_own_installer() {
+        let manifest = release();
+        manifest.validate(false).unwrap();
+        let base = "https://github.com/wojcikdominik/openspider/releases/download/v1.0.1/";
+        let msi = ctx("windows", "x86_64", Installer::Msi);
+        assert_eq!(msi.target().as_deref(), Some("windows-x86_64-msi"));
+        assert_eq!(
+            selected(&msi, &manifest),
+            Some((
+                "windows-x86_64-msi".into(),
+                format!("{base}OpenSpider_1.0.1_x64_en-US.msi")
+            ))
+        );
+        let nsis = ctx("windows", "x86_64", Installer::Nsis);
+        assert_eq!(
+            selected(&nsis, &manifest),
+            Some((
+                "windows-x86_64-nsis".into(),
+                format!("{base}OpenSpider_1.0.1_x64-setup.exe")
+            ))
+        );
+        let mac = ctx("darwin", "aarch64", Installer::Platform);
+        assert_eq!(
+            selected(&mac, &manifest),
+            Some((
+                "darwin-aarch64".into(),
+                format!("{base}OpenSpider_aarch64.app.tar.gz")
+            ))
+        );
+        // Kein Rückfall auf das andere Installer-Paket, wenn der eigene Eintrag fehlt.
+        let mut only_nsis = release();
+        only_nsis.platforms.remove("windows-x86_64-msi");
+        assert_eq!(selected(&msi, &only_nsis), None);
+        let mut only_msi = release();
+        only_msi.platforms.remove("windows-x86_64-nsis");
+        assert_eq!(selected(&nsis, &only_msi), None);
+        // Unbekannte Installationsart: es wird kein Paket angefordert.
+        let unknown = ctx("windows", "x86_64", Installer::Unknown);
+        assert_eq!(unknown.target(), None);
+        assert_eq!(selected(&unknown, &manifest), None);
+        // Das CLI meldet nur Verfügbarkeit: irgendein Eintrag der eigenen Plattform genügt, eine fremde Plattform nicht.
+        assert!(selected(
+            &ctx("windows", "x86_64", Installer::AnyReportOnly),
+            &only_msi
+        )
+        .is_some());
+        assert!(selected(
+            &ctx("windows", "aarch64", Installer::AnyReportOnly),
+            &manifest
+        )
+        .is_none());
+        assert!(selected(&ctx("linux", "x86_64", Installer::AnyReportOnly), &manifest).is_none());
+        assert!(selected(
+            &ctx("darwin", "x86_64", Installer::AnyReportOnly),
+            &manifest
+        )
+        .is_some());
+    }
+
+    // spec: OUT-262
+    #[test]
+    fn unknown_installer_disables_the_check_before_any_request() {
+        let unknown = ctx("windows", "x86_64", Installer::Unknown);
+        assert_eq!(unknown.disabled(), Some(Disabled::UnknownInstaller));
+        assert!(matches!(
+            reserve(&unknown, true),
+            Ok(Some(Outcome::Disabled(Disabled::UnknownInstaller)))
+        ));
+        // Keine Reservierung: es folgt keine Anfrage an den Update-Server.
+        assert!(unknown.last_attempt.lock().unwrap().is_none());
+        // Richtlinie und Einstellung gehen vor (OUT-253): ihr Hinweis bleibt sichtbar.
+        let mut by_policy = ctx("windows", "x86_64", Installer::Unknown);
+        by_policy.disabled_by_environment = true;
+        assert_eq!(by_policy.disabled(), Some(Disabled::Environment));
+        for installer in [
+            Installer::Msi,
+            Installer::Nsis,
+            Installer::Platform,
+            Installer::AnyReportOnly,
+        ] {
+            assert_eq!(ctx("windows", "x86_64", installer).disabled(), None);
+        }
     }
 }

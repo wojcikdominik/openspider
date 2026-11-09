@@ -25,6 +25,8 @@ foreach ($kind in @('msi', 'nsis')) {
             Invoke-Installer $installer "/S /D=$install"
         }
         $installed = $true
+        # B4-RELCHECK R1: Bundle-Kennung der installierten Desktop-EXE (Paketwahl des Updaters, OUT-262).
+        & "$PSScriptRoot/../release/check-bundle-marker.ps1" -InstallDir $install -Kind $kind
         # Python discovers the CLI in the installed payload, never in the downloaded loose CLI.
         python scripts/smoke/installed.py --install-dir $install --testsite $Testsite --chromium $Chromium --output "$Output/$kind"
         if ($LASTEXITCODE -ne 0) { throw "Installed $kind smoke failed" }

@@ -1,0 +1,4 @@
+import { test } from 'node:test';
+
+// spec: OUT-273 [M3]
+test('Linux-Archiv steht im Manifest', () => {});

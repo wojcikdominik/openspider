@@ -181,6 +181,13 @@ Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, ST
 - **Priorität:** P0
 - **Werkzeugklasse:** `crawl` (AGENT-003)
 - **Beschreibung:** `start_crawl(url | url_list, config_profile?, overrides?)` gibt Crawl-ID zurück; `crawl_status(id)` (Fortschritt, URLs/s, Fehler); `stop_crawl(id)` beendet den Crawl endgültig (Endgrund `stopped`, UI-003); `resume_crawl(id)` setzt nur pausierte, unterbrochene oder durch ein Limit beendete Crawls fort (Entscheidung (Fable-Empfehlung) vom 05.11.2026; Umsetzung mit beta.4, zusammen mit einem Werkzeug `pause_crawl(id)` für unterbrechbares Anhalten).
+- **Fehlercode `busy` (Nachtrag beta.4):** Ein Crawl-Werkzeug, das wegen vorübergehender Belegung nicht ausgeführt werden kann, liefert einen MCP-Fehler mit dem wiederholbaren Code `busy`: Der Text beginnt mit `busy:`, zusätzlich `structuredContent.error` = `{code: "busy", retryable: true, message}`. Ein späterer Aufruf mit denselben Argumenten kann gelingen; alle übrigen MCP-Fehler tragen keinen Code. Fälle (Entscheidung Fable, B4-RESUME): Eine Pause oder ein Stopp läuft noch, der Endzustand wird noch gespeichert, die App führt eine andere Operation aus.
+- **Antworten der Steuerwerkzeuge (Entscheidungen Fable, B4-RESUME):**
+  - `pause_crawl` antwortet, sobald die Pause angefordert ist; `Paused` meldet `crawl_status` nach dem dauerhaften Commit (CRAWL-126). Der In-App-Server darf erst dann antworten.
+  - Doppelte Steuerbefehle sind Fehler, nicht idempotent: `pause_crawl` auf einem pausierten oder beendeten Crawl, `stop_crawl` auf einem beendeten.
+  - `stop_crawl` gilt auch für unterbrochene Crawls.
+  - `crawl_status` liefert `state`, `errors` und `progress`; `progress` mit den Feldern von `--json-progress` (CRAWL-130), solange der Server den letzten Lauf des Crawls kennt und dieser zum Zustand passt.
+  - `owner_pid` ist leer, sobald kein Prozess den Crawl führt (Pause, Stopp, Ende). Nach einem harten Abbruch lässt sich das nicht mehr schreiben; dort gilt der Heartbeat (CRAWL-125).
 - **Akzeptanzkriterien:**
   - [ ] Gleiches Ergebnis wie gleichwertiger CLI-Aufruf (aus OUT-285).
   - [ ] Läuft die Desktop-App, erscheint ein per MCP gestarteter Crawl dort live.

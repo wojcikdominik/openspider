@@ -7,7 +7,7 @@
   "rows": [
     {"id":"0199f000-0000-7000-8000-000000000001","name":"Alpha","project":"Kunde A","phase":"paused","locked":false,"size":1024,"startUrl":"https://alpha.test/","canResume":true},
     {"id":"0199f000-0000-7000-8000-000000000002","name":"Beta","project":"Kunde A","phase":"completed","locked":false,"size":2048,"startUrl":"https://beta.test/","canResume":false},
-    {"id":"0199f000-0000-7000-8000-000000000003","name":"Geschützt","project":"Archiv","phase":"completed","locked":true,"size":4096,"startUrl":"https://archive.test/","canResume":false},
+    {"id":"0199f000-0000-7000-8000-000000000003","name":"Geschützt","project":"Archiv","phase":"completed","locked":true,"size":4096,"startUrl":"https://archive.test/","canResume":false,"endReason":"stopped"},
     {"id":"0199f000-0000-7000-8000-000000000004","name":"Live","project":null,"phase":"running","locked":false,"size":8192,"startUrl":"https://live.test/","canResume":false},
     {"id":"0199f000-0000-7000-8000-000000000005","name":"Interrupted","project":null,"phase":"incomplete","locked":false,"size":512,"startUrl":"https://interrupted.test/","canResume":true},
     {"id":"0199f000-0000-7000-8000-000000000006","name":"Failed","project":null,"phase":"failed","locked":false,"size":256,"startUrl":"https://failed.test/","canResume":false},

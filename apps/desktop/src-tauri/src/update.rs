@@ -127,9 +127,21 @@ impl<R: Runtime> UpdateBackend for Native<R> {
         })
     }
 }
+/// B4-MSIUPD: Installationsart für die Update-Prüfung aus derselben eingebetteten Bundle-Kennung, mit der
+/// tauri-plugin-updater beim Herunterladen das Paket wählt (MSI → `-msi`, NSIS → `-nsis`, sonst unbekannt).
+///
+/// B4-RELCHECK: Aufruf vor `App::new`. `App::new` startet bereits die erste Update-Prüfung
+/// (`check_updates_on_startup`) als Aufgabe, und deren `UpdateContext::default()` liest die Kennung; eine spätere
+/// Meldung könnte diese Prüfung verpassen und sie fälschlich als „unbekannte Installationsart“ abschalten.
+pub fn register_installer() {
+    let bundle_type = tauri::utils::platform::bundle_type().map(|b| b.to_string());
+    os_app::update::policy::register_bundle_type(bundle_type.as_deref());
+}
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("openspider-update")
         .setup(|handle, _| {
+            // B4-RELCHECK: Diagnosezeile (WARN) für den Support, wenn die Kennung fehlt; das Log ist eingerichtet.
+            os_app::update::policy::log_unknown_installer();
             let app = handle.state::<App>().inner().clone();
             os_app::update::download::set_backend(
                 &app,
@@ -144,4 +156,39 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             Ok(())
         })
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use os_app::update::{policy::Installer, UpdateContext, UpdateManifest};
+    use tauri::utils::config::BundleType;
+
+    const RELEASE: &str = include_str!("../../../../tests/fixtures/update/release-manifest.json");
+
+    // spec: OUT-262
+    #[test]
+    fn bundle_type_display_matches_the_installer_detection_in_os_app() {
+        // B4-RELCHECK R2: `register_installer` reicht `BundleType::to_string()` an `Installer::detect` weiter. Ändert
+        // Tauri diese Darstellung, gälte jede Windows-Installation als unbekannt und bekäme keine Updates.
+        assert_eq!(BundleType::Msi.to_string(), "msi");
+        assert_eq!(BundleType::Nsis.to_string(), "nsis");
+        let manifest: UpdateManifest = serde_json::from_str(RELEASE).unwrap();
+        for (bundle, installer, suffix) in [
+            (BundleType::Msi, Installer::Msi, ".msi"),
+            (BundleType::Nsis, Installer::Nsis, "-setup.exe"),
+        ] {
+            let detected = Installer::detect("windows", Some(&bundle.to_string()));
+            assert_eq!(detected, installer, "{bundle}");
+            let context = UpdateContext {
+                os: "windows".into(),
+                arch: "x86_64".into(),
+                installer: detected,
+                ..Default::default()
+            };
+            let (_, entry) = context
+                .select(&manifest)
+                .expect("Eintrag im Release-Manifest");
+            assert!(entry.url.ends_with(suffix), "{bundle}: {}", entry.url);
+        }
+    }
 }

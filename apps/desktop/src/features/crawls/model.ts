@@ -9,6 +9,10 @@ export function cell(row: CrawlListing, column: Column): string | number | boole
   if (column === "project" || column === "startUrl" || column === "durationMs" || column === "locked") return row[column] ?? "";
   return row.crawl[column];
 }
+/** CRAWL-128: a stopped crawl stays `Completed` (export key) but the management shows „Abgeschlossen (gestoppt)“. */
+export function phaseKey(row: CrawlListing): string {
+  return row.crawl.phase === "completed" && row.endReason === "stopped" ? "crawls-phase-completed-stopped" : `crawls-phase-${row.crawl.phase}`;
+}
 export function sortRows(rows: CrawlListing[], column: Column, direction: "asc" | "desc"): CrawlListing[] {
   return [...rows].sort((a, b) => {
     const x = cell(a, column), y = cell(b, column);

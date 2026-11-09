@@ -1,0 +1,8 @@
+{
+  "_comment": "Meldungen des Kerns zur nicht erreichbaren Start-URL (UI-019, CRAWL-128) wie os-app sie nach dem Lauf sendet: geschlossener Port (robots.txt ignoriert), unbekannte Domain, robots.txt per Netzfehler nicht erreichbar, Zeitüberschreitung, TLS. Die robots.txt mit 500 ist kein Fehlschlag und erzeugt keine Meldung.",
+  "closedPort": { "level": "error", "code": "start-connection", "args": { "startUrl": "http://127.0.0.1:9/", "url": "http://127.0.0.1:9/", "reason": "connection_refused", "robots": false } },
+  "unknownDomain": { "level": "error", "code": "start-dns", "args": { "startUrl": "https://unbekannt.invalid/", "url": "https://unbekannt.invalid/robots.txt", "reason": "dns_lookup_failed", "robots": true } },
+  "robotsNetwork": { "level": "error", "code": "start-connection", "args": { "startUrl": "http://site.test/", "url": "http://site.test/robots.txt", "reason": "connection_refused", "robots": true } },
+  "timeout": { "level": "error", "code": "start-timeout", "args": { "startUrl": "http://site.test/", "url": "http://site.test/", "reason": "response_timeout", "robots": false } },
+  "tls": { "level": "error", "code": "start-tls", "args": { "startUrl": "https://site.test/", "url": "https://site.test/", "reason": "tls_error", "robots": false } }
+}

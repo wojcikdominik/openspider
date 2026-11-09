@@ -18,7 +18,7 @@ import { registerMenuContributions } from "../../ui/menu/registry";
 import type { MenuEntry } from "../../ui/primitives/Menu";
 import { Banner, Button, ContextMenu, Dialog, DialogFooter, ProgressBar, Tree } from "../../ui/primitives";
 import { nativeCrawlDesktop, type CrawlDesktop, type RepairResult } from "./desktop";
-import { cell, columns, openCrawls, permissions, readRecent, sortRows, useCrawlsDialog, writeRecent, type Column } from "./model";
+import { cell, columns, openCrawls, permissions, phaseKey, readRecent, sortRows, useCrawlsDialog, writeRecent, type Column } from "./model";
 import "./crawls.css";
 
 type Form = { kind: "rename" | "move" | "projectCreate" | "projectRename"; ids: string[]; projectId?: string; value: string; error?: string };
@@ -281,7 +281,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
               </tr></thead><tbody>{visible.slice(page * 100, page * 100 + 100).map(row => <tr key={row.crawl.crawlId} aria-selected={selected.has(row.crawl.crawlId)} onDoubleClick={() => !disabled && void attempt(() => requestOpen({ kind: "id", crawlId: row.crawl.crawlId }))}
                 onContextMenu={() => { if (!selected.has(row.crawl.crawlId)) setSelected(new Set([row.crawl.crawlId])); }}>
                 <td><input type="checkbox" aria-label={t("crawls-select", { name: row.crawl.name })} checked={selected.has(row.crawl.crawlId)} onChange={e => toggle(row.crawl.crawlId, e.target.checked, (e.nativeEvent as MouseEvent).shiftKey)} /></td>
-                {columns.map(c => <td key={c}>{c === "phase" ? t(`crawls-phase-${row.crawl.phase}`) : c === "locked" ? t(row.locked ? "crawls-yes" : "crawls-no") : String(cell(row, c))}</td>)}
+                {columns.map(c => <td key={c}>{c === "phase" ? t(phaseKey(row)) : c === "locked" ? t(row.locked ? "crawls-yes" : "crawls-no") : String(cell(row, c))}</td>)}
               </tr>)}</tbody></table>
             </div>
           </ContextMenu>

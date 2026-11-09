@@ -7,6 +7,7 @@ update-disabled-settings = Update checks are disabled in Settings.
 update-disabled-missing-key = Update checks are unavailable because the signing key is missing.
 update-disabled-invalid-key = Update checks are unavailable because the signing key is invalid.
 update-disabled-unavailable = Update checks are unavailable in this build.
+update-disabled-unknown-installer = Automatic updates are not possible for this installation because it could not be determined whether OpenSpider was installed with the MSI package or the setup program. Please download new versions manually: https://github.com/wojcikdominik/openspider/releases/latest
 update-failed = The update could not be completed. Please try again.
 update-version = Version { $version }
 update-notes = Release notes

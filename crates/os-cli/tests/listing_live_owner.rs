@@ -418,3 +418,40 @@ async fn listing_crawls_while_a_cli_crawl_runs_keeps_the_file_intact() {
 async fn listing_crawls_while_a_cli_crawl_reports_json_progress_keeps_the_file_intact() {
     listing_next_to_a_cli_crawl(SLOW, &["--json-progress"]).await;
 }
+
+// Der Lauf in Server A ist beendet, ein anderer Prozess hat den Crawl fortgesetzt und beendet: A meldet die Datei (Fable, A2).
+// spec: AGENT-020
+// spec: CRAWL-130
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn crawl_status_follows_the_file_after_another_process_finished_the_crawl() {
+    let site = site(SLOW).await;
+    let env = Env::new();
+    let mut mcp = spawn_mcp(&env, &["--allow", "crawl"]);
+    let id = mcp.start(&site, json!({"speed.threads": 1}));
+    wait_until("3 Seitenabrufe", WAIT, || page_request_count(&site) >= 3);
+    assert!(!mcp.call("pause_crawl", json!({"crawl_id": id})).is_error);
+    wait_until("Pausiert in A", WAIT, || {
+        manifest(&only_file(&env).0)["completeness"] == "paused"
+    });
+    let status = mcp.call("crawl_status", json!({"crawl_id": id}));
+    assert_eq!(status.summary()["state"], "Paused");
+
+    let run = env
+        .run_async(vec![
+            "--load-crawl".to_string(),
+            id.clone(),
+            "--resume".into(),
+        ])
+        .await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    assert_eq!(listed_status(&env, &id), "Completed");
+
+    let status = mcp.call("crawl_status", json!({"crawl_id": id}));
+    let summary = status.summary();
+    assert_eq!(summary["state"], "Completed", "{summary}");
+    assert!(
+        summary.get("progress").is_none(),
+        "kein veralteter Fortschritt: {summary}"
+    );
+    mcp.close();
+}

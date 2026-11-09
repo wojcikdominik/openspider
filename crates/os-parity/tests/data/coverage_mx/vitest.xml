@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="vitest tests" tests="2" failures="0" errors="0">
+  <testsuite name="src/features/upd/upd.test.ts" tests="2" failures="0">
+    <testcase classname="src/features/upd/upd.test.ts" name="Update &gt; zeigt den Hinweis" time="0.001"/>
+    <testcase classname="src/features/upd/upd.test.ts" name="Update &gt; nutzt den Proxy" time="0.001"/>
+  </testsuite>
+</testsuites>

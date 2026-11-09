@@ -1,0 +1,234 @@
+name: Install and update matrix
+
+# M3-Q02: Version N aus einem Lauf von „Release orchestration“ installieren und über den Updater auf N+1 aus
+# einem zweiten Lauf aktualisieren. N+1 kommt ausschließlich von einem lokalen Mock-Update-Server im Runner
+# (tests/install/mockupdate.py); kein Request erreicht das öffentliche Release. Ablauf, Prüf-IDs und
+# Startbefehle: docs/plan/M3-acceptance/install/README.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      current_run_id:
+        description: 'Run-ID von „Release orchestration“ für Version N (Artefakt release-assets)'
+        required: true
+        type: string
+      next_run_id:
+        description: 'Run-ID von „Release orchestration“ für Version N+1 (Trockenlauf mit signierten Updater-Artefakten)'
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/install-test.yml'
+      - 'tests/install/**'
+  pull_request:
+    paths:
+      - '.github/workflows/install-test.yml'
+      - 'tests/install/**'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: install-test-${{ github.ref }}-${{ inputs.next_run_id || github.sha }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_BUILD_JOBS: '4'
+  OPENSPIDER_SECRET_STORE: memory
+
+jobs:
+  unit:
+    name: Mock-Server und Skripte (Unit-Tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Unit-Tests tests/install
+        run: python -W error::ResourceWarning -m unittest discover -s tests/install -v
+
+  prepare:
+    name: Artefakte N und N+1 prüfen
+    if: github.event_name == 'workflow_dispatch'
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      signed: ${{ steps.versions.outputs.signed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: release-assets von N
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.current_run_id }}
+          name: release-assets
+          path: assets/current
+      - name: release-assets von N+1
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.next_run_id }}
+          name: release-assets
+          path: assets/next
+      - name: Versionen, Manifest und Szenarien
+        id: versions
+        env:
+          CURRENT_RUN: ${{ inputs.current_run_id }}
+          NEXT_RUN: ${{ inputs.next_run_id }}
+        run: |
+          set -euo pipefail
+          # D14: Ohne signierte Updater-Artefakte (Trockenlauf ohne Secrets) endet der Lauf grün mit Hinweis.
+          if [[ ! -f assets/next/latest.json ]]; then
+            echo 'signed=false' >> "$GITHUB_OUTPUT"
+            echo "::warning title=Update-Matrix übersprungen::Lauf $NEXT_RUN enthält kein latest.json (keine signierten Updater-Artefakte); keine Zeile der Matrix ist gelaufen."
+            {
+              echo "**Update-Matrix übersprungen:** Lauf $NEXT_RUN enthält kein \`latest.json\`"
+              echo '(Trockenlauf ohne signierte Updater-Artefakte, siehe release-reports/updater-status.txt).'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          mkdir -p prepared
+          python tests/install/mockupdate.py prepare --current assets/current --next assets/next --out prepared \
+            | tee prepared/summary.json
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          info = json.load(open('prepared/summary.json'))
+          print(f"Update-Matrix: N = `{info['current']}` (Lauf {os.environ['CURRENT_RUN']}) → "
+                f"N+1 = `{info['next']}` (Lauf {os.environ['NEXT_RUN']}), Kanal {info['channel']}, {info['repository']}.")
+          PY
+          echo 'signed=true' >> "$GITHUB_OUTPUT"
+
+  update:
+    name: ${{ matrix.label }}
+    needs: prepare
+    if: needs.prepare.outputs.signed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: macos-arm64, runner: macos-15, installer: dmg, label: 'macOS arm64 (DMG)' }
+          - { id: macos-x64, runner: macos-15-intel, installer: dmg, label: 'macOS x64 (DMG)' }
+          - { id: windows-x64-nsis, runner: windows-latest, installer: nsis, label: 'Windows x64 NSIS' }
+          - { id: windows-x64-msi, runner: windows-latest, installer: msi, label: 'Windows x64 MSI' }
+          - { id: windows-arm64-nsis, runner: windows-11-arm, installer: nsis, label: 'Windows 11 ARM NSIS (x64-Emulation)' }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+          # Windows: bewusst x64 wie die emulierte App (Installations-Smoke).
+          architecture: ${{ runner.os == 'Windows' && 'x64' || runner.arch == 'ARM64' && 'arm64' || 'x64' }}
+      - name: release-assets von N
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.current_run_id }}
+          name: release-assets
+          path: assets/current
+      - name: release-assets von N+1
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.next_run_id }}
+          name: release-assets
+          path: assets/next
+      - name: openssl für die Test-CA (wird im Matrix-Treiber je Job erzeugt)
+        run: |
+          if command -v openssl >/dev/null; then openssl version; else
+            test -x '/c/Program Files/Git/usr/bin/openssl.exe' && '/c/Program Files/Git/usr/bin/openssl.exe' version
+          fi
+      - name: Fixture-Server bauen (os-testsite, kein Ersatz für die installierte CLI)
+        run: |
+          rustup show active-toolchain
+          cargo build -p os-testsite -j 4 --locked
+      - name: Öffentlichen Updater-Schlüssel bereitlegen (Repository-Variable, kein Secret)
+        env:
+          UPDATER_PUBKEY: ${{ vars.OPENSPIDER_UPDATER_PUBKEY }}
+        run: printf '%s' "$UPDATER_PUBKEY" > "$RUNNER_TEMP/updater.pub"
+      - name: N installieren, auf N+1 aktualisieren, prüfen
+        env:
+          INSTALLER: ${{ matrix.installer }}
+          MATRIX_ID: ${{ matrix.id }}
+          LABEL: ${{ matrix.label }}
+        run: |
+          set -euo pipefail
+          testsite=target/debug/os-testsite
+          if [[ "$RUNNER_OS" == Windows ]]; then testsite="$testsite.exe"; fi
+          python tests/install/update_matrix.py --installer "$INSTALLER" \
+            --current assets/current --next assets/next --testsite "$testsite" \
+            --output "install-results/$MATRIX_ID" --label "$LABEL" --pubkey-file "$RUNNER_TEMP/updater.pub"
+      - name: Protokoll im Job-Summary
+        if: always()
+        env:
+          MATRIX_ID: ${{ matrix.id }}
+        run: |
+          if [[ -f "install-results/$MATRIX_ID/report.md" ]]; then
+            cat "install-results/$MATRIX_ID/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: install-update-${{ matrix.id }}
+          path: install-results/
+          if-no-files-found: warn
+
+  protocol:
+    name: Gesamtprotokoll
+    needs: [prepare, update]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Protokoll „übersprungen“ (kein latest.json in N+1)
+        if: needs.prepare.outputs.signed != 'true'
+        env:
+          CURRENT_RUN: ${{ inputs.current_run_id }}
+          NEXT_RUN: ${{ inputs.next_run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo '# Installations- und Update-Matrix (M3-Q02)'
+            echo
+            echo "Lauf: $RUN_URL"
+            echo
+            echo "**Übersprungen: keine signierten Updater-Artefakte.** Lauf $NEXT_RUN (N+1) enthält kein latest.json;"
+            echo "N = Lauf $CURRENT_RUN. Keine Prüfung Q-01 bis Q-24 ist gelaufen; das ist kein Nachweis."
+          } > protokoll.md
+          cat protokoll.md >> "$GITHUB_STEP_SUMMARY"
+          echo '::warning title=Update-Matrix übersprungen::Protokoll „übersprungen: keine signierten Updater-Artefakte“ erzeugt.'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.prepare.outputs.signed == 'true'
+        with:
+          pattern: install-update-*
+          path: results
+      - name: Matrix zusammenfassen
+        if: needs.prepare.outputs.signed == 'true'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 tests/install/summarize.py results --out protokoll.md --summary "$GITHUB_STEP_SUMMARY" \
+            --run-url "$RUN_URL" \
+            --expect 'macOS arm64 (DMG)' --expect 'macOS x64 (DMG)' --expect 'Windows x64 NSIS' \
+            --expect 'Windows x64 MSI' --expect 'Windows 11 ARM NSIS (x64-Emulation)'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: install-update-protocol
+          path: protokoll.md
+          if-no-files-found: warn

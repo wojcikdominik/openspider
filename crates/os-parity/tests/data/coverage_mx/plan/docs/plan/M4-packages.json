@@ -1,0 +1,4 @@
+[
+  {"id": "M4-F01", "kind": "package", "wave": "0a", "spec_ids": [], "owns": [], "depends_on": []},
+  {"id": "M4-Y01", "kind": "package", "wave": 1, "spec_ids": ["UI-102"], "owns": [], "depends_on": ["M4-F01"]}
+]

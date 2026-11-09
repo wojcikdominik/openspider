@@ -210,6 +210,7 @@ pub async fn run_check_with_context(
                 Disabled::Environment => update::DisableReason::Environment,
                 Disabled::MissingPublicKey => update::DisableReason::MissingPublicKey,
                 Disabled::InvalidPublicKey => update::DisableReason::InvalidPublicKey,
+                Disabled::UnknownInstaller => update::DisableReason::UnknownInstaller,
             })
         }
         Err(error) if manual => UpdateState::Failed(error),

@@ -217,7 +217,7 @@ impl McpServer {
             .await
             {
                 Ok(Some(Ok(reply))) => return reply,
-                Ok(Some(Err(e))) => return tool_error(tool_error_text(&e)),
+                Ok(Some(Err(e))) => return tool_failure(&e),
                 Ok(None) => {}
                 Err(e) => return tool_error(format!("Interner Bildwerkzeugfehler: {e}")),
             }
@@ -227,7 +227,7 @@ impl McpServer {
         let joined = tokio::task::spawn_blocking(move || tool.call(&ctx, args)).await;
         match joined {
             Ok(Ok(output)) => self.render(output),
-            Ok(Err(e)) => tool_error(tool_error_text(&e)),
+            Ok(Err(e)) => tool_failure(&e),
             Err(join) => {
                 tracing::error!(tool = name, error = %join, "Werkzeug abgestürzt");
                 tool_error(format!(
@@ -295,7 +295,23 @@ fn tool_error_text(e: &ToolError) -> String {
     match e {
         ToolError::InvalidArguments(_) | ToolError::NotFound(_) => e.to_string(),
         ToolError::Internal(_) => format!("{e}. Details stehen im Protokoll des Servers (stderr)."),
+        ToolError::Busy(_) => {
+            format!("{e} (retryable: call again with the same arguments in a few seconds)")
+        }
     }
+}
+
+/// Fehlerantwort eines Werkzeugs: lesbare Meldung wie bisher; ein wiederholbarer Fehler trägt zusätzlich seinen
+/// Code maschinenlesbar in `structuredContent` (`{"error":{"code":"busy","retryable":true,...}}`, AGENT-020).
+fn tool_failure(e: &ToolError) -> CallToolResult {
+    let text = tool_error_text(e);
+    let mut result = tool_error(text.clone());
+    if e.retryable() {
+        result.structured_content = Some(json!({
+            "error": {"code": e.code(), "retryable": true, "message": text}
+        }));
+    }
+    result
 }
 
 /// Länge des Rahmens um den Untrusted-Block (Marken, Präambel, Zeilenumbrüche) in Zeichen.
@@ -627,5 +643,28 @@ mod tests {
         let failure = texts(&failure);
         assert!(failure.iter().map(|s| s.chars().count()).sum::<usize>() <= 50_000);
         assert!(failure.last().unwrap().contains("gekürzt"));
+    }
+
+    // spec: AGENT-020
+    #[test]
+    fn busy_is_a_retryable_error_code_and_other_errors_stay_plain_text() {
+        let busy = tool_failure(&ToolError::Busy("Crawl x is pausing".into()));
+        assert_eq!(busy.is_error, Some(true));
+        let text = texts(&busy).join(" ");
+        assert!(text.starts_with("busy: Crawl x is pausing") && text.contains("retryable"));
+        let structured = busy.structured_content.expect("Code maschinenlesbar");
+        assert_eq!(structured["error"]["code"], "busy");
+        assert_eq!(structured["error"]["retryable"], true);
+        assert_eq!(structured["error"]["message"], text);
+        for other in [
+            ToolError::InvalidArguments("x".into()),
+            ToolError::NotFound("x".into()),
+            ToolError::Internal("x".into()),
+        ] {
+            let failure = tool_failure(&other);
+            assert_eq!(failure.is_error, Some(true));
+            assert!(!other.retryable());
+            assert!(failure.structured_content.is_none(), "{other:?}");
+        }
     }
 }

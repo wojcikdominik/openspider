@@ -41,6 +41,8 @@ pub fn check() -> Result<i32, CliError> {
         settings: settings.updates,
         network: settings.network,
         proxy_password: password,
+        // Das CLI meldet nur, ob eine neuere Version existiert, und installiert nie (OUT-250).
+        installer: policy::Installer::AnyReportOnly,
         ..Default::default()
     };
     tokio::runtime::Builder::new_current_thread()
