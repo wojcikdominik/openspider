@@ -530,7 +530,8 @@ Die Last-Fixture und Fensterplanung sind in `livedetail-support.ts` überführt.
   Recorder-Abstände machen diesen Nachweis konservativ. F7 (bisher 2044/2420 ms) bleibt
   ein Produktbefund und wird nicht durch Testtoleranz behoben. Der 3-URL/s-Lauf ersetzt
   weiterhin nicht die gesonderten 200-URL/s-Kriterien aus UI-018.
-- Im angegebenen HEAD existiert die gemeldete `<800 ms`-Assertion noch nicht. Der schnelle
+- **(Korrigiert in Runde 3, T5: Diese Aussage war falsch, die `< 800 ms`-Assertion existierte auf `main`, siehe dort.)**
+  Im angegebenen HEAD existiert die gemeldete `<800 ms`-Assertion noch nicht. Der schnelle
   Wechsel in der bestehenden Auswahlprüfung wird jetzt dennoch deterministisch erzeugt:
   Fokus, Modulimport und Recorder-Markierung vorher setzen, drei Keydown/Keyup-Paare
   im Seitenkontext ohne Timer oder Protokoll-Roundtrips; `flushSync` übernimmt zwischen
@@ -735,3 +736,148 @@ Reproduktion/Einordnung unter dokumentierter gleichzeitiger Last; die bestehende
 Spec-Fragen **S1/S2** zu Dev-Schwellen werden dabei nicht durch einen geratenen Wert
 beantwortet. F7 bleibt beim parallelen Produktpaket `m3/lagfix`. Weder Budgets noch Last
 werden zum Erzielen eines grünen Ergebnisses reduziert.
+
+## Runde 3 (Auflagen der Merge-Prüfung, 09.11.2026)
+
+Tester: Claude Sonnet 5.5, unabhängig, Soll ausschließlich `docs/spec/*`. Stand: `m3/livedetail-tests-ci` =
+`build/livedetail-tests-ci` (07492189) plus `origin/main` (bb0b27e1, enthält B4-LAGFIX, B4-LDFOLLOW, B4-STOREFIX, B4-RESUME),
+Merge ohne Konflikt (`be07e313`). Kein Produktcode, keine Abhängigkeit, kein Budget und keine Assertion geändert oder gelockert.
+
+### Auflage A (blockierend): Teststand gegen main mit LAGFIX auf isolierten CPUs
+
+**Ergebnis: F7 ist mit LAGFIX bei 1000 ms NICHT grün.** Der Befund ist deutlich kleiner geworden (Runde 2 vor LAGFIX: Rückstand
+2,04 bis 2,42 s, im ausgewerteten Attachment 88 Verstöße; jetzt 0 bis 5 verletzende Stichproben je Lauf, meist 0 bis 250 ms über der
+Grenze), bleibt aber in **9 von 10** regulären Läufen rot. Test unverändert (K2-63), siehe Produktbefund unten.
+
+Aufbau: Server-Worktree `m3-ldtests` (Sync `be07e313` + Testcommit `78c2598c`), `npm ci`, Bridge und Fixture-Werkzeuge frisch gebaut.
+Je Engine 5 vollständige Läufe aller `livedetail-*`-Specs außer `budget` (nächtlich): **29 Tests je Lauf**, `--retries=0 --workers=2`,
+`taskset`: Chromium auf CPU 2,3 (physischer Kern 1), WebKit gleichzeitig auf CPU 4,5 (Kern 2); eigene Ports. Während der Läufe schrieb
+ein Sampler (`/home/build/ld3/sampler.py`) jede Sekunde alle lauffähigen Threads auf diesen CPUs, die nicht zu den eigenen
+Test-Prozessen gehören. Ergebnis der Messung der fremden Last auf den gepinnten CPUs:
+Chromium-Lauf 4/5 und WebKit-Lauf 3 bis 5 zeigen in 0,8 bis 2,3 % der Sekunden einen fremden lauffähigen Thread (höchstens 1 bis 3
+gleichzeitig; ein Teil davon sind Kernel-Threads und Browser-Threads mit nicht lesbarer Kommandozeile, also eher zu hoch gezählt); der
+Sampler der Läufe 1 bis 3 (Chromium) und 1 bis 2 (WebKit) konnte eigene Browser-Prozesse noch nicht von fremden unterscheiden und
+wurde danach korrigiert (Zuordnung über Affinitätsmaske); für diese fünf Läufe liegt keine belastbare Aussage vor. Die Server-
+Gesamtlast (Load average 15 bis 50, dauerhaft Cargo-/Clippy-Läufe anderer Pakete auf allen 16 CPUs) war hoch; gepinnt war nur diese
+Arbeit. Die CPUs sind SMT-Geschwister (2,3 bzw. 4,5 teilen sich je einen physischen Kern); L3 und Speicher teilen sich alle Läufe.
+
+| Lauf | Engine | grün/rot | Wanduhr | Rot | `live-lag` counters: limitMs, Verstöße / Stichproben | Inlinks: Verstöße |
+|---|---|---|---|---|---|---|
+| 1 | Chromium | 28/1 | 630 s (10:30) | F7 | 1000, 2 / 447 | 0 / 637 |
+| 2 | Chromium | 28/1 | 616 s (10:16) | F7 | 1000, 1 / 493 | 0 / 564 |
+| 3 | Chromium | 28/1 | 543 s (9:03) | F7 | 1000, 5 / 511 | 0 / 615 |
+| 4 | Chromium | 28/1 | 534 s (8:54) | F7 | 1000, 3 / 506 | 0 / 633 |
+| 5 | Chromium | 28/1 | 526 s (8:46) | F7 | 1000, 3 / 510 | 0 / 655 |
+| 1 | WebKit | 28/1 | 792 s (13:12) | F7 | 1000, 2 / 281 | 0 / 443 |
+| 2 | WebKit | 28/1 | 771 s (12:51) | F7 | 1000, 2 / 296 | 0 / 456 |
+| 3 | WebKit | **29/0** | 688 s (11:28) | - | 1000, **0** / 309 | 0 / 458 |
+| 4 | WebKit | 28/1 | 690 s (11:30) | F7 | 1000, 3 / 317 | 0 / 455 |
+| 5 | WebKit | 28/1 | 695 s (11:35) | F7 | 1000, 2 / 306 | 0 / 475 |
+
+**Summe: 281 von 290 Tests grün** (je Engine 5 x 29 = 145; Chromium 140 grün / 5 rot, WebKit 141 grün / 4 rot). Alle neun roten
+Tests sind derselbe Test `livedetail-live.spec.ts:46`, rot nur durch die Soft-Assertion „Lag-Grenze“ (alle harten Assertions desselben Tests,
+Anlauf, Takt- und Stichprobenwächter, Pause und Endabgleich, bestehen).
+Kein anderer Test war in einem der zehn Läufe rot: kein Dialog-Timeout (die drei Timeouts aus Runde 2 traten nicht wieder auf), kein
+F8, kein Timeout, kein Wackler. Alle 20 `live-lag`-Attachments sind vor den Auswertungsassertions geschrieben und enthalten
+`limitMs: 1000` (counters) bzw. 3,1 bis 3,9 s (Inlinks, 3000 x Rechner-/Recorderfaktor 1,03 bis 1,3); die Verstoßliste des
+Inlinks-Tests ist in allen zehn Läufen leer, die des Zähler-Tests nur im WebKit-Lauf 3.
+
+#### Produktbefund F7 (offen): Kettenlatenz des Tabellenfußes liegt knapp über 1000 ms
+
+Maß „Kettenlatenz“: Alter der ältesten URL, die der Session-Zähler schon enthält, der Tabellenfuß (bzw. Chip, bzw. Inlinks) aber noch nicht
+anzeigt, je Recorder-Stichprobe im Zufluss und im Schlussfenster (ab 6 s nach Messbeginn; Auswertung `ld3/analyze.py` aus den Attachments).
+Grenze nach UI-018: 1000 ms.
+
+| Lauf | Median | 99. Perzentil | Maximum | Stichproben über 1000 ms | Anlauf (erste 6 s), Maximum |
+|---|---|---|---|---|---|
+| Chromium 1 | 126 ms | 976 ms | 1245 ms | 2 / 447 | 535 ms |
+| Chromium 2 | 185 ms | 912 ms | 1025 ms | 1 / 486 | 524 ms |
+| Chromium 3 | 192 ms | 958 ms | 1012 ms | 1 / 496 | **2591 ms** (Fuß 0 bei 3 gecrawlten URLs) |
+| Chromium 4 | 189 ms | 927 ms | 1099 ms | 3 / 500 | 423 ms |
+| Chromium 5 | 226 ms | 914 ms | 1283 ms | 2 / 505 | **1686 ms** (8 statt 9) |
+| WebKit 1 | 102 ms | 980 ms | 1139 ms | 1 / 276 | 1024 ms (Fuß 0 bei 3) |
+| WebKit 2 | 0 ms | 985 ms | 1090 ms | 2 / 293 | 902 ms |
+| WebKit 3 | 99 ms | 953 ms | 992 ms | 0 / 304 | 469 ms |
+| WebKit 4 | 125 ms | 995 ms | **1389 ms** | 3 / 312 | 413 ms |
+| WebKit 5 | 103 ms | 966 ms | 1214 ms | 2 / 303 | 770 ms |
+
+Der aktive Chip hat in allen Läufen dieselben Werte wie der Fuß (gleiche Verstoßliste). Auffällig: Der Median liegt bei 0,1 bis 0,2 s, das
+99. Perzentil aber bei 0,91 bis 0,995 s, also unmittelbar an der Spec-Grenze; die Maxima 1,0 bis 1,39 s kommen als einzelne Stichproben
+mit 1 bis 3 URLs Differenz (z. B. 134 statt 136, 160 statt 161). Zwei Chromium-Läufe haben im Anlauf zusätzlich 1,7 bzw. 2,6 s, in denen
+der Fuß noch hinter den ersten drei URLs zurückliegt. Eine Ursache wird hier nicht behauptet; die Stufen laut LAGFIX-Bericht (Writer-Fenster
+100 ms, in Rückstau 500 ms, Feed-Poll 100 ms, Tick 500 ms, danach Rendern) summieren sich im ungünstigen Fall auf rund 1,2 s und passen zur
+Größenordnung. Die Messung enthält höchstens einen Recorder-Abstand (100 bis 140 ms) Quantisierung; Maxima über 1,15 s sind damit auch
+nach Abzug sicher über der Grenze. Der separate Lag-Lauf des Splitprojekts (s. C) bestätigt es: Chromium 4 / 438, WebKit 15 / 256 Verstöße
+(Recorderfaktor 1,41, zeitgleich zwei fremde Rust-Prozesse auf den CPUs).
+
+Stand: B4-LAGFIX hat die belegte Hauptursache (Zähler wartete auf Zeilenwechsel) behoben (Rückstand von 2,0 bis 2,4 s auf höchstens 1,0 bis 1,4 s,
+0 bis 5 verletzende Stichproben je Lauf), die UI-018-Grenze von 1000 ms wird aber im Dauerzustand nicht sicher eingehalten und im Anlauf zeitweise
+deutlich überschritten. Der Test bleibt unverändert rot; kein Zuschlag, keine Rate gesenkt.
+
+Zur Gegenprobe der **Inlinks-Prüfung** (Grenze 3 s x Faktor): größtes Maximum der Kettenlatenz 2,35 s (WebKit, Split-Lauf; dort Grenze 3,9 s),
+übrige 0,9 bis 2,2 s; 0 Verstöße in allen zwölf Läufen.
+
+### Auflage B
+
+**T1 – Haltetaste-Test mit echten Pfeiltasten (Commit `78c2598c`).** `livedetail-detail.spec.ts` („holding an arrow key leads to few detail
+requests and ends on the focused URL“) ruft `setDetailSelection` nicht mehr auf. Der Test fokussiert das obere Grid und erzeugt mit
+`rapidArrows(document.activeElement, 8)` (`livedetail-key-stimulus.ts`) acht echte `keydown`/`keyup`-Ereignisse `ArrowDown` an den Key-Handlern
+der Tabelle, ohne Timer und Protokoll-Roundtrips, mit `flushSync` je Ereignis; Zielzeile `page-8` wird zusätzlich über `selectedUpper`
+geprüft (UI-012), dazu die Vorbedingung „Ereigniserzeugung < 800 ms“ und weiterhin „weniger Detailabfragen als Wechsel“, Anzeige = Inlinks der
+Fokuszeile (UI-145). Der Import von `urlIdsOf` und die Hilfsabfrage der Zeilen-IDs entfallen. Nachweis: in allen zehn regulären Läufen grün; reine
+Ereigniszeit 80,6 bis 128,3 ms (Chromium) und 154 bis 205 ms (WebKit), mit React-Commits 1,5 bis 2,4 s; `view.open` für Inlinks jeweils **1** (< 8).
+Gegenprobe (Entprellung entfernt, `request.ts`: sofortiges `run()` statt Timer, isoliert im Server-Worktree und danach zurückgesetzt):
+**Chromium und WebKit rot** mit 16 statt < 8 Detailabfragen; die Pfeiltasten erreichen also den Produktcode und der Test sieht den Fehler.
+
+**T5 – Berichtskorrektur.** Die Aussage in Runde 2, die `< 800 ms`-Assertion existiere im HEAD „noch nicht“, war falsch. Die Assertion
+(`expect(spacing, "acht Tastendrücke innerhalb von weniger als 100 ms × 8").toBeLessThan(800)`, auf `main` `livedetail-detail.spec.ts:227`) kam mit
+`879c4c52` in den Haltetaste-Test, wurde mit dem Umbau auf das Tor (`9b69ca07`) zusammen mit den echten Tastendrücken entfernt und ist mit
+`78c2598c` wieder da (jetzt gegen `rapidArrows`, 8 Tasten). Die Stelle in Runde 2 ist entsprechend markiert.
+
+### Auflage C: Laufzeit je Engine auf 2 Kernen
+
+Gemessen (oben): Alle `livedetail-*`-Specs (ohne budget) brauchen auf 2 Kernen / 2 Workern **Chromium 526 bis 630 s (8:46 bis 10:30)**,
+**WebKit 688 bis 792 s (11:28 bis 13:12)**, beide Engines also über der Marke von 8 min. Die beiden Lag-Tests (`livedetail-live.spec.ts:46`,
+`livedetail-detail.spec.ts:72`) dauern je Engine 91 bis 138 s einzeln, zusammen etwa 3,5 bis 4 min Worker-Zeit (rund 20 % der Worker-Zeit).
+
+Maßnahme (nach der Vorgabe: wenn über etwa 8 min, die Lag-Tests in ein eigenes Projekt der CI-Matrix legen):
+
+- `apps/desktop/playwright.config.ts`: neues Projekt `<engine>-lag` (`testMatch` auf `livedetail-live`/`livedetail-detail`, `grep` auf „grow at 3
+  URL/s with bounded startup and final observation“), das nur mit `OS_E2E_LAG=split` existiert; in diesem Modus schließt das Hauptprojekt die beiden
+  Tests per `grepInvert` aus. Ohne die Variable (lokal, `spec-coverage-m2.yml`, `ui-nightly.yml`) ändert sich nichts.
+- `.github/workflows/ui-e2e.yml`: `OS_E2E_LAG=split` im Schritt E2E-A, vier neue Matrixeinträge `macos-webkit-lag`, `windows-chromium-lag`,
+  `linux-chromium-lag`, `linux-webkit-lag` (Job-Limit 30 min), die nur `--project=<engine>-lag` laufen; die Hauptjobs ohne Shard rufen jetzt
+  `--project=<engine> --project=<engine>-perf` statt `npm run e2e` (sonst liefe das Lag-Projekt mit), die Shards sind unverändert. `actionlint`
+  (1.7.12) Exit 0. Die neuen Job-Namen müssen bei Bedarf in die Pflicht-Checks des Branchschutzes; sie sind rot, solange F7 offen ist.
+- Prüfung „kein Test entfällt, keiner doppelt“ mit `playwright test --list`: Standardmodus 565 Tests je Engine (Haupt) und 567 mit Perf;
+  Splitmodus Haupt 563 plus Lag 2 = 565, Menge nach Normierung der Projektnamen identisch (`diff` leer, Chromium und WebKit); Perf-Projekt
+  unverändert; `chromium-lag` ohne `OS_E2E_LAG=split` existiert nicht (Playwright meldet unbekanntes Projekt).
+
+Laufzeit nach der Trennung (gleiche Bedingungen, jeweils 1 Lauf, `OS_E2E_LAG=split`, `--workers=2`):
+
+| Projekt | Chromium | WebKit |
+|---|---|---|
+| Hauptprojekt, `livedetail-*` (27 Tests) | **412 s (6:52)**, 27/27 grün | **602 s (10:02)**, 27/27 grün |
+| `<engine>-lag` (2 Tests, Fixture ohne Abhängigkeit) | 117 s (1:57), 1 rot (F7) | 123 s (2:03), 1 rot (F7) |
+| zum Vergleich ungetrennt | 526 bis 630 s | 688 bis 792 s |
+
+Der Gewinn der Hauptjobs beträgt also nur rund 1,9 bis 3,6 min (Chromium) bzw. 1,4 bis 3,2 min (WebKit) Testzeit je Job. Die 41 bis 43 min der
+Chromium-Hauptjobs sinken damit nur um diesen Betrag; ein größerer Gewinn bräuchte zusätzlich Shards für `linux-chromium`/`windows-chromium` (wie bei
+WebKit); das ist Sache des Orchestrators. Zu beachten: CI-Runner haben andere Kerne und Last als diese Messung; die Zahlen sind Verhältnisse, keine CI-Prognose.
+Kosten: vier zusätzliche CI-Jobs (je Setup/Build aus dem gemeinsamen Rust-Cache plus rund 2 min Testzeit).
+
+### F8: Inlinks-Wert 52 ms über der Grenze
+
+Nicht wieder aufgetreten: In allen 12 Inlinks-Läufen (10 reguläre, 2 Split-Lag-Läufe) 0 Verstöße. Das größte gemessene Alter einer nicht
+angezeigten Inlink-Zeile war 2,35 s bei Grenze 3,9 s (WebKit, Split-Lag-Lauf), sonst höchstens 2,2 s (WebKit Lauf 2; Grenze 3,9 s) und in Chromium höchstens
+1,28 s (Grenze 3,1 bis 3,6 s). Die fremde Last auf den gepinnten CPUs lag bei 1 bis 4 % der Sekunden. Das stützt die Einstufung als Umgebungsbefund
+unter Fremdlast (keine Änderung der Grenze).
+
+### Dateien, Gates, Aufräumen
+
+- Geändert (Tests/CI/Docs): `apps/desktop/e2e/acceptance/livedetail-detail.spec.ts` (T1), `apps/desktop/playwright.config.ts`,
+  `.github/workflows/ui-e2e.yml` (C), dieser Bericht. Keine Produktänderung, keine Lockdatei, keine Abhängigkeit.
+- `npm run -w apps/desktop typecheck` Exit 0 (inkl. Konfiguration), `npm run -w apps/desktop check:static` Exit 0,
+  `scripts/check-neutral.sh` keine Fundstellen. Rust-Gates unnötig (kein Rust geändert).
+- Rohdaten auf dem Server: `/home/build/ld3/` (`summary.txt`, `summary-split.txt`, `r3-*.log|.json|.load.jsonl`, `s3-*`, Skripte `series.sh`,
+  `split.sh`, `analyze.py`, `sampler.py`, `load.py`).
