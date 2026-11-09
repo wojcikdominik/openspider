@@ -2,15 +2,17 @@
 # Linux-Serverbetrieb von Kern, CLI und MCP-STDIO (OUT-273, Etappe E0, Paket M2-V01).
 #
 # Aufruf:  scripts/ci/linux-core.sh [schritt ...]
-#   Schritte: fmt | clippy | chromium | test | release | golden | all (Standard: all)
+#   Schritte: fmt | clippy | chromium | disk | test | release | golden | all (Standard: all)
 #
 #   fmt       cargo fmt --all --check
 #   clippy    cargo clippy --workspace --exclude openspider-desktop --all-targets --locked -- -D warnings
 #   chromium  sucht Chromium (OPENSPIDER_CHROMIUM, sonst vorinstalliertes Chrome, sonst Playwright-Chromium) und prüft es
 #             per `--headless=new --dump-dom` auf eine lokale Datei, ohne DISPLAY und ohne virtuellen Framebuffer;
 #             schreibt OPENSPIDER_CHROMIUM nach $GITHUB_ENV, damit spätere Schritte (Rendering-Tests) es sehen
+#   disk      freier Speicher auf den Laufwerken von Zielordner und TMPDIR; unter LINUX_CORE_MIN_FREE_GIB (Standard 4)
+#             bricht der Schritt mit klarer Meldung ab (CRAWL-124: die Engine pausiert Crawls unter 1 GiB)
 #   test      cargo test --workspace --exclude openspider-desktop --locked, ohne D-Bus/Secret Service,
-#             mit der Skip-Liste scripts/ci/linux-core-skips.txt (Ziel: leer)
+#             mit der Skip-Liste scripts/ci/linux-core-skips.txt (Ziel: leer); prüft nach dem Kompilieren `disk`
 #   release   cargo build --release -p os-cli --locked; Binärdatei nach target/linux-core/openspider
 #   golden    os-cli-Test tests/linux_server.rs gegen die Release-Binärdatei (Crawl von out-basic-site, Golden
 #             Internal:All, MCP-STDIO, Fehler statt Hänger bei fehlendem Geheimnis)
@@ -158,12 +160,32 @@ HTML
   printf '%s' "$chrome" > "$OUT_DIR/chromium.path"
 }
 
+# Die Engine warnt unter 2 GiB freiem Speicher und pausiert Crawls unter 1 GiB (CRAWL-124). Läuft die Platte des Runners
+# beim Testbau so weit voll, scheitern Dutzende Tests mit irreführenden Befunden (fehlende Zeilen in der Crawl-Datei,
+# Zustand Paused statt Completed; Läufe 42646892161, 42677181224). Deshalb vor dem Testlauf messen und klar abbrechen.
+step_disk() {
+  local min_gib="${LINUX_CORE_MIN_FREE_GIB:-4}"
+  case "$min_gib" in '' | *[!0-9]*) die "LINUX_CORE_MIN_FREE_GIB muss eine ganze Zahl (GiB) sein: $min_gib" ;; esac
+  log "Freier Speicher (verlangt: mindestens $min_gib GiB vor dem Testlauf, CRAWL-124)"
+  local min_kib=$((min_gib * 1024 * 1024)) path kib low=""
+  mkdir -p "$CARGO_TARGET"
+  for path in "$CARGO_TARGET" "${TMPDIR:-/tmp}"; do
+    df -h "$path" | tail -n 1
+    kib="$(df -Pk "$path" | awk 'NR == 2 { print $4 }')"
+    [ "$kib" -ge "$min_kib" ] || low="$low $path ($((kib / 1024)) MiB frei)"
+  done
+  du -sh "$CARGO_TARGET" 2> /dev/null || true
+  [ -z "$low" ] || die "Zu wenig freier Speicher vor dem Testlauf:$low; verlangt sind mindestens $min_gib GiB. Darunter \
+warnt (< 2 GiB) bzw. pausiert (< 1 GiB) der Ressourcenschutz der Engine die Crawls der Tests (CRAWL-124)."
+}
+
 step_test() {
   log "cargo test (ohne openspider-desktop), OPENSPIDER_SECRET_STORE=$OPENSPIDER_SECRET_STORE, ohne D-Bus"
   [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || die "DBUS_SESSION_BUS_ADDRESS darf im Testlauf nicht gesetzt sein"
   load_skips
   # Kompilieren getrennt vom Lauf: Laufzeit der reinen Testausführung bleibt sichtbar (Dauer hängt am Cache).
   cargo test --workspace --exclude openspider-desktop --locked --no-run
+  step_disk
   cargo test --workspace --exclude openspider-desktop --locked --no-fail-fast -- ${SKIP_ARGS[@]+"${SKIP_ARGS[@]}"}
 }
 
@@ -213,8 +235,8 @@ main() {
   for s in "${steps[@]}"; do
     case "$s" in
       all) run_all ;;
-      fmt | clippy | chromium | test | release | golden) timed "$s" "step_$s" ;;
-      *) die "Unbekannter Schritt: $s (fmt | clippy | chromium | test | release | golden | all)" ;;
+      fmt | clippy | chromium | disk | test | release | golden) timed "$s" "step_$s" ;;
+      *) die "Unbekannter Schritt: $s (fmt | clippy | chromium | disk | test | release | golden | all)" ;;
     esac
   done
 }

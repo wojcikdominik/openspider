@@ -214,6 +214,37 @@ test('Workflow packt L01-Hinweise in Linux-, Windows- und das veröffentlichte U
   assert.equal(readFileSync(join(out, 'OpenSpider_aarch64.app.tar.gz'), 'utf8'), 'signed updater bytes');
 });
 
+// Läufe 42646892161 und 42677181224: Mit line-tables-only blieben auf ubuntu-latest nach dem Testbau 1,7 bzw. 0,6 GB frei;
+// die Engine warnte (< 2 GiB) bzw. pausierte jeden Crawl (< 1 GiB, CRAWL-124) und 43 Tests scheiterten irreführend.
+// spec: OUT-273 [M3]
+// spec: CRAWL-124
+test('linux-core baut ohne Debuginfo und bricht vor dem Testlauf bei knappem Speicher mit klarer Meldung ab', t => {
+  const workflow = readFileSync(join(root, '.github/workflows/linux-core.yml'), 'utf8');
+  const env = workflow.split('\nenv:\n')[1].split('\njobs:\n')[0];
+  assert.match(env, /^  CARGO_PROFILE_DEV_DEBUG: "0"$/m);
+  assert.match(env, /^  CARGO_PROFILE_TEST_DEBUG: "0"$/m);
+  const script = join(root, 'scripts/ci/linux-core.sh');
+  assert.match(readFileSync(script, 'utf8'), /--locked --no-run\n  step_disk\n/, 'test prüft den Speicher nach dem Kompilieren');
+  const work = mkdtempSync(join(tmpdir(), 'openspider-linux-core-'));
+  t.after(() => rmSync(work, { recursive: true, force: true }));
+  const run = minGib => spawnSync('bash', [script, 'disk'], { encoding: 'utf8', env: { ...process.env,
+    LINUX_CORE_MIN_FREE_GIB: minGib, CARGO_TARGET_DIR: join(work, 'target'), TMPDIR: work, GITHUB_STEP_SUMMARY: join(work, 'summary.md') } });
+  let result = run('0');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /mindestens 0 GiB vor dem Testlauf/);
+  // 1 PiB hat kein Runner frei: der Schritt nennt Ordner, freien Speicher und den Grund (Ressourcenschutz der Engine).
+  result = run('1048576');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /::error::Zu wenig freier Speicher vor dem Testlauf: .*target \(\d+ MiB frei\).*mindestens 1048576 GiB\. .*pausiert \(< 1 GiB\).*\(CRAWL-124\)/);
+  result = run('4 GiB');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /LINUX_CORE_MIN_FREE_GIB muss eine ganze Zahl/);
+  // Dieser Test läuft im leichten Release-scripts-Lauf: Änderungen an Skript und Workflow starten ihn.
+  for (const file of ['scripts/ci/linux-core.sh', '.github/workflows/linux-core.yml']) {
+    for (const event of ['push', 'pull_request']) assert.equal(pathFilter('release-scripts.yml', event)([file]), true, `${event}: ${file}`);
+  }
+});
+
 test('Orchestrierung übergibt Beta-Kanal an R01/R02 mit einheitlicher Build-Variable', () => {
   const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
   for (const platform of ['macos', 'windows']) {
