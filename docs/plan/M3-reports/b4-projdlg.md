@@ -70,7 +70,8 @@ Fokus-Rückgabe schlägt fehl. Mit dem Fix sind sie grün.
 
 - **Hilfsfunktion** `apps/desktop/src/ui/recentCrawl.ts`: `middleEllipsis` (Trenner `/` und `\`; Anfang,
   ein kurzer Elternordner und der Dateiname bleiben, nur ein überlanger Dateiname wird selbst gekürzt, mit
-  Endung), `splitPath`, `fileName`, `recentCrawlTitle`, `recentMenuLabel`.
+  Endung), `splitPath`, `fileName`, `recentCrawlTitle`. (Stand nach den Nachträgen: `recentMenuLabel` gibt es nicht mehr; das Menü
+  nutzt `entry.label ?? middleEllipsis(path)` in `ui/menu/contributions/main.ts`.)
 - **Crawl-Verwaltung:** Die Einträge sind gleich breit und linksbündig (`ul`/`li`). Hauptzeile:
   Crawl-Name, ersatzweise der Host der Start-URL, dazu „ – “ und Datum mit Uhrzeit des Crawlstarts, im Format
   der UI-Sprache. Ist der Crawl unbekannt, steht dort der Dateiname. Darunter klein und gedämpft der Pfad,
@@ -83,13 +84,14 @@ Fokus-Rückgabe schlägt fehl. Mit dem Fix sind sie grün.
   zeigen deshalb eine Zeile `Name – Datum Uhrzeit`. Unbekannte Crawls zeigen den Pfad, auf höchstens 64 Zeichen
   in der Mitte gekürzt (**feste Grenze**). Das zunächst doppelte Untermenü ist seit dem Nachtrag „Abnahme“ (unten)
   auf eines reduziert.
-- **Datenquelle:** Ist die Verwaltung offen, kommen die Daten aus ihren Zeilen. Ist sie geschlossen, liefert
-  eine Index-Abfrage `crawls.list` (die gleiche Abfrage, die `loadRecent` schon nutzt) die Daten. Sie läuft
-  einmal bei Änderung der Liste bzw. des Crawl-Zustands, keine Abfrage je Datei und kein Backend-Eingriff.
+- **Datenquelle (Stand nach den Nachträgen):** Die Labels bildet `loadRecent` (`help/recent.ts`) aus einer
+  einzigen Index-Abfrage `crawls.list` für die ganze Liste, keine Abfrage je Datei und kein Backend-Eingriff. Die
+  Verwaltung hat keine eigene Index-Abfrage mehr; ist sie offen, haben ihre frischen Zeilen Vorrang (z. B. nach
+  Umbenennen). Neu geladen wird bei Crawl-Wechsel, Phasenwechsel, Änderung der Liste und Sprachwechsel.
 - **Spec:** CRAWL-127 hat ein neues Akzeptanzkriterium als OS-Festlegung (Nutzerwunsch 09.11.2026).
 - **Tests:** `src/ui/recentCrawl.test.ts` prüft Mac- und Windows-Pfad, kurze Pfade unverändert, den Erhalt
-  des Dateinamens, ein überlanges Dateiende sowie Titel in de und en. `crawls.test.tsx` prüft die
-  Menübeschriftung aus genau einer Index-Abfrage und den Render-Test (Tooltip und zugänglicher Name mit vollem
+  des Dateinamens, ein überlanges Dateiende sowie Titel in de und en. `crawls.test.tsx` prüft
+  (Stand nach den Nachträgen) die Übernahme der alten Liste, das Entfernen bei `NotFound` und den Render-Test (Tooltip und zugänglicher Name mit vollem
   Pfad, Titel, Kopf- und End-Span). `help.test.tsx` deckt das neue `loadRecent`-Label ab. Der E2E-Test „recent
   entries …“ in `management.spec.ts` zeigt bei 640 px Breite eine Pfadzeile mit Ellipse, den vollständigen
   Dateinamen, gleiche Breite und linksbündige Einträge ohne Überlauf.
@@ -198,3 +200,32 @@ liefern könnte. Das geforderte Verhalten (bekannter Crawl als „Name – Datum
 Datei) prüfen der grüne Abnahmetest „… aus dem Speicher trägt Name/Domain mit Datum und Uhrzeit …“ (IDs
 `recent.N`) sowie `help.test.tsx`. Vorschlag für den Testagenten: dieselbe Prüfung über `recent.N` mit den
 Einträgen aus `loadRecent()`.
+
+## Nachzug B4-PROJDLG2 (Folgepunkte A1–A6 nach Fable approved 88)
+
+Branch `m3/b4-projdlg2` ab `main` `dd855e51`.
+
+- **A1** `help/install.ts`: Die Menü-Labels von „Zuletzt geöffnet“ werden nach einem Sprachwechsel neu gebildet
+  (`onLanguageChanged` → `reloadRecent`). Test in `help.test.tsx`: Das Label wechselt von
+  „uuid – Oct 29, 2026, 12:00 PM“ zu „uuid – 29.10.2026, 12:00“.
+- **A4** `crawls/model.ts` und `CrawlsHost.tsx`: Der Legacy-Schlüssel wird erst nach erfolgreichem
+  `updateRecent` gelöscht (`readRecent` → `updateRecent` → `clearLegacyRecent`). Schlägt das Speichern fehl,
+  bleibt er für den nächsten Start; die Übernahme ist idempotent. `takeLegacyRecent` entfällt. Test in
+  `crawls.test.tsx`: Speichern schlägt fehl, der Schlüssel bleibt; beim nächsten Mount wird übernommen und erst
+  dann gelöscht.
+- **A5** CRAWL-127: Tooltip-Satz präzisiert („In der Verwaltung …“, das native Menü kennt keine Tooltips).
+- **A6** Abschnitt 2 dieses Berichts korrigiert (`recentMenuLabel` und die eigene Index-Abfrage der Verwaltung
+  gibt es nicht mehr).
+- **A3** `crawls.test.tsx`: Der Kappungs-Test prüft jetzt die gemeinsame Liste im UI-Zustand. Er ist strenger:
+  exakte Liste mit 10 Einträgen, neueste zuerst, Dubletten und leere Pfade entfernt. Dazu kommt `normalizeRecent`
+  mit ungültigen Einträgen und erhaltenem Label.
+- **A2** Seeding der eigenen Recent-Tests über den UI-Zustand: In `crawls.test.tsx` war das schon so (`seedRecent`),
+  nur der Übernahme-Test nutzt bewusst den Legacy-Schlüssel. `e2e/crawls/management.spec.ts` seedet jetzt über
+  `window.crawlsFixture.seedRecent` (neu in `e2e/crawls/harness.tsx`, ruft `updateRecent`). Die Abnahmedateien des
+  Testagenten (`e2e/acceptance/b4-projdlg.spec.ts`, `src/features/crawls/acceptance-projdlg.test.tsx`) seeden
+  weiter über den Legacy-Schlüssel und laufen damit über die Übernahme. Sie sind **nicht geändert**.
+
+Läufe (Server, `srv-run.sh b4-projdlg`): `npm run -w apps/desktop typecheck && npm run -w apps/desktop test` mit
+125 Dateien / 1 070 Tests grün (die Abnahmedateien sind seit dem Merge in `main` enthalten und liefen mit).
+`e2e/crawls` (Chromium und WebKit, `--workers=1`) 24 passed; `e2e/acceptance/b4-projdlg.spec.ts` 52 passed. Die
+Bridge für `e2e/crawls/bridge.spec.ts` ist der Build vom Stand `a675fefa`. Kein Rust geändert.

@@ -9,6 +9,7 @@ import { allMenuContributions } from "../../ui/menu/registry";
 import { CrawlsHost } from "./CrawlsHost";
 import { managementFixture, fixtureRows } from "./fixtures/core";
 import { columns, permissions, readRecent, sortRows, useCrawlsDialog, writeRecent } from "./model";
+import { normalizeRecent, updateRecent } from "../help/recent";
 let fixture: ReturnType<typeof managementFixture>;
 const calls = (cmd: string) => fixture.core.calls.filter(c => c.cmd === cmd);
 async function mount(open = true) {
@@ -217,8 +218,10 @@ it("native dialog cancellation sends no open/import/save/export and recent entri
   expect(calls("crawl.open")).toHaveLength(0); expect(calls("crawls.import")).toHaveLength(0);
   select("Alpha"); click("Export crawl…"); await waitFor(() => expect(button("Export crawl…")).toBeEnabled());
   expect(calls("crawls.export")).toHaveLength(0);
-  writeRecent(["/new.ospider", "/new.ospider", ...Array.from({ length: 20 }, (_, i) => `/crawl-${i}.ospider`)]);
-  expect(readRecent()).toHaveLength(10); expect(readRecent()[0]).toBe("/new.ospider");
+  // The one recent list (UI state) deduplicates, drops invalid entries and caps at ten, newest first.
+  await updateRecent(() => [{ path: "/new.ospider" }, { path: "/new.ospider" }, { path: "" }, ...Array.from({ length: 20 }, (_, i) => ({ path: `/crawl-${i}.ospider` }))]);
+  expect(stored()).toEqual(["/new.ospider", ...Array.from({ length: 9 }, (_, i) => `/crawl-${i}.ospider`)]);
+  expect(normalizeRecent([{ path: "/a.ospider" }, { path: "/a.ospider" }, null, { path: 3 }, { path: "/b.ospider", label: "B – 1" }])).toEqual([{ path: "/a.ospider" }, { path: "/b.ospider", label: "B – 1" }]);
 });
 
 // spec: CRAWL-127 [M2]
@@ -363,6 +366,23 @@ it("takes the former local recent list over into the UI state once and keeps bot
   // Opening from the management dialog moves the file to the top of the shared list.
   fireEvent.click(await within(nav).findByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/fixture\/Alpha\.ospider$/ }));
   await waitFor(() => expect(stored()).toEqual(["/fixture/Alpha.ospider", "/ui/first.ospider", "/fixture/Beta.ospider"]));
+});
+
+// spec: CRAWL-127
+it("keeps the former local recent list when taking it over fails and takes it over on the next start", async () => {
+  writeRecent(["/fixture/Alpha.ospider"]);
+  const save = fixture.core.handlers.get("uistate.save");
+  fixture.core.handlers.set("uistate.save", () => { throw new IpcError(localError("Io", "err-io")); });
+  await mount(false);
+  await waitFor(() => expect(calls("uistate.save").length).toBeGreaterThan(0));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(readRecent()).toEqual(["/fixture/Alpha.ospider"]);
+  expect(stored()).toEqual([]);
+  cleanup();
+  if (save) fixture.core.handlers.set("uistate.save", save); else fixture.core.handlers.delete("uistate.save");
+  render(<CrawlsHost desktop={fixture.desktop} />);
+  await waitFor(() => expect(stored()).toEqual(["/fixture/Alpha.ospider"]));
+  await waitFor(() => expect(readRecent()).toEqual([]));
 });
 
 // spec: CRAWL-127

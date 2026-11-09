@@ -466,6 +466,18 @@ it("Ein nach Fensterende bestätigter nativer Dialog startet keinen Crawl", asyn
   expect(core.calls.some(call => call.cmd === "crawl.open")).toBe(false);
 });
 
+// spec: CRAWL-127
+it("rebuilds the File → Recently opened labels after a language switch", async () => {
+  core.uiState = { version: 1, state: { recentCrawls: [{ path: "/fixture/uuid.ospider" }] } };
+  core.handlers.set("crawls.list", () => [{ crawl: { file: "/fixture/uuid.ospider", startedAt: "2026-10-29T12:00:00", name: "uuid" }, startUrl: "http://127.0.0.1:1234/fixture" }]);
+  await setLanguage("en");
+  dispose = installMainMenus();
+  const label = () => flattenItems(buildMenuModel(allMenuContributions(), { platform: "mac", lang: "en", native: true, t: key => key, ctx: {} }).menus.flatMap(menu => menu.items)).find(item => item.id === "recent.0")?.label;
+  await waitFor(() => expect(label()).toMatch(/^uuid – Oct 29, 2026, 12:00\sPM$/));
+  await act(async () => { await setLanguage("de"); });
+  await waitFor(() => expect(label()).toBe("uuid – 29.10.2026, 12:00"));
+});
+
 // spec: UI-124
 it("enriches recent fixture paths from the crawl index without changing opening addresses", async () => {
   core.uiState = { version: 1, state: { recentCrawls: [{ path: "/fixture/uuid.ospider" }] } };
