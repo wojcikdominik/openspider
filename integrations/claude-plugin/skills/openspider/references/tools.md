@@ -19,9 +19,13 @@ and per-installation availability; disabled classes/tools are omitted.
 | `url_screenshot` | `read` | Saved render screenshot of a URL as image content. |
 | `start_crawl` | `crawl` | Start a spider/list crawl with a saved profile and safe overrides. |
 | `crawl_status` | `crawl` | Poll progress and completion for a crawl. |
-| `stop_crawl` | `crawl` | Stop a crawl owned by this server, preserving its queue. |
-| `resume_crawl` | `crawl` | Resume a stopped, paused or interrupted crawl. |
+| `pause_crawl` | `crawl` | Pause a running crawl so it can be resumed later; poll until the state is Paused. |
+| `stop_crawl` | `crawl` | End a running or paused crawl for good; its data stays saved, but it can never be resumed. |
+| `resume_crawl` | `crawl` | Resume a paused, interrupted or limit-ended crawl; stopped crawls are rejected. |
 | `export` | `write` | Save a requested CSV/XLSX tab, bulk export or report, or page content as NDJSON. |
+
+Crawl control errors with code `busy` (also in `structuredContent.error`) are retryable: a pause or
+stop is still in progress, or the app is running another operation. Wait briefly and call again.
 
 The `cost` class contains paid provider operations. `fetch_link_metrics` first returns
 an estimate; executing it requires the same arguments with explicit confirmation. A server

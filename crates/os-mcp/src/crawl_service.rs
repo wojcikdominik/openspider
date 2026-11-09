@@ -16,6 +16,24 @@ use crate::{ToolContext, ToolError};
 pub(crate) struct CrawlService {
     handles: Mutex<HashMap<String, CrawlHandle>>,
     finished: Mutex<HashSet<String>>,
+    /// Angeforderte, noch nicht abgeschlossene Pause bzw. Stopp je Crawl (`busy`, AGENT-020).
+    settling: Mutex<HashMap<String, &'static str>>,
+}
+
+/// Was ein Steuerbefehl über einen Crawl dieses Prozesses wissen muss.
+enum Live {
+    /// Kein Engine-Handle dieses Prozesses (oder ein ganz beendeter Lauf).
+    None,
+    /// Die Engine arbeitet; `Some` = Pause/Stopp schon angefordert.
+    Running(Option<&'static str>),
+    /// Endzustand gemeldet und dauerhaft, der Lauf schließt die Datei aber noch ab (Checkpoint, Writer, Hook).
+    Closing(os_model::CrawlState),
+}
+
+fn busy_text(id: &str, what: &str) -> ToolError {
+    ToolError::Busy(format!(
+        "Crawl {id} is {what}; retry when crawl_status no longer reports Running"
+    ))
 }
 impl std::fmt::Debug for CrawlService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -115,26 +133,167 @@ impl CrawlService {
             .map(|h| json!({"crawl_id":id,"progress":h.progress()}))
     }
 
-    pub fn stop(&self, id: &str) -> Result<(), ToolError> {
+    /// Zustand des Laufs, solange ihn dieser Prozess führt. Ist der Lauf beendet, gilt die Datei: Ein anderer Prozess kann den
+    /// Crawl inzwischen fortgesetzt und beendet haben.
+    pub fn state(&self, id: &str) -> Option<os_model::CrawlState> {
+        let handles = self.handles.lock().ok()?;
+        handles
+            .get(id)
+            .filter(|h| !h.is_finished())
+            .map(|h| h.progress().state)
+    }
+
+    /// Zustand des Engine-Handles dieses Prozesses; räumt erledigte Anforderungen auf.
+    fn live(&self, id: &str) -> Result<Live, ToolError> {
         let handles = self.handles.lock().map_err(invalid)?;
-        if self.finished.lock().map_err(invalid)?.contains(id)
-            || handles
-                .get(id)
-                .is_some_and(|h| h.progress().state != os_model::CrawlState::Running)
-        {
-            return Err(ToolError::InvalidArguments(format!(
-                "Crawl {id} already finished"
-            )));
+        let mut settling = self.settling.lock().map_err(invalid)?;
+        let Some(handle) = handles.get(id) else {
+            settling.remove(id);
+            return Ok(Live::None);
+        };
+        if handle.progress().state == os_model::CrawlState::Running {
+            return Ok(Live::Running(settling.get(id).copied()));
         }
-        let handle = handles.get(id).ok_or_else(|| {
-            ToolError::NotFound(format!("Crawl {id} is not controlled by this MCP process"))
-        })?;
-        handle.stop();
-        Ok(())
+        settling.remove(id);
+        Ok(if handle.is_finished() {
+            Live::None
+        } else {
+            Live::Closing(handle.progress().state)
+        })
+    }
+
+    /// Sendet Pause bzw. Stopp an die laufende Engine; eine zweite Anforderung während des Anhaltens ist `busy`.
+    fn signal(&self, id: &str, what: &'static str) -> Result<bool, ToolError> {
+        let handles = self.handles.lock().map_err(invalid)?;
+        let mut settling = self.settling.lock().map_err(invalid)?;
+        let Some(handle) = handles
+            .get(id)
+            .filter(|h| h.progress().state == os_model::CrawlState::Running)
+        else {
+            return Ok(false);
+        };
+        if let Some(pending) = settling.get(id) {
+            return Err(busy_text(id, pending));
+        }
+        if what == "stopping" {
+            handle.stop();
+        } else {
+            handle.pause();
+        }
+        settling.insert(id.to_owned(), what);
+        Ok(true)
+    }
+
+    /// Fehler für einen Crawl ohne laufende Engine dieses Prozesses, nach dem Zustand seiner Datei.
+    fn not_live(ctx: &ToolContext, id: &str, verb: &str) -> Result<ToolError, ToolError> {
+        let crawl = super::tools::common::open_crawl(ctx, &json!({"crawl_id":id}))?;
+        let state = crawl.file.effective_state(&SystemClock).map_err(invalid)?;
+        Ok(match state {
+            os_model::CrawlState::Running => {
+                let kind = crawl
+                    .file
+                    .get_meta("owner_kind")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                let pid = crawl
+                    .file
+                    .get_meta("owner_pid")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                ToolError::InvalidArguments(format!(
+                    "Crawl {id} runs in another process ({kind}, PID {pid}); it can only be controlled there"
+                ))
+            }
+            os_model::CrawlState::Paused => {
+                ToolError::InvalidArguments(format!("Crawl {id} is already paused; cannot {verb}"))
+            }
+            other => ToolError::InvalidArguments(format!(
+                "Crawl {id} already finished ({})",
+                other.as_str()
+            )),
+        })
+    }
+
+    /// `pause_crawl` (AGENT-020, CRAWL-126): hält einen Crawl dieses Prozesses fortsetzbar an.
+    pub fn pause(&self, ctx: &ToolContext, id: &str) -> Result<(), ToolError> {
+        match self.live(id)? {
+            Live::Running(Some(pending)) => return Err(busy_text(id, pending)),
+            Live::Running(None) => {
+                if self.signal(id, "pausing")? {
+                    return Ok(());
+                }
+            }
+            Live::Closing(_) | Live::None => {}
+        }
+        Err(Self::not_live(ctx, id, "pause")?)
+    }
+
+    /// `stop_crawl` (AGENT-020, UI-003): beendet einen laufenden Crawl dieses Prozesses oder einen pausierten bzw.
+    /// unterbrochenen Crawl ohne Engine endgültig (Endgrund `stopped`).
+    pub fn stop(&self, ctx: &ToolContext, id: &str) -> Result<Value, ToolError> {
+        match self.live(id)? {
+            Live::Running(Some(pending)) => return Err(busy_text(id, pending)),
+            Live::Running(None) => {
+                if self.signal(id, "stopping")? {
+                    return Ok(json!({"crawl_id":id,"stopping":true}));
+                }
+            }
+            Live::Closing(os_model::CrawlState::Paused) => {
+                return Err(busy_text(id, "still saving its paused state"))
+            }
+            Live::Closing(_) | Live::None => {}
+        }
+        let crawl = super::tools::common::open_crawl(ctx, &json!({"crawl_id":id}))?;
+        let state = crawl.file.effective_state(&SystemClock).map_err(invalid)?;
+        if !matches!(
+            state,
+            os_model::CrawlState::Paused | os_model::CrawlState::Incomplete
+        ) {
+            return Err(Self::not_live(ctx, id, "stop")?);
+        }
+        let path = crawl.file.path().to_path_buf();
+        drop(crawl);
+        // Die Crawl-Analyse startet wie nach einem regulären Ende (UI-003, CRAWL-141), ohne die Antwort aufzuhalten.
+        let mut deps = self.deps(None);
+        deps.on_finished = Some(Arc::new(|summary| {
+            let file = summary.file.clone();
+            std::thread::spawn(move || {
+                if let Err(e) = run_after_crawl(&file, &CancelToken::new()) {
+                    tracing::error!(error=%e,"crawl analysis failed");
+                }
+            });
+        }));
+        os_engine::lifecycle::stop_unowned(&path, &deps).map_err(invalid)?;
+        self.handles.lock().map_err(invalid)?.remove(id);
+        self.finished.lock().map_err(invalid)?.insert(id.to_owned());
+        Ok(json!({"crawl_id":id,"state":"Completed","end_reason":"stopped"}))
     }
 
     pub fn resume(&self, ctx: &ToolContext, id: &str) -> Result<Value, ToolError> {
+        let live = self.live(id)?;
+        match live {
+            Live::Running(Some(pending)) => return Err(busy_text(id, pending)),
+            Live::Running(None) => {
+                return Err(ToolError::InvalidArguments(format!(
+                    "Crawl {id} is running; only a paused, interrupted or limit-ended crawl can be resumed"
+                )))
+            }
+            Live::Closing(_) | Live::None => {}
+        }
         let crawl = super::tools::common::open_crawl(ctx, &json!({"crawl_id":id}))?;
+        // CRAWL-128: „Gestoppt ist endgültig“ – derselbe Hinweis wie in CLI und Engine, vor jedem Abruferaufbau. Der gemeldete
+        // Endzustand ist dauerhaft, deshalb gilt das auch, solange der Lauf noch abschließt: Warten hülfe hier nicht.
+        if crawl.meta.end_reason == Some(os_model::EndReason::Stopped) {
+            return Err(ToolError::InvalidArguments(format!(
+                "Crawl {id} cannot be resumed: {} (stopped crawls are final; start a new crawl)",
+                os_engine::lifecycle::STOPPED_IS_FINAL
+            )));
+        }
+        if matches!(live, Live::Closing(_)) {
+            return Err(busy_text(id, "still saving its final state"));
+        }
         let mut deps = self.deps(None);
         deps.renderer = Self::renderer(&crawl.cfg, ctx)?;
         let fetch_cfg =

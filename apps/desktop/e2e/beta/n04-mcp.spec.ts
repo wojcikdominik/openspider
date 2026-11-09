@@ -14,7 +14,7 @@ test("real app lists MCP tools while stopped and keeps whole column headings", a
     });
     expect(status).toBe("off");
     const table = page.getByRole("table", { name: "Tools", exact: true });
-    await expect(table.locator("tbody tr")).toHaveCount(16);
+    await expect(table.locator("tbody tr")).toHaveCount(17); // AGENT-020: `pause_crawl` kam mit beta.4 dazu.
     for (const header of await table.locator("th").all()) {
       expect(await header.evaluate(el => getComputedStyle(el).whiteSpace)).toBe("nowrap");
     }
