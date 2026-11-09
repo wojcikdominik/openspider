@@ -1,0 +1,17 @@
+P1 M3-Q01: Feld size fehlt
+P1 M3-Q01: unbekannte Welle 'x1'
+P1 M3-Q01: unbekannter runner 'cloud'
+P2 M3-U01: unbekannte Abhängigkeit M2-NOPE (nicht in M2-packages.json)
+P2 M3-U02 (W1) hängt an M3-U01 (W1)
+P2 M3-D02 hängt an M4-F01 aus einem späteren Meilenstein
+P3 UI-100 steht mehrfach in den Spec-Dateien: 02-tabs-onpage.md, 05-ui.md
+P3 M3-D01: TEAM-001 aus 11-teams.md (Entwurf vom 09.11.2026, keinem Meilenstein zugeordnet (Roadmap R10, nach Release 1.0)) im Plan
+P3 OUT-250 doppelt: M3-F01 und M3-D02
+P3 UI-102 steht in M3-D02 und in M4-Y01 (M4)
+P3 OUT-257 (06-output-ops.md, P1) gehört laut README zu M3, steht aber in keinem Paket
+P3 OUT-253 (M3-U02) außerhalb der README-Zuordnung von M3 und ohne Grund in ZUSATZ
+P3 ZUSATZ nennt CRAWL-142, das in keinem Paket von M3 steht
+P3 ZUSATZ nennt OUT-247, das in keinem Paket von M3 steht
+P4 Welle 1: M3-U01 / M3-U02: crates/a/**  ×  crates/a/src/x.rs
+P12 Gate M3-G1 hängt nicht an der Nutzer-Abnahme M3-A01
+P12 M3-A02: Nutzer-Abnahme ohne runner/model human

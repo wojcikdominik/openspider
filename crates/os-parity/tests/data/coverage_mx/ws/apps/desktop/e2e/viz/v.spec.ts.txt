@@ -1,0 +1,3 @@
+import { test } from '@playwright/test';
+// spec: UI-098
+test('3D-Graph dreht', async () => {});

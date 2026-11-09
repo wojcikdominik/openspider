@@ -1,0 +1,251 @@
+name: Spec coverage M3-M5
+
+# M3-Q01: Abdeckung für M3, M4 und M5 (`os-parity coverage --milestone M3|M4|M5`) und Planprüfung
+# (`docs/plan/plan-check.py`). Die Testbelege (Rust-Ausgabe, vitest-, node:test- und Playwright-JUnit) erzeugt
+# „Spec coverage M2“ (spec-coverage-m2.yml, bleibt unverändert); dieser Workflow baut sie nicht ein zweites Mal,
+# sondern lädt die Artefakte des fertigen M2-Laufs auf main und wertet sie je Meilenstein aus.
+#
+# - workflow_run: nach jedem abgeschlossenen M2-Lauf eines Pushs auf main, Bericht für M3, M4 und M5 (kein Gate,
+#   ein roter Status ist eine Warnung in der Step-Summary).
+# - workflow_dispatch: Gate eines Meilensteins (M3.md 8 B2, M4.md 8 B2, M5.md 8 B2) gegen den letzten bzw. einen
+#   bestimmten M2-Lauf auf main; mit gate=true endet der Job bei fehlender Abdeckung, roten Tests, fehlenden
+#   Matrix-Belegen oder roter Planprüfung mit Exit 1.
+# - pull_request/push mit Änderungen an diesem Workflow, dem Prüfskript oder os-parity: nur Planprüfung und
+#   Selbsttest (ohne Testbelege), damit Änderungen an der Prüfung selbst sichtbar geprüft werden.
+
+on:
+  workflow_run:
+    workflows: ['Spec coverage M2']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      milestone:
+        description: 'Meilenstein (M3, M4, M5 oder alle)'
+        type: choice
+        options: [alle, M3, M4, M5]
+        default: M3
+      gate:
+        description: 'Abnahme über alle Wellen (Q04 bzw. Gate)'
+        type: boolean
+        default: false
+      run_id:
+        description: 'Lauf-ID von „Spec coverage M2“ als Belegquelle (leer = letzter abgeschlossener Lauf auf main)'
+        type: string
+        default: ''
+  push:
+    branches: [main, 'm3/**', 'm4/**', 'm5/**']
+    paths: &plan-paths
+      - 'docs/plan/M*-packages.json'
+      - 'docs/plan/plan-check.py'
+      - 'docs/plan/M2-check.py'
+      - 'docs/spec/**'
+      - 'crates/os-parity/src/coverage/**'
+      - 'crates/os-parity/tests/data/coverage_mx/**'
+      - '.github/workflows/spec-coverage.yml'
+  pull_request:
+    paths: *plan-paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_PROFILE_DEV_DEBUG: '0'
+
+jobs:
+  plan-check:
+    name: plan-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Beim workflow_run genau der Stand, zu dem die Testbelege gehören.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Planprüfung M3–M5 und Selbsttest
+        shell: bash
+        env:
+          GATE: ${{ github.event_name == 'workflow_dispatch' && inputs.gate || false }}
+        run: |
+          python3 -I docs/plan/plan-check.py --selftest
+          status=0
+          python3 -I docs/plan/plan-check.py > plan-check.txt 2>&1 || status=$?
+          cat plan-check.txt
+          { echo '### Planprüfung M3–M5'; echo '```'; cat plan-check.txt; echo '```'; echo "Exit: $status"; } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$status" -ne 0 ]]; then
+            echo "::warning title=Planprüfung M3–M5::plan-check.py Exit $status (Befunde in der Step-Summary)"
+          fi
+          # Nur im Gate rot: offene Planpunkte (z. B. eine README-ID ohne Paket) entscheidet der Planer.
+          if [[ "$GATE" == "true" ]]; then exit "$status"; fi
+
+  coverage:
+    name: coverage (${{ matrix.milestone }})
+    needs: plan-check
+    # Belege gibt es nur aus einem M2-Lauf auf main: nach dessen Abschluss (nicht abgebrochen) oder manuell.
+    if: >-
+      ${{ !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.conclusion != 'skipped')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        milestone: [M3, M4, M5]
+    env:
+      GATE: ${{ github.event_name == 'workflow_dispatch' && inputs.gate || false }}
+      SELECTED: ${{ github.event_name == 'workflow_dispatch' && inputs.milestone || 'alle' }}
+    steps:
+      - name: Auswahl
+        id: pick
+        shell: bash
+        run: |
+          if [[ "$SELECTED" == "alle" || "$SELECTED" == "${{ matrix.milestone }}" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "${{ matrix.milestone }} nicht ausgewählt (${SELECTED})" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Belegquelle bestimmen
+        id: source
+        if: steps.pick.outputs.run == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_FROM_EVENT: ${{ github.event.workflow_run.id }}
+          SHA_FROM_EVENT: ${{ github.event.workflow_run.head_sha }}
+          RUN_INPUT: ${{ inputs.run_id }}
+        run: |
+          if [[ -n "$RUN_FROM_EVENT" ]]; then
+            run_id="$RUN_FROM_EVENT"; sha="$SHA_FROM_EVENT"
+          else
+            if [[ -n "$RUN_INPUT" ]]; then
+              run_id="$RUN_INPUT"
+            else
+              run_id=$(gh run list -R "$GITHUB_REPOSITORY" --workflow spec-coverage-m2.yml --branch main \
+                --event push --status completed --limit 1 --json databaseId --jq '.[0].databaseId')
+            fi
+            if [[ -z "$run_id" ]]; then echo "::error::kein abgeschlossener Lauf von Spec coverage M2 auf main"; exit 1; fi
+            sha=$(gh run view -R "$GITHUB_REPOSITORY" "$run_id" --json headSha,headBranch,event \
+              --jq 'select(.headBranch == "main" and .event == "push") | .headSha')
+            if [[ -z "$sha" ]]; then echo "::error::Lauf $run_id ist kein Push-Lauf auf main"; exit 1; fi
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Belege aus Spec coverage M2, Lauf $run_id (Commit $sha)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@v4
+        if: steps.pick.outputs.run == 'true'
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.pick.outputs.run == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.pick.outputs.run == 'true'
+        with:
+          key: spec-coverage-mx
+      - uses: actions/setup-node@v4
+        if: steps.pick.outputs.run == 'true'
+        with:
+          node-version: '22'
+      # Vertragstests der Release-Skripte (node:test, wie release-scripts.yml, ohne npm-Abhängigkeiten). Sie tragen
+      # Teilkriterien von R04/P01/Q02 (`// spec: OUT-261 [M3]`) und laufen nicht in Spec coverage M2. node:test
+      # schreibt die Fälle ohne <testsuite>; je Datei eine Suite mit dem Dateipfad (wie integrations-m2.xml).
+      - name: Release-Vertragstests (node:test, JUnit)
+        if: steps.pick.outputs.run == 'true'
+        shell: bash
+        run: |
+          mkdir -p evidence/release
+          status=0
+          for file in tests/release/*.test.mjs scripts/release/*.test.mjs scripts/release/licenses/*.test.mjs; do
+            [[ -f "$file" ]] || continue
+            out="evidence/release/$(echo "$file" | tr '/' '_').xml"
+            node --test --test-reporter=spec --test-reporter-destination=stdout \
+              --test-reporter=junit --test-reporter-destination=raw.xml "$file" || status=$?
+            sed -e "s#<testsuites>#<testsuites><testsuite name=\"$file\">#" \
+              -e 's#</testsuites>#</testsuite></testsuites>#' raw.xml > "$out"
+            rm -f raw.xml
+          done
+          echo "Release-Vertragstests-Exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$status" -ne 0 ]]; then
+            echo "::warning title=Release-Vertragstests::node --test Exit $status"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.pick.outputs.run == 'true'
+        continue-on-error: ${{ env.GATE != 'true' }}
+        with:
+          name: vitest-junit
+          path: evidence/core
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: steps.pick.outputs.run == 'true'
+        continue-on-error: ${{ env.GATE != 'true' }}
+        with:
+          pattern: playwright-junit-*
+          path: evidence/e2e
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Spec-Abdeckung ${{ matrix.milestone }}
+        if: steps.pick.outputs.run == 'true'
+        shell: bash
+        env:
+          MS: ${{ matrix.milestone }}
+          SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          args=()
+          if [[ "$GATE" == "true" ]]; then args+=(--gate); fi
+          # Gemergte Pakete aus der Historie des Belegstands (coverage/merged.rs: „mN: Merge …“, „merge: MN-…“,
+          # Reihen B3/B4 als bekannt).
+          git log "$SHA" --format='%H%x09%s' > main-merges.txt
+          args+=(--merged-log main-merges.txt)
+          shopt -s nullglob
+          # Wie spec-coverage-m2.yml: fünf Matrix-Jobs mit playwright-m2.xml, einer mit den Laufzeitbudgets.
+          junit_files=(evidence/e2e/*/playwright-m2.xml)
+          perf_files=(evidence/e2e/*/playwright-m2-perf.xml)
+          missing=0
+          core="vorhanden"
+          if [[ ! -f evidence/core/rust-tests.txt || ! -f evidence/core/vitest-m2.xml ]]; then missing=1; core="fehlen"; fi
+          if [[ ${#junit_files[@]} -ne 5 || ${#perf_files[@]} -ne 1 ]]; then missing=1; fi
+          for file in "${junit_files[@]}" "${perf_files[@]}"; do args+=(--frontend-junit "$file"); done
+          if [[ -f evidence/core/vitest-m2.xml ]]; then args+=(--frontend-junit evidence/core/vitest-m2.xml); fi
+          if [[ -f evidence/core/integrations-m2.xml ]]; then args+=(--frontend-junit evidence/core/integrations-m2.xml); fi
+          if [[ -f evidence/core/rust-tests.txt ]]; then args+=(--test-output evidence/core/rust-tests.txt); fi
+          for file in evidence/release/*.xml; do args+=(--frontend-junit "$file"); done
+          status=0
+          cargo run --locked -p os-parity -- coverage --milestone "$MS" \
+            --write "target/$MS-status.json" "${args[@]}" > "coverage-$MS.txt" 2>&1 || status=$?
+          cat "coverage-$MS.txt"
+          { echo "### Spec-Abdeckung $MS"; echo '```'; cat "coverage-$MS.txt"; echo '```'
+            echo "Abdeckungs-Exit: $status; fehlende Belege: $missing; Gate: $GATE"; } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$status" -ne 0 ]]; then
+            echo "::warning title=Spec-Abdeckung $MS::os-parity coverage Exit $status (Gate: $GATE), Details in coverage-$MS.txt"
+          fi
+          if [[ "$missing" -ne 0 ]]; then
+            echo "::warning title=Spec-Abdeckung $MS::Belege unvollständig: ${#junit_files[@]} von 5 playwright-m2.xml, ${#perf_files[@]} von 1 playwright-m2-perf.xml, Rust/vitest $core"
+          fi
+          if [[ "$GATE" == "true" ]]; then
+            if [[ "$missing" -ne 0 ]]; then exit 1; fi
+            exit "$status"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.pick.outputs.run == 'true'
+        with:
+          name: spec-coverage-${{ matrix.milestone }}
+          path: |
+            main-merges.txt
+            evidence/release/
+            coverage-${{ matrix.milestone }}.txt
+            target/${{ matrix.milestone }}-status.json
+          if-no-files-found: warn

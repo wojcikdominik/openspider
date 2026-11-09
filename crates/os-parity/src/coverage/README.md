@@ -98,3 +98,50 @@ beliebiger Marker genügt“ würde ohne Planentscheidung Kriterien fallenlassen
 Eine gemeinsame maschinenlesbare C9-Datei für Q01 und M2-check.py P7 ist als
 Planerbedarf im Paketbericht ausgewiesen; bis dahin nennt der Kommentar in
 m2.rs die Quelle C9 Rev. 5 / K2-26 (17.10.2026). owns beschreibt allein nicht die erlaubten Zielpakete.
+
+## M3 … M5 (M3-Q01)
+
+```sh
+git log origin/main --format='%H%x09%s' > target/main-merges.txt
+cargo run --locked -p os-parity -- coverage --milestone M3 \
+  --test-output target/rust-tests.txt \
+  --frontend-junit target/vitest.xml --frontend-junit target/playwright.xml \
+  --merged-log target/main-merges.txt --write target/M3-status.json
+```
+
+`--milestone M3|M4|M5` liest `docs/plan/M<n>-packages.json` (oder `--packages`) und rechnet den Status je
+`spec_id` mit denselben Quellen wie M2 (Rust-Tags, TS-Tags, cargo-Ausgabe, JUnit, Paritätsbelege). Nur IDs des
+Meilensteins sind für den Status sichtbar; IDs aus anderen Paketlisten M1–M5 gelten als bekannt, andere Tags
+(z. B. aus dem Entwurf `11-teams.md`) erscheinen als Warnung. `--milestone M1` und `M2` sind unverändert (`m2.rs`
+unverändert, der gemeinsame Tag-Scan kennt zusätzlich `[M4]`/`[M5]`).
+
+**Teilkriterien** ersetzen Anhang B: Jede ID aus `extra_spec_ids` eines Pakets braucht einen grünen Test mit
+`// spec: <ID> [M<n>]` in einer Datei, die das Paket besitzt (M3.md D8). Tests derselben ID ohne Marker prüfen
+Kriterien früherer Meilensteine und zählen nicht. Pakete mit `"human": true` belegen Teilkriterien über ihr
+Protokoll (`manual`, nie blockierend). Statusdatei: `partial_criteria` (Paket → ID → Eintrag),
+`blocking_partial_criteria`. Zusätzlich steht in `partial_criteria_by_id` je Zusatz-ID der Status über alle
+Dateien ohne Besitzprüfung (informativ, nicht gewertet; die Besitzregel übernimmt die strenge Auslegung aus
+Anhang B, eine Lockerung wäre eine Planentscheidung). Nur für M3 … M5 zählen zusätzlich die Vertragstests der Release-Skripte
+(`tests/release/**/*.test.mjs`, `scripts/release/**/*.test.mjs` ohne `fixtures/`, node:test); ihre JUnit-Dateien
+mit dem Dateipfad als Suite kommen über `--frontend-junit`. `--milestone M2` liest diese Ordner nicht.
+
+**Ignore-Gründe** (M3.md D7, Paket M3-Q01): gültig sind `M<k>:` für spätere Meilensteine, `P2:`,
+`Klärung K3-nn`/`K4-nn`/`K5-nn`, `Manuell:` und `Benchmark` (neutral). Ein Grund `M<n>:` (Zurückstellung auf den
+eigenen Meilenstein, etwa aus M2) ist in der Entwicklung ein Altgrund (`legacy_ignores`, Warnung), im Gate
+ungültig. Platzhalter `wartet auf M<n>-xx` sind nur in `crates/*/tests/pending_m<n>_<kurz-id>.rs` eines anderen
+Pakets oder im E2E-Ordner eines anderen Pakets zulässig (`placeholders`), im Gate verboten. Geprüft werden Tests
+mit einer eigenen `spec_id`, mit einer Zusatz-ID samt Marker, mit eigenem Alt- oder Platzhaltergrund und Ignores
+ohne Grund; übrige Tests mit Gründen ohne gültiges Präfix stehen nur informativ in `out_of_scope_ignores` (sie
+gehören zu den Läufen früherer Meilensteine).
+
+**Gemergte Pakete**: `--merged`, `--wave` und `--merged-log` wie in M2. Die Historie erkennt
+`m<n>: Merge [m<n>/][M<n>-]<Zweig>[ inkl. <Zweig>, …]` und `merge: M<n>-<Paket> …`; `merged_via` im Paket wird
+wie in M2 geprüft. Pakete der Reihen B3, B4 … (`merge: B4-LAGFIX …`) stehen nicht in der Paketliste, sind aber
+bekannt (`series_packages`, keine Warnung, auch nicht in `--merged`). Fremde Zweige (`m3: Merge m2/n34`) stehen in
+`other_merge_branches`. Pakete, deren Titel mit „Bedingt“ beginnt (M4-X01, M4-Z01, M5-X02), sind auch mit
+`--gate` nur Pflicht, wenn sie gemergt sind (M4.md B2: „bedingte IDs nur, wenn umgesetzt“).
+
+`--gate` verlangt wie in M2 alle Wellen und jede Pflicht-ID als `implemented`/`verified`; `deferred` blockiert,
+auch mit `Manuell:` (ein Teilkriterium darf dagegen allein über `Manuell:` belegt sein). Echte `FAILED`-Ergebnisse
+blockieren in jedem Modus. Der Workflow `.github/workflows/spec-coverage.yml` wertet die Artefakte des Laufs
+„Spec coverage M2“ auf main für M3, M4 und M5 aus und führt `docs/plan/plan-check.py` aus.

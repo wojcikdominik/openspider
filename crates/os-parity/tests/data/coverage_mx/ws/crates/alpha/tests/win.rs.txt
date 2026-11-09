@@ -1,0 +1,4 @@
+// spec: OUT-263
+#[test]
+#[ignore = "Manuell: OUT-263 – Protokoll M3-Q03"]
+fn windows_arm_smoke() {}

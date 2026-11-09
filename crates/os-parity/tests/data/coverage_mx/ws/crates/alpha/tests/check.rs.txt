@@ -1,0 +1,46 @@
+// Fixture für M3-Q01 (coverage --milestone M3/M4). Die Tags belegen die Zuordnungsregeln aus M3.md D7/D8,
+// sie sind keine Produktabdeckung.
+
+// spec: OUT-250
+#[test]
+fn update_check() {}
+
+// spec: OUT-252
+#[test]
+#[ignore = "M4: Signaturkette erst mit dem KI-Paket"]
+fn signature_later() {}
+
+// spec: OUT-269 [M3]
+#[test]
+fn proxy() {}
+
+// spec: CRAWL-122 [M3]
+#[test]
+fn proxy_crawl() {}
+
+// spec: CRAWL-122
+#[test]
+#[ignore = "Klärung K2-12: Kriterium aus M2"]
+fn proxy_m2_criterion() {}
+
+// spec: OUT-222 [M3]
+#[test]
+fn settings_key() {}
+
+// spec: UI-002
+#[test]
+#[ignore = "M3: Nach Updates suchen ab M3"]
+fn help_menu_legacy() {}
+
+// spec: CRAWL-002
+#[test]
+#[ignore = "irgendein Grund"]
+fn foreign_reason() {}
+
+// spec: UI-004 [M4]
+#[test]
+fn ai_tab_m4() {}
+
+// spec: TEAM-001
+#[test]
+fn team_draft() {}

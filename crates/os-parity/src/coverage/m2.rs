@@ -118,7 +118,8 @@ fn glob(pattern: &str, value: &str) -> bool {
     go(pattern.as_bytes(), value.as_bytes(), &mut BTreeMap::new())
 }
 
-fn owns(pattern: &str, file: &str) -> bool {
+/// Besitzmuster eines `owns`-Eintrags (auch von `mx` genutzt, M3-Q01).
+pub(super) fn owns(pattern: &str, file: &str) -> bool {
     let base = pattern.split(" (").next().unwrap_or(pattern);
     if !glob(base, file) {
         return false;
