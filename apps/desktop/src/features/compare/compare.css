@@ -19,7 +19,13 @@
 .os-compare-detail-tabs, .os-compare-sidebar-tabs { display: flex; flex: none; gap: var(--os-space-4); padding: var(--os-space-4) var(--os-space-8); }
 .os-compare-links { flex: 1; height: auto; }
 .os-compare-links > h3 { flex: none; margin: 0; padding: 0 var(--os-space-8); font-size: var(--os-font-small); }
-.os-compare-numbers { flex: 1; min-height: 0; overflow: auto; }
+.os-compare-numbers { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+/* OUT-142: compact count columns; if they still do not fit, the table scrolls sideways with a hint and a fixed title column. */
+.os-compare-numbers-scroll { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
+.os-compare-numbers th, .os-compare-numbers td { padding: var(--os-space-4) var(--os-space-4); }
+.os-compare-numbers tbody th { white-space: normal; min-width: 12ch; position: sticky; left: 0; background: var(--os-bg-surface); }
+.os-compare-numbers td button { padding: 0 var(--os-space-4); font-variant-numeric: tabular-nums; }
+.os-compare-scroll-hint { flex: none; margin: 0; padding: var(--os-space-4) var(--os-space-8); font-size: var(--os-font-small); color: var(--os-text-muted); }
 .os-compare-sidebar { color: var(--os-text); background: var(--os-bg-surface); font-size: var(--os-font-table); }
 .os-compare-numbers td { text-align: end; font-variant-numeric: tabular-nums; }
 .os-compare-numbers > p { margin: 0; padding: var(--os-space-4) var(--os-space-8); }

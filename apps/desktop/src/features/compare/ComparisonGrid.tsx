@@ -84,26 +84,38 @@ export class ComparisonSource extends ViewDataSource {
   partner(key: number): number | null { return this.known.partners.get(key) ?? null; }
 }
 
-/** One comparison query as a virtualized source; a new query, sort or comparison revision starts again at row 0. */
-export function useComparisonSource(query: ComparisonQuery, revision: number, catalogTab?: string) {
+/**
+ * One comparison query as a virtualized source; a new query, sort, projection or comparison revision starts again at row 0.
+ * `columns` requests the ordinary projection of the tab (the user's visible columns); if the core rejects it (e.g. a custom
+ * column the compared crawl does not have), the tab's default columns are shown instead. `meta` replaces the catalog read.
+ */
+export function useComparisonSource(query: ComparisonQuery, revision: number, options: { catalogTab?: string; columns?: string[]; meta?: ColumnMeta[] } = {}) {
   const [source, setSource] = useState<ComparisonSource>();
   const [error, setError] = useState<unknown>();
-  const key = JSON.stringify([query, revision, catalogTab ?? null]);
+  const { catalogTab, columns = [], meta } = options;
+  const key = JSON.stringify([query, revision, catalogTab ?? null, columns, meta?.length ?? null]);
   useEffect(() => {
     const controller = new AbortController(); let created: ComparisonSource | undefined;
     setSource(undefined); setError(undefined);
-    const load: LoadPage = (offset, limit, signal) => comparisonRows(query, offset, signal, limit);
-    const meta = catalogTab ? catalog.columns({ tab: catalogTab }, controller.signal).catch(() => undefined) : Promise.resolve(undefined);
-    void Promise.all([load(0, BLOCK_SIZE, controller.signal), meta]).then(([first, columns]) => {
+    const loader = (projection: string[]): LoadPage => (offset, limit, signal) => comparisonRows(query, offset, signal, limit, projection);
+    const catalogColumns = meta ? Promise.resolve(meta) : catalogTab ? catalog.columns({ tab: catalogTab }, controller.signal).catch(() => undefined) : Promise.resolve(undefined);
+    const first = async (): Promise<[ComparisonPage, LoadPage]> => {
+      try { const load = loader(columns); return [await load(0, BLOCK_SIZE, controller.signal), load]; }
+      catch (e) {
+        if (!columns.length || controller.signal.aborted) throw e;
+        const load = loader([]); return [await load(0, BLOCK_SIZE, controller.signal), load];
+      }
+    };
+    void Promise.all([first(), catalogColumns]).then(([[page, load], known]) => {
       if (controller.signal.aborted) return;
-      created = new ComparisonSource(first, load, columns); setSource(created);
+      created = new ComparisonSource(page, load, known); setSource(created);
     }).catch(e => { if (!controller.signal.aborted) setError(e); });
     return () => { controller.abort(); void created?.dispose(); };
   }, [key]);
   return { source, error, setError };
 }
 
-/** Column layout per projection: retained across sorting and reloads of the same column set. */
+/** Column layout per projection (Change Detection, links): retained across sorting and reloads of the same column set. */
 export function useComparisonColumns(source: ComparisonSource | undefined, configuration: Map<string, ColumnState[]>) {
   const schema = source?.columns.map(c => c.key).join("\0") ?? "";
   const defaults = useMemo(() => source ? comparisonDefaultColumns(source.columns) : [], [source]);
@@ -112,6 +124,24 @@ export function useComparisonColumns(source: ComparisonSource | undefined, confi
   const setColumns = (next: ColumnState[]) => { configuration.set(schema, next); rerender(n => n + 1); };
   const reset = () => setColumns(defaults);
   return { columns, setColumns, reset };
+}
+
+/**
+ * The ordinary column configuration of a tab (UI-009: visibility, order, widths, pinning of the normal mode) applied to the
+ * comparison: the comparison columns stand directly after Address (OUT-142, OS-Festlegung 09.11.2026). Changes to ordinary
+ * columns are the user's normal configuration and persist there; the comparison columns keep their state for the session.
+ */
+export function mergeOrdinaryColumns(ordinary: readonly ColumnState[], source: ComparisonSource | undefined, local: ReadonlyMap<string, ColumnState>): ColumnState[] {
+  const available = new Set(source?.columns.map(c => c.key) ?? []);
+  const extra = (source?.columns ?? []).filter(c => COMPARISON_COLUMNS.includes(c.key))
+    .map(c => local.get(c.key) ?? { key: c.key, width: c.defaultWidth, visible: true, pinned: false });
+  // A visible ordinary column the core did not project (fallback to the defaults) cannot be shown.
+  const base = ordinary.filter(c => !COMPARISON_COLUMNS.includes(c.key)).map(c => ({ ...c, visible: c.visible && (available.has(c.key) || !source) }));
+  const at = base.findIndex(c => c.key === "Address") + 1;
+  return [...base.slice(0, at), ...extra, ...base.slice(at)];
+}
+export function splitOrdinaryColumns(next: readonly ColumnState[]): { ordinary: ColumnState[]; comparison: ColumnState[] } {
+  return { ordinary: next.filter(c => !COMPARISON_COLUMNS.includes(c.key)), comparison: next.filter(c => COMPARISON_COLUMNS.includes(c.key)) };
 }
 
 export function ComparisonGrid({ source, columns, onColumnsChange, label, sort, onSort, onSelect, onError, onExport, selectedKey }: {

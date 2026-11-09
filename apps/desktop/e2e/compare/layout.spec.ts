@@ -92,6 +92,18 @@ test("comparison fills the table region, shows the comparison columns, scrolls v
     expect(total).toBeGreaterThan(40);
     await expect(grid).toHaveAttribute("aria-rowcount", String(total + 1));
 
+    // Round 2 (beta.4): the same grouped tab bar as the ordinary mode, Change Detection as its own entry, mode „Comparison“.
+    await expect(page.getByRole("group", { name: "Areas" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change Detection", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Internal", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Mode: Comparison", { exact: true })).toBeVisible();
+    await expect(page.locator(".os-header-mode select")).toHaveValue("compare");
+    // The overview shows every count column (Removed/Missing) or says that it scrolls sideways.
+    const missingHead = (await page.locator(".os-app-sidebar").getByRole("columnheader", { name: "Missing", exact: true }).boundingBox())!;
+    const hint = page.locator(".os-app-sidebar").getByTestId("compare-scroll-hint");
+    if (missingHead.x + missingHead.width > sidebar.x + sidebar.width + 1) await expect(hint).toBeVisible();
+    else await expect(hint).toHaveCount(0);
+
     // 3. No file error appears for a comparison of two valid crawls.
     await expect(page.getByTestId("crawl-open-error")).toHaveCount(0);
     await expect(page.getByRole("alert").filter({ hasText: /file operation|Dateivorgang|os error/i })).toHaveCount(0);
@@ -105,5 +117,10 @@ test("comparison fills the table region, shows the comparison columns, scrolls v
       catch (e) { const error = (e as { cmdError: { code: string; messageKey: string; args: Record<string, unknown> } }).cmdError; return { code: error.code, messageKey: error.messageKey, path: error.args?.path }; }
     });
     expect(missing).toEqual({ code: "NotFound", messageKey: "err-file-not-found", path: expect.stringContaining("gone.ospider") });
+    // The main window reports it once, in the status bar, as one sentence with the file; no modal with the raw code.
+    await page.goto(`/?bridge=${encodeURIComponent(bridge!.url)}`);
+    await expect(page.getByTestId("crawl-open-error-text")).toHaveText("The file was not found: /os-b4-cmpui-missing/gone.ospider");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByText(/crawl-open-failed/)).toHaveCount(0);
   } finally { await bridge?.stop(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

@@ -6,6 +6,7 @@ import type { CompareSession } from "../../ipc/gen/CompareSession";
 import type { SortKey } from "../../ipc/gen/SortKey";
 import type { RowWindow } from "../../ipc/gen/RowWindow";
 import { setDetailSelection } from "../detail/frame/selection";
+import { useTabs } from "../../state/tabs";
 
 export type Side = "Current" | "Previous";
 export type Category = "Added" | "New" | "Removed" | "Missing";
@@ -20,11 +21,17 @@ interface State {
   dialog: boolean; session: CompareSession | null; snapshot: Snapshot | null; busy: boolean; error: unknown;
   revision: number; query: ComparisonQuery; selected: number | null; selectedPartner: number | null;
 }
-const defaultQuery = (): ComparisonQuery => ({ tab: "Internal", filter: "All", side: "Current" });
+/** A new comparison starts on the tab the ordinary tab bar shows (K2-77), otherwise on Internal. */
+const defaultQuery = (): ComparisonQuery => {
+  const tabs = useTabs.getState();
+  return { tab: tabs.catalog.some(t => t.id === tabs.active) ? tabs.active : "Internal", filter: "All", side: "Current" };
+};
 export const useComparison = create<State>(() => ({ dialog: false, session: null, snapshot: null, busy: false, error: null, revision: 0, query: defaultQuery(), selected: null, selectedPartner: null }));
 export const showComparison = () => useComparison.setState({ dialog: true });
 export function navigateComparison(tab: string, filter: string, category?: Category, side: Side = "Current") {
   useComparison.setState({ query: { tab, filter, class: category, side }, selected: null, selectedPartner: null });
+  // UI-004/K2-77: the comparison uses the ordinary tab bar; a jump from the numbers selects the same tab there.
+  if (useTabs.getState().active !== tab) useTabs.getState().select(tab);
   setDetailSelection({ urlIds: [] });
 }
 export function selectComparisonUrl(id: number, side: Side, partner: number | null = null) {
@@ -57,9 +64,20 @@ async function mutate(action: () => Promise<CompareSession | null>) {
 export const openComparison = (args: CompareOpenArgs) => mutate(() => compare.open(args));
 export const swapComparison = () => mutate(() => compare.swap());
 export const closeComparison = () => mutate(async () => { await compare.close(); return null; });
-export function comparisonRows(query: ComparisonQuery, offset = 0, signal?: AbortSignal, limit = 100): Promise<ComparisonPage> {
+/** `columns`: the ordinary projection of the tab (canonical names); empty = the tab's default columns (core). */
+export function comparisonRows(query: ComparisonQuery, offset = 0, signal?: AbortSignal, limit = 100, columns: string[] = []): Promise<ComparisonPage> {
   const session = useComparison.getState().session;
   if (!session) return Promise.reject(new Error("No comparison"));
-  return client.invoke("view.rows", { viewId: `comparison:${session.current.crawlId}:${session.previous.crawlId}:${useComparison.getState().revision}`, version: session.version, offset, limit, columns: [],
+  return client.invoke("view.rows", { viewId: `comparison:${session.current.crawlId}:${session.previous.crawlId}:${useComparison.getState().revision}`, version: session.version, offset, limit, columns,
     comparison: { ...query, current: session.current.crawlId, previous: session.previous.crawlId } }, signal);
 }
+
+/**
+ * UI-004/K2-77 (B4-CMPUI): the ordinary tab bar drives the comparison. A tab chosen there opens the same tab of the comparison;
+ * a catalog reload (Change Detection appears or disappears) moves a comparison off a tab that no longer exists.
+ */
+useTabs.subscribe((next, before) => {
+  const s = useComparison.getState();
+  if (!s.session || !next.catalog.some(t => t.id === next.active) || next.active === s.query.tab) return;
+  if (next.active !== before.active || (next.catalog !== before.catalog && !next.catalog.some(t => t.id === s.query.tab))) navigateComparison(next.active, "All");
+});
