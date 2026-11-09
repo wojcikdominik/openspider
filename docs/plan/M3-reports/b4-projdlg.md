@@ -113,8 +113,9 @@ Kein Rust geändert, daher kein Workspace-`cargo test`.
 
 | Datei | Bereich | Änderung |
 |---|---|---|
-| `apps/desktop/src/features/help/recent.ts` | Hilfe/Menü (u04) | Label über `recentCrawlTitle` |
+| `apps/desktop/src/features/help/recent.ts` | Hilfe/Menü (u04) | Label über `recentCrawlTitle`; `onRecentChanged` (Nachtrag Abnahme) |
 | `apps/desktop/src/features/help/help.test.tsx` | Hilfe/Menü (u04) | Erwartung an das neue Label |
+| `apps/desktop/src/features/help/install.ts` | Hilfe/Menü (u04) | lädt „Zuletzt geöffnet“ bei `onRecentChanged` neu (Nachtrag Abnahme) |
 | `apps/desktop/src/ui/menu/contributions/main.ts` | Menü | unbekannte Pfade per `middleEllipsis` |
 | `apps/desktop/e2e/beta/n04-live.spec.ts` | Beta-Live-E2E | Regex für das Label (nicht ausgeführt) |
 | `apps/desktop/e2e/tasks/tasks.spec.ts` | Planung | neuer Tipp-Test |
