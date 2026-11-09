@@ -53,7 +53,7 @@ jobs:
         run: python -W error::ResourceWarning -m unittest discover -s tests/install -v
 
   prepare:
-    name: Artefakte N und N+1 prüfen, Test-CA erzeugen
+    name: Artefakte N und N+1 prüfen
     if: github.event_name == 'workflow_dispatch'
     needs: unit
     runs-on: ubuntu-latest
@@ -89,6 +89,7 @@ jobs:
           # D14: Ohne signierte Updater-Artefakte (Trockenlauf ohne Secrets) endet der Lauf grün mit Hinweis.
           if [[ ! -f assets/next/latest.json ]]; then
             echo 'signed=false' >> "$GITHUB_OUTPUT"
+            echo "::warning title=Update-Matrix übersprungen::Lauf $NEXT_RUN enthält kein latest.json (keine signierten Updater-Artefakte); keine Zeile der Matrix ist gelaufen."
             {
               echo "**Update-Matrix übersprungen:** Lauf $NEXT_RUN enthält kein \`latest.json\`"
               echo '(Trockenlauf ohne signierte Updater-Artefakte, siehe release-reports/updater-status.txt).'
@@ -105,16 +106,6 @@ jobs:
                 f"N+1 = `{info['next']}` (Lauf {os.environ['NEXT_RUN']}), Kanal {info['channel']}, {info['repository']}.")
           PY
           echo 'signed=true' >> "$GITHUB_OUTPUT"
-      - name: Ephemere Test-CA (nur für die Testprofile dieses Laufs)
-        if: steps.versions.outputs.signed == 'true'
-        run: python tests/install/mockupdate.py certs --out certs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: steps.versions.outputs.signed == 'true'
-        with:
-          name: install-test-certs
-          path: certs/
-          retention-days: 1
-          if-no-files-found: error
 
   update:
     name: ${{ matrix.label }}
@@ -155,11 +146,11 @@ jobs:
           run-id: ${{ inputs.next_run_id }}
           name: release-assets
           path: assets/next
-      - name: Test-CA
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: install-test-certs
-          path: certs
+      - name: openssl für die Test-CA (wird im Matrix-Treiber je Job erzeugt)
+        run: |
+          if command -v openssl >/dev/null; then openssl version; else
+            test -x '/c/Program Files/Git/usr/bin/openssl.exe' && '/c/Program Files/Git/usr/bin/openssl.exe' version
+          fi
       - name: Fixture-Server bauen (os-testsite, kein Ersatz für die installierte CLI)
         run: |
           rustup show active-toolchain
@@ -178,7 +169,7 @@ jobs:
           testsite=target/debug/os-testsite
           if [[ "$RUNNER_OS" == Windows ]]; then testsite="$testsite.exe"; fi
           python tests/install/update_matrix.py --installer "$INSTALLER" \
-            --current assets/current --next assets/next --certs certs --testsite "$testsite" \
+            --current assets/current --next assets/next --testsite "$testsite" \
             --output "install-results/$MATRIX_ID" --label "$LABEL" --pubkey-file "$RUNNER_TEMP/updater.pub"
       - name: Protokoll im Job-Summary
         if: always()
@@ -198,16 +189,36 @@ jobs:
   protocol:
     name: Gesamtprotokoll
     needs: [prepare, update]
-    if: always() && needs.prepare.outputs.signed == 'true'
+    if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Protokoll „übersprungen“ (kein latest.json in N+1)
+        if: needs.prepare.outputs.signed != 'true'
+        env:
+          CURRENT_RUN: ${{ inputs.current_run_id }}
+          NEXT_RUN: ${{ inputs.next_run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            echo '# Installations- und Update-Matrix (M3-Q02)'
+            echo
+            echo "Lauf: $RUN_URL"
+            echo
+            echo "**Übersprungen: keine signierten Updater-Artefakte.** Lauf $NEXT_RUN (N+1) enthält kein latest.json;"
+            echo "N = Lauf $CURRENT_RUN. Keine Prüfung Q-01 bis Q-24 ist gelaufen; das ist kein Nachweis."
+          } > protokoll.md
+          cat protokoll.md >> "$GITHUB_STEP_SUMMARY"
+          echo '::warning title=Update-Matrix übersprungen::Protokoll „übersprungen: keine signierten Updater-Artefakte“ erzeugt.'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: needs.prepare.outputs.signed == 'true'
         with:
           pattern: install-update-*
           path: results
       - name: Matrix zusammenfassen
+        if: needs.prepare.outputs.signed == 'true'
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
