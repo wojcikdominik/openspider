@@ -16,6 +16,7 @@ import { attachSession, useSession } from "../../state/session";
 import { setLanguage } from "../../i18n";
 import { flushUiState } from "../../state/uistate";
 import fixtureTick from "../../ipc/__fixtures__/Tick.json";
+import { useSegments } from "../table-advanced/stores";
 import { UpperTable } from "./UpperTable";
 import { fixtureColumns, fixtureTabs, tableFixture } from "./fixtures/core";
 
@@ -75,4 +76,35 @@ it("reopens with the catalog's columns when they changed for the new crawl", asy
   expect(opens().at(-1)!.columns).toEqual(changed.map(c => c.key));
   await waitFor(() => expect(capture.grid?.source.viewId).toBe(`fixture-${opens().length}`));
   expect(fx.core.calls.some(c => c.cmd === "view.close")).toBe(true);
+});
+
+// spec: UI-018
+it("reloaded segment definitions without an active segment filter keep the open view", async () => {
+  render(<UpperTable />);
+  await waitFor(() => expect(capture.grid?.source.rowKey(0)).toBe(1));
+  const source = capture.grid!.source;
+  const opens = () => fx.core.calls.filter(c => c.cmd === "view.open").length;
+  const before = opens();
+  act(() => useSegments.setState({ revision: useSegments.getState().revision + 1 }));
+  await act(async () => { await Promise.resolve(); });
+  expect(opens()).toBe(before);
+  expect(capture.grid!.source).toBe(source);
+  expect(screen.getByRole("button", { name: "All (3)" })).toBeVisible();
+});
+
+// spec: UI-018
+it("a query change while the early open of a new crawl is in flight leaves exactly one open view", async () => {
+  render(<UpperTable />);
+  await waitFor(() => expect(capture.grid?.source.rowKey(0)).toBe(1));
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const open = fx.core.handlers.get("view.open")!;
+  fx.core.handlers.set("view.open", async (...call: Parameters<typeof open>) => { await gate; return open(...call); });
+  act(() => eventBus.emit({ kind: "tick", tick: tick(10, running("crawl-b", 0)) }));
+  act(() => useTabs.getState().query({ filter: "Client Error (4xx)" }));
+  await act(async () => { release(); await new Promise(r => setTimeout(r, 50)); });
+  await waitFor(() => expect(capture.grid?.source.total).toBe(1));
+  const opened = fx.core.calls.filter(c => c.cmd === "view.open").length;
+  const closed = new Set(fx.core.calls.filter(c => c.cmd === "view.close").map(c => (c.args as { viewId: string }).viewId));
+  expect(opened - closed.size).toBe(1);
 });
