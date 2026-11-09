@@ -1,6 +1,6 @@
 # Bericht B4-M2GATE: offene Gate-Punkte M2-Q04 aus der Fable-Prüfung von B4-M2CLOSE
 
-Branch `m3/m2gate` (Basis main `bb0b27e1`), Worktree `~/Projects/openspider-wt/c-m2gate`, Server-Worktree `m3-m2gate`.
+Branch `m3/m2gate` (Basis main `bb0b27e1`, nach Fable A1 mit dem lokalen main `c8a0d85f` zusammengeführt), Worktree `~/Projects/openspider-wt/c-m2gate`, Server-Worktree `m3-m2gate`.
 Nicht nach origin gepusht, nichts gemergt. Ausgeführt von Claude Opus 5.5 (Planer- und Bauarbeit in einem Paket).
 
 ## Ergebnis in Kürze
@@ -10,6 +10,11 @@ Server mit **Exit 0, `passed: true`**: 590/590 IDs implemented, **Anhang B 0 off
 Ignores**, `failed_tests: []`. Die Evidenz ist frisch und vollständig von diesem Stand, aber **nur Linux** (Chromium und
 WebKit); macOS-WebKit und Windows-Chromium liefert erst der echte Gate-Lauf in der CI (Abschnitt 6). `docs/plan/M2-status.json`
 habe ich deshalb nicht überschrieben.
+
+**Nachbesserung (Fable `needs_work` 70):** lokaler `main` mit M3-Q01 eingemergt und `mx.rs` angepasst (A1), Beleg
+CRAWL-124 korrigiert (A2), beide Prüfregeln als K2-102 in `M2.md` (A3), B4-LANG als M3-Paket eingetragen (Planer-Punkte
+a–d). Nach dem Merge: clippy grün, `os-parity` 208/208, M1 242/242, M2-Gate weiter Exit 0; M3-Zahlen im Abschnitt
+„Nachbesserung“.
 
 | Prüfgröße | B4-M2CLOSE (CI-Lauf 42263770213, main 06.11.) | B4-M2GATE (Server, `--gate`) |
 |---|---|---|
@@ -57,14 +62,19 @@ jede gestrichene ID bei den Tabellenpaketen bleibt). Gate-Ausgabe unten: Anhang 
 
 ## 2 Q03: CRAWL-124 und PERF-008
 
-**Begründung.** M2-Q03 ist ein Messpaket ohne Testdateien (`owns`: nur Dokumente und Aufrufhilfen). Sein Beleg ist der
-Bericht `docs/plan/M2-reports/q03.md` (1-Mio.-Profilläufe für CRAWL-124; PERF-008: 1 Mio. CSV-Zeilen 1,97 s,
-XLSX-Limitwarnung und Blattteilung bestanden). Ein getaggter Test kann dort nicht entstehen.
+**Begründung.** M2-Q03 ist ein Messpaket ohne Testdateien (`owns`: nur Dokumente und Aufrufhilfen); ein getaggter Test
+kann dort nicht entstehen. **Korrigiert nach Fable A2:** `q03.md` enthält **keine** CRAWL-124-Profilergebnisse (die
+Profilläufe gehören zur noch offenen Stufe 2 auf dem 16-GB-Mac). Den Profilbenchmark bei 1 Mio. belegt M1-N14/N21 (A4,
+`M1-acceptance/checklist.md` Zeilen 17 und 333, `M1.md` Welle 7b); die M2-Kriterien von CRAWL-124 (Dialog, Umzug des
+Speichermodus) belegen O02 (`os-app/tests/cmd_crawls_management.rs:194/334`, `os-store/tests/registry_management.rs:254`)
+und U14 (`e2e/settings-sections/sections.spec.ts:23`), alle mit `[M2]`. `q03.md` belegt nur PERF-008, und zwar Stufe 1
+(1 Mio. CSV-Zeilen 1,97 s, XLSX-Limitwarnung und Blattteilung bestanden); Stufe 2 ist offen.
 
 **Änderung** (Commit `58e6e8de`): CRAWL-124 und PERF-008 aus den `extra_spec_ids` von M2-Q03 gestrichen; in Anhang B
-lauten die Zeilen jetzt `O02⁺ (W1), U14⁺ (W2); Messung der 1-Mio.-Profile ohne Testmarker im Bericht
-M2-reports/q03.md (K2-101)` bzw. `X01 (W1); Großlauf ohne Testmarker im Bericht M2-reports/q03.md (K2-101)`. Q03 behält
-PERF-006/007 (nicht in Anhang B).
+lauten die Zeilen nach der Korrektur (Commit `828f6f3b`) `O02⁺ (W1), U14⁺ (W2); Q03 gestrichen (K2-101):
+Profilbenchmark bei 1 Mio. belegt M1-N14/N21 (A4, M1-acceptance/checklist.md), Stufe 2 von Q03 offen` bzw. `X01 (W1); Q03
+gestrichen (K2-101): Großlauf ohne Testmarker im Bericht M2-reports/q03.md (Stufe 1; Stufe 2 auf der Referenzhardware
+offen)`. K2-101 ist entsprechend berichtigt. Q03 behält PERF-006/007 (nicht in Anhang B).
 
 **Nachweis.** `m2.rs` liest Anhang B weiter fehlerfrei (Testlauf `coverage_m2`, Gate-Ausgabe ohne Q03-Eintrag).
 
@@ -161,7 +171,7 @@ Erwartung: `mode: "gate"`, `passed: true`, `blocking_specs: []`, `blocking_appen
 ungültigen Ignores. Ist der Lauf rot, stehen die Gründe in `coverage-m2.txt` im selben Artefakt und in der Step-Summary.
 Hinweis: Am 09.11. um 08:48 stand bereits ein Push-Lauf auf main in der Warteschlange (42588573478).
 
-## Server-Ergebnisse
+## Server-Ergebnisse (erster Lauf, vor dem Merge von `main`)
 
 Alle Läufe im Server-Worktree `m3-m2gate`, Stand `24260f18` (plus dieser Bericht), mit `~/ws-slot.sh` und
 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0`; Skript `~/m2gate-run.sh`, Belege unter
@@ -207,35 +217,89 @@ Server-Klon von `origin/main` älter ist; seit `6e08d7f2` kamen nur `merge:`-Tit
 Platte: Der Lauf wartete von 09:36 bis 11:08 UTC in `ws-slot` (zeitweise nur 33 GB frei durch andere Worktrees). `target/`
 dieses Worktrees ist am Ende gelöscht.
 
-## Fragen an Fable bzw. den Nutzer
+## Nachbesserung nach Fable `needs_work` 70 (09.11.2026)
 
-1. **Projektbegriff der Skip-Regel.** Umgesetzt ist „anderes Browserprojekt“ wörtlich (`hostname`). Ein Skip auf
-   macOS-WebKit mit `ok` auf Linux-WebKit zählt damit **nicht** als belegt (gleiches Projekt `webkit`). Für die heutigen
-   Fälle reicht das. Soll eine andere Plattform (anderer Matrix-Job) ebenfalls zählen?
-2. **D7-Grund im M2-Prüfer.** `m2.rs` erkennt jetzt `Manuell: <ID> – Protokoll M3-Q03` (wie zuvor schon `Klärung K3-`).
-   Bitte im Gate bestätigen, dass M3-Gründe nach D7 im M2-Gate gelten.
-3. **es/fr/it (UI-121 [P1], Zeile 4 der Sprachdatei).** K2-79 schob die vollständigen Kataloge „nach M3 (Beta/1.0) ins
-   Backlog“. Weder `M3.md` 1.3 noch `M3-packages.json` noch `ROADMAP-nach-1.0.md` führen den Punkt. Der Grund `M3:` ist im
-   M2-Gate gültig, wäre aber in einer M3-Abdeckung (D7 kennt `M3:` nicht) ungültig. Planer-Entscheidung nötig: M3-Paket
-   oder Roadmap mit neuem Grund.
-4. **Weitere Grenzfälle aus B4-M2CLOSE** (TECH-008/K06, CRAWL-127/U15 teilweise) sind nicht Teil dieses Auftrags und
-   unverändert.
+**A1 (Blocker), Basis veraltet.** Lokaler `main` (`c8a0d85f`, 74 Commits weiter, mit M3-Q01 `coverage/mx.rs`) in
+`m3/m2gate` gemergt (Merge `594826c7`, konfliktfrei). `mx.rs` ruft `frontend::read_junit` jetzt mit der neuen Rückgabe
+auf und nimmt nur die Ergebnisse (`.into_iter().map(|(result, _project)| result)`, Commit `3d35a04b`). Ob die Skip-Regel
+auch in `mx.rs` gilt, bleibt Folgepunkt für M3-Q01 (siehe M3-Zahlen unten: `v02.spec.ts:133/222/237` sind dort noch
+ungültige Ignores).
+
+**A2, falscher Beleg CRAWL-124.** Anhang B und K2-101 korrigiert (Abschnitt 2, Commit `828f6f3b`).
+
+**A3, Regeländerung in den Plan.** `M2.md` Regel 5 trägt die Ergänzung K2-102 (a) bedingte Skips, (b) D7-Form im
+M2-Check; neue Klärung **K2-102** mit der vollständigen Regel, den Tests und dem Satz: „Ein bedingter Skip, dessen
+Bedingung keine Engine-, Plattform- oder Fähigkeitsprüfung ist, verstößt gegen K2-63.“ Fables Entscheidungen sind
+eingetragen (andere Plattform desselben Projekts zählt nicht; D7-Form eng bestätigt). Die Crate-README verweist auf
+K2-102 (Commit `828f6f3b`). `M2-check.py` OK.
+
+**Planer-Punkte (Commit `6ee7c160`):**
+
+- (a) `M3-packages.json`: Eintrag **B4-LANG** (Branch `m3/lang`, `extra_spec_ids` UI-121 mit dem [P1]-Kriterium
+  es/fr/it, `depends_on` B4-M2GATE, Welle 4, `server+ci`). `owns`: `apps/desktop/src/**/i18n/**`, `e2e/i18n/**`,
+  `e2e/visual/language*.spec.ts`, dazu aus dem Bericht `b4-lang.md` die neuen Dateien `e2e/acceptance/lang/**`,
+  `core/issues/texts/{es,fr,it}.toml` und `{es,fr,it}.d/**`, `scripts/i18n-missing.mjs`, `M3-reports/b4-lang*.md`. Die
+  übrigen B4-LANG-Änderungen (Kern-Sprachzuordnung, `UiLanguage`/Schema, Exportoption, Spaltenköpfe, `ui/shortcuts.ts`)
+  stehen in dessen K2-92-Tabelle; die `prompt_notes` verweisen darauf. Zusätzlich vermerkt: Nach D8 braucht der
+  es/fr/it-Test `// spec: UI-121 [M3]`, sonst bleibt das Teilkriterium in der M3-Abdeckung offen (auf `m3/lang` trägt er
+  nur `[P1]`).
+- (b) `M3.md` 1.3: Zeile „K2-79 Punkt (2) → B4-LANG“, Merge nach B4-M2GATE und dem Gate-Lauf M2.
+- (c) Vermerk in `M3.md` 1.3 und in den `prompt_notes` von B4-LANG: Der `M3:`-Grund in `language.spec.ts:5` erscheint
+  bis zum Merge von B4-LANG in der M3-Abdeckung als Altgrund und entfällt mit dem Merge.
+- (d) `e2e/visual/README.md`: „ausschließlich das benannte M3-Kriterium verwendet `test.fixme`“ gilt jetzt ausdrücklich
+  nur bis zum Merge von B4-LANG.
+
+Hinweise für den Integrator: `m3/lang` ändert ebenfalls `e2e/visual/README.md`, `e2e/visual/language.spec.ts` und
+`apps/desktop/playwright.config.ts` (Cherry-Pick `e3c10e72`); beim Merge von B4-LANG nach B4-M2GATE sind dort Konflikte
+möglich. `merged.rs` erkennt `merge: B4-LANG …` als Reihe B, nicht als Paket der M3-Liste (Folgepunkt M3-Q01; im Gate ist
+B4-LANG ohnehin Pflicht).
+
+**Server nach dem Merge** (Stand `6ee7c160`, gleiche Evidenz wie oben: `rust-tests.txt`, vitest-, Playwright- und
+Integrations-JUnit vom ersten Lauf; Merge-Historie des lokalen `main` `c8a0d85f`):
+
+| Prüfung | Ergebnis |
+|---|---|
+| `cargo fmt --all --check` | grün |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | grün |
+| `cargo test -p os-parity --locked` | **208 bestanden, 0 fehlgeschlagen** (inkl. `coverage_mx`) |
+| `coverage --milestone M1 --strict` | 242/242, Exit 0 |
+| `coverage --milestone M2 --strict` (Entwicklung) | Exit 0 |
+| `coverage --milestone M2 --gate --strict` | **Exit 0**: 590/590, Anhang B 123/0 offen, 0 ungültige Ignores, 4 bedingte Skips |
+| `coverage --milestone M3` (Entwicklung) | Exit 1 (erwartet, M3 läuft): 18 IDs, 16 implemented, 2 open (OUT-262 ohne Ergebnis – Windows, OUT-263 ohne Tag); Teilkriterien 58: 24 implemented, 7 manual, 27 open, 24 blockierend; 3 ungültige Ignores (`v02.spec.ts:133/222/237`, M3-Prüfer ohne Skip-Regel); Altgrund `visual/language.spec.ts:4` (`M3:`, bis B4-LANG) |
+| `coverage --milestone M3 --gate` | Exit 1 (erwartet): 2 blockierende IDs, 27 blockierende Teilkriterien (darunter `B4-LANG: UI-121`), 4 ungültige Ignores (zusätzlich der `M3:`-Altgrund) |
+| `python3 -I docs/plan/M2-check.py` | OK |
+
+Die M3-Zahlen beruhen auf Linux-Evidenz ohne Release-, macOS- und Windows-JUnit; viele offene M3-Teilkriterien (Q02,
+R04, S01, W02) brauchen genau diese Belege oder stehen noch aus. Für dieses Paket zählt: Die M3-Abdeckung läuft mit der
+neuen `read_junit`-Signatur, und der Merge bricht weder clippy noch die Tests.
+
+## Antworten auf die Fragen (Fable, 09.11.2026)
+
+1. Andere Plattform desselben Projekts zählt **nicht** – so umgesetzt und in K2-102 festgehalten.
+2. D7-Form im M2-Check bestätigt, eng gefasst – K2-102 (b).
+3. es/fr/it: B4-LANG eingetragen (Planer-Punkte a–d).
+4. Weitere Grenzfälle aus B4-M2CLOSE (TECH-008/K06, CRAWL-127/U15) bleiben außerhalb dieses Pakets.
+
+**Folgepunkte M3-Q01:** Skip-Regel (K2-102 a) in `mx.rs` übernehmen; Reihe-B-Pakete mit Eintrag in der Paketliste
+(B4-LANG) als gemergt erkennen.
 
 ## Fremde Dateien (K2-92)
 
 | Datei | Besitz laut Plan | Änderung |
 |---|---|---|
 | `crates/os-parity/src/coverage/m2.rs` | M2-Q01 / M3-Q01 | Regel bedingte Skips, `conditional_skips`, D7-Grund `Manuell:` (Verhaltensänderung, siehe 4 und 5) |
-| `crates/os-parity/src/coverage/frontend.rs` | M2-Q01 | `read_junit` liefert zusätzlich das Browserprojekt (nur `m2.rs` nutzt die Funktion) |
-| `crates/os-parity/src/coverage/README.md` | M2-Q01 | Doku beider Regeln |
+| `crates/os-parity/src/coverage/frontend.rs` | M2-Q01 | `read_junit` liefert zusätzlich das Browserprojekt (`m2.rs` nutzt es, `mx.rs` verwirft es) |
+| `crates/os-parity/src/coverage/mx.rs` | M3-Q01 | Aufruf an die neue `read_junit`-Rückgabe angepasst, Verhalten unverändert (A1) |
+| `crates/os-parity/src/coverage/README.md` | M2-Q01 / M3-Q01 | Doku beider Regeln, Verweis K2-102 |
 | `crates/os-parity/tests/coverage_m2.rs` | M2-Q01 | 2 neue Tests; bestehende Tests unverändert |
 | `crates/os-parity/src/diff.rs` | M2-N06 | Marker `OUT-015 [M2]` entfernt (K2-101) |
 | `crates/os-app/tests/render_provision.rs` | M3-K01 | Ignore-Grund und Doc-Kommentar, Testlogik unverändert |
 | `apps/desktop/playwright.config.ts` | M2-F04 | `visual/language.spec.ts` aus dem Ausschluss genommen |
-| `apps/desktop/e2e/visual/README.md` | M2-U32 | ein Satz zur Ausnahme |
+| `apps/desktop/e2e/visual/README.md` | M2-U32 (künftig B4-LANG) | ein Satz zur Ausnahme; `test.fixme` nur bis B4-LANG |
 | `docs/plan/M2-packages.json` | Plan | 14 IDs aus `extra_spec_ids` von 10 Paketen (K2-101) |
-| `docs/plan/M2.md` | Plan | Anhang B (CRAWL-124, PERF-008), Klärung K2-101 |
-| `docs/plan/M3-packages.json` | Plan | M3-Q03 `prompt_notes` Punkt (7) OUT-260 |
+| `docs/plan/M2.md` | Plan | Anhang B (CRAWL-124, PERF-008), Regel 5 (Ergänzung K2-102), Klärungen K2-101 und K2-102 |
+| `docs/plan/M3-packages.json` | Plan | M3-Q03 `prompt_notes` Punkt (7) OUT-260; neuer Eintrag B4-LANG |
+| `docs/plan/M3.md` | Plan | 1.3: Zeile K2-79 Punkt (2) → B4-LANG |
 | `docs/plan/M3-reports/b4-m2gate.md` | neu | dieser Bericht |
 
 K2-63: Keine Assertion, kein Budget, kein Zeitlimit geändert; kein Test gelöscht oder aktiviert. Die Skip-Regel lockert
@@ -243,9 +307,14 @@ keine Prüfung für Tests, die nie liefen; die D7-Form ist eng gefasst.
 
 ## Commits
 
+- `6ee7c160` plan: B4-LANG als M3-Paket (UI-121 [P1] es/fr/it, K2-79 Punkt 2), M3.md 1.3, Vermerk M3:-Grund bis zum Merge (B4-M2GATE)
+- `828f6f3b` plan: K2-102 Prüfregeln bedingte Skips und D7-Form Manuell in Regel 5; CRAWL-124-Beleg korrigiert (Fable A2/A3, B4-M2GATE)
+- `3d35a04b` parity: mx.rs auf die neue read_junit-Signatur (Ergebnis, Browserprojekt) anpassen (Fable A1, B4-M2GATE)
+- `594826c7` merge: lokaler main (c8a0d85f, u. a. M3-Q01 mx.rs) in m3/m2gate (Fable A1, B4-M2GATE)
+- `f403600b` docs: Bericht B4-M2GATE (Gate-Prüfung M2 auf dem Server: 590/590, Anhang B 0 offen, 0 ungültige Ignores, passed)
 - `24260f18` test: visual/language.spec.ts läuft in E2E-A (UI-121 [P1], U32, B4-M2GATE)
 - `49f073de` test: Marker OUT-015 [M2] am Paritätstest entfernt (K2-101, B4-M2GATE)
 - `58e6e8de` plan: K2-101 geerbte Anhang-B-Paarungen und Q03 aus extra_spec_ids, Q03-Prüfpunkt OUT-260 (B4-M2GATE)
 - `72d9eb3e` test: ehrlicher Ignore-Grund nach D7 für den manuellen Archivtest (B4-M2GATE)
 - `0077b674` parity: bedingte Skips nur mit ok in einem anderen Browserprojekt, D7-Grund Manuell (B4-M2GATE)
-- (dieser Bericht, `docs:`)
+- (Berichtsergänzung, `docs:`)
