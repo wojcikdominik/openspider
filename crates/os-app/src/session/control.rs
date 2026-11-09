@@ -527,8 +527,16 @@ pub async fn settle(app: &App, s: &SessionInfo, action: Option<bool>) -> Result<
         crate::commands::mail::on_failed(app, &s.key);
     }
     let summary = result?;
-    if summary.state == CrawlState::Failed {
-        notify_start_unreachable(app, s).await;
+    match summary.state {
+        CrawlState::Failed => {
+            let cause = notify_start_unreachable(app, s).await;
+            // OUT-281: Ein Lauf, der als „Fehlgeschlagen“ endet (CRAWL-128), ist für die Mail ein Fehlschlag. Der Versand gilt
+            // je Lauf einmal; das folgende `Completed` sendet deshalb keine Erfolgsmail mehr.
+            crate::commands::mail::on_failed_with(app, &s.key, cause);
+        }
+        // CRAWL-128: Die Sperre per robots.txt ist kein Fehlschlag; der Lauf bleibt „Abgeschlossen“, aber nicht still (UI-019).
+        CrawlState::Completed => notify_start_robots(app, s).await,
+        _ => {}
     }
     feed::settled(app, s, &p);
     app.flush_tick();
@@ -552,7 +560,8 @@ pub async fn settle(app: &App, s: &SessionInfo, action: Option<bool>) -> Result<
 
 /// UI-019: Ein Lauf endet nur dann regulär als „Fehlgeschlagen“, wenn die Start-URL nicht erreichbar war (CRAWL-128). Der Dialog
 /// nennt die Fehlerklasse aus der Crawl-Datei (Grund der Start-URL-Zeile bzw. der robots.txt-Hilfszeile) statt eines stillen Endes.
-async fn notify_start_unreachable(app: &App, s: &SessionInfo) {
+/// Liefert die Ursache als Text für die Fehler-Mail (OUT-281).
+async fn notify_start_unreachable(app: &App, s: &SessionInfo) -> String {
     let found = app
         .read_pool()
         .run(s.key.clone(), |f, _| {
@@ -561,8 +570,15 @@ async fn notify_start_unreachable(app: &App, s: &SessionInfo) {
             }))
         })
         .await;
-    let notice = match found {
-        Ok(Some((start_url, failure))) => start_unreachable_notice(&start_url, &failure),
+    let (notice, cause) = match found {
+        Ok(Some((start_url, failure))) => {
+            let cause = format!(
+                "Start-URL nicht erreichbar ({}): {}",
+                failure.reason.as_str(),
+                os_fetch::redact::url(&failure.url)
+            );
+            (start_unreachable_notice(&start_url, &failure), cause)
+        }
         other => {
             if let Err(error) = other {
                 tracing::warn!(
@@ -571,14 +587,49 @@ async fn notify_start_unreachable(app: &App, s: &SessionInfo) {
                 );
             }
             // Nie still: ohne lesbare Ursache bleibt die allgemeine Fehlermeldung.
-            Notice {
+            let notice = Notice {
                 level: NoticeLevel::Error,
                 code: "crawl-failed".into(),
                 args: Default::default(),
-            }
+            };
+            (notice, "Crawl fehlgeschlagen".to_owned())
         }
     };
     app.push_notice(notice);
+    cause
+}
+
+/// UI-019: Sperrt robots.txt (`Disallow`) die Start-URL, endet der Lauf als „Abgeschlossen“ (CRAWL-128), aber nicht als stilles
+/// „0 URLs“: Die Meldung `start-robots` nennt die Sperre; der Dialog verweist auf die Einstellung, ändert sie aber nicht.
+async fn notify_start_robots(app: &App, s: &SessionInfo) {
+    let found = app
+        .read_pool()
+        .run(s.key.clone(), |f, _| {
+            Ok(f.meta()?.start_url.and_then(|start| {
+                os_engine::start_robots_block(f, &start).map(|block| (start, block))
+            }))
+        })
+        .await;
+    match found {
+        Ok(Some((start_url, block))) => app.push_notice(start_robots_notice(&start_url, &block)),
+        Ok(None) => {}
+        Err(error) => tracing::warn!(?error, "Sperre der Start-URL per robots.txt nicht lesbar"),
+    }
+}
+
+/// Meldung zur per robots.txt gesperrten Start-URL (UI-019): Code `start-robots`, Stufe Warnung (kein Fehlschlag, CRAWL-128),
+/// dazu Start-URL, robots.txt-URL (`url`) und die treffende Zeile (`line`).
+pub fn start_robots_notice(start_url: &str, block: &os_engine::StartRobotsBlock) -> Notice {
+    Notice {
+        level: NoticeLevel::Warning,
+        code: "start-robots".into(),
+        args: [
+            ("startUrl".into(), serde_json::json!(start_url)),
+            ("url".into(), serde_json::json!(block.robots_url)),
+            ("line".into(), serde_json::json!(block.matched_line)),
+        ]
+        .into(),
+    }
 }
 
 /// Meldung zur nicht erreichbaren Start-URL (UI-019): Code nach Fehlerklasse (`start-dns`, `start-connection`, `start-timeout`,
