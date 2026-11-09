@@ -43,6 +43,9 @@ pub struct Outcome {
     pub crawled: Option<u64>,
     /// Optional completion data retained before --no-store discards the database (OUT-281/282).
     pub mail_completion: Option<serde_json::Value>,
+    /// Der Crawl endete regulär als `Failed` (CRAWL-128, z. B. Start-URL nicht erreichbar): Exit-Code und Historie bleiben
+    /// unverändert (OUT-182), die Abschlussmail gilt aber als Fehlschlag (OUT-281). Inhalt: die Fehlermeldung.
+    pub crawl_failed: Option<String>,
 }
 
 impl Outcome {
@@ -55,6 +58,7 @@ impl Outcome {
             crawl_id: None,
             crawled: None,
             mail_completion: None,
+            crawl_failed: None,
         }
     }
 
@@ -80,6 +84,8 @@ impl IdSource for FixedId {
 struct Crawled {
     path: PathBuf,
     crawled: u64,
+    /// Der Lauf endete regulär als `Failed` (CRAWL-128).
+    failed: bool,
 }
 
 tokio::task_local! {
@@ -149,13 +155,19 @@ async fn run(plan: &Plan, rep: &Arc<Reporter>, signals: &Signals) -> Result<Outc
         }
     };
 
+    // OUT-281: Ein regulär als `Failed` beendeter Lauf (CRAWL-128) ist für die Abschlussmail ein Fehlschlag.
+    let mut crawl_failed = crawled.failed.then(|| "Crawl fehlgeschlagen".to_string());
     // Start-URL erreichbar? (nur neue Spider-Crawls)
     if let (Source::Spider { start_url }, false) = (&plan.source, plan.resume) {
         if let Some(problem) = start_url_problem(&crawled.path, start_url) {
-            rep.warn(format!(
+            let message = format!(
                 "Start-URL {} nicht erreichbar: {problem}",
                 os_fetch::redact::url(start_url)
-            ));
+            );
+            if crawled.failed {
+                crawl_failed = Some(message.clone());
+            }
+            rep.warn(message);
             if plan.fail_on_start_error {
                 return Err(CliError::crawl(format!(
                     "Start-URL nicht erreichbar ({problem}) – Abbruch wegen --fail-on-start-error"
@@ -240,6 +252,7 @@ async fn run(plan: &Plan, rep: &Arc<Reporter>, signals: &Signals) -> Result<Outc
     let crawl_info = |outcome: Outcome| {
         let mut outcome = outcome.with_crawl(&crawled.path, Some(crawled.crawled));
         outcome.mail_completion = mail_completion.clone();
+        outcome.crawl_failed = crawl_failed.clone();
         outcome
     };
     if failures > 0 {
@@ -292,6 +305,7 @@ fn open_only(path: &Path, rep: &Reporter) -> Result<Crawled, CliError> {
     Ok(Crawled {
         path: path.to_path_buf(),
         crawled: u64::try_from(crawled).unwrap_or(0),
+        failed: false,
     })
 }
 
@@ -514,6 +528,7 @@ async fn crawl_phase(
     Ok(CrawlEnd::Done(Crawled {
         path,
         crawled: summary.crawled,
+        failed: summary.state == CrawlState::Failed,
     }))
 }
 

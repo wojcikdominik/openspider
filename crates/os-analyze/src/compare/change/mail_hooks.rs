@@ -25,18 +25,37 @@ impl TaskHooks for ComparisonMailHooks {
             .ok_or("Completion mail: crawl not found")?;
         let file = os_store::CrawlFile::open(&crawl.path, os_store::OpenMode::ReadOnly)
             .map_err(|e| e.to_string())?;
+        let failed = matches!(record.result, RunResult::Failed | RunResult::Aborted);
+        // OUT-281: Ein fehlgeschlagener Lauf hat oft keinen Vergleich (z. B. ein als `Failed` beendeter Crawl, CRAWL-128); die
+        // Fehler-Mail geht dann ohne Änderungstabelle hinaus, statt ganz zu entfallen.
         let content = os_analyze::compare::change::notification::content(
             &file,
             &task.name,
-            task.execution.auto_compare,
+            task.execution.auto_compare && !failed,
             task.effective_exports().skip_empty,
         )
         .map_err(|e| e.to_string())?;
+        let (mut text, mut html) = (content.text, content.html);
+        if failed {
+            // Fehlermeldung des Laufs (OUT-281) vor dem Überblick.
+            let message = record
+                .message
+                .clone()
+                .unwrap_or_else(|| record.result.label().into());
+            text = format!("Error: {message}\n{text}");
+            html = format!("<p>Error: {}</p>{html}", html_escape(&message));
+        }
         self.sender.send(
             &task.notify.to,
-            &format!("{}: {}", task.name, record.result.label()),
-            &content.text,
-            &content.html,
+            // OUT-281: Betreff-Präfix `[FAILED]` wie bei der Abschlussmail ohne Vergleich.
+            &format!(
+                "{}{}: {}",
+                if failed { "[FAILED] " } else { "" },
+                task.name,
+                record.result.label()
+            ),
+            &text,
+            &html,
         )
     }
 }
@@ -72,4 +91,12 @@ pub fn notify_configured(task: &Task, record: &RunRecord) -> Result<(), String> 
         sender: Arc::new(sender),
     }
     .notify(task, record)
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
