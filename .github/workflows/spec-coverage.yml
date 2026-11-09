@@ -155,6 +155,32 @@ jobs:
         if: steps.pick.outputs.run == 'true'
         with:
           key: spec-coverage-mx
+      - uses: actions/setup-node@v4
+        if: steps.pick.outputs.run == 'true'
+        with:
+          node-version: '22'
+      # Vertragstests der Release-Skripte (node:test, wie release-scripts.yml, ohne npm-Abhängigkeiten). Sie tragen
+      # Teilkriterien von R04/P01/Q02 (`// spec: OUT-261 [M3]`) und laufen nicht in Spec coverage M2. node:test
+      # schreibt die Fälle ohne <testsuite>; je Datei eine Suite mit dem Dateipfad (wie integrations-m2.xml).
+      - name: Release-Vertragstests (node:test, JUnit)
+        if: steps.pick.outputs.run == 'true'
+        shell: bash
+        run: |
+          mkdir -p evidence/release
+          status=0
+          for file in tests/release/*.test.mjs scripts/release/*.test.mjs scripts/release/licenses/*.test.mjs; do
+            [[ -f "$file" ]] || continue
+            out="evidence/release/$(echo "$file" | tr '/' '_').xml"
+            node --test --test-reporter=spec --test-reporter-destination=stdout \
+              --test-reporter=junit --test-reporter-destination=raw.xml "$file" || status=$?
+            sed -e "s#<testsuites>#<testsuites><testsuite name=\"$file\">#" \
+              -e 's#</testsuites>#</testsuite></testsuites>#' raw.xml > "$out"
+            rm -f raw.xml
+          done
+          echo "Release-Vertragstests-Exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$status" -ne 0 ]]; then
+            echo "::warning title=Release-Vertragstests::node --test Exit $status"
+          fi
       - uses: actions/download-artifact@v4
         if: steps.pick.outputs.run == 'true'
         continue-on-error: ${{ env.GATE != 'true' }}
@@ -196,6 +222,7 @@ jobs:
           if [[ -f evidence/core/vitest-m2.xml ]]; then args+=(--frontend-junit evidence/core/vitest-m2.xml); fi
           if [[ -f evidence/core/integrations-m2.xml ]]; then args+=(--frontend-junit evidence/core/integrations-m2.xml); fi
           if [[ -f evidence/core/rust-tests.txt ]]; then args+=(--test-output evidence/core/rust-tests.txt); fi
+          for file in evidence/release/*.xml; do args+=(--frontend-junit "$file"); done
           status=0
           cargo run --locked -p os-parity -- coverage --milestone "$MS" \
             --write "target/$MS-status.json" "${args[@]}" > "coverage-$MS.txt" 2>&1 || status=$?
@@ -218,6 +245,7 @@ jobs:
           name: spec-coverage-${{ matrix.milestone }}
           path: |
             main-merges.txt
+            evidence/release/
             coverage-${{ matrix.milestone }}.txt
             target/${{ matrix.milestone }}-status.json
           if-no-files-found: warn
