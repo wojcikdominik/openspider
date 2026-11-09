@@ -17,6 +17,7 @@ import crawl_rate
 import summarize
 import update_matrix
 
+ROOT = Path(__file__).resolve().parents[2]
 INFO = dict(endpoints=['/o/r/releases/latest/download/latest.json', '/o/r/releases/latest/download/latest-beta.json'],
             artifacts={'darwin-aarch64': dict(request_path='/o/r/releases/download/v1.0.1/OpenSpider_aarch64.app.tar.gz')})
 
@@ -43,6 +44,43 @@ class Privacy(unittest.TestCase):
         self.assertEqual(len(update_matrix.manifest_requests(log, INFO)), 1)
         self.assertEqual(len(update_matrix.artifact_requests(log, INFO)), 1)
         self.assertEqual([e['kind'] for e in update_matrix.plain_or_blocked(log)], ['http', 'connect-blocked'])
+
+
+class UpdaterTarget(unittest.TestCase):
+    """B4-RELCHECK R3: der Matrix-Schlüssel folgt unter Windows der Installationsart wie ``Installer::detect``."""
+
+    def test_windows_target_follows_the_installer(self):
+        with mock.patch.object(update_matrix, 'SYSTEM', 'Windows'):
+            self.assertEqual(update_matrix.updater_target('msi'), 'windows-x86_64-msi')
+            self.assertEqual(update_matrix.updater_target('nsis'), 'windows-x86_64-nsis')
+            for other in ('dmg', '', None):
+                with self.subTest(other=other), self.assertRaises(ValueError):
+                    update_matrix.updater_target(other)
+
+    def test_windows_targets_are_release_manifest_keys(self):
+        # Gleiche Schlüssel wie manifest.mjs (Fixture der Rust-Tests); kein Rückfall auf das andere Paket.
+        manifest = json.loads((ROOT / 'tests' / 'fixtures' / 'update' / 'release-manifest.json').read_text())
+        with mock.patch.object(update_matrix, 'SYSTEM', 'Windows'):
+            targets = {kind: update_matrix.updater_target(kind) for kind in ('msi', 'nsis')}
+        self.assertTrue(manifest['platforms'][targets['msi']]['url'].endswith('.msi'))
+        self.assertTrue(manifest['platforms'][targets['nsis']]['url'].endswith('-setup.exe'))
+
+    def test_macos_target_ignores_the_installer_argument(self):
+        arm = mock.Mock(stdout='1\n')
+        with mock.patch.object(update_matrix, 'SYSTEM', 'Darwin'), \
+                mock.patch.object(update_matrix.subprocess, 'run', return_value=arm):
+            self.assertEqual(update_matrix.updater_target('dmg'), 'darwin-aarch64')
+
+    def test_replica_requests_the_msi_artifact_for_msi(self):
+        # Die Nachbildung (Q-14, Q-16) lädt dasselbe Paket, das der Updater einer MSI-Installation wählt.
+        info = dict(next='1.0.1', artifacts={'windows-x86_64-msi': dict(url='u', path='p')})
+        report = mock.Mock()
+        report.check.side_effect = RuntimeError('stop')
+        with mock.patch.object(update_matrix, 'SYSTEM', 'Windows'), \
+                mock.patch.object(update_matrix.tempfile, 'mkdtemp', return_value=tempfile.gettempdir()), \
+                self.assertRaises(RuntimeError):
+            update_matrix.update_replica(None, report, None, info, None, {}, {}, 'proxy', 'ca', 'msi')
+        self.assertEqual(report.check.call_args.args[0], 'Q-14')
 
 
 class Settings(unittest.TestCase):

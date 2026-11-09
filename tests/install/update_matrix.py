@@ -160,13 +160,18 @@ def logs_dir():
     return Path(os.environ['LOCALAPPDATA']) / 'OpenSpider' / 'logs'
 
 
-def updater_target():
-    """Plattformschlüssel, den der Update-Kern anfragt (``UpdateContext::target``)."""
+def updater_target(installer):
+    """Plattformschlüssel, den der Update-Kern anfragt (``UpdateContext::target``).
+
+    Unter Windows folgt er der Installationsart, die der Bundler als Kennung in die EXE schreibt (B4-MSIUPD,
+    ``Installer::detect``): MSI → ``windows-x86_64-msi``, NSIS → ``windows-x86_64-nsis``. Einen Rückfall auf das andere
+    Paket gibt es nicht."""
     if SYSTEM == 'Darwin':
         arm = subprocess.run(['sysctl', '-n', 'hw.optional.arm64'], capture_output=True, text=True).stdout.strip()
         return 'darwin-aarch64' if arm == '1' else 'darwin-x86_64'
-    # Der Kern setzt unter Windows immer `nsis` (policy.rs), auch bei einer MSI-Installation.
-    return 'windows-x86_64-nsis'
+    if installer not in ('msi', 'nsis'):
+        raise ValueError(f'Installer {installer!r} gibt es unter Windows nicht')
+    return f'windows-x86_64-{installer}'
 
 
 def clean_env():
@@ -419,7 +424,7 @@ def main(argv=None):
     output.mkdir(parents=True, exist_ok=True)
     ctx = Context(output)
     info = mockupdate.prepare(args.current, args.next, output / 'mock')
-    target = updater_target()
+    target = updater_target(args.installer)
     vn, vn1 = info['current'], info['next']
     report = Report(output, dict(label=args.label or f'{SYSTEM} {args.installer}', current=vn, next=vn1,
                                  platform=platform.platform(), machine=platform.machine(), target=target,
@@ -826,7 +831,7 @@ def update_replica(ctx, report, mock, info, installed, env, state, proxy, ca, ki
     N+1-Installer still über die vorhandene Installation (``/S`` bzw. ``msiexec /i … /qn``; die Argumente des
     Updaters sind andere). Der echte Klickweg ist Handprüfung M-02 bzw. W-02."""
     vn1 = info['next']
-    key = 'windows-x86_64-msi' if kind == 'msi' else updater_target()
+    key = updater_target(kind)
     artifact = info['artifacts'][key]
     work = Path(tempfile.mkdtemp(prefix='q02-update-'))
     if SYSTEM == 'Darwin':
