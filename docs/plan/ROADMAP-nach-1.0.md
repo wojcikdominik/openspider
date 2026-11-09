@@ -14,6 +14,7 @@ Sammelstelle für Funktionen, die bewusst **nach 1.0** kommen. Ausspezifiziert w
 | R8 | Logfile-Analyse lokal (Bot-Verifizierung, Abgleich mit Crawl) | Abgleich Autonomo 16.10. | Kandidat für 1.x; Server-Zulauf bleibt Cloud |
 | R9 | Crawl-Qualität aus Autonomo: Indexierungsregeln mit „gewollt“-Ausnahmen, Fallenwächter, Soft-404-Probe | Abgleich Autonomo 16.10. | Kandidat für 1.x |
 | R7 | Erweiterte Struktur- und Linkanalysen (siehe Abschnitt Audisto) | Abgleich Audisto 16.10. | Kandidat für 1.x |
+| R10 | Teams: Crawls im Team teilen – Stufe 1 Team-Ordner (frei), Stufe 2 OpenSpider Teams über evnxt-Account (bezahlt); gecrawlt wird weiter lokal | Nutzer 09.11. | `docs/spec/11-teams.md` (Entwurf) |
 
 ## Geschäftsmodell (Entscheidung Nutzer 16.10.2026): Open Core
 
