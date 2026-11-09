@@ -68,6 +68,36 @@ pub fn register_bundle_type(bundle_type: Option<&str>) {
 fn registered_bundle_type() -> Option<&'static str> {
     BUNDLE_TYPE.get().and_then(|b| b.as_deref())
 }
+/// Systemname wie im Manifest-Schlüssel (`darwin` statt `macos`).
+fn current_os() -> String {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    }
+    .into()
+}
+/// Text der WARN-Zeile für den Support (B4-RELCHECK), wenn die Installationsart unter Windows unbekannt ist, etwa weil
+/// der Bundler die Kennung nicht in die EXE gepatcht hat. `None`, wenn die Art bekannt ist oder es keine Varianten gibt.
+pub fn unknown_installer_warning(os: &str, bundle_type: Option<&str>) -> Option<String> {
+    (Installer::detect(os, bundle_type) == Installer::Unknown).then(|| {
+        format!(
+            "Installationsart unbekannt: keine MSI- oder NSIS-Kennung in der EXE (gefunden: {}); \
+             automatische Updates sind abgeschaltet, manueller Download: {RELEASES_PAGE}",
+            bundle_type.unwrap_or("keine")
+        )
+    })
+}
+/// Beim Start der Desktop-App, nach dem Einrichten des Logs und nach `register_bundle_type`: eine WARN-Zeile bei
+/// unbekannter Installationsart. Nur Diagnose; die Prüfung schaltet sich unabhängig davon über
+/// `Disabled::UnknownInstaller` ab.
+pub fn log_unknown_installer() {
+    log_installer_diagnosis(&current_os(), registered_bundle_type());
+}
+fn log_installer_diagnosis(os: &str, bundle_type: Option<&str>) {
+    if let Some(message) = unknown_installer_warning(os, bundle_type) {
+        tracing::warn!("{message}");
+    }
+}
 #[derive(Debug)]
 pub enum Outcome {
     Disabled(Disabled),
@@ -94,11 +124,7 @@ pub struct UpdateContext {
 impl Default for UpdateContext {
     fn default() -> Self {
         let beta = option_env!("OPENSPIDER_UPDATE_BETA") == Some("1");
-        let os: String = match std::env::consts::OS {
-            "macos" => "darwin",
-            other => other,
-        }
-        .into();
+        let os = current_os();
         Self {
             endpoint: if beta { BETA_ENDPOINT } else { STABLE_ENDPOINT }.into(),
             beta,
@@ -530,6 +556,57 @@ mod installer_tests {
             UpdateContext::default().installer,
             Installer::detect(&os, Some("msi"))
         );
+    }
+
+    // spec: OUT-262
+    #[test]
+    fn warns_at_startup_only_when_the_windows_installer_is_unknown() {
+        // B4-RELCHECK: Diagnosezeile ohne Kennung (ungepatchter Build) oder mit fremder Kennung.
+        let missing = unknown_installer_warning("windows", None).expect("Warnung ohne Kennung");
+        assert!(missing.contains("gefunden: keine"), "{missing}");
+        assert!(missing.contains(RELEASES_PAGE), "{missing}");
+        let foreign =
+            unknown_installer_warning("windows", Some("app")).expect("Warnung mit fremder Kennung");
+        assert!(foreign.contains("gefunden: app"), "{foreign}");
+        for marker in [Some("msi"), Some("nsis")] {
+            assert_eq!(
+                unknown_installer_warning("windows", marker),
+                None,
+                "{marker:?}"
+            );
+        }
+        for os in ["darwin", "linux"] {
+            assert_eq!(unknown_installer_warning(os, None), None, "{os}");
+        }
+
+        // Die Zeile erscheint auf Stufe WARN, bei bekannter Art gar nicht.
+        #[derive(Clone, Default)]
+        struct Buffer(std::sync::Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Buffer {
+            fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(data);
+                Ok(data.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let logged = |os: &str, marker: Option<&str>| {
+            let buffer = Buffer::default();
+            let writer = buffer.clone();
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(move || writer.clone())
+                .with_ansi(false)
+                .finish();
+            tracing::subscriber::with_default(subscriber, || log_installer_diagnosis(os, marker));
+            let bytes = buffer.0.lock().unwrap().clone();
+            String::from_utf8(bytes).unwrap()
+        };
+        let line = logged("windows", None);
+        assert!(line.contains("WARN"), "{line}");
+        assert!(line.contains("Installationsart unbekannt"), "{line}");
+        assert_eq!(logged("windows", Some("msi")), "");
+        assert_eq!(logged("darwin", None), "");
     }
 
     // spec: OUT-262
