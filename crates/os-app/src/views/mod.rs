@@ -717,41 +717,49 @@ impl TabView {
         let cfg = published.session.config.clone();
         let clock = self.clock.clone();
         let budget = self.budget;
+        // UI-018 (B4-LAGFIX2): maintenance has its own serialized lane. On the shared pool it waited behind
+        // per-tick readers (catalog, counts, Overview; up to 460 ms in the debug E2E bridge) and missed the tick
+        // it was started for.
         let (snapshot, core, seq, total) = app
             .read_pool()
-            .run(self.key.clone(), move |file, _| {
-                let mut guard = lock(&slot);
-                Ok((|| {
-                    match (guard.as_mut(), rebuild) {
-                        (Some(s), Some(spec)) => s.update(file, &cfg, spec)?,
-                        (None, Some(spec)) => {
-                            *guard = Some(ViewSession::open_with_clock(
-                                file, &cfg, spec, budget, clock,
-                            )?)
+            .run_cached(
+                self.key.clone(),
+                "view-maintenance",
+                crate::runtime::current_cancel(),
+                move |file, _| {
+                    let mut guard = lock(&slot);
+                    Ok((|| {
+                        match (guard.as_mut(), rebuild) {
+                            (Some(s), Some(spec)) => s.update(file, &cfg, spec)?,
+                            (None, Some(spec)) => {
+                                *guard = Some(ViewSession::open_with_clock(
+                                    file, &cfg, spec, budget, clock,
+                                )?)
+                            }
+                            (Some(s), None) => s.apply_changes(file, &pending.ids)?,
+                            (None, None) => unreachable!("a missing session implies a rebuild"),
                         }
-                        (Some(s), None) => s.apply_changes(file, &pending.ids)?,
-                        (None, None) => unreachable!("a missing session implies a rebuild"),
-                    }
-                    let s = guard.as_ref().expect("session");
-                    let snapshot = s.snapshot(file)?;
-                    let total = snapshot
-                        .rows(
-                            file,
-                            RowsReq {
-                                version: s.version(),
-                                offset: 0,
-                                limit: 1,
-                            },
-                        )?
-                        .total;
-                    Ok::<_, os_analyze::ViewError>((
-                        snapshot,
-                        s.version(),
-                        s.built_seq().unwrap_or(0),
-                        total,
-                    ))
-                })())
-            })
+                        let s = guard.as_ref().expect("session");
+                        let snapshot = s.snapshot(file)?;
+                        let total = snapshot
+                            .rows(
+                                file,
+                                RowsReq {
+                                    version: s.version(),
+                                    offset: 0,
+                                    limit: 1,
+                                },
+                            )?
+                            .total;
+                        Ok::<_, os_analyze::ViewError>((
+                            snapshot,
+                            s.version(),
+                            s.built_seq().unwrap_or(0),
+                            total,
+                        ))
+                    })())
+                },
+            )
             .await?
             .map_err(view_error)?;
         let mut st = lock(&self.state);

@@ -182,3 +182,70 @@ async fn the_session_loop_sends_the_table_total_with_the_status_of_the_same_poll
         "status and table total of the same poll travel in one tick"
     );
 }
+
+// spec: UI-018
+// A running crawl at 20 URL/s: every tick that reports the crawl counter and the table total reports a total that
+// already contains every counted URL. The engine writes counted URLs before the snapshot of a due tick.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn in_a_running_crawl_the_table_total_of_a_tick_contains_every_counted_url() {
+    let site = os_testsite::TestSite::start_spec(
+        "synthetic:n=400,links=5,seed=7",
+        os_testsite::SiteOptions::default(),
+    )
+    .await
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let sink = Arc::new(CollectingSink::new());
+    app.subscribe(window(), sink.clone());
+    let mut config = cfg();
+    config.speed.threads = 2;
+    config.speed.max_urls_per_sec = Some(20.0);
+    config.save_default(&app.config().paths.settings).unwrap();
+    call(
+        &app,
+        "crawl.start",
+        serde_json::to_value(request(site.url("/"))).unwrap(),
+    )
+    .await;
+    let mut handle = call(
+        &app,
+        "view.open",
+        json!({"spec":{"kind":"tab","tab":"Response Codes","filter":"All","search":null,"sort":[]},"columns":["Address"]}),
+    )
+    .await;
+    if handle["state"] == "building" {
+        let op = app.ops().wait(handle["op"]["opId"].as_str().unwrap()).await;
+        handle = op.unwrap().result.unwrap();
+    }
+    let view_id = handle["viewId"].as_str().unwrap().to_string();
+    let mut checked = Vec::new();
+    let end = std::time::Instant::now() + Duration::from_secs(6);
+    while std::time::Instant::now() < end {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        for tick in ticks(&sink) {
+            let (Some(crawl), Some(total)) = (
+                tick.crawl.as_ref(),
+                tick.views
+                    .iter()
+                    .find(|v| v.view_id == view_id)
+                    .and_then(|v| v.total),
+            ) else {
+                continue;
+            };
+            if crawl.phase == os_app::dto::CrawlPhase::Running {
+                checked.push((tick.seq, crawl.crawled, total));
+            }
+        }
+    }
+    call(&app, "crawl.stop", json!(null)).await;
+    assert!(
+        checked.len() >= 5,
+        "ticks with counter and total: {checked:?}"
+    );
+    let behind: Vec<_> = checked.iter().filter(|(_, c, t)| t < c).collect();
+    assert!(
+        behind.is_empty(),
+        "total behind the counter of its own tick: {behind:?} of {checked:?}"
+    );
+}
