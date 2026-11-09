@@ -32,6 +32,9 @@ pub struct AppInfo {
     pub version: String,
     /// Build-Kennung (Commit, Datum).
     pub build: String,
+    /// Build-Nummer (Anzahl der Commits bis zum gebauten Stand, UI-127); fehlt ohne Git und in Entwickler-Builds.
+    #[ts(optional = nullable)]
+    pub build_number: Option<String>,
     /// `macos` oder `windows` (Linux nur für den Kernbetrieb).
     pub platform: String,
     /// `aarch64` oder `x86_64`.

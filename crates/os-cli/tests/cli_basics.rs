@@ -43,7 +43,14 @@ fn version_has_the_documented_format() {
     assert!(line.starts_with(&prefix), "{line}");
     let suffix = format!(", {}-{})", std::env::consts::OS, std::env::consts::ARCH);
     assert!(line.ends_with(&suffix), "{line}");
-    let hash = &line[prefix.len()..line.len() - suffix.len()];
+    // Optional build number first (UI-127, Nutzerentscheidung 09.11.2026): `(Build 2578, <hash>, …)`.
+    let inner = &line[prefix.len()..line.len() - suffix.len()];
+    let hash = match os_model::build_number::BUILD_NUMBER {
+        Some(number) => inner
+            .strip_prefix(&format!("Build {number}, "))
+            .unwrap_or_else(|| panic!("build number missing: {line}")),
+        None => inner,
+    };
     assert!(!hash.is_empty() && !hash.contains(' '), "{line}");
 }
 
