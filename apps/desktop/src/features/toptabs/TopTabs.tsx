@@ -1,5 +1,4 @@
 import { ComparisonControls } from "../compare/ComparisonControls";
-import { ComparisonTabs } from "../compare/ComparisonTable";
 import { useComparison } from "../compare/model";
 import { useEffect, useState } from "react";
 import { useT } from "../../i18n";
@@ -18,9 +17,11 @@ import "./toptabs.css";
 
 export function TopTabs() {
   const active = useComparison(s => !!s.session);
-  return <div className="os-compare-tab-strip">{active ? <ComparisonTabs /> : <RegularTopTabs />}<ComparisonControls compact={!active} /></div>;
+  // OUT-140/K2-77 (B4-CMPUI): the comparison uses the same data tabs, groups and overflow menu as the ordinary mode.
+  return <div className="os-compare-tab-strip"><DataTabs /><ComparisonControls compact={!active} /></div>;
 }
-function RegularTopTabs() {
+/** The grouped data tab bar (UI-004, K2-77); in a comparison the core adds Change Detection to the catalog. */
+export function DataTabs() {
   const t = useT(); const s = useTabs();
   const [configure, setConfigure] = useState(false);
   // K2-77: the pills show the tabs of the active tab's group; configure, reset and the context menu work per group.
@@ -31,7 +32,8 @@ function RegularTopTabs() {
   const layout = { order: mine, hidden: s.hidden.filter(id => mine.includes(id)), mandatory };
   const fail = (error: unknown) => useTabs.setState({ error });
   const crawlId = useSession(s => s.crawl?.crawlId);
-  useEffect(() => { void useTabs.getState().load(); }, [crawlId]);
+  const comparison = useComparison(c => c.session ? `${c.session.current.crawlId}:${c.session.previous.crawlId}:${c.revision}` : null);
+  useEffect(() => { void useTabs.getState().load(); }, [crawlId, comparison]);
   useEffect(() => eventBus.on("focusUrl", event => {
     if (useSession.getState().crawl?.crawlId !== event.crawlId) return;
     useTabs.getState().focus(event.isInternal ? "Internal" : "External", event.urlId);
