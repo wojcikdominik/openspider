@@ -1540,7 +1540,7 @@ Führung: Dieser Abschnitt ist führend für den Vergleichsablauf (Auswahl, Klas
   - [ ] Exporte (`--export-tabs` usw.) können im Vergleichskontext ausgeführt werden und tragen dann die Vergleichsspalten (OUT-151).
   - [ ] Die Option ist bei jedem Leistungsprofil aktivierbar; es gibt keine Fehlermeldung oder ausgegraute Option wegen eines Speichermodus.
   - [ ] `--project-crawl-comparison "true"` und `--compare-with-previous` erzeugen bei sonst gleichen Argumenten identische gespeicherte Vergleiche.
-  - [ ] Endet der aktuelle Crawl als „Fehlgeschlagen“ (CRAWL-128, z. B. Start-URL nicht erreichbar), wird nicht verglichen: Log und Laufhistorie vermerken „Auto-Vergleich übersprungen (Crawl fehlgeschlagen)“, das zählt nicht als fehlgeschlagener Vergleich; Meldung und Ergebnis nennen den Fehler des Crawls, nie „Crawl erfolgreich, aber Auto-Vergleich fehlgeschlagen“. Die Fehler-Mail (OUT-281) enthält statt der Änderungstabelle denselben Vermerk **(OS-Festlegung 09.11.2026, Orchestrator, B4-STARTFIX)**.
+  - [ ] Endet der aktuelle Crawl als „Fehlgeschlagen“ (CRAWL-128, z. B. Start-URL nicht erreichbar), wird nicht verglichen: Log und Laufhistorie vermerken „Auto-Vergleich übersprungen (Crawl fehlgeschlagen)“, das zählt nicht als fehlgeschlagener Vergleich; Meldung und Ergebnis nennen den Fehler des Crawls, nie „Crawl erfolgreich, aber Auto-Vergleich fehlgeschlagen“. Die Fehler-Mail (OUT-281) enthält statt der Änderungstabelle denselben Vermerk, für Planer-Aufgaben wie für die globale Mail der Kommandozeile mit `--compare-with-previous` **(OS-Festlegung 09.11.2026, Orchestrator, B4-STARTFIX)**.
 - **Testfixture:** `out-compare` via CLI-Integrationstest (zwei Läufe mit Projektname; dritter Lauf nach absichtlich abgebrochenem Lauf); SMTP-Mock für die Mail.
 
 ### OUT-153 Paritätsprüfungen über Vergleich
@@ -1759,7 +1759,7 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - [ ] URL ohne Schema → `http://` wird ergänzt (wie UI), Hinweis auf stderr.
   - [ ] Ungültige URL → Exit-Code 2 vor Crawlbeginn.
   - [ ] Start-URL nicht erreichbar → Crawl endet regulär mit 1 URL (No Response), Exit-Code 0, Warnung **(OS-Festlegung:** kein Fehler, weil das ein gültiges Crawlergebnis ist); mit `--fail-on-start-error` Exit-Code 3. Der Zustand in der Verwaltung ist Fehlgeschlagen (CRAWL-128); Exporte und der Analyse-Hook laufen, die Analyse gilt als unvollständig, die App startet keine automatische Analyse (CRAWL-141; Entscheidung Fable, B4-RESUME). Die Schlusszeile nennt dann den Fehler des Crawls statt „Fertig“ **(OS-Festlegung 09.11.2026, Orchestrator, B4-STARTFIX)**.
-  - [ ] Start-URL per robots.txt gesperrt (`Disallow`, bzw. Regel „robots.txt nicht erreichbar“ bei einer robots.txt, die mit 5xx/429 antwortet) → kein Fehlschlag (CRAWL-128): Exit-Code 0 auch mit `--fail-on-start-error`, Warnung auf stderr mit robots.txt-URL und sperrender Zeile (Zeilennummer und Regel; bei der Regel „robots.txt nicht erreichbar“ mit dem Grund) **(OS-Festlegung 09.11.2026, Orchestrator, B4-STARTFIX)**.
+  - [ ] Start-URL per robots.txt gesperrt (`Disallow`, bzw. Regel „robots.txt nicht erreichbar“ bei einer robots.txt, die mit 5xx/429 antwortet) → kein Fehlschlag (CRAWL-128): Exit-Code 0 auch mit `--fail-on-start-error`, Warnung auf stderr mit robots.txt-URL und sperrender Zeile (Zeilennummer und Regel; bei der Regel „robots.txt nicht erreichbar“ mit robots.txt-URL und dem Grund, das ist der HTTP-Status der robots.txt, z. B. „HTTP 503“) **(OS-Festlegung 09.11.2026, Orchestrator, B4-STARTFIX)**.
   - [ ] `openspider --crawl https://site.test/ --save-crawl --output-folder X --resolve '*.site.test=127.0.0.1'` mit demselben Profil wie ein UI-Crawl derselben Fixture ergibt dieselbe URL-Menge, dieselben Statuscodes und Tiefen (übernommen aus CRAWL-135; `--resolve` ist OS-Erweiterung, Wirkung CRAWL-123).
 - **Testfixture:** `out-basic-site`.
 
@@ -2674,6 +2674,8 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - [ ] Crawl in der UI mit globaler Option → eine Mail nach Ende.
   - [ ] Fehlgeschlagener geplanter Lauf → Mail mit Betreff-Präfix `[FAILED]` und Fehlermeldung.
   - [ ] Entfernen eines Empfängers macht die Aufgabe nicht ungültig (Referenzfehler nicht übernehmen); ohne Empfänger wird keine Mail gesendet.
+  - [ ] Endet der Crawl als „Fehlgeschlagen“, weil die Start-URL nicht erreichbar war (CRAWL-128), nennt die Fehler-Mail in App, Kommandozeile und Planer gleichlautend die Fehlerklasse der Start-URL bzw. ihrer robots.txt (z. B. „Verbindung abgelehnt“), die betroffene Adresse und die Ursache (Start-URL selbst oder ihre nicht abrufbare robots.txt) **(OS-Festlegung 09.11.2026, Orchestrator, B4-STARTFIX)**.
+  - [ ] Auch bei Exit-Code 3 durch `--fail-on-start-error` (OUT-182) trägt die Fehler-Mail Start-URL, Projekt, Start und Ende des Crawls **(OS-Festlegung 09.11.2026, Orchestrator, B4-STARTFIX)**.
 - **Testfixture:** Test-SMTP-Server.
 
 ### OUT-282 Inhalt der Abschlussmail
