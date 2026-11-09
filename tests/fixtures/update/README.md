@@ -23,3 +23,8 @@ node node_modules/@tauri-apps/cli/tauri.js signer sign \
 ```
 
 Anschließend muss die Signatur auch in `manifest.json` und `scenario.toml` aktualisiert werden.
+
+`release-manifest.json` (B4-MSIUPD) hat die Form, die `scripts/release/manifest.mjs` für ein Release schreibt: genau
+die Schlüssel `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64-nsis` und `windows-x86_64-msi`, je mit eigener URL
+nach dem Namensschema der Release-Dateien (Signatur wie in `manifest.json`). Daran prüfen die Tests, dass eine
+MSI-Installation nur den MSI-Eintrag und eine NSIS-Installation nur den NSIS-Eintrag wählt.

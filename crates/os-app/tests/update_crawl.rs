@@ -55,7 +55,7 @@ async fn check_and_simulated_background_download_do_not_change_running_crawl_sta
         current: "1.0.0".parse().unwrap(),
         os: "darwin".into(),
         arch: "aarch64".into(),
-        installer: None,
+        installer: update::policy::Installer::Platform,
         disabled_by_environment: false,
         ..Default::default()
     };

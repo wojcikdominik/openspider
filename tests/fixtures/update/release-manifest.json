@@ -1,0 +1,23 @@
+{
+  "version": "1.0.1",
+  "notes": "OpenSpider fixture update",
+  "pub_date": "2026-10-30T12:00:00.000Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTT0M2R1gzODBiQzJWbGtlYmxiR0hFRVNoK0UvSTBDMTE4aHFFMmxFNWpxK2dvYnNEVkJlcTY1cnRvdUlLYU96d2l3b0dGRGdseDhZVThOUEF1ZFAwcEN0YS9iR0hsMWdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMzgyNjcxCWZpbGU6YXJ0aWZhY3QJdmVyc2lvbjoxLjAuMQpESDVaQms0V1l1ei9waUlmZGQ2QTRLMjY1R1VSUlgwY2dTTmZjcGIreFJwenFFSzF1RndsWHd6eVExV0hyeGpYdEdmUTdGZkl6d3NZYnVLYTN0VHRDUT09Cg==",
+      "url": "https://github.com/wojcikdominik/openspider/releases/download/v1.0.1/OpenSpider_aarch64.app.tar.gz"
+    },
+    "darwin-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTT0M2R1gzODBiQzJWbGtlYmxiR0hFRVNoK0UvSTBDMTE4aHFFMmxFNWpxK2dvYnNEVkJlcTY1cnRvdUlLYU96d2l3b0dGRGdseDhZVThOUEF1ZFAwcEN0YS9iR0hsMWdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMzgyNjcxCWZpbGU6YXJ0aWZhY3QJdmVyc2lvbjoxLjAuMQpESDVaQms0V1l1ei9waUlmZGQ2QTRLMjY1R1VSUlgwY2dTTmZjcGIreFJwenFFSzF1RndsWHd6eVExV0hyeGpYdEdmUTdGZkl6d3NZYnVLYTN0VHRDUT09Cg==",
+      "url": "https://github.com/wojcikdominik/openspider/releases/download/v1.0.1/OpenSpider_x86_64.app.tar.gz"
+    },
+    "windows-x86_64-nsis": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTT0M2R1gzODBiQzJWbGtlYmxiR0hFRVNoK0UvSTBDMTE4aHFFMmxFNWpxK2dvYnNEVkJlcTY1cnRvdUlLYU96d2l3b0dGRGdseDhZVThOUEF1ZFAwcEN0YS9iR0hsMWdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMzgyNjcxCWZpbGU6YXJ0aWZhY3QJdmVyc2lvbjoxLjAuMQpESDVaQms0V1l1ei9waUlmZGQ2QTRLMjY1R1VSUlgwY2dTTmZjcGIreFJwenFFSzF1RndsWHd6eVExV0hyeGpYdEdmUTdGZkl6d3NZYnVLYTN0VHRDUT09Cg==",
+      "url": "https://github.com/wojcikdominik/openspider/releases/download/v1.0.1/OpenSpider_1.0.1_x64-setup.exe"
+    },
+    "windows-x86_64-msi": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTT0M2R1gzODBiQzJWbGtlYmxiR0hFRVNoK0UvSTBDMTE4aHFFMmxFNWpxK2dvYnNEVkJlcTY1cnRvdUlLYU96d2l3b0dGRGdseDhZVThOUEF1ZFAwcEN0YS9iR0hsMWdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMzgyNjcxCWZpbGU6YXJ0aWZhY3QJdmVyc2lvbjoxLjAuMQpESDVaQms0V1l1ei9waUlmZGQ2QTRLMjY1R1VSUlgwY2dTTmZjcGIreFJwenFFSzF1RndsWHd6eVExV0hyeGpYdEdmUTdGZkl6d3NZYnVLYTN0VHRDUT09Cg==",
+      "url": "https://github.com/wojcikdominik/openspider/releases/download/v1.0.1/OpenSpider_1.0.1_x64_en-US.msi"
+    }
+  }
+}

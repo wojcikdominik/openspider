@@ -126,3 +126,20 @@ it("brings a minimized main window to the front before showing the update dialog
   expect(native.win.setFocus).toHaveBeenCalled();
   expect(screen.getByText("OpenSpider is up to date.")).toBeInTheDocument();
 });
+
+// spec: OUT-262
+it("tells the user to download manually when the installer type is unknown, without offering a download", async () => {
+  vi.spyOn(update, "status").mockImplementation(async () => "idle");
+  vi.spyOn(update, "check").mockImplementation(async () => ({ disabled: "unknownInstaller" }));
+  const download = vi.spyOn(update, "download");
+  render(<UpdateHost />);
+  await flush();
+  act(() => { runAction("help.updates", { source: "menu" }); });
+  await flush();
+  expect(screen.getByText(/could not be determined whether OpenSpider was installed with the MSI package or the setup program/)).toHaveTextContent("https://github.com/wojcikdominik/openspider/releases/latest");
+  expect(screen.queryByRole("button", { name: "Download in background" })).toBeNull();
+  expect(download).not.toHaveBeenCalled();
+  await setLanguage("de");
+  await flush();
+  expect(screen.getByText(/Bitte laden Sie neue Versionen manuell herunter/)).toHaveTextContent("https://github.com/wojcikdominik/openspider/releases/latest");
+});

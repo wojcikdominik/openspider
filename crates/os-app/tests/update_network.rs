@@ -26,7 +26,7 @@ async fn fixture() -> (os_testsite::TestSite, tempfile::TempDir, UpdateContext) 
         current: "1.0.0".parse().unwrap(),
         os: "darwin".into(),
         arch: "aarch64".into(),
-        installer: None,
+        installer: os_app::update::policy::Installer::Platform,
         now: time::OffsetDateTime::parse(
             "2026-10-30T12:00:00Z",
             &time::format_description::well_known::Rfc3339,
@@ -237,4 +237,70 @@ async fn app_startup_network_errors_only_log_manual_errors_have_state() {
         run_check_with_context(&app, true, ctx).await,
         UpdateState::Failed(_)
     ));
+}
+
+// spec: OUT-262
+// spec: OUT-250
+#[tokio::test]
+async fn windows_check_follows_the_installer_and_unknown_sends_no_request() {
+    use os_app::update::policy::{Disabled, Installer};
+    let (site, _dir, mut ctx) = fixture().await;
+    ctx.os = "windows".into();
+    ctx.arch = "x86_64".into();
+    for installer in [Installer::Msi, Installer::Nsis] {
+        ctx.installer = installer;
+        let Outcome::Available(manifest) = policy::check(&ctx, true).await.unwrap() else {
+            panic!("{installer:?}: Update erwartet");
+        };
+        assert_eq!(
+            ctx.select(&manifest).map(|(key, _)| key.to_owned()),
+            ctx.target()
+        );
+    }
+    let log = site.requests();
+    assert_eq!(log.len(), 2);
+    for request in log {
+        // Die Anfrage verrät die Installationsart nicht (nur Version, System, Architektur; OUT-250).
+        assert_eq!(
+            request.path_and_query,
+            "/latest.json?version=1.0.0&os=windows&arch=x86_64"
+        );
+    }
+    // Unbekannte Installationsart: kein Request, eigener Abschaltgrund.
+    ctx.installer = Installer::Unknown;
+    assert!(matches!(
+        policy::check(&ctx, true).await.unwrap(),
+        Outcome::Disabled(Disabled::UnknownInstaller)
+    ));
+    assert_eq!(site.requests().len(), 2);
+    // Das Manifest der Fixture hat für Windows arm64 nur NSIS: eine MSI-Installation bekommt kein NSIS-Paket.
+    ctx.arch = "aarch64".into();
+    ctx.installer = Installer::Msi;
+    assert!(policy::check(&ctx, true).await.is_err());
+    ctx.installer = Installer::Nsis;
+    assert!(matches!(
+        policy::check(&ctx, true).await.unwrap(),
+        Outcome::Available(_)
+    ));
+}
+
+// spec: OUT-262
+#[tokio::test]
+async fn app_reports_unknown_installer_as_disable_reason_without_request() {
+    use os_app::{
+        commands::update::run_check_with_context,
+        update::{policy::Installer, DisableReason, UpdateState},
+        App, AppConfig,
+    };
+    let (site, dir, mut ctx) = fixture().await;
+    ctx.os = "windows".into();
+    ctx.arch = "x86_64".into();
+    ctx.installer = Installer::Unknown;
+    let app = App::new(AppConfig::new(dir.path())).unwrap();
+    assert_eq!(
+        run_check_with_context(&app, true, ctx).await,
+        UpdateState::Disabled(DisableReason::UnknownInstaller)
+    );
+    assert!(site.requests().is_empty());
+    assert!(app.settings_snapshot().updates.last_check.is_none());
 }

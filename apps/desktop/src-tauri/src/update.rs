@@ -128,6 +128,10 @@ impl<R: Runtime> UpdateBackend for Native<R> {
     }
 }
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
+    // B4-MSIUPD: Installationsart für die Update-Prüfung aus derselben eingebetteten Bundle-Kennung, mit der
+    // tauri-plugin-updater beim Herunterladen das Paket wählt (MSI → `-msi`, NSIS → `-nsis`, sonst unbekannt).
+    let bundle_type = tauri::utils::platform::bundle_type().map(|b| b.to_string());
+    os_app::update::policy::register_bundle_type(bundle_type.as_deref());
     Builder::new("openspider-update")
         .setup(|handle, _| {
             let app = handle.state::<App>().inner().clone();

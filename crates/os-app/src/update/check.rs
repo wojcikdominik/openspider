@@ -9,6 +9,7 @@ pub async fn check(ctx: &UpdateContext, manual: bool) -> UpdateState {
             Disabled::Environment => DisableReason::Environment,
             Disabled::MissingPublicKey => DisableReason::MissingPublicKey,
             Disabled::InvalidPublicKey => DisableReason::InvalidPublicKey,
+            Disabled::UnknownInstaller => DisableReason::UnknownInstaller,
         }),
         Ok(Outcome::Throttled) => UpdateState::Idle,
         Ok(Outcome::Current) => UpdateState::UpToDate,
