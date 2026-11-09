@@ -42,7 +42,7 @@ Den Update-Dialog zeigt immer die **installierte** Version. Beim Test beta.2 →
 ### Überspringen / Später erinnern
 
 - `updates.skipped_version` in `settings.toml` (os-model, DTO, TS-Typ optional, Schema, DTO-Fixture). „Diese Version überspringen“ schreibt die Version per `settings.set` und schließt.
-- `run_check_with_context`: Bei einer automatischen Prüfung ergibt die übersprungene Version „aktuell“ (kein Manifest gemerkt, kein Download). Eine neuere Version wird wieder gemeldet; die manuelle Prüfung zeigt auch die übersprungene.
+- `run_check_with_context`: Eine automatische Prüfung meldet nur Versionen, die nach SemVer größer als die übersprungene sind (Vorabversionen eingeschlossen, `1.0.0-beta.4` < `1.0.0-rc.1` < `1.0.0`); gleiche oder ältere ergeben „aktuell“ (kein Manifest gemerkt, kein Download). Ein unlesbarer gespeicherter Wert überspringt nichts. Die manuelle Prüfung zeigt auch die übersprungene Version.
 - „Später erinnern“ schließt nur. Die nächste reguläre Prüfung (Start, höchstens einmal je 24 h, OUT-250) meldet das Update wieder. Ein bereits geladenes Paket installiert nichts von selbst (`install` nur auf Wahl).
 
 ### Kurze Update-Notes
@@ -133,6 +133,24 @@ Server `m3-upddlg`, 09.11.2026, Stand `0178ec33` (gespiegelt per `srv-sync.sh`).
 - `crates/os-cli/build.rs`, `crates/os-cli/tests/cli_basics.rs`: CLI-Version mit Build-Nummer; Formattest erlaubt das optionale „Build n, “.
 - `.github/workflows/release.yml`, `release-macos.yml`, `release-windows.yml`, `tests/release/orchestration.test.mjs`.
 - `docs/spec/05-ui.md` (UI-127), `docs/spec/06-output-ops.md` (OUT-251, OUT-181).
+
+## Nachbesserung nach der unabhängigen Abnahme (`m3/t-upddlg` 46386e86)
+
+1. **Überspringen nach SemVer:** Vorher Gleichheitsvergleich; jetzt meldet die automatische Prüfung nur Versionen größer als die übersprungene (`skipped_covers` in `crates/os-app/src/commands/update.rs`). Eigener Test `update_network::skipping_follows_semver_order_including_pre_releases` (übersprungene Vorabversion derselben Version → gemeldet; gleiche, neuere Vorabversion oder neuere Version → still; unlesbarer Wert → gemeldet). Spec OUT-251 entsprechend präzisiert.
+2. **Debug-Info:** Die Zeile mit dem Commit-Hash heißt jetzt „Commit“ in de und en (vorher „Build“ bzw. „Erstellungsstand“). Vitest `help.test.tsx` prüft Versionszeile „<Version> (Build 2578)“, Zeile „Commit“ mit Hash und dass keine Zeile „Build“/„Erstellungsstand“ mehr da ist.
+
+Gates (Server, Abnahmedateien des Testagenten nur temporär ausgecheckt, danach entfernt, nicht committet):
+
+| Gate | Ergebnis |
+|---|---|
+| `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` | Exit 0 |
+| Abnahme `os-app --test acceptance_upddlg` | 8/8, darunter `a_version_older_than_the_skipped_one_stays_silent_for_automatic_checks` |
+| `cargo test -p os-app` | 647 bestanden, 0 fehlgeschlagen |
+| `cargo test -p os-cli` (mit Abnahme `acceptance_version`) | 232 bestanden, 0 fehlgeschlagen |
+| typecheck, `npm run -w apps/desktop test` (mit `acceptance-upddlg.test.tsx`) | Exit 0; 125 Dateien, 1.081 Tests grün |
+| `node --test` Abnahme + Orchestrierung | 44/45; einzig der bekannte L01-Test 29 (scheitert auch auf `main`) |
+| Playwright `e2e/update` (Chromium + WebKit) | 42/42 |
+| Playwright Abnahme `e2e/acceptance/b4-upddlg.spec.ts` (Chromium) | 48/48 |
 
 ## Abschluss
 
