@@ -153,9 +153,12 @@ fn open<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, CmdResult>
                 result=work=>result,
                 _=async {while !cancel.is_cancelled() {tokio::time::sleep(Duration::from_millis(25)).await;}}=>Err(cancelled()),
             };
-            browser.close().await;
             let reply=captured.as_ref().map(|s|LoginCapture { final_url:s.final_url.clone(),cookies:s.cookies.len() as u32,local_storage:s.storage.iter().map(|s|s.local_storage.len() as u32).sum(),session_storage:s.storage.iter().map(|s|s.session_storage.len() as u32).sum() }).map_err(Clone::clone);
+            // B4-FLAKY (CRAWL-120): „Sitzung übernehmen“ answers as soon as the session is captured. Closing the login
+            // browser (CDP close with up to 2 s grace, process kill and wait, removal of the temporary profile) is cleanup
+            // and must not delay the acknowledgement (Windows CI: 3.5 to 5 s from the click to the reply while it waited).
             let _=result.send(captured);
+            browser.close().await;
             to_json(&reply?)
         }));
         app.ext::<Logins>()
