@@ -189,3 +189,48 @@ Weitere fremde Dateien im Nachtrag (K2-92): `crates/os-fetch/src/robots/parser.r
   `--run-task` dann einen anderen Code liefern (z. B. 3)? Nicht geändert.
 - **O3 robots.txt mit 5xx/429:** Hier sperrt die Regel „robots.txt nicht erreichbar“ die Start-URL, aber der Lauf ist kein
   Fehlschlag. Die App zeigt dafür weder den Dialog „nicht erreichbar“ noch `start-robots` (UI-019 nennt nur `Disallow`).
+
+## Nachtrag 2: Befunde der unabhängigen Abnahme (`m3/t-startfix`, e71a5fe2)
+
+Die Abnahme meldete 5 rote Tests in `crates/os-cli/tests/acceptance_startfix.rs`. Die Entscheidungen des Orchestrators sind als
+**OS-Festlegung 09.11.2026 (Orchestrator)** in OUT-281, OUT-152 und OUT-182 eingetragen.
+
+| Nr. | Befund | Umsetzung | Eigener Test (`crates/os-cli/tests/b4_startfix_mail.rs`) |
+|---|---|---|---|
+| 1 | Fehler-Mail von CLI und Planer nannte im Standardmodus (robots.txt beachten, Port zu) nur „Blocked by Robots.txt (robots.txt unreachable)“ | `os_engine::StartFailure::describe`: eine Meldung für App, CLI und Planer mit Fehlerklasse in Worten und als Schlüssel, betroffener Adresse und Ursache, z. B. „Start-URL http://…/ nicht erreichbar: Verbindung abgelehnt (connection_refused) bei http://…/robots.txt; die robots.txt war nicht abrufbar, deshalb wurde die Start-URL nicht gecrawlt“. Die CLI liest die Ursache bei `Failed` per `start_failure` aus der Crawl-Datei statt des Status-Texts der Zeile. | `cli_an_unreachable_start_url_sends_the_failure_mail_with_exit_0`, `planner_an_unreachable_start_url_sends_the_failure_mail` (Klasse + robots.txt-Adresse) |
+| 2 | Mail bei Exit 3 (`--fail-on-start-error`) ohne Start-URL, Projekt, Start, Ende | Exit 3 entsteht nicht mehr über den Fehlerweg ohne Crawl-Angaben, sondern als Ergebnis mit Crawl-Datei (`with_crawl`); der Mail-Schnappschuss liest die Kopfdaten daraus. Ausgabe auf stderr und Exit-Code unverändert. | `cli_the_failure_mail_with_exit_3_carries_the_crawl_header` |
+| 3 | Globale CLI-Mail mit `--compare-with-previous` ohne Vermerk | `Outcome::compare_skipped`; `notify_global` hängt „Auto-Vergleich übersprungen (Crawl fehlgeschlagen)“ an die Fehlermeldung | `cli_the_failure_mail_of_a_skipped_comparison_carries_the_note` |
+| 4 | Warnung bei robots.txt mit 5xx/429 ohne URL und Grund | `os_engine::start_robots_unavailable` liest robots.txt-URL und deren HTTP-Status; Warnung „Start-URL … durch robots.txt gesperrt: robots.txt http://…/robots.txt nicht abrufbar (Grund: HTTP 503)“ | `cli_the_warning_for_a_robots_txt_answering_503_names_url_and_status` |
+
+Ohne `--project-name` steht in der Mail wie bisher das Projekt „Default“.
+
+### Eingabetaste unter WebKit (Beobachtung des Testers)
+
+Reproduziert mit einer temporären Playwright-Spec. Sie lag nur im Server-Worktree und ist wieder gelöscht.
+
+- **Ablauf:** erster Crawl per Enter, dann Feld leeren, URL tippen, Enter.
+- **Ergebnis:** In Chromium startet Enter den zweiten Crawl, die Rückfrage „Ersetzen“ erscheint. In WebKit passiert nichts, auch
+  nicht beim zweiten Enter. Das gilt für dieselbe URL, für eine andere URL, ohne `datalist` (Attribut `list` entfernt) und
+  **ohne jeden Dialog dazwischen** (robots.txt ignoriert, erster Crawl endet normal).
+- **Diagnose:** `keydown` (Enter) kommt im Feld an und wird nicht verhindert. Unter WebKit erreicht aber kein `keypress` das
+  Fenster, und das `submit`-Ereignis des Formulars bleibt aus (Chromium: `keypress` und `submit` = 1). Die implizite Übermittlung
+  des Kopf-Formulars (`features/header/Header.tsx`) bleibt also nach dem ersten Crawl aus. Mit dem Startdialog hat das nichts zu
+  tun.
+- **Einordnung:** Produktfehler im Kopfbereich (Start-URL-Feld, UI-001/UI-003), nicht Teil dieses Pakets; nicht behoben. Er
+  betrifft vermutlich auch WKWebView unter macOS. Folgepaket empfohlen: Ursache des fehlenden `keypress`, z. B. ein Handler, der
+  `keypress` stoppt, oder ein Verhalten der Fokusverwaltung nach dem ersten Lauf. Als Abhilfe käme in Frage, Enter im Feld selbst
+  per `keydown` zu übermitteln. Dazu ein Playwright-Test „zweiter Start per Enter“ in WebKit.
+
+### Gates Nachtrag 2 (Server)
+
+Abnahmedateien nur temporär per `git checkout m3/t-startfix -- …` geholt; nicht geändert, nicht committet, lokal wieder
+entfernt.
+
+| Gate | Ergebnis |
+|---|---|
+| `cargo fmt --all --check` | grün |
+| `cargo clippy --workspace --all-targets -- -D warnings` (mit Abnahmedateien) | grün |
+| `cargo test -p os-cli --test acceptance_startfix --test b4_startfix_mail --test cli_basics -- --test-threads=1` | Abnahme 21/21 grün (vorher 16/5); 7 + 15 grün; nach den neuen eigenen Tests `b4_startfix_mail` 10/10 |
+| `cargo test -p os-app --test acceptance_startfix --test b4_startfix --test b4_unreach --test cmd_mail_lifecycle -- --test-threads=1` | 14 + 6 + 6 + 4 grün |
+| Playwright Chromium + WebKit: `e2e/acceptance/b4-startfix.spec.ts`, `e2e/beta/startrobots.spec.ts`, `e2e/beta/unreach.spec.ts` | 14/14 grün |
+| `cargo test --workspace --no-fail-fast` (`os-engine` geändert; über `~/ws-slot.sh` mit 80-GB-Grenze) | grün: 622 Testbinaries (mit den beiden temporären Abnahmedateien), 4553 bestanden, 0 fehlgeschlagen, 51 ignoriert; Abnahme os-app 14/14, os-cli 21/21. Der Lauf startete regulär nach `~/ws-slot.sh`. |
