@@ -9,6 +9,8 @@ import { ComparisonControls } from "./ComparisonControls";
 import { ComparisonNumbers } from "./ComparisonNumbers";
 import { ComparisonLinks } from "./ComparisonLinks";
 import { ComparisonTable } from "./ComparisonTable";
+import { UpperTable } from "../table/UpperTable";
+import { useTabs } from "../../state/tabs";
 import { closeComparison, comparisonRows, navigateComparison, openComparison, selectComparisonUrl, useComparison } from "./model";
 import { comparisonFixture, current, previous, session, snapshot, pagedLinks } from "./fixtures/out-compare/core";
 // Contract harness: preserve the existing population/number assertions independently
@@ -270,4 +272,15 @@ it("shows localized select values and keeps the canonical values for the core", 
   await waitFor(() => expect(calls("view.rows").at(-1)?.args).toMatchObject({ comparison: { tab: "outlinks", change: "Anchor Changed" } }));
   const filter = screen.getByRole("combobox", { name: "Filter" }) as HTMLSelectElement;
   expect([...filter.options].find(o => o.value === "All")?.textContent).toBe("Alle");
+});
+
+// spec: UI-004
+// spec: UI-150
+// B4-CMPUI2 (A8): „Übersicht“ during a comparison shows the hint in the panel the tab bar names (`data-panel`).
+it("shows the overview hint of a comparison inside the data panel", () => {
+  active(); useTabs.setState({ view: "overview" });
+  render(<UpperTable />);
+  const panel = document.getElementById("data-panel");
+  expect(panel).toHaveTextContent("Not available in comparison mode.");
+  useTabs.setState({ view: "tabs" });
 });

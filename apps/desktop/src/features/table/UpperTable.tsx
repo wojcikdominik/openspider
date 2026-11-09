@@ -57,7 +57,9 @@ export function UpperTable() {
   const active = useComparison(s => !!s.session);
   const overview = useTabs(s => s.view === "overview");
   // UI-150/UI-061 (OS-Festlegung): the overview dashboard is not available in a comparison; the tabs show the comparison.
-  return active ? overview ? <ComparisonOverviewUnavailable /> : <ComparisonTable /> : overview ? <Dashboard /> : <RegularUpperTable />;
+  // A8 (B4-CMPUI2): every branch carries the panel id the tab bar's `aria-controls` names; the wrapper has no box of its own.
+  return active ? overview ? <ComparisonOverviewUnavailable /> : <ComparisonTable />
+    : overview ? <div id="data-panel" className="u10-panel-contents"><Dashboard /></div> : <RegularUpperTable />;
 }
 function RegularUpperTable() {
   const t = useT(); const locale = currentLanguage(); const tabs = useTabs();
