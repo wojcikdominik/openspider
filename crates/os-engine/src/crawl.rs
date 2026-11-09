@@ -1235,9 +1235,61 @@ fn is_network_failure(reason: Option<&str>) -> bool {
     )
 }
 
-/// Ob die einzige abgerufene Seite die Start-URL ohne Antwort ist, weil sie oder ihre robots.txt am Netz scheiterte. Sperrt die
-/// Regel „robots.txt nicht erreichbar“, entscheidet die Hilfszeile der robots.txt: Antwortete der Host dort mit 5xx oder 429, ist
-/// er erreichbar.
+/// Ursache einer nicht erreichbaren Start-URL (CRAWL-128, UI-019): die Fehlerklasse der Zeile, an der der Abruf am Netz scheiterte.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartFailure {
+    /// Fehlerklasse (`dns_lookup_failed`, `connection_refused`, `connection_timeout`, `response_timeout`, `connection_error`,
+    /// `tls_error`).
+    pub reason: os_model::NoResponseReason,
+    /// Die gescheiterte URL: die Start-URL selbst oder ihre robots.txt.
+    pub url: String,
+    /// Ob die robots.txt-Hilfszeile scheiterte (die Start-URL wurde dann nach der Regel „robots.txt nicht erreichbar“ gesperrt).
+    pub robots: bool,
+}
+
+/// Liest aus der Crawl-Datei, ob und warum die Start-URL nicht erreichbar war: Grund der Start-URL-Zeile, bzw. – sperrt die Regel
+/// „robots.txt nicht erreichbar“ die Start-URL – Grund der robots.txt-Hilfszeile. Antwortete der Host dort mit 5xx oder 429, ist er
+/// erreichbar (`None`). Prüft nicht, ob die Start-URL die einzige abgerufene Seite ist; das entscheidet der Lauf (CRAWL-128).
+pub fn start_failure(crawl: &CrawlFile, start_url: &str) -> Option<StartFailure> {
+    let (reason, robots_url): (Option<String>, Option<String>) = crawl
+        .conn()
+        .query_row(
+            "SELECT no_response_reason, robots_txt_url FROM urls \
+             WHERE url = ?1 AND state = 'done' AND status_code = 0",
+            [start_url],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .ok()?;
+    if reason.as_deref() != Some(os_model::NoResponseReason::BlockedByRobotsUnreachable.as_str()) {
+        return network_failure(reason.as_deref()).map(|reason| StartFailure {
+            reason,
+            url: start_url.to_owned(),
+            robots: false,
+        });
+    }
+    let robots_url = robots_url?;
+    let robots_reason: Option<String> = crawl
+        .conn()
+        .query_row(
+            "SELECT no_response_reason FROM urls WHERE url = ?1 AND discovered_via = 'robots_txt'",
+            [&robots_url],
+            |r| r.get(0),
+        )
+        .ok()?;
+    network_failure(robots_reason.as_deref()).map(|reason| StartFailure {
+        reason,
+        url: robots_url,
+        robots: true,
+    })
+}
+
+fn network_failure(reason: Option<&str>) -> Option<os_model::NoResponseReason> {
+    is_network_failure(reason)
+        .then(|| reason.and_then(|r| r.parse().ok()))
+        .flatten()
+}
+
+/// Ob die einzige abgerufene Seite die Start-URL ohne Antwort ist, weil sie oder ihre robots.txt am Netz scheiterte ([`start_failure`]).
 async fn start_url_unreachable(writer: &WriterThread, file: &Path, start_url: &str) -> bool {
     if writer.flush().await.is_err() {
         return false;
@@ -1245,34 +1297,12 @@ async fn start_url_unreachable(writer: &WriterThread, file: &Path, start_url: &s
     let (file, start_url) = (file.to_path_buf(), start_url.to_owned());
     tokio::task::spawn_blocking(move || {
         let crawl = CrawlFile::open(&file, os_store::OpenMode::ReadOnly).ok()?;
-        let (reason, robots_url): (Option<String>, Option<String>) = crawl
-            .conn()
-            .query_row(
-                "SELECT no_response_reason, robots_txt_url FROM urls \
-                 WHERE url = ?1 AND state = 'done' AND status_code = 0",
-                [&start_url],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .ok()?;
-        if reason.as_deref()
-            != Some(os_model::NoResponseReason::BlockedByRobotsUnreachable.as_str())
-        {
-            return Some(is_network_failure(reason.as_deref()));
-        }
-        let robots_reason: Option<String> = crawl
-            .conn()
-            .query_row(
-                "SELECT no_response_reason FROM urls WHERE url = ?1 AND discovered_via = 'robots_txt'",
-                [robots_url?],
-                |r| r.get(0),
-            )
-            .ok()?;
-        Some(is_network_failure(robots_reason.as_deref()))
+        start_failure(&crawl, &start_url)
     })
     .await
     .ok()
     .flatten()
-    .unwrap_or(false)
+    .is_some()
 }
 
 // K2-61: API work runs off the asynchronous worker threads; SQLite connections stay on that thread.
