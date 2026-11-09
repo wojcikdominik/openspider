@@ -43,6 +43,8 @@ fn app_version() -> String {
 pub fn run() {
     // OUT-246 (M3-C01): Sitzungsmarke für `unclean_exit`, nur in der Desktop-App.
     os_app::crash::enable_session_tracking();
+    // B4-RELCHECK: Installationsart vor `App::new`, das schon die erste Update-Prüfung startet.
+    update::register_installer();
     let app = match App::new(AppConfig::from_env()) {
         Ok(app) => app,
         Err(e) => {

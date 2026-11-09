@@ -1,6 +1,7 @@
 # spec: OUT-266
 # spec: OUT-166 [M3]
 # spec: OUT-272 [M3]
+# spec: OUT-262
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$BundleDir, [switch]$Signed)
 $ErrorActionPreference = 'Stop'
@@ -34,6 +35,8 @@ foreach ($kind in @('nsis', 'msi')) {
         Assert (@(Get-ChildItem $install -Filter '*.exe').Count -ge 2) 'Desktop-Binary fehlt'
         & $cli --help | Out-Null
         Assert ($LASTEXITCODE -eq 0) 'Installierte CLI startet nicht'
+        # B4-RELCHECK R1: Die Desktop-EXE trägt die Bundle-Kennung ihres Pakettyps (Paketwahl des Updaters, OUT-262).
+        & "$PSScriptRoot/../../../../scripts/release/check-bundle-marker.ps1" -InstallDir $install -Kind $kind
         $pathEntries = @([Environment]::GetEnvironmentVariable('Path', $scope) -split ';' |
             ForEach-Object { $_.TrimEnd('\') })
         Assert ($pathEntries -contains $install.TrimEnd('\')) "$scope PATH fehlt"
