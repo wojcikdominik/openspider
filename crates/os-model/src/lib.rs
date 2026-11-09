@@ -4,6 +4,8 @@
 //! und die Indexierbarkeitsbewertung (M1-Plan 3.3/3.4). Ab M2: Konfiguration v2, App-Einstellungen
 //! ([`settings`]), Erweiterungsschlüssel ([`ext`]) und das erweiterte Schreib-/Parse-Modell (M2-Plan 3.3). Das Crate kennt weder HTTP noch SQLite noch HTML.
 
+/// Build-Nummer zur Anzeige neben der Version (UI-127, OUT-181).
+pub mod build_number;
 pub mod cancel;
 pub mod config;
 pub use cancel::{CancelToken, Cancelled};
