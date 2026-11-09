@@ -4061,7 +4061,6 @@
    "PERF-001",
    "PERF-002",
    "PERF-003",
-   "CRAWL-124",
    "CRAWL-129"
   ],
   "owns": [
@@ -4109,7 +4108,6 @@
    "CRAWL-126",
    "CRAWL-145",
    "UI-120",
-   "UI-121",
    "UI-001",
    "UI-002",
    "UI-124",
@@ -4305,9 +4303,7 @@
   ],
   "extra_spec_ids": [
    "PERF-006",
-   "PERF-007",
-   "PERF-008",
-   "CRAWL-124"
+   "PERF-007"
   ],
   "owns": [
    "docs/plan/M2-acceptance/loadtest/**",
@@ -4365,13 +4361,10 @@
   "spec_ids": [],
   "extra_spec_ids": [
    "ONPAGE-008",
-   "ONPAGE-011",
    "ONPAGE-013",
    "ONPAGE-020",
    "ONPAGE-024",
-   "OUT-015",
    "OUT-080",
-   "OUT-081",
    "OUT-083",
    "OUT-084",
    "OUT-085",
@@ -4410,10 +4403,8 @@
    "ONPAGE-023",
    "ONPAGE-024",
    "ONPAGE-011",
-   "ONPAGE-090",
    "ONPAGE-077",
-   "INTEG-081",
-   "OUT-031"
+   "INTEG-081"
   ],
   "owns": [
    "crates/os-parse/src/lib.rs (nur Aufruf css::extract_inline, G13)",
@@ -4453,7 +4444,6 @@
   "spec_ids": [],
   "extra_spec_ids": [
    "ONPAGE-013",
-   "ONPAGE-140",
    "ONPAGE-141",
    "ONPAGE-142",
    "ONPAGE-147",
@@ -5093,7 +5083,6 @@
   "wave": "4n",
   "spec_ids": [],
   "extra_spec_ids": [
-   "CRAWL-126",
    "CRAWL-141"
   ],
   "owns": [
@@ -5126,8 +5115,7 @@
   "spec_ids": [],
   "extra_spec_ids": [
    "UI-145",
-   "CRAWL-126",
-   "CRAWL-130"
+   "CRAWL-126"
   ],
   "owns": [
    "crates/os-app/src/commands/export.rs (nur Katalog ohne Zählung)",
@@ -5255,7 +5243,6 @@
   "spec_ids": [],
   "extra_spec_ids": [
    "UI-061",
-   "CRAWL-130",
    "UI-145"
   ],
   "owns": [
@@ -5296,7 +5283,6 @@
   "wave": "4n",
   "spec_ids": [],
   "extra_spec_ids": [
-   "CRAWL-112",
    "UI-141"
   ],
   "owns": [
