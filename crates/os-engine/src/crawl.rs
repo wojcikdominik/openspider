@@ -59,6 +59,7 @@ pub struct CrawlHandle {
     crawl_id: CrawlId,
     progress: watch::Receiver<Progress>,
     control: Arc<Control>,
+    writer: crate::writer_thread::WeakWriterSender,
     task: JoinHandle<Result<CrawlSummary, EngineError>>,
 }
 
@@ -113,6 +114,13 @@ impl CrawlHandle {
     /// Beobachter des Fortschritts.
     pub fn watch(&self) -> watch::Receiver<Progress> {
         self.progress.clone()
+    }
+
+    /// Schreibt alle bereits gezählten URLs sofort (UI-018, B4-LAGFIX2). Worker senden ihre Seite vor dem
+    /// Zählen; nach der Bestätigung enthält die Crawl-Datei also jede URL eines zuvor gelesenen
+    /// [`progress`](Self::progress). `None` bei Rückstau des Writers (siehe `WriterSender::flush_if_idle`).
+    pub fn flush_counted(&self) -> Option<impl std::future::Future<Output = bool> + Send + use<>> {
+        self.writer.flush_if_idle()
     }
 
     /// Pausiert den Crawl: keine neuen Abrufe, laufende werden gespeichert, Zustand `Paused`, die
@@ -808,6 +816,7 @@ pub(crate) fn launch<F: Fetch>(setup: Setup<F>) -> CrawlHandle {
     let (progress_tx, progress_rx) = watch::channel(initial);
     let network_notices = sh.host_pacer.notices();
     let network_waits = sh.host_pacer.cancellation();
+    let counted = writer.sender().downgrade();
     let parts = RunParts {
         sh,
         writer,
@@ -827,6 +836,7 @@ pub(crate) fn launch<F: Fetch>(setup: Setup<F>) -> CrawlHandle {
         crawl_id,
         progress: progress_rx,
         control,
+        writer: counted,
         task,
     }
 }

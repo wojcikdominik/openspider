@@ -236,6 +236,28 @@ pub struct WriterSender {
     shared: Arc<Shared>,
 }
 
+/// Schwache Schreibseite für die Steuerung von außen (UI-018, B4-LAGFIX2).
+#[derive(Clone)]
+pub struct WeakWriterSender {
+    tx: mpsc::WeakSender<Msg>,
+}
+
+impl WeakWriterSender {
+    /// Schreibt den im Writer gesammelten Batch sofort, sofern im Kanal nichts wartet: Die App fordert das je
+    /// fälligem Oberflächen-Tick an, damit gezählte URLs schon in den Tabellen stehen, statt bis zu
+    /// [`BATCH_MAX_WAIT`] später. Bei Rückstau (Kanal nicht leer) oder beendetem Writer `None`; der
+    /// Gruppen-Commit bleibt ungestört (PERF-002/003). Die Zukunft liefert `true` nach der Bestätigung.
+    pub fn flush_if_idle(&self) -> Option<impl std::future::Future<Output = bool> + Send + use<>> {
+        let tx = self.tx.upgrade()?;
+        if tx.capacity() < tx.max_capacity() {
+            return None;
+        }
+        let (ack, wait) = oneshot::channel();
+        tx.try_send(Msg::Flush(ack)).ok()?;
+        Some(async move { matches!(wait.await, Ok(true)) })
+    }
+}
+
 /// Reservierter Platz im Kanal. Senden geht ohne Warten und ist damit unter einer Sperre möglich.
 pub struct Slot {
     permit: mpsc::OwnedPermit<Msg>,
@@ -494,6 +516,13 @@ impl WriterSender {
         match wait.await {
             Ok(true) => Ok(()),
             _ => Err(WriterGone),
+        }
+    }
+
+    /// Schwache Schreibseite: hält den Kanal nicht offen, [`WriterThread::finish`] endet wie bisher.
+    pub fn downgrade(&self) -> WeakWriterSender {
+        WeakWriterSender {
+            tx: self.tx.downgrade(),
         }
     }
 
@@ -1181,6 +1210,46 @@ mod tests {
     }
 
     // spec: PERF-005
+    // spec: UI-018
+    // B4-LAGFIX2: Auf Anforderung schreibt ein untätiger Writer die gezählten Seiten sofort statt nach
+    // BATCH_MAX_WAIT; bei wartenden Nachrichten wird nichts angefordert, und die schwache Seite hält den
+    // Writer nach `finish` nicht offen.
+    #[tokio::test]
+    async fn an_idle_writer_writes_counted_pages_on_request_and_the_weak_side_keeps_nothing_open() {
+        let (s, log) = sink(Duration::ZERO, None);
+        let w = WriterThread::spawn(s);
+        let tx = w.sender();
+        let weak = tx.downgrade();
+        tx.send(page_batch(1)).await.unwrap();
+        let start = Instant::now();
+        while tx.tx.capacity() < tx.tx.max_capacity() {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        assert!(weak.flush_if_idle().expect("idle writer").await);
+        assert!(start.elapsed() < BATCH_MAX_WAIT, "{:?}", start.elapsed());
+        assert_eq!(log.lock().unwrap().batches.len(), 1);
+        drop(tx);
+        let stats = w.finish().unwrap();
+        assert_eq!(stats.pages, 1);
+        assert!(weak.flush_if_idle().is_none(), "finished writer");
+
+        let (s, log) = sink(Duration::from_millis(300), None);
+        let w = WriterThread::spawn(s);
+        let tx = w.sender();
+        let weak = tx.downgrade();
+        tx.send(page_batch(BATCH_PAGES)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        tx.send(page_batch(1)).await.unwrap();
+        assert!(
+            weak.flush_if_idle().is_none(),
+            "a waiting message keeps the group commit"
+        );
+        tx.flush().await.unwrap();
+        assert_eq!(log.lock().unwrap().batches.len(), 2);
+        drop(tx);
+        w.finish().unwrap();
+    }
+
     #[tokio::test]
     async fn the_first_batch_is_cut_at_the_normal_page_limit_before_any_backlog() {
         let (s, log) = sink(Duration::ZERO, None);
