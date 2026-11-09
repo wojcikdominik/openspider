@@ -572,11 +572,8 @@ async fn notify_start_unreachable(app: &App, s: &SessionInfo) -> String {
         .await;
     let (notice, cause) = match found {
         Ok(Some((start_url, failure))) => {
-            let cause = format!(
-                "Start-URL nicht erreichbar ({}): {}",
-                failure.reason.as_str(),
-                os_fetch::redact::url(&failure.url)
-            );
+            // Fehlerklasse, betroffene Adresse und Ursache, gleichlautend mit Kommandozeile und Planer (OUT-281).
+            let cause = failure.describe(&start_url);
             (start_unreachable_notice(&start_url, &failure), cause)
         }
         other => {
