@@ -229,3 +229,24 @@ Läufe (Server, `srv-run.sh b4-projdlg`): `npm run -w apps/desktop typecheck && 
 125 Dateien / 1 070 Tests grün (die Abnahmedateien sind seit dem Merge in `main` enthalten und liefen mit).
 `e2e/crawls` (Chromium und WebKit, `--workers=1`) 24 passed; `e2e/acceptance/b4-projdlg.spec.ts` 52 passed. Die
 Bridge für `e2e/crawls/bridge.spec.ts` ist der Build vom Stand `a675fefa`. Kein Rust geändert.
+
+## Nachzug B4-PROJDLG3: Datumsformat auf macOS-WebKit (CI-Lauf 42646891713)
+
+Branch `m3/b4-projdlg3` ab `main` `821123bb`.
+
+- **Befund:** Unter macOS-WebKit scheiterten `e2e/crawls/management.spec.ts:189` und der Abnahmetest
+  `e2e/acceptance/b4-projdlg.spec.ts:343`. Ursache: Ein gemeinsamer Formatter mit `dateStyle` + `timeStyle`
+  schreibt dort „Oct 1, 2026 at 12:00 PM“, Chromium und Linux-WebKit „Oct 1, 2026, 12:00 PM“. Die Mac-App
+  (WKWebView) hätte also ein anderes Format gezeigt als Windows.
+- **Fix (Entscheidung Orchestrator):** `formatCrawlDate` in `ui/recentCrawl.ts` formatiert Datum (`dateStyle:
+  "medium"`) und Uhrzeit (`timeStyle: "short"`) mit getrennten Formattern und verbindet sie selbst mit „, “.
+  `recentCrawlTitle` nutzt das; damit gilt es zentral für Verwaltung und Menü (`help/recent.ts` → `loadRecent`), in
+  de und en.
+- **Test:** `recentCrawl.test.ts` simuliert einen Formatter wie macOS-WebKit (kombiniert mit „ at “). Geprüft wird,
+  dass trotzdem „Oct 1, 2026, 12:00 PM“ entsteht und nie ein kombinierter Formatter angefordert wird. Dazu kommen
+  de/en mit dem echten `Intl`. Die beiden betroffenen E2E-Tests sind unverändert.
+- **Läufe (Server):** typecheck und test mit 128 Dateien / 1 128 Tests grün. `e2e/crawls` (Bridge neu gebaut auf
+  `821123bb`) 24 passed, `e2e/acceptance/b4-projdlg.spec.ts` 52 passed, jeweils Chromium und WebKit mit
+  `--workers=1`. **Hinweis:** Linux-WebKit zeigt den Fehler nicht (es formatiert wie Chromium mit Komma). Der
+  Server-Lauf belegt den Fix deshalb nur für Chromium und Linux-WebKit; für macOS-WebKit belegt ihn der Unit-Test
+  mit dem simulierten Formatter, und der nächste macOS-CI-Lauf bestätigt ihn.
