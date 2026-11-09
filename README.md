@@ -121,15 +121,24 @@ plus the files for automatic updates, the CLI, managed installs (MSI) and checks
 which also covers the two versionless copies). See also the [beta page](https://openspider.de/en/beta/).
 Linux x86_64 with glibc supports the core and CLI only; Linux desktop,
 .deb/.rpm and arm64 releases remain unsupported.
-A Homebrew tap (`wojcikdominik/homebrew-openspider`) is prepared but not published yet; winget will follow with 1.0.
+Check a download against `SHA256SUMS` before opening it (commands on the [download page](https://openspider.de/en/download/#sha256)).
+The macOS app is signed and notarized; on first launch Gatekeeper asks once, and Windows SmartScreen may warn while the
+signing certificate is new (see the user guide for what to check).
+Version 1.0 has not been released yet; beta users receive it as a normal update.
 
-**Docker (self-hosted server).** A container image with the Linux CLI covers crawls, exports,
+**Packages.** A Homebrew tap (`wojcikdominik/homebrew-openspider`, cask `openspider@beta`) is planned and will follow
+shortly; it is not published yet. winget is planned from 1.0 on. Until then use the installers above.
+
+**JavaScript rendering.** Chromium is not part of the installer. On request the app downloads a verified Chromium
+(Configuration → Spider → Rendering, about 200 MB, SHA-256 check); an installed Chrome works as well.
+
+**Docker (self-hosted server).** A [Dockerfile](packaging/docker/Dockerfile) builds a container image with the Linux CLI that covers crawls, exports,
 scheduled runs (cron on the host) and MCP over STDIO. It has no web interface: results are files
 and `.ospider` crawl files that you open in the desktop app. The image runs as UID/GID 10001,
 uses `/data` as output folder and `/config` (`OPENSPIDER_HOME`) for crawl management; keep
-`/config` to compare with the previous crawl. Publishing at `ghcr.io/wojcikdominik/openspider` is
-prepared; until it is approved, build the image yourself from [`packaging/docker`](packaging/docker/Dockerfile)
-at the release tag, with the archive checksum from `SHA256SUMS` of the same release. A ready-made image will follow.
+`/config` to compare with the previous crawl. There is no public image: build it yourself from
+[`packaging/docker`](packaging/docker/Dockerfile) at the release tag, with the archive checksum from `SHA256SUMS`
+of the same release.
 
 ```sh
 docker build -t openspider:<version> --build-arg OPENSPIDER_VERSION=<version> \
@@ -145,15 +154,16 @@ section [Docker](https://openspider.de/en/manual/#docker).
 
 The [German user guide](https://openspider.de/handbuch/) and
 [English user guide](https://openspider.de/en/manual/) cover DMG, NSIS and silent MSI
-installation, Gatekeeper/SmartScreen, CLI/MCP, scheduling, updates and uninstalling.
+installation, Gatekeeper/SmartScreen, Chromium, CLI/MCP, scheduling, updates and uninstalling.
 Automatic update checks send only version, OS and architecture to GitHub Releases
 (which sees the connection IP), without telemetry or crawl data. Disable them in
-Settings → Updates or with `OPENSPIDER_DISABLE_UPDATE_CHECK=1`.
+Settings → Updates or with `OPENSPIDER_DISABLE_UPDATE_CHECK=1`. From beta.4 the app shows what is new once after an update.
 
 ## Documentation
 
 - [Benutzerhandbuch (Deutsch)](https://openspider.de/handbuch/)
 - [User guide (English)](https://openspider.de/en/manual/)
+- [Download and checksums](https://openspider.de/en/download/) ([Deutsch](https://openspider.de/download/)) and the [FAQ](https://openspider.de/en/faq/) ([Deutsch](https://openspider.de/faq/))
 - [Open beta](https://openspider.de/en/beta/) ([Deutsch](https://openspider.de/beta/)) — everyone can join; send feedback through the form on that page or open a [GitHub issue](https://github.com/wojcikdominik/openspider/issues/new/choose).
 
 ### Build the CLI from source
