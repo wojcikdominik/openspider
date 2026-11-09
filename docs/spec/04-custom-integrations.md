@@ -23,6 +23,8 @@ Referenzstand: Oktober 2026, Referenzprodukt (Verhalten laut öffentlicher Doku,
 | K KI-Anbieter & Prompts | INTEG-160 – INTEG-179 | Konten, Endpunkte, Prompts, Eingaben, Bibliothek, Tester, Limits, KI-Tab, System-Prompt, Tokenverbrauch, Timeout | 0 | 14 | 6 |
 | L Embeddings & semantische Analyse | INTEG-180 – INTEG-189 | Ähnlichkeit, Low Relevance, Filterregeln, semantische Suche, Cluster, Reduktions-Presets (führend für Embeddings, ONPAGE-159 … 164 verweisen hierher) | 0 | 10 | 0 |
 
+**Nachtrag 09.11.2026:** INTEG-085 (Abschnitt E, P1, 1.x) und INTEG-190 (Abschnitt K, P2, M4) sind in den Zählungen dieses Dokuments nicht enthalten.
+
 Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-Stubs auf führende Einträge anderer Bereiche (INTEG-016, 017, 034, 145, 146, 147); sie behalten ihre ID und tragen die Priorität des führenden Eintrags.
 
 ## Inhaltsverzeichnis
@@ -105,6 +107,7 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
 - INTEG-082 Eigene Regeln und Reihenfolge
 - INTEG-083 Funktion abschaltbar
 - INTEG-084 Ausgabe in Inlinks/Outlinks
+- INTEG-085 Links nach Position nicht verfolgen (Nachtrag 09.11.2026, 1.x)
 
 **F Google Analytics 4**
 - INTEG-090 Verbindung und Auswahl von Konto, Property, Datenstream
@@ -192,6 +195,7 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
 - INTEG-177 Systemweiter System-Prompt je Anbieter
 - INTEG-178 Tokenverbrauch in den Kontoinformationen
 - INTEG-179 Request-Timeout für KI-Anbieter
+- INTEG-190 Prompts auch bei leerer Eingabe senden (Nachtrag 09.11.2026, M4)
 
 **L Embeddings & semantische Analyse**
 - INTEG-180 Embedding-Funktionalität aktivieren
@@ -1047,6 +1051,7 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
 - **Akzeptanzkriterien:**
   - [ ] Bei deaktivierter Option sind beide Spalten leer und der Speicherumfang der Crawl-Datei kleiner als mit Option (Messung auf Fixture mit 1.000 Links).
   - [ ] Filter, die von Link-Positionen abhängen (z. B. „nur Content-Links"), zeigen einen Hinweis.
+  - Verweis (Nachtrag 09.11.2026): Positionsregeln zum Nicht-Verfolgen (INTEG-085, 1.x) wirken auch bei ausgeschalteter Speicherung; Regeln dort.
 - **Testfixture:** `fixtures/integ/linkpos/many-links.html` (1.000 Links).
 
 ### INTEG-084 Ausgabe in Inlinks/Outlinks
@@ -1058,6 +1063,36 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
   - [ ] Bulk-Export „All Inlinks" enthält beide Spalten.
   - [ ] Der Filter „Link Position = Content" in Inlinks zeigt nur Content-Links.
 - **Testfixture:** Fixture aus INTEG-080.
+
+### INTEG-085 Links nach Position nicht verfolgen (Nachtrag 09.11.2026)
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0) – OS-Festlegung, Nutzerentscheidung 09.11.2026, ohne Paritätsbezug.
+- **Beschreibung:** Crawl-Regeln, die Links anhand ihrer Position im Layout (INTEG-080 … 082) oder eines Teilstrings ihres Link-Pfads nicht verfolgen. Gedacht für Fälle, in denen sich die Ziel-URLs nicht über ein URL-Muster (Exclude, CRAWL-110) abgrenzen lassen, die Herkunft aber eindeutig ist: z. B. Filterleisten eines Shops, deren Links dieselben URL-Formen haben wie die Kategorienavigation, ein Mega-Menü, das auf jeder Seite Tausende Links erzeugt, oder Footer-Links auf Länderseiten. Ein betroffener Link wird wie ein nicht verfolgter nofollow-Link behandelt (CRAWL-056): Er wird gespeichert, dient aber nicht zur Entdeckung. Ziele, die nur über solche Links erreichbar sind, werden nicht angefragt und erscheinen nicht in den Tabellen; über einen anderen Link erreichbare Ziele werden normal gecrawlt.
+- **Eingaben/Konfiguration:** Konfiguration › Link-Positionen, Abschnitt „Nicht verfolgen“ (Schlüssel `link_positions.exclude`, Liste; Standard leer). Je Regel:
+  - `name` – Anzeigename (Pflicht, eindeutig);
+  - `positions` – Liste von Positionsnamen aus der Regelliste (INTEG-081/082), z. B. `Navigation`, `Footer`, eigene wie `Facets`;
+  - `path_contains` – Liste von Teilstrings des Link-Pfads (case-sensitiv wie INTEG-080), z. B. `div[@class='facets']`;
+  - `allow_url` – optionales URL-Muster (Regex-Dialekt und Abgleichsemantik wie CRAWL-109): passende Ziele werden trotz Position verfolgt (z. B. die erste Filterebene);
+  - `scope` ∈ {`internal` (Standard), `all`} – ob auch externe Links betroffen sind.
+  Eine Regel trifft einen Link, wenn seine Position in `positions` steht **oder** sein Pfad einen Teilstring aus `path_contains` enthält, und sein Ziel nicht auf `allow_url` passt. Mindestens eines von `positions`/`path_contains` ist Pflicht.
+- **Vorrang und Zusammenspiel (OS-Festlegung):**
+  - Betroffen sind nur Hyperlinks (`<a>`, `<area>`). Ressourcen, Canonicals, hreflang, Paginierung, Weiterleitungen, Sitemap-Einträge und die Start-URL bleiben unberührt.
+  - Include/Exclude (CRAWL-109/110) werden zuerst angewandt; eine Positionsregel kann ein ausgeschlossenes Ziel nicht wieder zulassen. Gegenüber Speichern/Crawlen-Schaltern (CRAWL-038) wirkt die Regel wie „Crawlen aus“ für genau diesen Link.
+  - **`link_positions.store = false` (INTEG-083):** Die Position wird beim Parsen trotzdem ermittelt, damit die Regel wirkt; nur `Link Path` und `Link Position` werden nicht gespeichert. Der Name der treffenden Regel (`Position Rule`) wird auch dann gespeichert, damit nachvollziehbar bleibt, warum ein Ziel fehlt.
+  - Im Rendering-Modus gilt die Position im gerenderten DOM.
+  - Änderungen während einer Pause wirken auf Seiten, die nach dem Fortsetzen geparst werden; bereits eingereihte URLs bleiben in der Warteschlange (ihre Herkunft ist dort nicht mehr zuzuordnen). Die nachträgliche Neuberechnung der Positionen ohne Neucrawl (INTEG-082) ändert keine Crawl-Entscheidung; der Dialog weist darauf hin.
+- **Ausgabe:** In Inlinks/Outlinks und den zugehörigen Bulk-Exporten Spalte `Position Rule` (leer, wenn keine Regel trifft); Filteroption „Durch Positionsregel nicht verfolgt“. Crawl-Übersicht/Report „Crawl Overview“: Zähler „Durch Positionsregel nicht verfolgt (Links)“. Im Konfigurationsdialog je Regel die Trefferzahl des geöffneten Crawls (sofern Link-Pfade gespeichert sind) als Vorschau.
+- **Akzeptanzkriterien:**
+  - [ ] Regel `positions = ["Footer"]`: Ein Ziel, das nur im Footer verlinkt ist, wird nicht angefragt (Request-Log) und fehlt in Internal; ein Ziel, das im Footer und im Content verlinkt ist, wird gecrawlt.
+  - [ ] Eigene Position `Facets` (INTEG-082, Teilstring `facets`) plus Regel `positions = ["Facets"]`: Keine der 40 Filter-URLs der Fixture wird angefragt; die Kategorieseiten mit denselben URL-Formen aus der Navigation werden gecrawlt.
+  - [ ] `allow_url = ".*\?farbe=[a-z]+"` zur Facetten-Regel: Einfache Farbfilter werden verfolgt, Kombinationen (`?farbe=rot&groesse=m`) nicht.
+  - [ ] `path_contains = ["div[@id='mega-menu']"]` wirkt ohne eigene Position.
+  - [ ] Die nicht verfolgten Links stehen in den Outlinks der Quellseite mit `Position Rule` = Regelname; `Follow` bleibt unverändert (beschreibt weiter das `rel`-Attribut).
+  - [ ] Mit `link_positions.store = false` werden dieselben URLs nicht angefragt wie mit `true`; `Link Path`/`Link Position` sind leer, `Position Rule` ist gefüllt.
+  - [ ] `scope = internal`: Externe Footer-Links werden weiter geprüft (CRAWL-045); mit `all` nicht.
+  - [ ] Ein per Exclude ausgeschlossenes Ziel bleibt ausgeschlossen, auch wenn `allow_url` passt.
+  - [ ] Ohne Regeln verhält sich der Crawl byte-gleich wie vor diesem Eintrag (Regressionstest der Linkexporte von `fixtures/integ/linkpos/`).
+- **Testfixture:** `fixtures/integ/linkpos/shop/`: Kategorieseiten mit Navigation, Mega-Menü (`div#mega-menu`), Filterleiste (`div.facets` mit 40 Links in Kombinationen aus `farbe` und `groesse`), Footer mit Länderseiten und einem externen Link; eine Zielseite nur im Footer, eine im Footer und im Content.
 
 ---
 
@@ -1918,6 +1953,7 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
 - **Akzeptanzkriterien:**
   - [ ] Prompt mit Eingabe Custom Extraction auf 3 Seiten, von denen 1 keinen Extraktionswert hat → Mock-Zähler = 2.
 - **Testfixture:** `fixtures/integ/ai/site/`.
+- **Verweis (Nachtrag 09.11.2026):** Ausnahme per Einstellung je Anbieter bzw. Prompt: INTEG-190 (M4). Ohne diese Einstellung gilt dieser Eintrag unverändert.
 
 ### INTEG-174 KI-Tab und Ergebnisspalten
 - **Priorität:** P1
@@ -1990,6 +2026,30 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
   - [ ] Der Timeout eines Anbieters beeinflusst andere Anbieter nicht (OpenAI-Mock mit 100 s Antwortzeit gelingt bei OpenAI-Timeout 120 s, auch wenn Ollama auf 30 s steht).
   - [ ] Der Prompt-Tester (INTEG-170) verwendet denselben Timeout und zeigt bei Überschreitung die Timeout-Meldung.
 - **Testfixture:** Mock-Endpunkte mit Parameter `delay=<s>` für Chat und Bildgenerierung; Testuhr.
+
+### INTEG-190 Prompts auch bei leerer Eingabe senden (Nachtrag 09.11.2026)
+- **Priorität:** P2
+- **Meilenstein:** M4 (1.1) – OS-Festlegung, Nutzerentscheidung 09.11.2026, ohne Paritätsbezug.
+- **Beschreibung:** Ausnahme zu INTEG-173 per Einstellung: Ein Prompt wird auch dann gesendet, wenn seine Inhaltseingabe für eine URL leer ist. Gedacht für Prompts, die gerade bei fehlendem Inhalt etwas erzeugen sollen, z. B. „Schlage eine Meta Description vor“ mit Eingabe `Meta Description 1` und Platzhaltern wie `{{url}}` und `{{title}}` (INTEG-164). Standard bleibt „nicht senden“ (INTEG-173), weil leere Anfragen sonst unbemerkt Kosten verursachen.
+- **Eingaben/Konfiguration:**
+  - Je Anbieter im Reiter „Erweitert“ (INTEG-160): Checkbox „Prompts auch bei leerer Eingabe senden“ (Standard aus).
+  - Je Prompt im erweiterten Editor (INTEG-164): Auswahl „Wie Anbieter“ (Standard), „Senden“, „Nicht senden“. Die Prompt-Einstellung geht der Anbieter-Einstellung vor.
+  - Teil des Konfigurationsprofils und des Prompt-Exports (INTEG-169, Feld `sendEmptyInput` ∈ {`inherit`, `send`, `skip`}; Anbieterfeld `providerSendEmptyInput`).
+- **Verhalten:**
+  - „Leer“ heißt wie in INTEG-173: Die Voraussetzung der Eingabe ist erfüllt, ihr Wert für diese URL ist aber leer (bzw. alle Platzhalterwerte sind leer). Wird gesendet, enthält die Anfrage den Prompt-Text mit leer ersetzten Platzhaltern und ohne Inhaltsblock.
+  - Nicht betroffen: Eingaben, deren Voraussetzung fehlt (z. B. `Page Text` ohne gespeichertes HTML, Warnung nach INTEG-162), und Bild-Eingaben ohne Bild – beides bleibt übersprungen. Segment-Regeln (INTEG-165), Kostenschutz (INTEG-176) und Budget (AI-013) gelten unverändert.
+  - Die Kostenschätzung vor dem Crawl (INTEG-176) zieht für Prompts mit wirksamer Einstellung „Senden“ keine Leerausschlüsse ab.
+  - Die Aufgaben aus 08 (Decision-Fragen, Vorschläge, AI-032) sind nicht betroffen; für sie gilt INTEG-173 unverändert.
+- **Ausgabe:** Ergebnis wie jede andere Antwort (`<Prompt> Status = Success`). Der Prompt-Tester (INTEG-170) zeigt bei leerer Test-Eingabe an, ob gesendet würde und warum (Anbieter- oder Prompt-Einstellung).
+- **Akzeptanzkriterien:**
+  - [ ] Prompt mit Eingabe Custom Extraction auf 3 Seiten, 1 ohne Extraktionswert: Anbieter-Einstellung an → Mock-Zähler 3, die dritte Anfrage enthält keinen Inhaltsblock; Status aller drei `Success`.
+  - [ ] Anbieter-Einstellung an, Prompt „Nicht senden“ → Mock-Zähler 2, die leere Seite `Skipped (empty input)`.
+  - [ ] Anbieter-Einstellung aus, Prompt „Senden“ → Mock-Zähler 3; ein zweiter Prompt desselben Anbieters mit „Wie Anbieter“ → 2.
+  - [ ] `{{title}}` auf einer Seite ohne Title wird leer ersetzt; die gesendete Anfrage ist sonst identisch mit der Anfrage einer Seite mit Title (Mock-Echo, Vergleich ohne den Title-Wert).
+  - [ ] `Page Text` bei ausgeschaltetem „HTML speichern“ → weiterhin kein Request, Warnung nach INTEG-162.
+  - [ ] Die Kostenschätzung nennt für den Fall oben 3 statt 2 Anfragen.
+  - [ ] Export und Import eines Prompts erhalten `sendEmptyInput` (Rundreise).
+- **Testfixture:** `fixtures/integ/ai/site/` (INTEG-173) mit Mock-Echo-Endpunkt; zusätzliche Seite ohne Title.
 
 ---
 

@@ -23,6 +23,7 @@ Zuständige Crates (siehe `docs/ARCHITECTURE.md`): `os-export` (Formate, Bulk-Ex
 | [12 Update-Mechanismus](#12-update-mechanismus) | OUT-250 – OUT-255 | Prüfen, Herunterladen, Signatur, Abschalten |
 | [13 Plattformanforderungen](#13-plattformanforderungen) | OUT-260 – OUT-274 | macOS arm64/x64, Windows x64, Installer, Signatur, Pfade, Ressourcen, Zertifikate, Linux-Serverbetrieb (Kern und CLI), Docker-Image |
 | [14 Benachrichtigungen & Automatisierungs-Schnittstellen](#14-benachrichtigungen--automatisierungs-schnittstellen) | OUT-280 – OUT-285 | E-Mail-Konten, Abschlussmail, Anhänge, Desktop-Benachrichtigung, MCP-Server |
+| [15 Nachtrag 09.11.2026](#15-nachtrag-09112026-funktionen-für-1x-nach-10) | OUT-286 – OUT-289 | 1.x: fremde Läufe pausieren, CLI-Verwaltung, Profile als JSON, Markdown |
 
 Prioritäten: **P0** = MVP-Kern, **P1** = für Parität nötig, **P2** = später/Nische.
 
@@ -1591,7 +1592,7 @@ Menü „Datei → Zeitplanung“. Eine geplante Aufgabe ist eine Beschreibung v
 
 ### OUT-160 Aufgabenverwaltung
 - **Priorität:** P1
-- **Beschreibung:** Liste aller Aufgaben mit Spalten `Name`, `Project`, `Next Run`, `Interval`, `Mode`, `Start URL / Source`, `Status` (Valid/Invalid), `Last Run Result`. Aktionen: Hinzufügen, Bearbeiten, Duplizieren, Löschen, Jetzt ausführen, Historie, Export/Import (OUT-170), Abbrechen eines laufenden Laufs (OUT-171).
+- **Beschreibung:** Liste aller Aufgaben mit Spalten `Name`, `Project`, `Next Run`, `Interval`, `Mode`, `Start URL / Source`, `Status` (Valid/Invalid), `Last Run Result`. Aktionen: Hinzufügen, Bearbeiten, Duplizieren, Löschen, Jetzt ausführen, Historie, Export/Import (OUT-170), Abbrechen eines laufenden Laufs (OUT-171); ab 1.x zusätzlich Pausieren/Fortsetzen eines laufenden Laufs (OUT-286, Nachtrag 09.11.2026).
 - **Eingaben/Konfiguration:** Der Aufgabendialog folgt der Reiterstruktur der Referenz, damit Umsteiger Felder an gewohnter Stelle finden (übernommen aus CRAWL-136): **Allgemein** (OUT-161), **Spider** (Modus, Start-URL/Listenquelle, Konfiguration, Auth-Profil, „Mit vorherigem Crawl vergleichen“ – OUT-162/163, OUT-152), **APIs** (OUT-164), **Exporte** mit den Unterreitern in dieser Reihenfolge: Ausgabe-Einstellungen, Tabellen, Lokale Dateien, Looker Studio (OUT-165/210), Vorlagen/Presets (OUT-075), Benachrichtigungen (OUT-281). Ein Schalter „Headless“ existiert nicht (OUT-163).
 - **Ausgabe:** Aufgabendateien + Registrierung beim Betriebssystem (OUT-166).
 - **Akzeptanzkriterien:**
@@ -1720,6 +1721,7 @@ Menü „Datei → Zeitplanung“. Eine geplante Aufgabe ist eine Beschreibung v
   - [ ] Abbruch → Prozess beendet sich innerhalb 10 s, Crawl wird gespeichert, Status `Aborted`, Exporte werden nicht erzeugt.
   - [ ] [P2] Max. Laufzeit erreicht → Crawl wird gestoppt, Exporte des bisherigen Stands werden erzeugt, Status `Completed with warnings`.
   - [ ] Ein laufender geplanter Crawl bietet keine Aktion „Pausieren“ (Parität: ein geplanter Lauf ist ein Prozess ohne Oberfläche), nur „Abbrechen“ (übernommen aus CRAWL-136).
+  - **Nachtrag 09.11.2026 (1.x):** Mit OUT-286 erhält ein laufender geplanter Lauf zusätzlich „Pausieren“ und „Fortsetzen“, sofern sein Prozess erreichbar ist (Steuerkanal dort). Das Kriterium oben gilt bis zur Umsetzung von OUT-286 und danach nur für nicht erreichbare Besitzerprozesse; „Abbrechen“ bleibt unverändert.
 - **Testfixture:** `out-basic-site` mit großer Verzögerung.
 
 ---
@@ -2108,7 +2110,7 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 
 ### OUT-221 Format der Konfigurationsdatei
 - **Priorität:** P0
-- **Beschreibung:** Menschenlesbares, versioniertes Textformat **(OS-Festlegung)**: TOML, UTF-8, mit Pflichtfeld `schema_version` (Ganzzahl) und `generator = "openspider <version>"`. Es werden **alle** Werte geschrieben (nicht nur Abweichungen), stabil sortiert nach Abschnitten, damit Dateien diff- und versionskontrollierbar sind. Kommentare sind erlaubt und werden beim Laden ignoriert. Konfigurationsdateien der Referenz können nicht importiert werden (proprietäres Format).
+- **Beschreibung:** Menschenlesbares, versioniertes Textformat **(OS-Festlegung)**: TOML, UTF-8, mit Pflichtfeld `schema_version` (Ganzzahl) und `generator = "openspider <version>"`. Es werden **alle** Werte geschrieben (nicht nur Abweichungen), stabil sortiert nach Abschnitten, damit Dateien diff- und versionskontrollierbar sind. Kommentare sind erlaubt und werden beim Laden ignoriert. Konfigurationsdateien der Referenz können nicht importiert werden (proprietäres Format). **Nachtrag 09.11.2026 (1.x):** Dasselbe Schema lässt sich auch als JSON lesen und schreiben (OUT-288); TOML bleibt Standard- und Einbettungsformat, die Regeln dieses Eintrags gelten für beide Formate.
 - **Akzeptanzkriterien:**
   - [ ] Ein JSON-Schema (`docs/spec/schemas/osconfig.schema.json`) beschreibt das Format; CI validiert alle Fixture-Konfigurationen dagegen.
   - [ ] Fehlende Felder → Standardwert; unbekannte Felder → Warnung mit Feldpfad, Laden wird fortgesetzt.
@@ -2206,6 +2208,7 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - [ ] Löschen eines Crawls, der in einem gespeicherten Vergleich verwendet wird, nennt vorher den Vergleich namentlich (OUT-150).
   - [ ] [P2] „Projekt exportieren“ erzeugt ein ZIP mit allen `.ospider`-Dateien des Projekts; Import des ZIP auf einem anderen Rechner legt das Projekt mit allen Crawls an.
 - **Testfixture:** Integrationstest mit 3 Projekten und 1 000 synthetischen Crawl-Metadaten; `out-basic-site` für Absturz-/Fortsetzungstest; umbenannte Textdatei `fake.ospider`.
+- **Verweis (Nachtrag 09.11.2026):** Löschen, Umbenennen, Verschieben und Projektverwaltung per CLI sowie die neue Aktion „Projekt löschen“: OUT-287 (1.x); Pausieren/Fortsetzen fremder Crawls: OUT-286.
 
 ### OUT-229 Automatische Crawl-Aufbewahrung (Retention)
 - **Priorität:** P1
@@ -2752,6 +2755,7 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 | `out-compare`, `out-compare-mapping`, `out-compare-ua` | Crawl-Vergleich inkl. Linkwechsel `/start`, Ankertextwechsel `/c`, Auto-Compare-Läufe | OUT-140 – -153, -282 |
 | `onpage-rc/` (Fachspec 02) | Antwortcode-Fixture für Fehler-Inlinks und Redirects to Errors | OUT-067, -084 |
 | `out-schedule` | Sitemap-Index, Formular-/Basic-Auth, Golden-plist/Task-XML | OUT-162, -166, -187, -209, -223 |
+| `out-markdown` (Nachtrag 09.11.2026) | HTML-Seiten mit allen Markdown-Fällen und erwarteten `.md`-Dateien | OUT-289 |
 | Mocks im `os-testsite` | Google Sheets/Drive, GA4/GSC, PSI, KI (Text/Bild/Audio/Embeddings), SMTP, Update-Server, Proxy | OUT-005, -021, -025, -064, -065, -099, -104 – -106, -114, -201, -210 – -214, -250, -269, -280 |
 
 ## Anhang B – Offene Punkte / Annahmen
@@ -2791,3 +2795,129 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - Stubs OUT-144, OUT-231, OUT-271 auf das strikte Format normiert.
 - Nachtrag Abgleich Cloud-Variante, Etappe E0 (16.10.2026, Planer; `docs/plan/autonomo-abgleich.md` 5.2/5.4): neu OUT-233 (Manifest der Crawl-Datei), OUT-234 (stabile Leseschnittstelle, `q_`-Sichten, führend für die Grundsichten von AI-100) und OUT-273 (Linux-Serverbetrieb von Kern und CLI, P1). OUT-264 behält aarch64, Pakete und Desktop (P2). Befund-Zuordnungstabelle, gemeinsame Datendateien (Bot-Katalog, Lastprofile) und ein Secret-Store für Server sind noch nicht spezifiziert.
 - Nachtrag B3-DOCKER (05.11.2026, Nutzerentscheidung 04.11.2026, `docs/plan/beta3.md` 4b): neu OUT-274 (Docker-Image für den Serverbetrieb, P1) im Abschnitt 13. Ein Konfigurationsschlüssel für die Chromium-Sandbox (`LaunchOpts.no_sandbox` in `os-render`) ist nicht spezifiziert; das Image setzt `--no-sandbox` über seinen Chromium-Starter.
+
+---
+
+## 15 Nachtrag 09.11.2026: Funktionen für 1.x (nach 1.0)
+
+Die folgenden Einträge sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerentscheidung 09.11.2026)** ohne Paritätsbezug. Sie gehören unabhängig von ihrer Priorität zum Meilenstein **1.x (nach 1.0)** (Zuordnung `README.md`). Neue CLI-Optionen sind OS-Erweiterungen im Sinn von OUT-181 (in `--help` markiert); Exit-Codes gelten nach OUT-204.
+
+### OUT-286 Geplante und per CLI gestartete Läufe pausieren und fortsetzen
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Ein Crawl, den ein anderer Prozess führt – ein geplanter Lauf (`--run-task`, OUT-209), ein manueller CLI-Lauf oder ein MCP-Server über STDIO (`owner_kind` = `cli` bzw. `mcp-stdio`, AGENT-020) –, lässt sich aus der App pausieren und fortsetzen, sofern der Besitzerprozess erreichbar ist. Bisher war das ausgeschlossen (OUT-171, CRAWL-136, AGENT-020). Der Besitzerprozess bleibt dabei Besitzer: Er hält an, wartet und setzt auf Anforderung fort, sodass Exporte, Benachrichtigungen und Laufhistorie eines geplanten Laufs nach dem Fortsetzen wie gewohnt entstehen.
+- **Steuerkanal (OS-Festlegung):**
+  - Die App schreibt eine Steueranforderung als Datei `<crawl-id>.control` (JSON: `request` ∈ {`pause`, `resume`}, `request_id`, `valid_until` = Zeitpunkt + 10 s) in den Ordner der Crawl-Datei, atomar (temporäre Datei, dann Umbenennen). Kein Netzwerk, kein Shell-Aufruf; Zugriff nur für denselben Betriebssystem-Benutzer.
+  - Der Besitzerprozess prüft die Datei mindestens einmal je Sekunde (zusammen mit dem Heartbeat, CRAWL-125), führt eine gültige Anforderung aus, quittiert sie in den Crawl-Metadaten (`control_ack` = `request_id`) und löscht die Datei. Abgelaufene Anforderungen werden verworfen, nicht nachträglich ausgeführt.
+  - **Erreichbar** ist ein Besitzerprozess, wenn sein Heartbeat höchstens 5 s alt ist und er in den Crawl-Metadaten `control = 1` meldet (Fähigkeit; ältere Versionen melden nichts und bleiben wie bisher nur lesend).
+- **Verhalten:**
+  - **Pausieren:** Der Besitzerprozess verhält sich wie bei CRAWL-126 (keine neue Anfrage nach 1 s, Warteschlange dauerhaft gespeichert), beendet sich aber nicht, sondern wartet. `owner_pid` bleibt gesetzt und der Heartbeat läuft weiter (Abweichung von der Regel „`owner_pid` leer bei Pause“ in AGENT-020, nur für diesen Fall). Die Crawl-Verwaltung zeigt `Paused` mit dem Zusatz „wartet auf Fortsetzen (<cli|mcp-stdio>, PID <n>)“.
+  - **Fortsetzen:** Der Besitzerprozess crawlt weiter; danach laufen Analyse, Exporte, Benachrichtigungen und Historie wie bei einem ununterbrochenen Lauf. Die Laufzeit-Konfiguration ändert sich nicht (Konfigurationsänderungen an fremden Crawls bleiben ausgeschlossen).
+  - **Höchstdauer der Pause:** Option „Pausierte Läufe beenden nach (h)“ je Aufgabe (OUT-161) bzw. `--max-pause-h <n>` für CLI-Läufe, Standard 24 h, 0 = unbegrenzt. Danach beendet sich der Besitzerprozess wie nach dem ersten SIGINT (OUT-206): Crawl bleibt `Paused`, Exit-Code 130, keine Exporte; Historie `Aborted` mit „Pause-Höchstdauer erreicht“.
+  - **Besitzer endet während der Pause** (Abbrechen nach OUT-171, Signal, Neustart des Rechners): Der Crawl bleibt `Paused` und ist wie jeder pausierte Crawl in der App oder per `--load-crawl <id> --resume` fortsetzbar (CRAWL-126); die Exporte der Aufgabe entstehen dann nicht (Hinweis beim Fortsetzen in der App).
+  - **Geplante Läufe:** Die Aufgabenliste (OUT-160) bietet für einen laufenden Lauf „Pausieren“, „Fortsetzen“ und „Abbrechen“. Ein pausierter Lauf gilt für die Überlappungsregel (OUT-167) als aktiv; die Historie (OUT-169) zeigt während der Pause den Zustand `Paused`.
+  - **Weiterhin nicht steuerbar** aus der App: Stoppen (für geplante Läufe bleibt „Abbrechen“), Threads, Konfiguration.
+  - Das erste SIGINT eines CLI-Laufs pausiert und beendet weiterhin den Prozess (CRAWL-126, OUT-206); der Steuerkanal ändert daran nichts.
+- **Ausgabe:** Schaltflächen „Pausieren“/„Fortsetzen“ für fremde Crawls in der Crawl-Verwaltung (OUT-228), in der Kopfleiste eines geöffneten fremden Crawls (UI-003) und in der Aufgabenliste; Tooltip bei nicht erreichbarem Besitzer „Besitzerprozess nicht erreichbar – Steuerung nicht möglich“. CLI-Lauf: Zeile auf stderr bei Pause und Fortsetzen; `--progress json` (OUT-205) meldet die Phase `paused`.
+- **Akzeptanzkriterien:**
+  - [ ] CLI-Crawl von `out-basic-site` (verlangsamt), App „Pausieren“: Innerhalb von 3 s startet keine neue Anfrage (Request-Log), die Verwaltung zeigt `Paused` mit Zusatz, der Prozess läuft weiter, `owner_pid` ist gesetzt.
+  - [ ] „Fortsetzen“: Der Prozess crawlt zu Ende, erzeugt die angeforderten Exporte und endet mit Exit-Code 0; URL-Menge, Statuscodes und Tiefen sind identisch mit einem ununterbrochenen Lauf.
+  - [ ] Geplanter Lauf: Historie zeigt während der Pause `Paused`, nach Fortsetzen und Ende `Completed`; Exporte und Abschlussmail (Mock) entstehen genau einmal.
+  - [ ] Prozess wird während der Pause beendet (SIGKILL): Die Verwaltung zeigt nach Ablauf des Heartbeats `Paused` ohne Zusatz; „Fortsetzen“ in der App setzt den Crawl im App-Prozess fort.
+  - [ ] Besitzer einer älteren Version (ohne `control = 1`) bzw. mit Heartbeat älter als 5 s: Schaltflächen deaktiviert mit Tooltip; es wird keine Steuerdatei geschrieben.
+  - [ ] Eine abgelaufene Steuerdatei (`valid_until` überschritten) wird vom Besitzer gelöscht und nicht ausgeführt; die App meldet nach 3 s ohne Quittung „Keine Antwort vom Besitzerprozess“.
+  - [ ] `--max-pause-h` (Testwert über simulierte Uhr): Nach Ablauf endet der Prozess mit Exit-Code 130, Crawl `Paused`, Historie `Aborted` mit Meldung.
+  - [ ] Überlappung „Überspringen, wenn noch aktiv“ (OUT-167): Ein pausierter Lauf verhindert den nächsten Lauf derselben Aufgabe (Historie „Skipped: previous run still active“).
+- **Testfixture:** `out-basic-site` mit großer Verzögerung (wie OUT-171); `out-schedule` für geplante Läufe mit SMTP-Mock; simulierte Uhr für Heartbeat und Höchstdauer.
+- **Offene Frage (Nutzer):** Verhältnis zu AGENT-020 „fremde Crawls nur lesend“ bei MCP: Sollen `pause_crawl`/`resume_crawl` (AGENT-020) über denselben Steuerkanal auch fremde Crawls steuern dürfen (Werkzeugklasse `crawl`)? Vorschlag: ja für den In-App-HTTP-Server (er ist die App) und für STDIO-Server, beides nur mit freigegebener Klasse `crawl`; bis zur Entscheidung antworten die Werkzeuge bei fremden Crawls wie bisher mit Fehler.
+
+### OUT-287 CLI-Verwaltung von Crawls und Projekten
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Die Aktionen der Crawl-Verwaltung (OUT-228) zum Löschen, Umbenennen und Verschieben von Crawls sowie zum Anlegen, Umbenennen und Löschen von Projekten sind ohne Oberfläche per CLI verfügbar, z. B. für Aufräumskripte auf einem Server (OUT-273) oder nach geplanten Läufen. Es gelten dieselben Regeln wie in der App (gesperrte Crawls und Projekte, laufende Crawls, Vergleiche); beide Wege nutzen dieselbe Kernfunktion.
+- **Eingaben/Konfiguration (OS-Erweiterung):**
+  - `--delete-crawl <id>[,<id>…]` – löscht Crawls; ohne `--yes` nur interaktiv (TTY-Rückfrage mit Anzahl und freiwerdendem Speicher), ohne TTY und ohne `--yes` Exit-Code 2.
+  - `--rename-crawl <id> <name>`
+  - `--move-crawl <id>[,<id>…] --to-project <name>` – `--to-project ""` entfernt die Projektzuordnung; das Zielprojekt muss existieren.
+  - `--create-project <name>`, `--rename-project <alt> <neu>`
+  - `--delete-project <name> [--with-crawls]` – ein leeres Projekt wird gelöscht; ein Projekt mit Crawls nur mit `--with-crawls` (löscht die Crawls mit, Rückfrage bzw. `--yes` wie oben).
+  - `--list-projects` – Name, Anzahl Crawls, Größe, gesperrt.
+  - `--json` – Ergebnis als JSON auf stdout (Fortschritt und Meldungen auf stderr, OUT-205).
+  - Die Befehle schließen sich gegenseitig und mit Crawl-Optionen (`--crawl`, `--crawl-list`, `--load-crawl`, `--run-task`) aus (Exit-Code 2).
+- **Regeln (wie OUT-228, OS-Festlegung wo die App keine hat):**
+  - Gesperrte Crawls sind nicht lösch- und nicht umbenennbar; gesperrte Projekte sind nicht lösch- und nicht umbenennbar.
+  - Ein laufender Crawl (Status `Running` mit aktuellem Heartbeat) und ein pausierter Crawl mit wartendem Besitzer (OUT-286) sind nicht lösch- und nicht verschiebbar; Umbenennen ist erlaubt (betrifft nur die Metadaten).
+  - Projektnamen sind eindeutig (Vergleich ohne Groß-/Kleinschreibung); `--create-project` und `--rename-project` auf einen vorhandenen Namen → abgelehnt.
+  - Wird ein zu löschender Crawl in einem gespeicherten Vergleich verwendet, nennt die Rückfrage bzw. die Ausgabe den Vergleich namentlich (OUT-150); der Vergleich wird als „nicht verfügbar“ markiert.
+  - **Alles oder nichts bei der Prüfung:** Bei mehreren IDs werden zuerst alle geprüft; ist eine abgelehnt, wird nichts geändert. Scheitert danach die Ausführung an einem Dateisystemfehler, bleiben bereits erledigte Änderungen bestehen und die Ausgabe nennt sie.
+  - Ein geöffnetes App-Fenster zeigt die Änderungen innerhalb von 2 s in der Crawl-Verwaltung (gemeinsamer Index).
+  - Die App-Verwaltung erhält dieselbe Aktion „Projekt löschen“ (bisher nicht vorhanden) mit denselben Regeln.
+- **Ausgabe:** Ohne `--json` eine Zeile je Objekt auf stdout (`deleted <id> <name> (<größe>)`, `refused <id>: <grund>` …). Mit `--json` ein Objekt `{"action", "ok", "results": [{"id"|"project", "result": "done"|"refused"|"failed", "reason", "freed_bytes"?, "comparisons"?}]}`; Gründe als stabile Schlüssel: `not_found`, `locked`, `project_locked`, `running`, `owner_waiting`, `name_exists`, `project_not_found`, `project_not_empty`, `confirmation_required`, `io_error`.
+- **Exit-Codes (nach OUT-204):** `0` alles ausgeführt; `2` Aufruf- oder Prüffehler, nichts geändert (unbekannte ID, gesperrt, laufend, Name vergeben, fehlende Bestätigung); `3` Dateisystemfehler während der Ausführung (Teilausführung möglich, siehe Ausgabe); `1` interner Fehler.
+- **Akzeptanzkriterien:**
+  - [ ] `--delete-crawl <id> --yes --json` löscht die Datei, gibt `freed_bytes` = Dateigröße aus und Exit-Code 0; `--list-crawls` enthält die ID danach nicht mehr.
+  - [ ] `--delete-crawl <gesperrt> --yes` → Exit-Code 2, `reason = locked`, Datei unverändert (übernimmt das Kriterium aus OUT-228).
+  - [ ] `--delete-crawl a,b --yes` mit gesperrtem `b` → Exit-Code 2, auch `a` bleibt erhalten.
+  - [ ] Ohne `--yes` und ohne TTY → Exit-Code 2, `reason = confirmation_required`.
+  - [ ] `--rename-crawl` und `--move-crawl` ändern die ID nicht; `--list-crawls --json` zeigt danach Name bzw. Projekt (wie OUT-228).
+  - [ ] `--move-crawl` eines laufenden Crawls → Exit-Code 2, `reason = running`; `--rename-crawl` desselben Crawls gelingt.
+  - [ ] `--delete-project leer` gelingt; `--delete-project voll` ohne `--with-crawls` → Exit-Code 2, `project_not_empty`; mit `--with-crawls --yes` werden Projekt und Crawls gelöscht, sofern keiner gesperrt oder laufend ist.
+  - [ ] `--create-project Kunde` bei vorhandenem `kunde` → Exit-Code 2, `name_exists`.
+  - [ ] Löschen eines in einem Vergleich verwendeten Crawls nennt den Vergleich in stdout bzw. in `comparisons`.
+  - [ ] Schreibgeschützter Crawl-Ordner: `--delete-crawl` → Exit-Code 3, `reason = io_error`.
+  - [ ] Bei geöffneter App erscheint die Änderung innerhalb von 2 s in der Crawl-Verwaltung (E2E-Test).
+- **Testfixture:** Crawl-Verwaltung mit 3 Projekten (eines gesperrt, eines leer) und 6 Crawls (einer gesperrt, einer laufend mit simuliertem Heartbeat, einer in einem gespeicherten Vergleich); schreibgeschützter Ordner.
+
+### OUT-288 Konfigurationsprofile auch als JSON
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Konfigurationsprofile (OUT-220) lassen sich neben TOML (OUT-221) auch als JSON lesen und schreiben, mit demselben Schema (`docs/spec/schemas/osconfig.schema.json`) und denselben Pflichtfeldern `schema_version` und `generator`. Das erleichtert die Erzeugung und Prüfung von Profilen in Skripten, CI-Pipelines und Agenten, die JSON nativ verarbeiten. TOML bleibt das Standardformat (Standardkonfiguration `default.osconfig`, Einbettung in die Crawl-Datei OUT-230).
+- **Eingaben/Konfiguration:**
+  - Dateiendungen: `.osconfig` (TOML) und `.osconfig.json` (JSON). Beim Laden entscheidet der Inhalt, nicht die Endung: Beginnt die Datei nach optionalem BOM und Leerraum mit `{`, wird sie als JSON gelesen, sonst als TOML.
+  - App: „Laden…“ akzeptiert beide; „Speichern unter…“ bietet beide Formate an (Standard TOML); „Exportieren als JSON“ im Menü Konfiguration → Profile.
+  - CLI: `--config` (OUT-186) akzeptiert beide Formate; neu `--convert-config <eingabe> <ausgabe>` (OS-Erweiterung) – Format der Ausgabe nach Endung (`.json` → JSON, sonst TOML); kein Crawl, Exit-Code 0 bzw. 2 bei ungültiger Eingabe.
+- **Abbildung (OS-Festlegung):** gleiche Feldnamen und Verschachtelung wie TOML (Tabellen → Objekte, Tabellen-Arrays → Arrays von Objekten); Ganzzahlen ohne, Gleitkommazahlen mit Dezimalpunkt; geschrieben wird wie in OUT-221 stabil sortiert, mit zwei Leerzeichen Einrückung, UTF-8 ohne BOM, LF. Ein Feld `$schema` (Verweis auf das JSON-Schema, für Editoren) wird beim Schreiben gesetzt und beim Laden ohne Warnung ignoriert. `null` wird wie ein fehlendes Feld behandelt (Standardwert); geschrieben wird `null` nie. JSON kennt keine Kommentare; Kommentare einer TOML-Datei gehen bei der Umwandlung verloren (Hinweis im Dialog und auf stderr).
+- **Ausgabe:** `.osconfig.json`-Datei.
+- **Akzeptanzkriterien:**
+  - [ ] **Rundreise:** Für jede Konfiguration (Property-Test über alle Felder wie OUT-220) gilt: TOML → JSON → TOML ergibt eine byte-identische TOML-Datei, JSON → TOML → JSON eine byte-identische JSON-Datei; die geladenen Konfigurationen sind gleich.
+  - [ ] Jede geschriebene JSON-Datei ist gültig gegen `osconfig.schema.json` (CI); alle Fixture-Konfigurationen aus `tests/fixtures/config/` liegen zusätzlich als JSON vor und werden ebenfalls validiert.
+  - [ ] Fehlerregeln wie OUT-221: fehlende Felder → Standardwert; unbekannte Felder → Warnung mit Feldpfad; Typfehler → Meldung mit Zeile/Spalte, Datei wird nicht geladen; Datei ohne `schema_version` lädt als Version 1; zukünftige `schema_version` lädt mit Warnung (OUT-226).
+  - [ ] `--config profil.osconfig.json` ergibt denselben Crawl wie `--config profil.osconfig` mit gleichem Inhalt (gleiche URL-Menge und Exporte).
+  - [ ] Eine JSON-Datei mit Endung `.osconfig` und eine TOML-Datei mit Endung `.json` werden anhand des Inhalts korrekt gelesen.
+  - [ ] `--convert-config a.osconfig b.osconfig.json` schreibt JSON, meldet verlorene Kommentare auf stderr und endet mit Exit-Code 0; ungültige Eingabe → Exit-Code 2 mit Zeile/Spalte.
+  - [ ] Keine Geheimnisse in JSON-Dateien (OUT-225, Volltextsuche nach Testgeheimnissen).
+- **Testfixture:** `tests/fixtures/config/` um JSON-Gegenstücke ergänzt; Datei mit Kommentaren; Datei mit `null`-Werten und `$schema`.
+
+### OUT-289 Seiten als Markdown: Ansicht, Bulk-Export und MCP
+- **Priorität:** P1
+- **Meilenstein:** 1.x (nach 1.0)
+- **Beschreibung:** Gespeichertes Original-HTML bzw. gespeichertes gerendertes HTML einer Seite wird in Markdown umgewandelt: als dritte Ansicht im Quelltext-Fenster (UI-041), als Bulk-Export „alle Seiten als Markdown“ und als Format `markdown` des MCP-Werkzeugs `url_content` (AGENT-017). Markdown ist kompakter als HTML und erhält anders als reiner Text (OUT-046) die Struktur; es eignet sich für Redaktionsprüfungen, Content-Migrationen und als Eingabe für Agenten und KI. Voraussetzung ist gespeichertes HTML („HTML speichern“ bzw. „Gerendertes HTML speichern“); ohne gespeichertes HTML sind Ansicht und Export deaktiviert mit Hinweis auf die Einstellung (UI-016). Die Umwandlung liest nur die Crawl-Datei, nie das Netz.
+- **Eingaben/Konfiguration:**
+  - Quelle: Original oder gerendert (wie OUT-045; „gerendert“ nur, wenn gespeichert).
+  - Umfang: „Nur Inhaltsbereich“ (Standard an) verwendet den Inhaltsbereich nach ONPAGE-140 und entfernt damit Navigation, Kopf- und Fußbereich nach den Einstellungen des Inhaltsbereichs; aus = ganzer `<body>`.
+  - „Kopfdaten voranstellen“ (Standard: im Export an, in der Ansicht aus): YAML-Block mit `url`, `title`, `status_code`, `crawled_at`, `source` (`original`/`rendered`).
+  - Schlüssel `export.markdown.content_area`, `export.markdown.front_matter` im Profil; die Ansicht merkt sich ihre Schalter im UI-Zustand (UI-125).
+- **Umwandlungsregeln (OS-Festlegung, Ausgabe CommonMark mit GFM-Tabellen):**
+  - **Entfernt** werden `script`, `style`, `noscript`, `template`, `iframe`, `object`, `embed`, `canvas`, `svg`, Formularelemente (`form`-Inhalte bleiben als Text, `input`/`select`/`button`/`textarea` entfallen), Kommentare und Elemente mit Attribut `hidden`.
+  - **Überschriften** `h1`–`h6` → `#` … `######` (ATX), Inhalt einzeilig; leere Überschriften entfallen.
+  - **Absätze** und Blockelemente → durch eine Leerzeile getrennt; `br` → harter Umbruch mit `\` am Zeilenende; Leerraum nach HTML-Regeln zusammengefasst; höchstens eine Leerzeile in Folge.
+  - **Hervorhebung:** `strong`/`b` → `**…**`, `em`/`i` → `*…*`, `del`/`s` → `~~…~~`; `code` → Backticks (bei enthaltenem Backtick mit längerer Begrenzung); `pre` → umzäunter Codeblock, Sprache aus einer Klasse `language-<x>` bzw. `lang-<x>`.
+  - **Listen:** `ul` → `- `, `ol` → `1. ` mit fortlaufender Nummer ab `start`; Verschachtelung durch Einrückung um die Breite des Listenzeichens; `dl` → Begriff fett in eigener Zeile, Beschreibung als Absatz darunter.
+  - **Links:** `[Text](URL "title")` mit absoluter URL (aufgelöst nach TECH-002); `title` nur, wenn vorhanden. Leerer Linktext → Bild-Alt, sonst die URL als Autolink `<URL>`. `javascript:`-Links und Links ohne `href` → nur Text. Fragment-Links auf dieselbe Seite bleiben relativ (`#abschnitt`).
+  - **Bilder:** `![Alt](URL)` mit absoluter URL; ohne Alt `![](URL)`; `data:`-Bilder entfallen (Alt-Text bleibt als Text, falls vorhanden).
+  - **Tabellen:** GFM-Tabelle; Kopfzeile = erste Zeile mit `th` bzw. die erste Zeile; `colspan`/`rowspan` → zusätzliche leere Zellen; `|` in Zellen als `\|`, Zeilenumbrüche in Zellen als Leerzeichen. Tabellen mit nur einer Spalte oder mit verschachtelten Tabellen (Layout-Tabellen) werden als Absätze ausgegeben.
+  - **Sonstiges:** `blockquote` → `> `, `hr` → `---`; `figure`/`figcaption` → Bild, Bildunterschrift als eigener Absatz. Zeichen mit Markdown-Bedeutung im Text (`\`, `*`, `_`, `[`, `]`, `` ` ``, `#`/`>`/`-`/`+`/Ziffer+`.` am Zeilenanfang) werden maskiert.
+  - Ausgabe UTF-8 ohne BOM, LF, abschließender Zeilenumbruch; dasselbe HTML ergibt auf allen Plattformen byte-identisches Markdown.
+- **Ausgabe:**
+  - **Ansicht (UI-041):** Der Umschalter „HTML | Sichtbarer Text“ erhält „Markdown“; Diff zwischen Original und gerendert zeilenbasiert; Schaltflächen „Kopieren“ und „Als .md speichern“.
+  - **Bulk-Export „Web: All Page Markdown“** (Menü Bulk-Export → Web, CLI `--bulk-export "Web:All Page Markdown"`): Ordner `page_markdown/` mit einer `.md`-Datei je interner HTML-URL mit Status 200 und gespeichertem HTML, Dateinamen nach den Regeln von OUT-045, dazu `index.csv` (`Address`, `File`, `Source Type`). Seiten ohne gespeichertes HTML fehlen und werden in `index.csv` nicht aufgeführt; ist für keine Seite HTML gespeichert, ist der Export deaktiviert (CLI: Exit-Code 2 vor dem Crawl nach OUT-203, wenn „HTML speichern“ im Profil aus ist).
+  - **MCP:** `url_content(crawl_id, url, format = "markdown")` (AGENT-017) liefert dieselbe Umwandlung (Quelle wie dort: gerendert, falls gespeichert, sonst Original; Umfang Inhaltsbereich; ohne Kopfdaten) im Untrusted-Datenblock (AGENT-004) mit Kürzung nach `max_chars`.
+- **Akzeptanzkriterien:**
+  - [ ] Golden-Test: Fixture-Seiten mit Überschriften, verschachtelten Listen, Links (relativ, absolut, `javascript:`, leer mit Bild-Alt), Bildern (mit/ohne Alt, `data:`), Tabellen (mit `th`, `colspan`, einspaltig, verschachtelt), Codeblock mit Sprache, Zitat, Definitionsliste und Sonderzeichen ergeben byte-gleich die erwarteten `.md`-Dateien (macOS, Windows, Linux).
+  - [ ] Ein CommonMark/GFM-Parser liest jede erzeugte Datei ohne Fehler; Anzahl und Reihenfolge der Überschriften, Links und Bilder entsprechen dem HTML (Rundreise-Prüfung).
+  - [ ] „Nur Inhaltsbereich“ an: kein Text aus `<nav>` und `<footer>` (bei Standard-Inhaltsbereich); aus: beide enthalten.
+  - [ ] Bulk-Export auf `out-render`: genau eine `.md` je interner HTML-200-Seite mit gespeichertem HTML; `index.csv` hat dieselbe Zeilenzahl; Kopfdaten-Block mit `url` und `title` am Dateianfang.
+  - [ ] Crawl ohne gespeichertes HTML: Ansicht zeigt Hinweis, Export ist deaktiviert, `url_content(format="markdown")` liefert die Meldung aus AGENT-017.
+  - [ ] Die MCP-Antwort ist für dieselbe Seite inhaltsgleich mit der Ansicht bei gleichen Schaltern (ohne Kopfdaten) und steht im markierten Datenblock; eine Seite mit eingebetteter Anweisung (AGENT-004) erscheint nur dort.
+  - [ ] Umwandlung einer 5-MB-Seite dauert höchstens 1 s (Referenzhardware A) und blockiert die Oberfläche nicht.
+- **Testfixture:** `tests/fixtures/out-markdown/` (neu) mit den genannten Seiten und erwarteten `.md`-Dateien; `out-render`; `agent-injection` (10) für die MCP-Prüfung.

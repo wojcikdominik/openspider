@@ -172,6 +172,7 @@ Clean-Room-Funktionsspezifikation für OpenSpider. Referenz: Referenzprodukt (Re
 | ONPAGE-179 | Image-Filter Missing Size Attributes | P1 |
 | ONPAGE-180 | Image-Filter Incorrectly Sized Images | P1 |
 | ONPAGE-181 | Bulk-Exporte Images | P1 |
+| ONPAGE-182 | Image-Filter Missing Title Attribute (Nachtrag 09.11.2026, 1.x) | P2 |
 | ONPAGE-190 | Übersichtszähler je Tab/Filter | P0 |
 | ONPAGE-191 | Export der aktuellen Filteransicht (Verweis → OUT-020) | P0 |
 | ONPAGE-192 | Verknüpfung mit Lower-Tabs (Inlinks/Outlinks/Details) | P0 |
@@ -2088,6 +2089,21 @@ Grundmenge („All“): alle internen **und** externen Bild-URLs (Inhaltsklasse 
   - [ ] „Images Missing Alt Text“ listet nur die betroffenen Instanzen (Bild mit 1 guter und 1 leerer Instanz → 1 Zeile).
   - [ ] Zeilenzahlen entsprechen den Golden-CSVs.
 - **Testfixture:** `onpage-images/`.
+
+### ONPAGE-182 Image-Filter Missing Title Attribute (Nachtrag 09.11.2026)
+- **Priorität:** P2
+- **Meilenstein:** 1.x (nach 1.0) – OS-Festlegung, Nutzerentscheidung 09.11.2026, ohne Paritätsbezug.
+- **Beschreibung:** Bilder mit mindestens einer `<img>`-Instanz ohne `title`-Attribut oder mit leerem `title` (nach N(x)). Der Filter ist ein **Hinweis**: Das `title`-Attribut ist weder für Suchmaschinen noch für die Barrierefreiheit erforderlich (dafür ist `alt` maßgeblich, ONPAGE-175/176) und wird von Hilfstechnologien uneinheitlich vorgelesen. Er dient Teams, deren Redaktionsrichtlinien ein Bild-`title` vorschreiben (z. B. Tooltip mit Bildquelle).
+- **Eingaben/Konfiguration:** keine eigene; Einblendung im Issues-Tab über UI-151.
+- **Ausgabe:** Filter `Missing Title Attribute` im Images-Tab; Spalte `Title Attribute` in Image Details (ONPAGE-172, Wert der Instanz, leer wenn fehlend); Bulk-Export „Images Missing Title Attribute“ mit den Instanzspalten aus ONPAGE-181. Katalogeintrag (UI-063): Typ `Opportunity`, Priorität `Low` (`T-O2`, `P-L1`) mit `default_enabled = false` (UI-151): Er erscheint im Issues-Tab erst, wenn der Nutzer ihn einschaltet; der Filter im Images-Tab ist immer verfügbar.
+- **Akzeptanzkriterien:**
+  - [ ] `<img src=a.png alt="A">` → im Filter; `<img src=a.png alt="A" title="Quelle: X">` → nicht.
+  - [ ] `title=""` und `title="   "` → im Filter.
+  - [ ] Gleiches Bild auf Seite 1 mit `title` und auf Seite 2 ohne → im Filter (Aggregationsregel des Abschnitts); der Bulk-Export listet nur die Instanz auf Seite 2.
+  - [ ] Bild nur über `<a href>` verlinkt oder nur aus `srcset`/CSS bekannt → nicht im Filter (keine `<img>`-Instanz). `<picture>`: maßgeblich ist das `<img>`-Element.
+  - [ ] Ein `title` am umschließenden Link (`<a title="…"><img></a>`) zählt nicht als Bild-`title`.
+  - [ ] Im Standard erscheint der Befund nicht im Issues-Tab und nicht im Issues-Export; nach Einschalten über UI-151 erscheint er dort als `Opportunity`/`Low`.
+- **Testfixture:** `onpage-images/title-*.html` (mit, ohne, leer, nur am Link, gemischt über zwei Seiten).
 
 ---
 
