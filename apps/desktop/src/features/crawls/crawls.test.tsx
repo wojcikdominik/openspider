@@ -373,3 +373,32 @@ it("names the file and distinguishes newer schemas and foreign formats without o
   expect(screen.getByRole("dialog", { name: "Manage crawls…" })).toBeVisible();
   expect(readRecent()).toEqual(["/fixture/Alpha.ospider"]);
 });
+
+// spec: OUT-228
+it.each(["lock", "unlock"] as const)("refreshes stale rows after rejected %s and keeps the action error", async action => {
+  const rows = structuredClone(fixtureRows);
+  rows[0]!.locked = action === "unlock";
+  fixture.setRows(rows);
+  fixture.core.handlers.set(`crawls.${action}`, () => {
+    rows[0]!.crawl.phase = "running";
+    fixture.setRows(rows);
+    throw new IpcError(localError("InvalidInput", "err-file-exists", { path: "action-failed" }));
+  });
+  await mount(); select("Alpha"); click(action === "lock" ? "Lock" : "Unlock");
+  expect(await screen.findByRole("alert")).toHaveTextContent("action-failed");
+  await waitFor(() => expect(calls("crawls.list")).toHaveLength(2));
+  expect(calls("projects.list")).toHaveLength(2);
+  expect(button("Lock")).toBeDisabled(); expect(button("Unlock")).toBeDisabled();
+  expect(screen.getByRole("alert")).toHaveTextContent("action-failed");
+});
+
+// spec: OUT-228
+it("keeps the lock error when the subsequent refresh also fails", async () => {
+  await mount(); select("Alpha");
+  fixture.core.handlers.set("crawls.lock", () => { throw new IpcError(localError("InvalidInput", "err-file-exists", { path: "action-failed" })); });
+  fixture.core.handlers.set("crawls.list", () => { throw new IpcError(localError("InvalidInput", "err-file-exists", { path: "refresh-failed" })); });
+  click("Lock");
+  expect(await screen.findByRole("alert")).toHaveTextContent("action-failed");
+  expect(calls("crawls.list")).toHaveLength(2);
+  expect(screen.getByRole("alert")).not.toHaveTextContent("refresh-failed");
+});

@@ -962,7 +962,9 @@ pub async fn change_view(
                 let position = |id: i64| ids.iter().position(|k| *k == id).map(|i| i as u64);
                 let (from_row, to_row) = (position(args.from), position(args.to));
                 let keys = match (from_row, to_row) {
-                    (Some(a), Some(b)) => ids[a.min(b) as usize..=a.max(b) as usize].to_vec(),
+                    (Some(a), Some(b)) if !super::view::range_requires_export(a, b) => {
+                        ids[a.min(b) as usize..=a.max(b) as usize].to_vec()
+                    }
                     _ => Vec::new(),
                 };
                 to_json(&KeyRange {
@@ -973,6 +975,9 @@ pub async fn change_view(
                     total: ids.len() as u64,
                     keys,
                     all: false,
+                    export_required: from_row
+                        .zip(to_row)
+                        .is_some_and(|(a, b)| super::view::range_requires_export(a, b)),
                 })
             }
             "view.close" => {

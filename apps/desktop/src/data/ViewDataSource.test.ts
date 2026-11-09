@@ -171,7 +171,7 @@ it("requests a detail reload on stale pages and keeps cached rows until replacem
   it("resolves a range through the core, retries a stale answer and reports a missing command as unavailable (F3)", async () => {
     const { source, api } = setup();
     expect(await source.range(1, 2)).toBeUndefined();
-    const answer = { viewId: fixture.viewId, version: 1, fromRow: 0, toRow: 1, total: 2, keys: [1, 2], all: false };
+    const answer = { viewId: fixture.viewId, version: 1, fromRow: 0, toRow: 1, total: 2, keys: [1, 2], all: false, exportRequired: false };
     const range = vi.fn().mockRejectedValueOnce(new IpcError(localError("Stale", "err-stale"))).mockResolvedValue(answer);
     (api as { range?: unknown }).range = range;
     await expect(source.range(1, 2)).resolves.toEqual(answer);

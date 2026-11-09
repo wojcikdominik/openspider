@@ -183,3 +183,79 @@ async fn another_process_keeps_the_wal_of_an_app_crawl_after_the_app_listed_its_
     assert_eq!(meta.state, os_model::CrawlState::Completed);
     assert_eq!(meta.end_reason, Some(os_model::EndReason::Stopped));
 }
+
+// spec: OUT-228
+// spec: CRAWL-125
+#[tokio::test]
+async fn lock_and_unlock_reject_a_live_foreign_owner_before_changing_any_selected_file() {
+    for action in ["crawls.lock", "crawls.unlock"] {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, clock) = manual_app(dir.path());
+        let path = foreign_crawl(&app);
+        let id = "0199f000-0000-7000-8000-00000000f001";
+        let foreign = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        foreign.set_meta("state", "Running").unwrap();
+        foreign
+            .set_meta(
+                "heartbeat_at",
+                &os_model::Clock::now(clock.as_ref()).to_db(),
+            )
+            .unwrap();
+        foreign
+            .set_meta("locked", if action == "crawls.unlock" { "1" } else { "0" })
+            .unwrap();
+        drop(foreign);
+        // Ein zulässiger erster Eintrag darf nicht schon verändert sein, wenn der zweite läuft.
+        let first_id = "0199f000-0000-7000-8000-00000000f002";
+        let first_path = path.parent().unwrap().join(format!("{first_id}.ospider"));
+        let first = create(&first_path, cfg());
+        first.set_meta("crawl_id", first_id).unwrap();
+        first.set_meta("state", "Paused").unwrap();
+        let initial_lock = if action == "crawls.unlock" { "1" } else { "0" };
+        first.set_meta("locked", initial_lock).unwrap();
+        drop(first);
+        with_foreign_owner(&path, async {
+            // Hier liest der Test im anderen Prozess als der Besitzer; dessen Sperren bleiben erhalten.
+            let before = std::fs::read(&path).unwrap();
+            let wal_before = std::fs::read(companion(&path, "-wal")).unwrap();
+            let err = app
+                .dispatch(ctx(), action, json!({"ids":[first_id, id]}))
+                .await
+                .unwrap_err();
+            assert_eq!(err.code, os_app::dto::ErrorCode::Busy);
+            assert_eq!(err.message_key, "err-crawl-running");
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            assert_eq!(std::fs::read(companion(&path, "-wal")).unwrap(), wal_before);
+            let first = CrawlFile::open(&first_path, OpenMode::ReadOnly).unwrap();
+            assert_eq!(
+                first.get_meta("locked").unwrap().as_deref(),
+                Some(initial_lock)
+            );
+        })
+        .await;
+    }
+}
+
+// spec: OUT-228
+#[tokio::test]
+async fn known_running_sessions_are_rejected_without_opening_their_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let path = foreign_crawl(&app);
+    open(&app, &path).await;
+    let session = app.sessions().current(&window()).unwrap();
+    app.sessions()
+        .update_state(&session.key, os_model::CrawlState::Running);
+    // Ein bereits bekannter Live-Zustand hat Vorrang selbst vor der Pfadauflösung.
+    app.read_pool().unregister(&session.key);
+    app.write_queue().unregister(&session.key);
+    std::fs::remove_file(&path).unwrap();
+    for action in ["crawls.lock", "crawls.unlock"] {
+        let err = app
+            .dispatch(ctx(), action, json!({"ids":[session.key.0]}))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, os_app::dto::ErrorCode::Busy);
+        assert_eq!(err.message_key, "err-crawl-running");
+    }
+}

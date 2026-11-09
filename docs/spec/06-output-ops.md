@@ -2482,6 +2482,24 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - [ ] CI-Test: Crawl-Dateien und Konfigurationen jeder veröffentlichten Version (Fixture-Archiv) werden mit der aktuellen Version geöffnet und exportiert.
 - **Testfixture:** `tests/fixtures/migrations/`.
 
+### OUT-257 Neuigkeiten nach einem Update
+- **Priorität:** P1
+- **Beschreibung:** **OS-Festlegung (Nutzerentscheidung 09.11.2026):** Beim ersten Start einer neueren Version nach einem Update zeigt die App einmal einen modalen Dialog „Neu in OpenSpider <Version>“ mit den Release-Notes. Quelle sind die Notes unter `docs/release/notes/<Version>.md` (englischer Teil, darunter `### Deutsch` vollständig auf Deutsch, siehe `docs/release/release-rhythmus.md`); sie werden beim Build in die App eingebettet, zum Anzeigen gibt es keinen Netzwerkzugriff. Sprache: Oberflächensprache Deutsch → deutscher Teil, jede andere Oberflächensprache → englischer Teil. Wurden Versionen übersprungen, zeigt der Dialog die Notes aller eingebetteten Versionen zwischen der zuletzt gestarteten (ausschließlich) und der aktuellen Version (einschließlich), neueste zuerst, je mit Versionsüberschrift. Die zuletzt gestartete Version wird in den Einstellungen gespeichert (bleibt nach OUT-255 über Updates erhalten). Hilfe-Menü → „Neuigkeiten“ öffnet den Dialog jederzeit mit den Notes der aktuellen Version. Die CLI zeigt nichts an.
+- **Wann nicht:** Erstinstallation (weder gespeicherte Version noch Daten einer früheren Installation); gleiche oder ältere Version (Downgrade); fehlende eingebettete Notes für die aktuelle Version (dann kein Dialog, Log-Eintrag).
+- **Übergang:** Fehlt die gespeicherte Version, sind aber Einstellungen oder Crawl-Verwaltungsdaten einer früheren Installation vorhanden (Update von einer Version ohne diese Funktion, z. B. 1.0.0-beta.3 → 1.0.0-beta.4), zeigt der Dialog die Notes der aktuellen Version.
+- **Bedienung:** Fokus im Dialog, Schließen mit „OK“ oder Esc, danach Fokusrückgabe (UI-126); Inhalt scrollbar; Listen und Hervorhebungen der Notes werden dargestellt, eingebettetes HTML nicht ausgeführt; Links öffnen im Standardbrowser. Kein Schalter „Nicht mehr anzeigen“. Erscheint erst, nachdem die App bereit ist, und nie über einem Dialog, der eine Entscheidung verlangt (z. B. Wiederherstellung nach Absturz); dann danach.
+- **Akzeptanzkriterien:**
+  - [ ] Gespeicherte Version 1.0.0-beta.3, aktuelle 1.0.0-beta.4 → Dialog einmal mit den Notes von beta.4; nach „OK“ und Neustart kein Dialog mehr.
+  - [ ] Gespeicherte Version 1.0.0-beta.2, aktuelle 1.0.0-beta.4 → Notes von beta.4 und beta.3, neueste zuerst.
+  - [ ] Erstinstallation (leeres Profil) → kein Dialog; gespeicherte Version danach = aktuelle.
+  - [ ] Keine gespeicherte Version, aber vorhandene Einstellungen einer früheren Installation → Dialog mit den Notes der aktuellen Version.
+  - [ ] Gleiche oder höhere gespeicherte Version → kein Dialog.
+  - [ ] Oberflächensprache Deutsch → deutscher Teil; Englisch, Spanisch, Französisch, Italienisch → englischer Teil.
+  - [ ] Hilfe → „Neuigkeiten“ zeigt die Notes der aktuellen Version, auch ohne Update.
+  - [ ] Bedienung nur per Tastatur möglich, Esc schließt, Fokus kehrt zurück; axe ohne kritische oder schwerwiegende Verstöße (UI-126).
+  - [ ] Kein Netzwerkzugriff beim Anzeigen (Netzwerkmitschnitt bzw. Test mit blockiertem Netz).
+- **Testfixture:** Profilverzeichnisse mit gespeicherter Version beta.2/beta.3/beta.4, leeres Profil, Profil mit Einstellungen ohne gespeicherte Version; eingebettete Test-Notes für mehrere Versionen.
+
 ---
 
 ## 13 Plattformanforderungen

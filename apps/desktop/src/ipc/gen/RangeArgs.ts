@@ -9,10 +9,10 @@ export type RangeArgs = {
  */
 viewId: string, 
 /**
- * URL am Anker der Bereichsauswahl.
+ * Zeilenkennung am Anker: URL-ID in URL-Views, Link-ID bei materialisierten Linklisten.
  */
 from: number, 
 /**
- * URL am Ziel der Bereichsauswahl.
+ * Zeilenkennung am Ziel: URL-ID in URL-Views, Link-ID bei materialisierten Linklisten.
  */
 to: number, };

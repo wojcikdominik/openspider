@@ -203,3 +203,107 @@ fn metadata_of_a_crashed_owner_are_read_from_its_wal_without_touching_it() {
     let listing = registry::read_listing(&path).unwrap();
     assert_eq!(listing.meta.name, "Testcrawl");
 }
+
+// spec: CRAWL-125
+// spec: OUT-233
+// spec: OUT-184
+#[test]
+fn migrating_an_old_fixture_backs_up_all_pages_and_keeps_a_second_connections_locks() {
+    for with_frames in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = copy_fixture("schema-v2.ospider", dir.path());
+        let owner = rusqlite::Connection::open(&path).unwrap();
+        owner
+            .execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;")
+            .unwrap();
+        if with_frames {
+            owner.execute("INSERT OR REPLACE INTO crawl_meta(key,value) VALUES ('backup_probe','from-wal')", []).unwrap();
+        }
+        let _: i64 = owner
+            .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
+            .unwrap();
+        let migrated = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        let backup = os_store::backup_path(&path, 2);
+        let saved = rusqlite::Connection::open_with_flags(
+            &backup,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        assert_eq!(os_store::schema::user_version(&saved).unwrap(), 2);
+        let rows: i64 = saved
+            .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 42);
+        let integrity: String = saved
+            .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(integrity, "ok");
+        if with_frames {
+            let value: String = saved
+                .query_row(
+                    "SELECT value FROM crawl_meta WHERE key='backup_probe'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(value, "from-wal");
+        }
+        migrated.check_read_api().unwrap();
+        in_second_process(CHILD_WRITE, &path);
+        assert_owner_intact(migrated, &path);
+        drop(owner);
+        assert!(CrawlFile::open(&path, OpenMode::ReadOnly)
+            .unwrap()
+            .integrity_check()
+            .unwrap());
+    }
+}
+
+// spec: OUT-228
+// spec: CRAWL-125
+#[test]
+fn manager_rejects_lock_and_unlock_without_disturbing_a_live_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let (file, path) = owner(dir.path());
+    let now = created_at();
+    file.set_meta("state", "Running").unwrap();
+    file.set_meta("heartbeat_at", &now.to_db()).unwrap();
+    let id = file.meta().unwrap().crawl_id;
+    let mut manager = Manager::open(dir.path()).unwrap();
+    for locked in [true, false] {
+        assert!(manager
+            .lock(&id, locked, now)
+            .unwrap_err()
+            .to_string()
+            .contains("Crawl läuft"));
+    }
+    assert_ne!(file.get_meta("locked").unwrap().as_deref(), Some("1"));
+    in_second_process(CHILD_WRITE, &path);
+    assert_owner_intact(file, &path);
+}
+
+// spec: CRAWL-125
+// spec: OUT-233
+#[test]
+fn a_blocked_checkpoint_does_not_publish_an_incomplete_migration_backup() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = copy_fixture("schema-v2.ospider", dir.path());
+    let reader = rusqlite::Connection::open(&path).unwrap();
+    reader
+        .execute_batch("PRAGMA journal_mode=WAL; BEGIN;")
+        .unwrap();
+    let _: i64 = reader
+        .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
+        .unwrap();
+    let writer = rusqlite::Connection::open(&path).unwrap();
+    writer.execute("INSERT OR REPLACE INTO crawl_meta(key,value) VALUES ('backup_probe','not-checkpointed')", []).unwrap();
+    let err = CrawlFile::open(&path, OpenMode::ReadWrite).err().unwrap();
+    assert!(
+        matches!(err, os_store::StoreError::Sqlite(ref error)
+        if error.sqlite_error_code() == Some(rusqlite::ErrorCode::DatabaseBusy)),
+        "{err}"
+    );
+    assert!(!os_store::backup_path(&path, 2).exists());
+    assert_eq!(os_store::schema::user_version(&writer).unwrap(), 2);
+    reader.execute_batch("ROLLBACK").unwrap();
+}

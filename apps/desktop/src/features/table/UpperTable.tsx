@@ -1,3 +1,4 @@
+import { LiveViewTotal } from "./LiveViewTotal";
 import { tabId } from "../../ui/primitives/TabBar";
 import { Dashboard } from "../dashboard/Dashboard";
 import { ComparisonTable } from "../compare/ComparisonTable";
@@ -92,12 +93,10 @@ function RegularUpperTable() {
   const current = tabs.catalog.find(tab => tab.id === tabs.active);
   // UI-018 (M2-N27): while the crawl runs, filter counts come from the shared, throttled count. The active filter's
   // chip, list entry and the footer follow the live view total instead (≤ 1 s) when the view is exactly that filter.
-  const running = useSession(s => s.crawl?.phase === "running");
-  const liveKey = running && !query.search && !query.rules && !segments.filter ? `${crawlId ?? ""}|${tabs.active}|${query.filter}` : null;
+  const liveKey = !query.search && !query.rules && !segments.filter ? `${crawlId ?? ""}|${tabs.active}|${query.filter}` : null;
   const openedFor = useRef<string | null>(null);
-  const liveTotal = source && liveKey !== null && openedFor.current === liveKey ? source.total : undefined;
+  const liveCountEnabled = liveKey !== null && openedFor.current === liveKey;
   const filters = (current?.filters ?? []).map(f => controller.counts.filters.find(row => row.tab === tabs.active && row.filter.id === f.id)?.filter ?? f)
-    .map(f => liveTotal !== undefined && f.id === query.filter && f.state.kind === "ready" ? { ...f, count: liveTotal } : f)
     .sort((a, b) => a.id === "All" ? -1 : b.id === "All" ? 1 : 0);
   const activeFilter = filters.find(f => f.id === query.filter);
   const total = filters.find(f => f.id === "All")?.count;
@@ -268,21 +267,27 @@ function RegularUpperTable() {
     noCrawl ? { code: "NO_DATA_YET" as const } : null;
   return <section className="u10-table" data-shortcut-scope="table" role="tabpanel" id="data-panel" aria-labelledby={tabs.view === "tabs" ? tabId("data-panel", tabs.active) : undefined} aria-label={tabs.view === "tabs" ? undefined : t("u10-table")}>
     <div className="u10-toolbar" key={tabs.active}>
-      {/* K2-77: the first filters of the tab (and the active one) as chips with counts; all filters stay in the dropdown. */}
-      <div className="u34-chips" role="group" aria-label={t("u34-quick-filters")}>
-        {[...filters.slice(0, 3), ...(activeFilter && !filters.slice(0, 3).includes(activeFilter) ? [activeFilter] : [])].map(f => {
-          const count = f.state.kind === "needsCrawlAnalysis" || f.count == null ? "" : ` (${new Intl.NumberFormat(locale).format(f.count)})`;
-          return <button key={f.id} type="button" className="os-btn u34-chip" title={`${filterLabel(t, f)}${count}`} aria-pressed={query.filter === f.id} onClick={() => tabs.query({ filter: f.id })}>{filterLabel(t, f)}{count}</button>;
-        })}
-      </div>
-      <div ref={filterRef}><ComboBox label={t("u10-filter")} selected={query.filter} onSelect={filter => tabs.query({ filter })}
-        formatCount={n => new Intl.NumberFormat(locale).format(n)} options={filters.map(f => ({ id: f.id,
-          label: filterLabel(t, f),
-          count: f.state.kind === "needsCrawlAnalysis" ? null : f.count ?? null,
-          hint: f.state.kind === "ready" ? undefined : t(`u10-filter-${f.state.kind}`),
-          badge: f.issue ? <><Badge tone={f.issue.issueType === "issue" ? "danger" : f.issue.issueType === "warning" ? "warning" : "neutral"}>{t(`u10-issue-${f.issue.issueType}`)}</Badge>
-            <Badge tone={f.issue.priority === "high" ? "danger" : f.issue.priority === "medium" ? "warning" : "neutral"}>{t(`u10-priority-${f.issue.priority}`)}</Badge></> : undefined,
-        }))} /></div>
+      <LiveViewTotal source={source} enabled={liveCountEnabled} runningOnly>{liveTotal => {
+        const liveFilters = filters.map(f => liveTotal !== undefined && f.id === query.filter && f.state.kind === "ready" ? { ...f, count: liveTotal } : f);
+        const liveActive = liveFilters.find(f => f.id === query.filter);
+        return <>
+          {/* K2-77: the first filters of the tab (and the active one) as chips with counts; all filters stay in the dropdown. */}
+          <div className="u34-chips" role="group" aria-label={t("u34-quick-filters")}>
+            {[...liveFilters.slice(0, 3), ...(liveActive && !liveFilters.slice(0, 3).includes(liveActive) ? [liveActive] : [])].map(f => {
+              const count = f.state.kind === "needsCrawlAnalysis" || f.count == null ? "" : ` (${new Intl.NumberFormat(locale).format(f.count)})`;
+              return <button key={f.id} type="button" className="os-btn u34-chip" title={`${filterLabel(t, f)}${count}`} aria-pressed={query.filter === f.id} onClick={() => tabs.query({ filter: f.id })}>{filterLabel(t, f)}{count}</button>;
+            })}
+          </div>
+          <div ref={filterRef}><ComboBox label={t("u10-filter")} selected={query.filter} onSelect={filter => tabs.query({ filter })}
+            formatCount={n => new Intl.NumberFormat(locale).format(n)} options={liveFilters.map(f => ({ id: f.id,
+              label: filterLabel(t, f),
+              count: f.state.kind === "needsCrawlAnalysis" ? null : f.count ?? null,
+              hint: f.state.kind === "ready" ? undefined : t(`u10-filter-${f.state.kind}`),
+              badge: f.issue ? <><Badge tone={f.issue.issueType === "issue" ? "danger" : f.issue.issueType === "warning" ? "warning" : "neutral"}>{t(`u10-issue-${f.issue.issueType}`)}</Badge>
+                <Badge tone={f.issue.priority === "high" ? "danger" : f.issue.priority === "medium" ? "warning" : "neutral"}>{t(`u10-priority-${f.issue.priority}`)}</Badge></> : undefined,
+            }))} /></div>
+        </>;
+      }}</LiveViewTotal>
       <SegmentControls crawlId={crawlId} />
       <div ref={search} className="u20-search" data-invalid={searchError ? "true" : undefined}>
         <SearchField label={t(advanced ? "u20-search-syntax-field" : "u10-search")} placeholder={advanced ? undefined : `${t("u10-search")} …`} value={text} onChange={value => { setText(value); setSearchError(undefined); }}
@@ -334,8 +339,11 @@ function RegularUpperTable() {
             fontFamily: FONT_STACKS[currentPlatform()].ui, fontSize: SIZES.fontTable[appearance.density], zebra: appearance.zebra }} /> :
         controller.pending ? <ProgressBar label={t("u04-loading")} /> : <EmptyState state={{ code: "NO_MATCH" }} />}
     </div>
-    <div className="u10-counter" role="status">{t("u10-count", { shown: empty ? 0 : source?.total ?? 0, total: total == null ? "–" : Math.max(total, empty ? 0 : source?.total ?? 0) })}
-      {(query.search || query.rules) && ` · ${t("u10-search-active")}`}{count > 0 && ` · ${t("u10-selected", { count })}`}</div>
+    <LiveViewTotal source={source}>{liveTotal => {
+      const shown = empty ? 0 : liveTotal ?? 0;
+      return <div className="u10-counter" role="status">{t("u10-count", { shown, total: total == null && !(source && liveCountEnabled && query.filter === "All") ? "–" : Math.max(total ?? 0, shown) })}
+        {(query.search || query.rules) && ` · ${t("u10-search-active")}`}{count > 0 && ` · ${t("u10-selected", { count })}`}</div>;
+    }}</LiveViewTotal>
     <span ref={anchor} className="u10-menu-anchor" style={{ left: context?.x ?? 0, top: context?.y ?? 0 }} />
     <Popover triggerRef={anchor} isOpen={context !== undefined} onOpenChange={open => { if (!open) setContext(undefined); }} className="os-popover">
       <MenuBody entries={menuEntries} label={t("u10-context")} />

@@ -1417,6 +1417,10 @@ fn locate<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<
 /// Ab dieser Größe wird eine vollständig überdeckte View als „alle“ ausgewählt statt als Liste von Kennungen
 /// (gleiche Grenze wie der Zeilencache des Clients, UI-144).
 const RANGE_ALL_ABOVE: u64 = 20_000;
+/// Bound the IPC response like the client row cache (UI-144); larger partial ranges use the export hint (UI-012).
+pub(crate) fn range_requires_export(from_row: u64, to_row: u64) -> bool {
+    from_row.abs_diff(to_row) >= RANGE_ALL_ABOVE
+}
 pub(crate) fn range_covers_large(from_row: u64, to_row: u64, total: u64) -> bool {
     total > RANGE_ALL_ABOVE && from_row.min(to_row) == 0 && from_row.max(to_row) == total - 1
 }
@@ -1456,6 +1460,10 @@ fn range<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'
             total,
             keys,
             all,
+            export_required: !all
+                && from_row
+                    .zip(to_row)
+                    .is_some_and(|(a, b)| range_requires_export(a, b)),
         })
     })
 }
@@ -1469,17 +1477,27 @@ async fn detail_range(
         link_ids(app, v, links).await?.as_ref().clone()
     } else {
         let mut ids = Vec::new();
+        let generation = Arc::new(Mutex::new(None));
         loop {
-            let p = page(
+            let p = page_query(
                 app,
                 &v.session,
                 v.spec.clone(),
                 v.columns.clone(),
                 ids.len() as u64,
                 500,
-                Some(v.version),
+                PageSelection {
+                    expected: Some(v.version),
+                    ids: None,
+                    ordered: false,
+                    detail_seq: Some(generation.clone()),
+                },
             )
             .await?;
+            #[cfg(test)]
+            if let Some(write) = app.ext::<RangePageWrite>().0.lock().unwrap().take() {
+                write();
+            }
             let done = p.keys.is_empty() || ids.len() as u64 + p.keys.len() as u64 >= p.total;
             ids.extend(p.keys);
             if done {
@@ -1491,7 +1509,7 @@ async fn detail_range(
     let (from_row, to_row) = (position(args.from), position(args.to));
     let total = ids.len() as u64;
     let keys = match (from_row, to_row) {
-        (Some(a), Some(b)) if !range_covers_large(a, b, total) => {
+        (Some(a), Some(b)) if !range_requires_export(a, b) => {
             ids[a.min(b) as usize..=a.max(b) as usize].to_vec()
         }
         _ => Vec::new(),
@@ -1590,3 +1608,15 @@ mod tests {
         assert_copy_uses_one_page(|app| app.ext::<PageReads>().0.load(Ordering::Relaxed)).await;
     }
 }
+
+#[cfg(test)]
+#[derive(Default)]
+struct RangePageWrite(Mutex<Option<Box<dyn FnOnce() + Send>>>);
+
+#[cfg(test)]
+#[path = "../../tests/cmd_catalog_fixture.rs"]
+mod ldfollow_fixture;
+
+#[cfg(test)]
+#[path = "../../tests/ldfollow/pages.rs"]
+mod ldfollow_tests;

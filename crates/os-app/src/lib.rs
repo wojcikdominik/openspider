@@ -20,6 +20,10 @@
 //! | [`logging`], [`diag`] | Logs, Diagnose | M2-O01 |
 //! | `stub` (Feature `stub-views`) | synthetische 5-Mio.-View | M2-S01 |
 
+// Reuse integration fixtures from private unit tests.
+#[cfg(test)]
+extern crate self as os_app;
+
 pub mod assets;
 pub mod clipboard;
 pub mod commands;
