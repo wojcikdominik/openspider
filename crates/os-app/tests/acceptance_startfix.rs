@@ -7,6 +7,8 @@
 //! Namen der Meldungsargumente sind in der Spec nicht festgelegt; die Tests lesen deshalb Werte, nicht Schlüssel.
 //!
 //! Kriterienliste: `docs/plan/M3-reports/b4-startfix-tests.md`.
+// Der Test liest die Crawl-Datei von außen (Beleg, dass „URLs hinzufügen“ wirklich abgerufen hat), wie die Abnahmetests anderer Pakete.
+#![allow(clippy::disallowed_types, clippy::disallowed_methods)]
 #[path = "session_common.rs"]
 mod common;
 #[path = "acceptance_startfix/fixtures.rs"]

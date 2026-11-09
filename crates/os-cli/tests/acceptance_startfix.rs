@@ -301,7 +301,11 @@ async fn a_robots_txt_answering_5xx_or_429_is_no_start_error() {
             "{status}: Warnung zur Sperre fehlt: {}",
             run.dump()
         );
-        assert!(!run.stderr.contains("nicht erreichbar"), "{status}: {}", run.dump());
+        assert!(
+            !run.stderr.contains("nicht erreichbar"),
+            "{status}: {}",
+            run.dump()
+        );
     }
 }
 
