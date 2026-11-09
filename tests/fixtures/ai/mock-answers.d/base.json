@@ -12,20 +12,62 @@
       "type": "choice",
       "choice": "product",
       "probabilities": [
-        0.93,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385,
-        0.005384615384615385
+        {
+          "value": "product",
+          "probability": 0.93
+        },
+        {
+          "value": "homepage",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "category",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "article",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "landing",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "local",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "contact",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "about",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "legal",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "search-results",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "account",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "media",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "error",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "other",
+          "probability": 0.005384615384615385
+        }
       ],
       "confidence": 0.93
     },

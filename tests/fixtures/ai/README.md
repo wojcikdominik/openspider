@@ -40,7 +40,7 @@ Alle `mock-answers.d/*.json` werden in sortierter Reihenfolge geladen:
 {"product-1": {"page-type": {"type": "choice", "choice": "product"}, "default": {"ok": true}}}
 ```
 
-Die äußere Kennung kommt aus `MOCK-ID:product-1`, die innere aus `questions[].id`
+Die äußere Kennung kommt aus `MOCK-ID:product-1`, die innere aus `questions[].name` (alternativ `id` für ältere Tests)
 (Decisions) oder `task` (Textaufgabe). Ohne passenden Eintrag gilt `default`, dann
 `{"ok":true}`; Decisions besitzen außerdem feste Standardwerte je Fragetyp.
 Doppelte Paare (MOCK-ID, Frage/Aufgabe) über Fragmentgrenzen sind Ladefehler;

@@ -312,7 +312,10 @@ async fn answer_selection_refusals_missing_schema_and_models() {
     let p = "/openai/v1/decisions";
     let r = call(&s, "x", "POST", p, "ok", &input.to_string()).await;
     assert_eq!(value(&r)["answers"][0]["choice"], "product");
-    assert_eq!(value(&r)["answers"][0]["probabilities"][0], 0.93);
+    assert_eq!(
+        value(&r)["answers"][0]["probabilities"][0]["probability"],
+        0.93
+    );
     assert_eq!(
         value(&call(&s, "x", "POST", p, "missing-answer", &input.to_string()).await)["answers"]
             .as_array()
@@ -737,4 +740,69 @@ async fn openrouter_eu_catalog_is_a_five_model_subset_of_eight_global_models() {
     assert_eq!(vision["pricing"]["image"], "0.002");
     assert_eq!(mock.requests()[0].host, "openrouter.mock.test");
     assert_eq!(mock.requests()[1].host, "eu.openrouter.mock.test");
+}
+
+// spec: INTEG-019 [M4]
+#[tokio::test]
+async fn decisions_use_provider_names_and_typed_probability_entries() {
+    let (_, s) = server().await;
+    let choices: Vec<_> = [
+        "product",
+        "homepage",
+        "category",
+        "article",
+        "landing",
+        "local",
+        "contact",
+        "about",
+        "legal",
+        "search-results",
+        "account",
+        "media",
+        "error",
+        "other",
+    ]
+    .into_iter()
+    .map(|value| json!({"value":value,"description":value}))
+    .collect();
+    let input = json!({"input":"MOCK-ID:product-1","questions":[
+        {"name":"page-type","type":"choice","instructions":"Classify","choices":choices},
+        {"name":"quality","type":"score","instructions":"Rate","levels":[{"label":"a"},{"label":"b"},{"label":"c"}]},
+        {"name":"relevant","type":"predicate","instructions":"Relevant?"}
+    ]});
+    let r = value(
+        &call(
+            &s,
+            "x",
+            "POST",
+            "/openai/v1/decisions",
+            "ok",
+            &input.to_string(),
+        )
+        .await,
+    );
+    let answers = r["answers"].as_array().unwrap();
+    assert_eq!(answers[0]["name"], "page-type");
+    assert_eq!(answers[0]["choice"], "product");
+    assert_eq!(
+        answers[0]["probabilities"][0],
+        json!({"value":"product","probability":0.93})
+    );
+    assert_eq!(answers[1]["name"], "quality");
+    assert_eq!(answers[1]["score"], 1.5);
+    assert_eq!(
+        answers[1]["probabilities"][2],
+        json!({"value":2,"label":"c","probability":0.6})
+    );
+    assert_eq!(answers[2]["name"], "relevant");
+    assert_eq!(answers[2]["probability"], 0.93);
+    for answer in &answers[..2] {
+        let sum: f64 = answer["probabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["probability"].as_f64().unwrap())
+            .sum();
+        assert!((sum - 1.0).abs() < 1e-12);
+    }
 }

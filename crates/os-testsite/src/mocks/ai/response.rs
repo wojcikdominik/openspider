@@ -333,14 +333,49 @@ pub(super) fn success(
                     None,
                 );
             }
-            let answers: Vec<_> = questions.iter().enumerate().filter(|(i,_)| !(scenario == "missing-answer" && *i == questions.len().saturating_sub(1))).map(|(i,q)| {
-                let id = q.get("id").and_then(Value::as_str).unwrap_or("default");
-                let mut a = book.answer(input,id);
-                if !a.is_object() { a = json!({"value":a}); }
-                if a.get("ok").is_some() { a = match q["type"].as_str().unwrap_or("predicate") { "choice" => json!({"type":"choice","choice":0,"probabilities":[0.8,0.2],"confidence":0.8}), "score" => json!({"type":"score","score":1.5,"probabilities":[0.1,0.2,0.7],"confidence":0.7}), _ => json!({"type":"predicate","probability":0.93,"value":true}) }; }
-                if refusal && i == 0 { a = json!({"type":"refusal","refusal":"Fixture refusal"}); }
-                a["id"] = json!(id); a
-            }).collect();
+            let answers: Vec<_> = questions.iter().enumerate()
+                .filter(|(i, _)| !(scenario == "missing-answer" && *i == questions.len().saturating_sub(1)))
+                .map(|(i, q)| {
+                    let name = q.get("name").or_else(|| q.get("id"))
+                        .and_then(Value::as_str).unwrap_or("default");
+                    let mut a = book.answer(input, name);
+                    if !a.is_object() {
+                        a = json!({"value":a});
+                    }
+                    if a.get("ok").is_some() {
+                        a = match q["type"].as_str().unwrap_or("predicate") {
+                            "choice" => {
+                                let choices = q["choices"].as_array().cloned()
+                                    .unwrap_or_else(|| vec![json!({"value":0}), json!({"value":1})]);
+                                let n = choices.len();
+                                let probabilities: Vec<_> = choices.iter().enumerate().map(|(i, c)| {
+                                    let p = if n == 1 {1.0} else if i == 0 {0.8} else {0.2 / (n - 1) as f64};
+                                    json!({"value":c["value"],"probability":p})
+                                }).collect();
+                                json!({"type":"choice","choice":choices.first().map(|c| &c["value"]),"probabilities":probabilities,"confidence":if n == 1 {1.0} else {0.8}})
+                            }
+                            "score" => {
+                                let levels = q["levels"].as_array().cloned()
+                                    .unwrap_or_else(|| vec![json!({"label":"a"}), json!({"label":"b"}), json!({"label":"c"})]);
+                                let n = levels.len();
+                                let probabilities: Vec<_> = levels.iter().enumerate().map(|(i, level)| {
+                                    let p = if n == 3 {[0.1,0.3,0.6][i]} else {1.0 / n as f64};
+                                    json!({"value":i,"label":level["label"],"probability":p})
+                                }).collect();
+                                let score: f64 = probabilities.iter().enumerate()
+                                    .map(|(i, p)| i as f64 * p["probability"].as_f64().unwrap()).sum();
+                                json!({"type":"score","score":score,"probabilities":probabilities,"confidence":if n == 3 {0.6} else {1.0 / n.max(1) as f64}})
+                            }
+                            _ => json!({"type":"predicate","probability":0.93}),
+                        };
+                    }
+                    if refusal && i == 0 {
+                        a = json!({"type":"refusal","refusal":"Fixture refusal"});
+                    }
+                    a["name"] = json!(name);
+                    a["id"] = json!(name);
+                    a
+                }).collect();
             json!({"id":"decision_mock","answers":answers,"usage":{"input_tokens":tokens,"output_tokens":out_tokens}})
         }
         _ => {
