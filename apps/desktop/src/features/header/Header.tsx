@@ -178,12 +178,19 @@ export function Header() {
   useAction("crawl.new", clear);
   useAction("header.focusUrl", () => input.current?.focus());
 
-  function chooseMode(next: CrawlModeDto) {
-    // UI-013/OUT-140: while a comparison is open the mode reads „Vergleich“; another mode closes the comparison.
-    if (comparing) { if (next !== "compare") void closeComparison().then(() => useHeader.setState({ mode: next })); return; }
+  function applyMode(next: CrawlModeDto) {
     if (!allowed || running || next === mode) return;
     if (hasResults) setConfirm({ mode: next });
     else useHeader.setState({ mode: next });
+  }
+  function chooseMode(next: CrawlModeDto) {
+    // UI-013/OUT-140: while a comparison is open the mode reads „Vergleich“; another mode closes the comparison first and
+    // then takes the ordinary path (CRAWL-026): with results beside it, the replacement is confirmed and the view cleared.
+    if (comparing) {
+      if (next !== "compare") void closeComparison().then(() => { if (!useComparison.getState().session) applyMode(next); });
+      return;
+    }
+    applyMode(next);
   }
 
   return <div className="os-crawl-header" data-testid="crawl-header">

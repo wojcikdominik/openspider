@@ -207,3 +207,24 @@ it("shows the comparison mode while a comparison is open and closes it for anoth
   expect(mode.value).toBe("list");
   await setLanguage("en");
 });
+
+// spec: UI-013
+// spec: CRAWL-026 [M2]
+// B4-CMPUI2 (A1): with crawl results beside the comparison, leaving the comparison for another mode still asks before the
+// view is replaced; it never ends in „List mode with Spider results“.
+it("confirms the replacement when leaving a comparison for another mode while results are loaded", async () => {
+  core.handlers.set("compare.close", () => null);
+  useSession.getState().applyTick({ ...tick, crawl: { ...tick.crawl!, phase: "paused" } });
+  render(<Header />);
+  act(() => { useComparison.setState({ session: compareSession }); });
+  const mode = screen.getByLabelText("Mode") as HTMLSelectElement;
+  fireEvent.change(mode, { target: { value: "list" } });
+  await waitFor(() => expect(useComparison.getState().session).toBeNull());
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+  expect(useHeader.getState().mode).toBe("spider");
+  expect(calls("crawl.clear")).toHaveLength(0);
+  fireEvent.change(mode, { target: { value: "list" } });
+  fireEvent.click(await screen.findByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(useHeader.getState().mode).toBe("list"));
+  expect(calls("crawl.clear")).toHaveLength(1);
+});
