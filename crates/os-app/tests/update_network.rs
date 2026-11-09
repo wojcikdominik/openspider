@@ -364,3 +364,60 @@ async fn skipped_version_is_silent_for_automatic_checks_but_shown_by_a_manual_ch
         UpdateState::Available(_)
     ));
 }
+
+// spec: OUT-251
+#[tokio::test]
+async fn skipping_follows_semver_order_including_pre_releases() {
+    use os_app::{commands::update::run_check_with_context, update::UpdateState, App, AppConfig};
+    // The fixture offers one version; the skipped value decides by SemVer order whether automatic checks stay silent.
+    let (site, dir, ctx) = fixture().await;
+    let probe = App::new(AppConfig::new(dir.path())).unwrap();
+    let UpdateState::Available(offered) = run_check_with_context(&probe, true, ctx).await else {
+        panic!("fixture offers an update");
+    };
+    let offered: semver::Version = offered.version.parse().unwrap();
+    assert!(
+        "1.0.0-beta.4".parse::<semver::Version>().unwrap()
+            < "1.0.0-rc.1".parse::<semver::Version>().unwrap()
+            && "1.0.0-rc.1".parse::<semver::Version>().unwrap()
+                < "1.0.0".parse::<semver::Version>().unwrap()
+    );
+    let pre = |tag: &str| {
+        let mut v = offered.clone();
+        v.pre = semver::Prerelease::new(tag).unwrap();
+        v.to_string()
+    };
+    let next_patch = semver::Version::new(offered.major, offered.minor, offered.patch + 1);
+    let ca = dir.path().join("ca.pem").to_string_lossy().into_owned();
+    for (skipped, silent) in [
+        // Skipped a pre-release of the offered version: the final release is newer → reported.
+        (pre("beta.4"), false),
+        (pre("rc.1"), false),
+        // Skipped the same or a newer version (also a newer pre-release): silent.
+        (offered.to_string(), true),
+        (format!("{next_patch}-beta.1"), true),
+        (next_patch.to_string(), true),
+        // Unreadable stored value: skips nothing.
+        ("not-a-version".to_string(), false),
+    ] {
+        let home = tempfile::tempdir().unwrap();
+        let app = App::new(AppConfig::new(home.path())).unwrap();
+        app.settings()
+            .apply_patch(&serde_json::json!({"updates":{"skippedVersion": skipped}}))
+            .unwrap();
+        let (_, _other, mut automatic) = fixture().await;
+        automatic.endpoint = format!("{}/latest.json", site.https_base_url());
+        automatic.network.trusted_certificates = vec![ca.clone()];
+        let state = run_check_with_context(&app, false, automatic).await;
+        assert_eq!(
+            state == UpdateState::UpToDate,
+            silent,
+            "skipped {skipped}, offered {offered}: {state:?}"
+        );
+        assert_eq!(
+            matches!(state, UpdateState::Available(_)),
+            !silent,
+            "skipped {skipped}"
+        );
+    }
+}

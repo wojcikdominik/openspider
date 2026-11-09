@@ -188,11 +188,11 @@ pub async fn run_check_with_context(
         Err(error) => Err(error),
     };
     let state = match result {
-        // OUT-251 (Nutzerentscheidung 09.11.2026): a skipped version is reported again only by a manual check.
+        // OUT-251 (Nutzerentscheidung 09.11.2026): after "Skip this version" automatic checks report only a version
+        // newer than the skipped one (SemVer order, pre-releases included: 1.0.0-beta.4 < 1.0.0-rc.1 < 1.0.0); the
+        // manual check reports it anyway.
         Ok(Outcome::Available(manifest))
-            if !manual
-                && context.settings.skipped_version.as_deref()
-                    == Some(manifest.version.to_string().as_str()) =>
+            if !manual && skipped_covers(&context, &manifest.version) =>
         {
             UpdateState::UpToDate
         }
@@ -229,6 +229,15 @@ pub async fn run_check_with_context(
     }
     *service.state.lock().unwrap_or_else(|p| p.into_inner()) = state.clone();
     state
+}
+/// True if the offered version is not newer than the skipped one; an unreadable stored value skips nothing.
+fn skipped_covers(context: &crate::update::UpdateContext, offered: &semver::Version) -> bool {
+    context
+        .settings
+        .skipped_version
+        .as_deref()
+        .and_then(|skipped| semver::Version::parse(skipped.trim()).ok())
+        .is_some_and(|skipped| *offered <= skipped)
 }
 pub fn on_startup(app: &App) {
     crate::update::install::init(app);
