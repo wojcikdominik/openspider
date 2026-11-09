@@ -1,28 +1,31 @@
 import type { ColumnState } from "../../grid/DataGrid";
 import type { SortKey } from "../../ipc/gen/SortKey";
-import { ComparisonGrid } from "./ComparisonGrid";
+import { ComparisonGrid, useComparisonColumns, useComparisonSource } from "./ComparisonGrid";
 import { downloadComparison } from "./export";
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useT } from "../../i18n";
 import { describeError, toCmdError } from "../../ipc/errors";
-import { comparisonRows, LINK_CHANGES, type ComparisonPage, type Side, useComparison } from "./model";
+import { ColumnsMenu } from "../table/ColumnsMenu";
+import { LINK_CHANGES, type ComparisonQuery, type Side, useComparison } from "./model";
+/** OUT-149: links of the selected URL in both crawls, one virtualized grid over all links (UI-140, UI-032 detail tables). */
 export function ComparisonLinks({direction,urlId}:{direction:"inlinks"|"outlinks";urlId:number}) {
-  const t=useT();const state=useComparison();const [source,setSource]=useState<"Auto"|Side>("Auto");const [change,setChange]=useState("All");const [page,setPage]=useState<ComparisonPage>();const [error,setError]=useState<unknown>();const [offset,setOffset]=useState(0);const [exporting,setExporting]=useState(false);
+  const t=useT();const side=useComparison(s=>s.query.side);const revision=useComparison(s=>s.revision);
+  const [source,setSource]=useState<"Auto"|Side>("Auto");const [change,setChange]=useState("All");const [exporting,setExporting]=useState(false);
   const configuration=useRef(new Map<string, ColumnState[]>());
   const [sort,setSort]=useState<SortKey>();
-  useEffect(()=>{setOffset(0);},[direction,source,change,urlId,state.query.side,state.revision,sort]);
-  useEffect(()=>{
-    const controller=new AbortController();setPage(undefined);setError(undefined);
-    void comparisonRows({tab:direction,filter:"All",side:state.query.side,urlId,source,change,sort},offset,controller.signal).then(result=>{if(!controller.signal.aborted)setPage(result);}).catch(e=>{if(!controller.signal.aborted)setError(e);});
-    return ()=>controller.abort();
-  },[direction,urlId,source,change,offset,state.query.side,state.revision,sort]);
-  return <section aria-label={direction}><h3>{t(`detail-tab-${direction}`)}</h3><div className="os-compare-form">
+  const query=useMemo<ComparisonQuery>(()=>({tab:direction,filter:"All",side,urlId,source,change,sort}),[direction,side,urlId,source,change,JSON.stringify(sort ?? null)]);
+  const view=useComparisonSource(query, revision);
+  const { columns, setColumns, reset } = useComparisonColumns(view.source, configuration.current);
+  const exportView=()=>{setExporting(true);void downloadComparison(query,`${direction}-comparison.csv`).catch(view.setError).finally(()=>setExporting(false));};
+  const enabled=view.source?.filtersEnabled;
+  return <section aria-label={direction} className="os-compare-links"><h3>{t(`detail-tab-${direction}`)}</h3><div className="os-compare-form os-compare-toolbar">
     <label>{t("compare-source")}<select aria-label={t("compare-source")} value={source} onChange={e=>setSource(e.target.value as typeof source)}>{["Auto","Current","Previous"].map(v=><option key={v}>{v}</option>)}</select></label>
-    <label>{t("compare-link-change")}<select aria-label={t("compare-link-change")} disabled={!page?.filtersEnabled} value={page?.filtersEnabled===false ? "All" : change} onChange={e=>setChange(e.target.value)}>{LINK_CHANGES.map(v=><option key={v} disabled={v!=="All" && !page?.filtersEnabled}>{v}</option>)}</select></label>
-    <button type="button" disabled={!page || exporting} onClick={()=>{setExporting(true);void downloadComparison({tab:direction,filter:"All",side:state.query.side,urlId,source,change,sort},`${direction}-comparison.csv`).catch(setError).finally(()=>setExporting(false));}}>{t("compare-export")}</button>
-  </div>{error!=null && <p role="alert">{describeError(t, toCmdError(error)).text}</p>}{!page && !error && <p role="status">{t("compare-loading")}</p>}
-    {page && <><p role="status">{t("compare-total",{count:page.total})}</p><ComparisonGrid key={page.columns.join("|")} page={page} configuration={configuration.current} label={t("compare-links-table")} sort={sort} onSort={setSort}
-      onError={setError} onExport={()=>{void downloadComparison({tab:direction,filter:"All",side:state.query.side,urlId,source,change,sort},`${direction}-comparison.csv`).catch(setError);}} />
-      <button type="button" disabled={offset===0} onClick={()=>setOffset(n=>Math.max(0,n-100))}>{t("compare-page-previous")}</button><button type="button" disabled={offset+page.cells.length>=page.total} onClick={()=>setOffset(n=>n+100)}>{t("compare-page-next")}</button></>}
+    <label>{t("compare-link-change")}<select aria-label={t("compare-link-change")} disabled={!enabled} value={enabled===false ? "All" : change} onChange={e=>setChange(e.target.value)}>{LINK_CHANGES.map(v=><option key={v} disabled={v!=="All" && !enabled}>{v}</option>)}</select></label>
+    <button type="button" disabled={!view.source || exporting} onClick={exportView}>{t("compare-export")}</button>
+    {view.source && <ColumnsMenu columns={columns} onChange={setColumns} onReset={reset} />}
+  </div>{view.error!=null && <p role="alert" className="os-compare-message">{describeError(t, toCmdError(view.error)).text}</p>}{!view.source && view.error==null && <p role="status" className="os-compare-message">{t("compare-loading")}</p>}
+    {view.source ? <ComparisonGrid source={view.source} columns={columns} onColumnsChange={setColumns} label={t("compare-links-table")} sort={sort} onSort={setSort}
+      onError={view.setError} onExport={exportView} /> : <div className="os-compare-grid-host" />}
+    {view.source && <p role="status" className="os-compare-counter">{t("compare-total",{count:view.source.total})}</p>}
   </section>;
 }

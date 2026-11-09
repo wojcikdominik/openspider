@@ -165,31 +165,36 @@ it("reopens the selection from Mode → Compare after the dialog was cancelled",
 });
 
 // spec: CRAWL-144
-it("resets the page when switching from 105 Inlinks to three Outlinks and back",async()=>{
+// spec: UI-140
+it("shows all 105 Inlinks in one virtualized table and starts at row 0 again after switching to three Outlinks and back",async()=>{
   active();
   fixture.core.handlers.set("view.rows",args=>{
     const a=args as {comparison:{tab:"inlinks"|"outlinks"};offset:number;limit:number};
     const all=pagedLinks[a.comparison.tab];
-    return {viewId:"paged-links",version:1,offset:a.offset,columns:["Source","Destination"],rowKeys:[],cells:all.slice(a.offset,a.offset+a.limit),total:all.length,side:"Current",filtersEnabled:true};
+    // Like the core: every row window carries one key per row (UI-142).
+    const cells=all.slice(a.offset,a.offset+a.limit);
+    return {viewId:"paged-links",version:1,offset:a.offset,columns:["Source","Destination"],rowKeys:cells.map((_,i)=>a.offset+i+1),cells,total:all.length,side:"Current",filtersEnabled:true};
   });
   const mounted=render(<ComparisonLinks direction="inlinks" urlId={1} />);
   await screen.findByText("https://site.test/in-0");
-  fireEvent.click(screen.getByRole("button",{name:"Next page"}));
-  await screen.findByText("https://site.test/in-100");
-  expect(screen.getAllByRole("row")).toHaveLength(6);
+  // UI-140: one scrollable population instead of client pages; the row 101 is reachable without a page button.
+  expect(screen.getByText("https://site.test/in-104")).toBeInTheDocument();
+  expect(screen.getAllByRole("row")).toHaveLength(106);
+  expect(screen.getByText("105 rows")).toBeVisible();
+  expect(screen.queryByRole("button",{name:"Next page"})).toBeNull();
+  expect(screen.queryByRole("button",{name:"Previous page"})).toBeNull();
   mounted.rerender(<ComparisonLinks direction="outlinks" urlId={1} />);
   await screen.findByText("https://site.test/out-0");
   expect(screen.getAllByRole("row")).toHaveLength(4);
   expect(screen.getByText("3 rows")).toBeVisible();
-  expect(screen.getByRole("button",{name:"Previous page"})).toBeDisabled();
-  expect(screen.getByRole("button",{name:"Next page"})).toBeDisabled();
   expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:0,comparison:{tab:"outlinks"}});
   mounted.rerender(<ComparisonLinks direction="inlinks" urlId={1} />);
   await screen.findByText("https://site.test/in-0");
-  expect(screen.getAllByRole("row")).toHaveLength(101);
+  expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:0,comparison:{tab:"inlinks"}});
+  expect(screen.getAllByRole("row")).toHaveLength(106);
 });
 // spec: TECH-301
-it("toggles Change % sorting through the core, resets paging, and exports the sorted query",async()=>{
+it("toggles Change % sorting through the core, reloads from row 0, and exports the sorted query",async()=>{
   active();navigateComparison("Change Detection","All");
   fixture.core.handlers.set("view.rows",args=>{
     const a=args as {offset:number;comparison:{sort?:{dir:string}}};
@@ -198,8 +203,7 @@ it("toggles Change % sorting through the core, resets paging, and exports the so
   });
   render(<ComparisonTable />);
   await screen.findByRole("button",{name:"Word Count Change %"});
-  fireEvent.click(screen.getByRole("button",{name:"Next page"}));
-  await waitFor(()=>expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:100}));
+  expect(screen.queryByRole("button",{name:"Next page"})).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:"Word Count Change %"}));
   await waitFor(()=>expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:0,comparison:{sort:{column:"Word Count Change %",dir:"asc"}}}));
   expect(screen.getByRole("columnheader",{name:"Word Count Change %"})).toHaveAttribute("aria-sort","ascending");

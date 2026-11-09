@@ -57,9 +57,9 @@ async function mutate(action: () => Promise<CompareSession | null>) {
 export const openComparison = (args: CompareOpenArgs) => mutate(() => compare.open(args));
 export const swapComparison = () => mutate(() => compare.swap());
 export const closeComparison = () => mutate(async () => { await compare.close(); return null; });
-export function comparisonRows(query: ComparisonQuery, offset = 0, signal?: AbortSignal): Promise<ComparisonPage> {
+export function comparisonRows(query: ComparisonQuery, offset = 0, signal?: AbortSignal, limit = 100): Promise<ComparisonPage> {
   const session = useComparison.getState().session;
   if (!session) return Promise.reject(new Error("No comparison"));
-  return client.invoke("view.rows", { viewId: `comparison:${session.current.crawlId}:${session.previous.crawlId}:${useComparison.getState().revision}`, version: session.version, offset, limit: 100, columns: [],
+  return client.invoke("view.rows", { viewId: `comparison:${session.current.crawlId}:${session.previous.crawlId}:${useComparison.getState().revision}`, version: session.version, offset, limit, columns: [],
     comparison: { ...query, current: session.current.crawlId, previous: session.previous.crawlId } }, signal);
 }
