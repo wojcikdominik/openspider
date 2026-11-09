@@ -35,10 +35,13 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # M2.md C5
+  # M2.md C5, aber ohne Debuginfo wie ci.yml, spec-coverage-m2.yml und release-macos.yml: Mit line-tables-only belegten die
+  # rund 590 Testprogramme die Platte bis auf 0,6 GB (Läufe 42646892161, 42677181224); unter 2 GiB warnt und unter 1 GiB
+  # pausiert der Ressourcenschutz der Engine (CRAWL-124) jeden Crawl, 43 Tests scheiterten. Ohne Debuginfo ist ein
+  # Testprogramm etwa 44 % kleiner (tab_indexability 272 MB -> 153 MB).
   CARGO_INCREMENTAL: "0"
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
-  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
   # M2.md C13: kein Schlüsselbund, kein Secret Service; D-Bus-Sitzung wird im Skript entfernt
   OPENSPIDER_SECRET_STORE: memory
   # Nur für den Fallback, wenn der Runner kein Chrome mitbringt: Playwright-Version wie in M2.md C3 (F04 pinnt sie im Lockfile)
@@ -62,6 +65,8 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
           # int-g: mit dem M3-Stand lief die Platte erneut voll ("No space left on device", Lauf 41496422333).
           sudo rm -rf /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /opt/az /usr/local/julia* /opt/microsoft
+          # Wie spec-coverage-m2.yml: Go, Ruby und PyPy des Tool-Caches braucht der Job nicht (Python ist das des Systems).
+          sudo rm -rf /opt/hostedtoolcache/go /opt/hostedtoolcache/Ruby /opt/hostedtoolcache/PyPy
           sudo docker image prune --all --force > /dev/null 2>&1 || true
           df -h / | tail -n 1
 

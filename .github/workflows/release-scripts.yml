@@ -4,6 +4,8 @@ name: Release scripts
 # Notes-/CHANGELOG-Commits, die ci.yml per Pfadfilter nicht startet, und bei Änderungen am Homebrew-Cask (B3-BREW:
 # homebrew.test.mjs liest packaging/homebrew und homebrew.yml); so fällt eine ungültige
 # docs/release/notes/<Version>.md schon am Mittwoch auf und nicht erst im prepare-Job des Release-Laufs.
+# orchestration.test.mjs prüft auch Debuginfo und Speicher-Schritt von linux-core (Läufe 42646892161, 42677181224),
+# deshalb starten Änderungen an scripts/ci/linux-core.sh und linux-core.yml diesen Lauf ebenfalls.
 
 on:
   push:
@@ -18,6 +20,8 @@ on:
       - ".github/workflows/licenses.yml"
       - "packaging/homebrew/**"
       - ".github/workflows/homebrew.yml"
+      - "scripts/ci/linux-core.sh"
+      - ".github/workflows/linux-core.yml"
   pull_request:
     paths: *release-paths
   workflow_dispatch:
