@@ -358,3 +358,49 @@ englischen Text oder Rohcodes.
 | `2e0651a4` | docs: OS-Festlegung OUT-142 (lokalisierte Statuswerte) |
 | `bec5750d` | ui: Werte der Spalte Vergleichsstatus lokalisiert, Kopieren/Export kanonisch |
 | (dieser) | docs: Bericht Runde 3 |
+
+---
+
+## B4-CMPUI2 – Auflagen aus der Fable-Freigabe (88)
+
+Branch `m3/b4-cmpui2`, abgezweigt von `m3/cmpui-int` (`b02d6464` = main + B4-CMPUI + Abnahme `m3/t-cmpui`), eigener
+Worktree. A4 (Fensterkosten im Kern) und A6 (Exportdialog) sind eigene Pakete und hier nicht bearbeitet.
+
+| Auflage | Ursache / Umsetzung | Test (Gegenprobe gegen `b02d6464`: rot) |
+|---|---|---|
+| **A1** `Header.tsx` | `chooseMode` setzte im Vergleich nach `closeComparison()` den Modus direkt und übersprang `allowed`/`hasResults` → Bestätigung → `crawl.clear()`. Jetzt läuft nach dem Schließen derselbe Weg wie ohne Vergleich (`applyMode`): mit Ergebnissen erst die Bestätigung „Ersetzen“, sonst direkt. Schlägt das Schließen fehl, ändert sich der Modus nicht. | `Header.test.tsx` „confirms the replacement when leaving a comparison for another mode while results are loaded“ (`// spec: UI-013`, `CRAWL-026 [M2]`): Abbrechen lässt Spider und ruft kein `crawl.clear`, „Replace“ setzt Liste und ruft `crawl.clear` genau einmal |
+| **A2** `ComparisonTable.tsx` `exportView` | Der Export nutzte die angeforderte Projektion, auch wenn der Kern sie abgelehnt hatte und die Tabelle die Standardspalten zeigte. `ComparisonSource.projection` merkt sich jetzt die angenommene Projektion (leer = Standardspalten); der Export nutzt sie. | `comparison-grid.test.tsx` „falls back to the tab's default columns …“ (`// spec: OUT-142`, `OUT-151`): Export ruft `view.rows` nur mit `columns: []`, kein Fehler |
+| **A3** tote Reste | `compare-page-previous/next` aus `features/compare/i18n/{de,en}.ftl` und alle `.os-compare-tabs`-Regeln aus `compare.css` entfernt. Der Kommentar in `CrawlsHost.tsx` (Z. 196–199) ist auf `m3/cmpui-int` schon aktuell (Commit `9623665d`: „CRAWL-127: the core reports a missing file as NotFound … Older cores reported it as Io …“); daher keine Änderung an `features/crawls/`. | Typecheck, Unit-Tests (keine Verweise mehr) |
+| **A5** OUT-151 | Satz ergänzt: In Exportdateien stehen `Comparison Status`/`Previous Address` nach den Spalten des Current-Crawls (in der Tabellenanzeige direkt nach `Address`, OUT-142). | – |
+| **A7** Abnahme-Teardown | `e2e/acceptance/b4-cmpui.spec.ts`: Nur Teardown geändert. `beforeAll` merkt sich das Home, wenn es in diesem Lauf `prepared` geschrieben hat; `afterAll` löscht es nach dem Stoppen der Bridge. Ein über `OS_CMPUI_HOME` vorgegebenes oder früher vorbereitetes Home bleibt. Keine Prüfung geändert. | Nach beiden Abnahmeläufen liegt kein `/tmp/os-cmpui-*` mehr auf dem Server |
+| **A8** `data-panel` | `ComparisonOverviewUnavailable` trägt `id="data-panel"`; der Dashboard-Zweig von `UpperTable` liegt in `<div id="data-panel" class="u10-panel-contents">` (`display: contents`, Layout unverändert). Hinweis: Die Tab-Leiste rendert ihre Tabs (und damit `aria-controls`) nur in der Ansicht „Tabs“; die ids sichern auch Übergänge und spätere Varianten ab. | `comparison.test.tsx` „shows the overview hint of a comparison inside the data panel“, `dashboard.test.tsx` „keeps the data panel id in the overview branch …“ (`// spec: UI-004`); axe-Lauf der Vergleichsansicht in der Abnahme grün |
+
+### Prüfungen (Build-Server, Worktree `b4-cmpui2`)
+| Befehl | Ergebnis |
+|---|---|
+| `npm run -w apps/desktop typecheck` | ok |
+| `npm run -w apps/desktop test` | 128 Dateien, 1126 Tests passed |
+| Gegenprobe der neuen Tests mit den Dateien aus `b02d6464` | A1, A2, A8 (beide) rot |
+| `npx playwright test e2e/compare e2e/header e2e/acceptance/b4-cmpui.spec.ts --workers=1 --project=chromium` | 17 passed |
+| `npx playwright test e2e/acceptance/b4-cmpui.spec.ts --workers=1 --project=webkit` | 13 passed |
+| Rust | unverändert |
+
+### Fremde Dateien (K2-92)
+| Datei | Eigentümer | Änderung | Spec-ID |
+|---|---|---|---|
+| `apps/desktop/e2e/acceptance/b4-cmpui.spec.ts` | Testagent (`m3/t-cmpui`) | nur Teardown (A7): vorbereitetes Home in `afterAll` entfernen | – |
+| `apps/desktop/src/features/table/UpperTable.tsx`, `table.css` | Tabelle | Wrapper mit `id="data-panel"` um das Dashboard | UI-004 |
+| `apps/desktop/src/features/dashboard/dashboard.test.tsx` | Dashboard | ein Test ergänzt | UI-004 |
+| `apps/desktop/src/features/header/Header.tsx`, `Header.test.tsx` | Kopf | Moduswechsel aus dem Vergleich | UI-013, CRAWL-026 |
+| `docs/spec/06-output-ops.md` | Spec | ein Satz in OUT-151 | OUT-151 |
+
+### Commits
+| Commit | Inhalt |
+|---|---|
+| `06e7af50` | A1 Moduswechsel mit Bestätigung |
+| `45699fa5` | A2 Export mit angenommener Projektion; A8 id am Übersichtshinweis |
+| `7b170e34` | A8 id im Dashboard-Zweig |
+| `09e96db9` | A3 tote Reste entfernt |
+| `777ad2ff` | A5 OUT-151 |
+| `c9addaa9` | A7 Teardown der Abnahme |
+| (dieser) | docs: Bericht B4-CMPUI2 |
