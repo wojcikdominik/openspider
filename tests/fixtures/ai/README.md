@@ -25,6 +25,8 @@ Clients verwenden die bestehende `os_fetch::resolve::HostResolver`-Zuordnung
 `*.mock.test=127.0.0.1` und deaktivieren System-Proxys. Die URL enthält weiter den
 Mock-Host und den ephemeren Port; so bleiben globale und EU-Hosts im Log getrennt.
 Der Resolver-Vertrag ist in `crates/os-fetch/tests/ai_mock_hosts.rs` geprüft.
+`AiMock::set_models(provider, payload)` ersetzt eine Modellliste zur Laufzeit,
+um das erneute Laden geänderter Fähigkeiten oder Preise zu prüfen.
 Produktive Adapter und die Freigabe von Overrides in Release-Builds besitzen die
 jeweiligen Fachpakete. Gemini-Testserver besitzt M4-K03.
 

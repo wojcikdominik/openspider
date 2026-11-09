@@ -39,6 +39,7 @@ struct Data {
     attempts: HashMap<(String, String, String, String), usize>,
     batches: HashMap<String, batch::Batch>,
     files: HashMap<String, String>,
+    models: HashMap<String, Value>,
     next_id: usize,
 }
 #[derive(Clone)]
@@ -55,6 +56,14 @@ impl AiMock {
     }
     pub fn fixtures() -> io::Result<Self> {
         Self::from_fragments(crate::fixtures_root().join("ai").join("mock-answers.d"))
+    }
+    /// Replace a provider catalog to exercise reloading live capabilities/prices.
+    pub fn set_models(&self, provider: &str, models: Value) {
+        self.data
+            .lock()
+            .unwrap()
+            .models
+            .insert(provider.into(), models);
     }
     pub fn requests(&self) -> Vec<RequestRecord> {
         self.data.lock().unwrap().log.clone()
@@ -222,6 +231,14 @@ async fn handle(
     };
     if let Some(r) = response::scenario(provider, &host, &scenario, attempt).await {
         return r;
+    }
+    if method == Method::GET
+        && (uri.path().ends_with("/models") || uri.path().ends_with("/tags"))
+        && scenario != "empty"
+    {
+        if let Some(models) = mock.data.lock().unwrap().models.get(provider).cloned() {
+            return Json(models).into_response();
+        }
     }
     if let Some(r) = batch::handle(
         &mock,

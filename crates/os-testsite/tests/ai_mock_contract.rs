@@ -723,3 +723,18 @@ async fn multipart_upload_and_token_counter_use_real_provider_shapes() {
         r["answers"].to_string().chars().count().div_ceil(4)
     );
 }
+
+// spec: INTEG-019 [M4]
+#[tokio::test]
+async fn model_catalog_changes_are_visible_without_restarting_the_mock() {
+    let (mock, s) = server().await;
+    let path = "/anthropic/v1/models";
+    let mut catalog = value(&call(&s, "x", "GET", path, "ok", "").await);
+    assert_eq!(
+        catalog["data"][0]["capabilities"]["image_input"]["supported"],
+        true
+    );
+    catalog["data"][0]["capabilities"]["image_input"]["supported"] = json!(false);
+    mock.set_models("anthropic", catalog.clone());
+    assert_eq!(value(&call(&s, "x", "GET", path, "ok", "").await), catalog);
+}
