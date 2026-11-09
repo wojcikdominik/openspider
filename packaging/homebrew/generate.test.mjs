@@ -27,7 +27,7 @@ test('Cask links the CLI at the stable app path and removes registrations withou
   assert.match(cask, /binary "#\{appdir\}\/OpenSpider.app\/Contents\/MacOS\/openspider"/);
   assert.match(cask, /auto_updates true/);
   assert.match(cask, /uninstall launchctl: "de.openspider.task.\*"/);
-  assert.match(cask, /delete: "~\/Library\/LaunchAgents\/de.openspider.task.\*.plist"/);
+  assert.match(cask, /delete:    "~\/Library\/LaunchAgents\/de.openspider.task.\*.plist"/);
   assert.doesNotMatch(cask.split('uninstall launchctl:')[1].split('zap trash:')[0], /Application Support|Preferences|Caches/);
   assert.match(cask, /uninstall_preflight_steps do/);
   assert.match(cask, /postflight_steps do/);

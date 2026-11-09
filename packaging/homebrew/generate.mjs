@@ -15,6 +15,9 @@ export const caskChannels = {
   stable: { token: 'openspider', other: 'openspider@beta', tag: String.raw`/^v?(\d+\.\d+\.\d+)$/i` },
   beta: { token: 'openspider@beta', other: 'openspider', tag: String.raw`/^v?(\d+\.\d+\.\d+(?:-(?:beta|rc)\.\d+)?)$/i` },
 };
+// Homebrew's RuboCop config enforces Layout/HashAlignment in `table` style: the values of a multi-line hash
+// start in one column (`args:           [...]` above `writable_paths: [...]`). `depends_on macos: :ventura` is the
+// minimum release (Homebrew/OSDependsOn rejects the older `">= :ventura"`); Ventura = macOS 13 (OUT-260).
 // App data removed only by an explicit `brew uninstall --zap`: OUT-227 paths (settings, default crawls, logs,
 // cache) and what macOS/WebKit store for the bundle id org.openspider.desktop (tauri.conf.json). Sorted
 // case-insensitively, as Homebrew's Cask/ArrayAlphabetization cop requires.
@@ -54,7 +57,7 @@ export function caskSource({ channel = 'stable', version, sha256, url }) {
 
   auto_updates true
   conflicts_with cask: "${other}"
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "OpenSpider.app"
   generated_script "openspider-launchagents.rb", content: <<~'RUBY'
@@ -64,18 +67,18 @@ ${readFileSync(new URL('./lifecycle.rb', import.meta.url), 'utf8').trimEnd().spl
 
   postflight_steps do
     run "/usr/bin/ruby",
-        args: ["{{staged_path}}/openspider-launchagents.rb", "restore", "{{temp}}/launchagents.json"],
+        args:           ["{{staged_path}}/openspider-launchagents.rb", "restore", "{{temp}}/launchagents.json"],
         writable_paths: ["~/Library/LaunchAgents"]
   end
 
   uninstall_preflight_steps do
     run "/usr/bin/ruby",
-        args: ["{{staged_path}}/openspider-launchagents.rb", "save", "{{temp}}/launchagents.json"],
+        args:           ["{{staged_path}}/openspider-launchagents.rb", "save", "{{temp}}/launchagents.json"],
         writable_paths: ["~/Library/LaunchAgents"]
   end
 
   uninstall launchctl: "de.openspider.task.*",
-            delete: "~/Library/LaunchAgents/de.openspider.task.*.plist"
+            delete:    "~/Library/LaunchAgents/de.openspider.task.*.plist"
 
   zap trash: [
 ${zapPaths.map(path => `    "${path}",`).join('\n')}
