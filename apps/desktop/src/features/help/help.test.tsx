@@ -483,3 +483,18 @@ it("version with build number reads „1.0.0-beta.3 (Build 2578)“, without num
     expect(versionLabel(makeT(lang), { version: "1.0.0-beta.3" })).toBe("1.0.0-beta.3");
   }
 });
+
+// spec: UI-127
+it("Debug-Info: version row with build number, the commit hash row is labelled „Commit“, not „Build“ (de/en)", async () => {
+  core.handlers.set("diag.debugInfo", () => ({ ...debugFixture, app: { ...debugFixture.app, buildNumber: "2578" } }));
+  for (const [lang, versionLabel] of [["en", "Version"], ["de", "Version"]] as const) {
+    await setLanguage(lang);
+    const { unmount } = render(<DebugHelp />);
+    const row = (label: string) => screen.getByText(label, { selector: "dt" }).parentElement!.querySelector("dd")!;
+    expect((await screen.findByText(versionLabel, { selector: "dt" })).parentElement).toHaveTextContent(`${debugFixture.app.version} (Build 2578)`);
+    expect(row("Commit")).toHaveTextContent(debugFixture.app.build);
+    expect(screen.queryByText("Build", { selector: "dt" })).toBeNull();
+    expect(screen.queryByText("Erstellungsstand", { selector: "dt" })).toBeNull();
+    unmount();
+  }
+});
