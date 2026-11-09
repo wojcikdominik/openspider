@@ -461,9 +461,15 @@ pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
     old.last = Some(now);
     // Counters above are independent of the configurable table cadence (K2-39).
     // Accumulate IDs between row publications; overflow becomes one full reset.
+    // UI-018 (B4-LAGFIX2): rows are published in a poll whose tick is due. View maintenance then
+    // starts with the status it belongs to, and the session loop sends both in the same tick instead of
+    // the totals following one tick later on an independent table clock. Should another flusher take
+    // the due tick, rows still follow after two intervals.
+    let interval = Duration::from_millis(u64::from(app.live_interval_ms()));
     if old.pending.is_some()
         && old.rows_at.is_none_or(|t| {
-            now.saturating_sub(t) >= Duration::from_millis(u64::from(app.live_interval_ms()))
+            let elapsed = now.saturating_sub(t);
+            elapsed >= interval && (elapsed >= interval * 2 || app.tick_due())
         })
     {
         let change = old.pending.take().expect("pending change");

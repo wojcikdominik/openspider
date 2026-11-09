@@ -236,6 +236,9 @@ fn attach(
     );
     super::activate(app);
     feed::invalidate(app, &key);
+    // UI-018 (B4-LAGFIX2): the window learns the new crawl with the next poll, not one tick period later,
+    // and opens its views before the first URLs are counted.
+    app.expedite_tick();
     app.crawl_events().emit(app, ev);
 }
 

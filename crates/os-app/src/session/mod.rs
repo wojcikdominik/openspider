@@ -57,6 +57,18 @@ impl TickSource for SessionService {
     }
 }
 
+/// Longest wait of a due tick for the view maintenance its poll started (UI-018, B4-LAGFIX2). Measured in the
+/// debug E2E bridge on two shared CPUs: maintenance p99 100–230 ms. A slower run arrives with the next tick.
+pub const TICK_SETTLE_MAX: Duration = Duration::from_millis(250);
+
+/// Does the session loop deliver due ticks (a crawl session was attached)? Other periodic flushers stand back
+/// then, so a tick is sent only after the session's aligned poll (UI-018, B4-LAGFIX2).
+pub fn delivers_ticks(app: &App) -> bool {
+    app.ext::<SessionService>()
+        .active
+        .load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Installed once by the service initializer. Weak ownership lets App shut down.
 pub fn init(app: &App) {
     app.add_tick_source(app.ext::<SessionService>());
@@ -75,12 +87,19 @@ pub fn init(app: &App) {
             {
                 continue;
             }
-            // Deliver due control status before starting potentially expensive reads.
-            app.flush_tick();
+            // UI-018 (B4-LAGFIX2): a tick carries the status and the table totals of the same poll.
+            // Rows are published only when a tick is due (`feed::refresh`); the tick waits a bounded
+            // time for the view maintenance this started. Periodic ticks are sent only from here while a
+            // session is active (`delivers_ticks`); control commands send their own acknowledgement, and
+            // while they hold the mutation lock `poll` returns at once.
+            let due = app.tick_due();
             if let Err(e) = poll(&app).await {
                 tracing::warn!(error = ?e, "Session poll failed");
             }
-            app.flush_tick();
+            if due {
+                crate::views::settle(&app, TICK_SETTLE_MAX).await;
+                app.flush_tick();
+            }
         }
     });
 }
