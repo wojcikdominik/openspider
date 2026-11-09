@@ -38,14 +38,32 @@ export class TableController {
   /** Last `Tick.countsVersion` answered with a counts request. It is a tick counter of the core and not comparable with `FilterCounts.version` (change sequence of the file). */
   private countsTick = -1;
   private abortBuild?: () => void;
+  /** UI-018 (B4-LAGFIX2): what is open (crawl, tab, spec, segment revision), the last arguments and the tab's column keys. */
+  private openKey?: string;
+  private lastOpen?: { tab: string; query: TabQuery };
+  private columnKeys = new Map<string, string[]>();
+  private offCrawl?: () => void;
   subscribe = (cb: () => void) => { this.listeners.add(cb); return () => { this.listeners.delete(cb); }; };
   snapshot = () => this.revision;
   private emit() { this.revision++; for (const cb of this.listeners) cb(); }
   fail = (error: unknown) => { if (!this.disposed && !isSilentError(error)) { this.error = error; this.emit(); } };
   setSelection = (selection: SelectionModel) => { this.selection = selection; useTableSelection.setState({ selection, viewId: this.source?.viewId, version: this.source?.version }); this.emit(); };
-  activate() { this.disposed = false; }
+  activate() {
+    this.disposed = false;
+    // UI-018 (B4-LAGFIX2): a new crawl reopens the active table as soon as its first tick is applied, before the
+    // crawl switch renders the window (1–2 s on two busy CPUs in the debug E2E build). The table's own effect then
+    // finds the same view in progress; a different tab or query opens as before.
+    this.offCrawl?.();
+    this.offCrawl = useSession.subscribe((state, previous) => {
+      const id = state.crawl?.crawlId;
+      if (id && id !== previous.crawl?.crawlId && this.lastOpen) void this.open(this.lastOpen.tab, this.lastOpen.query);
+    });
+  }
   resetCrawl() { this.countsEpoch++; this.countsRequest++; this.countsTick = -1; this.counts = { version: -1, filters: [] }; this.setSelection(SelectionModel.empty()); }
   async open(tab: string, query: TabQuery): Promise<void> {
+    const key = JSON.stringify([useSession.getState().crawl?.crawlId ?? null, tab, tabSpec(tab, query), useSegments.getState().revision]);
+    if (key === this.openKey && !this.error && !this.disposed) return this.opening;
+    this.openKey = key; this.lastOpen = { tab, query };
     const generation = ++this.generation;
     this.abortBuild?.();
     const previous = this.source;
@@ -55,9 +73,19 @@ export class TableController {
     if (previous) void previous.dispose().catch(this.fail);
     const job = async () => {
       try {
-        const columns = await catalog.columns({ tab });
+        // The tab's column keys from the previous open start the view at once; the catalog answer only confirms them
+        // (one round trip less on the critical path of a crawl switch). Changed keys reopen with the new ones.
+        const known = this.columnKeys.get(tab);
+        const fresh = catalog.columns({ tab }).then(columns => columns.map(c => c.key));
+        if (known) void fresh.then(current => {
+          if (current.join("\n") === known.join("\n") || generation !== this.generation || this.disposed) return;
+          this.columnKeys.set(tab, current); this.openKey = undefined;
+          void this.open(tab, query);
+        }, () => undefined);
+        const keys = known ?? await fresh;
         if (generation !== this.generation || this.disposed) return;
-        const opened = await view.open({ spec: tabSpec(tab, query), columns: columns.map(c => c.key) });
+        this.columnKeys.set(tab, keys);
+        const opened = await view.open({ spec: tabSpec(tab, query), columns: keys });
         const handle = await this.built(opened, generation);
         if (!handle || generation !== this.generation || this.disposed) { await view.close({ viewId: opened.viewId }); return; }
         const source = new ViewDataSource(handle);
@@ -157,6 +185,7 @@ export class TableController {
     return row;
   }
   dispose() {
+    this.offCrawl?.(); this.offCrawl = undefined; this.openKey = undefined;
     this.disposed = true; this.generation++; this.countsRequest++; this.abortBuild?.(); this.unsubscribe?.(); this.listeners.clear();
     void this.source?.dispose().catch(() => undefined); this.source = undefined;
     useTableSelection.setState({ selection: SelectionModel.empty(), viewId: undefined, version: undefined });
