@@ -109,3 +109,26 @@ test("plaintext SMTP cannot be saved without explicit confirmation", async ({ pa
   await page.getByText(/I confirm sending credentials/).click();
   await expect(page.getByRole("button", { name: "Save account", exact: true })).toBeEnabled();
 });
+
+// B4-PROJDLG: the task editor opens on top of the scheduling dialog (as its React sibling). Real key presses after a
+// click into a field (no `fill`) must reach the field.
+// spec: OUT-161 [P1]
+test("typing reaches the task editor opened from the scheduling dialog", async ({ page }) => {
+  await page.getByRole("button", { name: "Scheduling", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Select Nightly" }).check();
+  await page.getByRole("button", { name: "Edit task", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Edit task", exact: true });
+  for (const [label, text] of [["Task name", "Nightly typed"], ["Project name (defaults to task name)", "Kunde B"]] as const) {
+    const field = editor.getByLabel(label, { exact: true });
+    await field.click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(text, { delay: 20 });
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue(text);
+  }
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "Nightly typed", exact: true })).toBeVisible();
+  const saves = await page.evaluate(() => window.taskFixture.calls().filter(c => c.cmd === "tasks.save"));
+  expect(saves.at(-1)?.args).toMatchObject({ task: { name: "Nightly typed", project: "Kunde B" } });
+});
