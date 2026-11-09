@@ -76,7 +76,8 @@ def make_certs(out, openssl=None, days=7):
     """
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    openssl = openssl or shutil.which('openssl')
+    git_openssl = Path(os.environ.get('ProgramFiles', r'C:\Program Files')) / 'Git' / 'usr' / 'bin' / 'openssl.exe'
+    openssl = openssl or shutil.which('openssl') or (str(git_openssl) if git_openssl.is_file() else None)
     if not openssl:
         raise RuntimeError('openssl nicht gefunden')
     with tempfile.TemporaryDirectory(prefix='q02-ca-') as tmp:

@@ -49,14 +49,15 @@ class Report:
         self.meta = meta
         self.checks = []
 
-    def check(self, ident, title, spec, fn):
+    def check(self, ident, title, spec, fn, on_error='failed', hint=''):
+        """``on_error``: Status bei einer Ausnahme; ``unbelegt`` für erwartbar unerreichbare Wege (kein Fehlschlag)."""
         started = time.monotonic()
         try:
             detail = fn()
             status = 'passed'
         except Exception as error:  # noqa: BLE001 – jeder Fehler wird protokolliert, der Lauf geht weiter
-            detail = f'{type(error).__name__}: {error}'
-            status = 'failed'
+            detail = f'{type(error).__name__}: {error}' + (f' – {hint}' if hint else '')
+            status = on_error
             with (self.output / 'errors.log').open('a', encoding='utf-8') as log:
                 log.write(f'## {ident}\n{traceback.format_exc()}\n')
         self.checks.append(dict(id=ident, title=title, spec=spec, status=status, detail=_short(detail),
@@ -403,7 +404,7 @@ def main(argv=None):
     parser.add_argument('--installer', choices=('dmg', 'nsis', 'msi'), required=True)
     parser.add_argument('--current', type=Path, required=True, help='release-assets von N')
     parser.add_argument('--next', type=Path, required=True, help='release-assets von N+1')
-    parser.add_argument('--certs', type=Path, required=True, help='ca.pem, server.pem, server.key')
+    parser.add_argument('--certs', type=Path, help='ca.pem, server.pem, server.key (Standard: im Job neu erzeugen)')
     parser.add_argument('--testsite', type=Path, required=True, help='os-testsite-Binary')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--label', default='')
@@ -426,6 +427,10 @@ def main(argv=None):
                                  runner=os.environ.get('RUNNER_NAME'), run=os.environ.get('GITHUB_RUN_ID')))
     env = clean_env()
     state = {}
+    if args.certs is None:
+        # Test-CA nur in diesem Job, außerhalb des Ergebnisordners (der als Artefakt hochgeladen wird).
+        args.certs = Path(tempfile.mkdtemp(prefix='q02-certs-'))
+        mockupdate.make_certs(args.certs)
     with mockupdate.MockUpdateServer(info, args.certs, log_file=output / 'mock-log.jsonl') as mock:
         run_matrix(ctx, report, mock, info, args, env, target, state)
     for name, source in (('app-logs', logs_dir()), ('settings', config_dir())):
@@ -605,10 +610,8 @@ def run_matrix(ctx, report, mock, info, args, env, target, state):
     report.check('Q-12', 'Zweiter App-Start innerhalb von 24 h → keine Prüfung', 'OUT-250', app_throttled)
 
     # Q-13 … Q-17 Update in der App
-    if SYSTEM == 'Windows':
-        update_windows(ctx, report, mock, info, installed, env, state)
-    else:
-        update_macos_replica(ctx, report, mock, info, installed, env, state, proxy, ca)
+    if SYSTEM == 'Darwin' or not update_windows(ctx, report, mock, info, installed, env, state):
+        update_replica(ctx, report, mock, info, installed, env, state, proxy, ca, args.installer)
 
     # Q-18 … Q-23 Nach dem Update (am ursprünglichen Ort; ein zweiter Installationsort wäre ein Befund)
     try:
@@ -683,7 +686,8 @@ def run_matrix(ctx, report, mock, info, args, env, target, state):
                      lambda: uninstall_windows(ctx, args, info, after, settings_path))
 
     for ident, title, spec, ref in MANUAL[SYSTEM]:
-        report.note(ident, title, spec, 'manual', f'Prüfprotokoll {CHECKLIST}: {ref}')
+        required = ' – Pflicht, weil Q-13 nicht erreichbar war' if state.get('w02_required') and 'W-02' in ref else ''
+        report.note(ident, title, spec, 'manual', f'Prüfprotokoll {CHECKLIST}: {ref}{required}')
 
 
 def uninstall_windows(ctx, args, info, after, settings_path):
@@ -717,6 +721,10 @@ def uninstall_windows(ctx, args, info, after, settings_path):
 
 
 def update_windows(ctx, report, mock, info, installed, env, state):
+    """Update in der echten Release-App über die WebView2-DevTools. Gibt False zurück, wenn der Steuerweg nicht
+    erreichbar ist (dann übernimmt die Nachbildung). Unbelegt: Laut M3-nightly-b („Ursache 2“) überschreibt wry die
+    Variable ``WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS``; der Debug-Port kam dort nur über ``TAURI_CONFIG`` in einem
+    Testbuild an, was bei der signierten Release-App nicht geht. Q-13 ist daher voraussichtlich ``unbelegt``."""
     vn, vn1 = info['current'], info['next']
     port = free_port()
     app = App(ctx, installed, dict(env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f'--remote-debugging-port={port}'),
@@ -728,10 +736,12 @@ def update_windows(ctx, report, mock, info, installed, env, state):
         conn = cdp.connect(port, wait=120)
         until(lambda: conn.evaluate("typeof window.__TAURI_INTERNALS__?.invoke === 'function'"), 'Tauri-IPC', 60)
         return dict(devtools_port=port, status=conn.evaluate(cdp.invoke_expression('update.status')))
-    if not report.check('Q-13', 'Release-App über WebView2-DevTools steuerbar', 'OUT-251', connect):
+    if not report.check('Q-13', 'Release-App über WebView2-DevTools steuerbar (unbelegt, wahrscheinlich nicht erreichbar)',
+                        'OUT-251', connect, on_error='unbelegt',
+                        hint=f'kein Steuerweg; Klickweg {CHECKLIST}: W-02 ist Pflicht, weiter mit Nachbildung'):
         app.stop()
-        report.note('Q-14', 'Update in der App', 'OUT-251, OUT-252', 'failed', 'ohne IPC-Zugang nicht ausführbar')
-        return
+        state['w02_required'] = True
+        return False
 
     def invoke(name, args=None, timeout=60):
         return conn.evaluate(cdp.invoke_expression(name, args), timeout=timeout)
@@ -793,7 +803,7 @@ def update_windows(ctx, report, mock, info, installed, env, state):
         pass
     app.stop()
     if not ok:
-        return
+        return True  # Steuerweg vorhanden, Update gescheitert: Befund, keine Nachbildung
 
     def restarted():
         version = until(lambda: vn1 in (cli_version(ctx, installed, env) if installed.cli.is_file() else ''),
@@ -805,18 +815,23 @@ def update_windows(ctx, report, mock, info, installed, env, state):
             stop_pid(pid)
         return dict(cli=version, processes=[p[1] for p in procs])
     report.check('Q-17', 'Installer ersetzt N durch N+1, App startet neu', 'OUT-251', restarted)
+    return True
 
 
-def update_macos_replica(ctx, report, mock, info, installed, env, state, proxy, ca):
-    """Ohne Webdriver lässt sich der Update-Dialog in der Release-App nicht bedienen (WKWebView).
-    Geprüft wird alles außer dem Klick: Download wie die App (Proxy, Test-CA, User-Agent), Signatur mit dem
-    in N eingebetteten Schlüssel und der Austausch des Bundles wie der Tauri-Updater (macOS: entpacken,
-    altes Bundle beiseite, neues an dieselbe Stelle). Der echte Klickweg ist Handprüfung M-02."""
+def update_replica(ctx, report, mock, info, installed, env, state, proxy, ca, kind):
+    """Nachbildung, wenn die Release-App nicht steuerbar ist (macOS immer, Windows ohne DevTools-Zugang).
+    Geprüft wird alles außer dem Klick und dem Updater-Code selbst: Download wie die App (Proxy, Test-CA,
+    User-Agent), Signatur mit dem in N eingebetteten Schlüssel, dann Einspielen am selben Ort – macOS wie der
+    Tauri-Updater (entpacken, altes Bundle beiseite, neues an dieselbe Stelle), Windows mit dem signierten
+    N+1-Installer still über die vorhandene Installation (``/S`` bzw. ``msiexec /i … /qn``; die Argumente des
+    Updaters sind andere). Der echte Klickweg ist Handprüfung M-02 bzw. W-02."""
     vn1 = info['next']
-    artifact = info['artifacts'][updater_target()]
+    key = 'windows-x86_64-msi' if kind == 'msi' else updater_target()
+    artifact = info['artifacts'][key]
     work = Path(tempfile.mkdtemp(prefix='q02-update-'))
-    report.note('Q-13', 'Release-App steuerbar', 'OUT-251', 'manual',
-                f'macOS-Release-Builds haben keinen WebDriver/DevTools-Zugang; Klickweg {CHECKLIST}: M-02')
+    if SYSTEM == 'Darwin':
+        report.note('Q-13', 'Release-App steuerbar', 'OUT-251', 'manual',
+                    f'macOS-Release-Builds haben keinen WebDriver/DevTools-Zugang; Klickweg {CHECKLIST}: M-02')
 
     def tampered():
         mock.use('tampered')
@@ -830,8 +845,9 @@ def update_macos_replica(ctx, report, mock, info, installed, env, state, proxy, 
             return dict(rejected=str(error), bytes=size)
         raise AssertionError('Manipuliertes Paket als gültig erkannt')
     report.check('Q-14', 'Manipuliertes Paket über den Mock geladen und abgelehnt (Nachbildung)', 'OUT-252', tampered)
-    report.note('Q-15', 'App: manipuliertes Paket in der App verworfen', 'OUT-252', 'covered',
-                'Windows-Zeilen der Matrix (echte App) und update_security::tauri_signature_rejects_one_modified_byte_and_wrong_keys')
+    report.note('Q-15', 'App: manipuliertes Paket in der App verworfen', 'OUT-252', 'unbelegt',
+                'in der Release-App nicht automatisierbar; Updater-Prüfung abgedeckt durch '
+                'update_security::tauri_signature_rejects_one_modified_byte_and_wrong_keys (Mock, kein installiertes Paket)')
 
     def replace():
         mock.use('valid')
@@ -841,6 +857,16 @@ def update_macos_replica(ctx, report, mock, info, installed, env, state, proxy, 
             raise AssertionError(f'HTTP {status}')
         comment = tauri_sig.verify(archive.read_bytes(), Path(artifact['path'] + '.sig').read_text(),
                                    state['pubkey'], vn1)
+        if SYSTEM == 'Windows':
+            if kind == 'msi':
+                result = ctx.run(['msiexec.exe', '/i', archive, '/qn', '/norestart', '/l*v',
+                                  ctx.output / 'msi-update.log'], timeout=900, check=False)
+                if result.returncode not in (0, 3010):
+                    raise RuntimeError(f'msiexec Exit {result.returncode}')
+            else:
+                ctx.run([archive, '/S'], timeout=900)
+            until(lambda: vn1 in cli_version(ctx, installed, env), 'Installer schreibt N+1', 300, 5)
+            return dict(trusted_comment=comment, installer=archive.name, key=key)
         extracted = work / 'extracted'
         extracted.mkdir()
         ctx.run(['/usr/bin/tar', '-xzf', archive, '-C', extracted])
@@ -852,12 +878,14 @@ def update_macos_replica(ctx, report, mock, info, installed, env, state, proxy, 
         shutil.move(str(apps[0]), str(macos_app()))
         shutil.rmtree(backup)
         return dict(trusted_comment=comment, archive=archive.name)
-    if not report.check('Q-16', 'Updater-Archiv laden, Signatur prüfen, Bundle austauschen (Nachbildung des Tauri-Updaters)',
-                        'OUT-251, OUT-252', replace):
+    title = ('Updater-Archiv laden, Signatur prüfen, Bundle austauschen (Nachbildung des Tauri-Updaters)'
+             if SYSTEM == 'Darwin' else
+             'N+1-Installer laden, Signatur prüfen, still über N installieren (Nachbildung, nicht der Tauri-Updater)')
+    if not report.check('Q-16', title, 'OUT-251, OUT-252', replace):
         return
 
     def restarted():
-        after = discover_macos(macos_app())
+        after = discover_macos(macos_app()) if SYSTEM == 'Darwin' else discover_windows(installed.root)
         mark = mock.mark()
         app = App(ctx, after, env, 'app-after-update.log')
         try:
@@ -869,7 +897,8 @@ def update_macos_replica(ctx, report, mock, info, installed, env, state, proxy, 
         if manifest_requests(mock.log(mark), info):
             raise AssertionError('Startprüfung trotz 24-h-Drosselung')
         return dict(gui=gui_version(ctx, after), pid=app.proc.pid)
-    report.check('Q-17', 'N+1 startet am selben Ort, Drosselung über das Update erhalten', 'OUT-251, OUT-250', restarted)
+    report.check('Q-17', 'N+1 startet am selben Ort, Drosselung über das Update erhalten (Nachbildung)',
+                 'OUT-251, OUT-250', restarted)
 
 
 MANUAL = {

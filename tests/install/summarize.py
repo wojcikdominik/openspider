@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 
-SYMBOL = {'passed': '✔', 'failed': '✘', 'manual': 'Hand', 'covered': 'anderswo', 'skipped': '–'}
+SYMBOL = {'passed': '✔', 'failed': '✘', 'manual': 'Hand', 'unbelegt': 'unbelegt', 'covered': 'anderswo', 'skipped': '–'}
 
 
 def load(folder):

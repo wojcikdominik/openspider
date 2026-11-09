@@ -1,4 +1,8 @@
-"""Tests der plattformunabhängigen Teile von update_matrix.py und crawl_rate.py (M3-Q02)."""
+"""Tests der plattformunabhängigen Teile von update_matrix.py und crawl_rate.py (M3-Q02).
+
+Testinfrastruktur der Matrix, nicht das Produkt: bewusst ohne `# spec:`-Tags. Produktprüfungen mit
+Spec-Tags: test_cli_integration.py und die Matrix-Läufe von install-test.yml.
+"""
 import io
 import json
 import os
@@ -22,7 +26,6 @@ def request(query, user_agent='OpenSpider-Updater', path=INFO['endpoints'][1]):
 
 
 class Privacy(unittest.TestCase):
-    # spec: OUT-250 [M3]
     def test_only_version_os_and_arch(self):
         ok = request(dict(version='1.0.0', os='darwin', arch='aarch64'))
         self.assertEqual(update_matrix.assert_privacy(ok, '1.0.0'), dict(version='1.0.0', os='darwin', arch='aarch64'))
@@ -43,7 +46,6 @@ class Privacy(unittest.TestCase):
 
 
 class Settings(unittest.TestCase):
-    # spec: OUT-250 [M3]
     def test_profile_settings_are_valid_toml_with_app_keys(self):
         for ca in ('/tmp/q02/ca.pem', r'C:\Users\runneradmin\AppData\Local\Temp\q02 ca\ca.pem'):
             data = tomllib.loads(update_matrix.settings_toml(43210, ca))
@@ -67,6 +69,19 @@ class ReportFile(unittest.TestCase):
             self.assertIn('| Q-2 | kaputt | OUT-252 | failed |', (Path(tmp) / 'report.md').read_text())
             self.assertEqual(len(report.failed), 1)
 
+    def test_unreachable_path_is_unbelegt_not_failed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = update_matrix.Report(Path(tmp), dict(label='t', current='1.0.0', next='1.0.1', platform='p',
+                                                          target='windows-x86_64-nsis'))
+            def no_port():
+                raise TimeoutError('kein DevTools-Ziel')
+            self.assertFalse(report.check('Q-13', 'steuerbar', 'OUT-251', no_port, on_error='unbelegt',
+                                          hint='W-02 ist Pflicht'))
+            self.assertEqual(report.failed, [])
+            self.assertEqual(report.checks[0]['status'], 'unbelegt')
+            self.assertIn('W-02 ist Pflicht', report.checks[0]['detail'])
+            self.assertEqual(summarize.SYMBOL['unbelegt'], 'unbelegt')
+
     def test_refuses_to_touch_a_developer_profile(self):
         env = {k: v for k, v in os.environ.items() if k != 'CI'}
         with mock.patch.dict(os.environ, env, clear=True), redirect_stderr(io.StringIO()) as err, \
@@ -77,8 +92,6 @@ class ReportFile(unittest.TestCase):
 
 
 class CrawlRate(unittest.TestCase):
-    # spec: OUT-250 [M3]
-    # spec: CRAWL-142 [M3]
     def test_evaluation_follows_the_measurement_recipe(self):
         passed = crawl_rate.evaluate([100, 101, 99], [97, 98, 96.5])
         self.assertEqual(passed['verdict'], 'bestanden')
