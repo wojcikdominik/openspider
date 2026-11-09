@@ -101,13 +101,27 @@ fn clippy(dir: &Path) -> (bool, String) {
     )
 }
 
+/// Versionsanforderung von `rusqlite` aus dem Workspace-`Cargo.toml` (B4-DEPSEC): Die Fixture muss dieselbe Hauptversion
+/// verwenden, sonst kollidieren zwei `libsqlite3-sys` über `links = "sqlite3"`.
+fn workspace_rusqlite_version() -> String {
+    let text = fs::read_to_string(crate_dir().join("../../Cargo.toml")).unwrap();
+    let line = text
+        .lines()
+        .find(|l| l.trim_start().starts_with("rusqlite ="))
+        .expect("rusqlite im Workspace-Cargo.toml");
+    let rest =
+        &line[line.find("version = \"").expect("rusqlite mit version") + "version = \"".len()..];
+    rest[..rest.find('"').unwrap()].to_string()
+}
+
 fn write_fixture(dir: &Path, lib: &str) {
     let os_store = crate_dir().join("../os-store");
     let manifest = format!(
         "[package]\nname = \"lint-fixture\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n\
          [lib]\npath = \"lib.rs\"\n\n[workspace]\n\n[dependencies]\n\
-         rusqlite = {{ version = \"0.37\", features = [\"bundled\", \"collation\"] }}\n\
+         rusqlite = {{ version = \"{}\", features = [\"bundled\", \"collation\"] }}\n\
          os-store = {{ path = '{}' }}\n",
+        workspace_rusqlite_version(),
         os_store.display().to_string().replace('\\', "/")
     );
     fs::write(dir.join("Cargo.toml"), manifest).unwrap();

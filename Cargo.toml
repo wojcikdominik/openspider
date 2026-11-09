@@ -55,7 +55,9 @@ url = "2"
 # os-url (P01): Anzeigeform (IDN/Non-ASCII dekodiert) und Prozent-Dekodierung der Normalisierung
 idna = "1"
 percent-encoding = "2"
-rusqlite = { version = "0.37", features = ["bundled", "collation", "functions"] }
+# B4-DEPSEC: 0.41 bündelt SQLite 3.54.1 (RUSTSEC-2026-0459). `fallible_uint` erhält die u64/usize-Umwandlung von
+# 0.37 (seit 0.38 hinter diesem Feature; Fehler statt Überlauf bei Werten über i64::MAX).
+rusqlite = { version = "0.41", features = ["bundled", "collation", "functions", "fallible_uint"] }
 clap = { version = "4", features = ["derive"] }
 axum = "0.8"
 h2 = "0.4.20"
