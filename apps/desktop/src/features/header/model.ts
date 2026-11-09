@@ -45,6 +45,17 @@ export function enterStartsCrawl(e: StartKey, browsingSuggestions: boolean): boo
   return !browsingSuggestions;
 }
 
+/**
+ * UI-113 (OS-Festlegung, Orchestrator 09.11.2026): is the address in the field another one than the start URL of the
+ * paused crawl? An empty or invalid field, or a crawl without a known start URL, counts as unchanged: Enter then
+ * resumes instead of replacing the crawl.
+ */
+export function startUrlDiffers(field: string | null, crawlStartUrl: string | null): boolean {
+  if (!field || !crawlStartUrl) return false;
+  const saved = normalizeInput(crawlStartUrl);
+  return !!saved && saved !== field;
+}
+
 export function rememberUrl(history: readonly string[], url: string): string[] {
   return [url, ...history.filter((u) => u !== url)].slice(0, 20);
 }

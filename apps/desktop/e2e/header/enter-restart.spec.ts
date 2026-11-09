@@ -72,3 +72,88 @@ test("Enter in the start URL field starts the next crawl after a finished one", 
     expect(started()).toEqual([first, second]);
   } finally { await new Promise<void>((resolve, reject) => server.close((e) => e ? reject(e) : resolve())); }
 });
+
+// spec: UI-113
+// spec: UI-003
+test("Enter in the URL field and Mod+Enter resume a paused crawl without confirmation or a new crawl; a changed URL starts anew", async ({ app, page }) => {
+  test.skip(app.mode !== "bridge", "needs os-app-bridge");
+  test.setTimeout(120_000);
+  // Mod = Ctrl: a Windows platform makes the shortcut independent of the host running the engines.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "platform", { value: "Win32" });
+    Object.defineProperty(navigator, "userAgentData", { value: { platform: "Windows" } });
+  });
+  // Endless fixture like header.spec.ts › CRAWL-001: "/" (and "/other/") link /p/0 … /p/99, every /p/<n> links /p/<n+100>.
+  const hits: string[] = [];
+  const server = createServer((req, res) => {
+    hits.push(req.url ?? "");
+    setTimeout(() => {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      const n = /^\/p\/(\d+)$/.exec(req.url ?? "");
+      res.end(req.url === "/" || req.url === "/other/"
+        ? Array.from({ length: 100 }, (_, i) => `<a href="/p/${i}">${i}</a>`).join("")
+        : `<title>Fixture page</title>${n ? `<a href="/p/${Number(n[1]) + 100}">next</a>` : ""}`);
+    }, 200);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Fixture address missing");
+  const url = `http://127.0.0.1:${address.port}/`;
+  try {
+    await app.open(page, "main");
+    await expect(page.locator("[data-shell-ready]")).toHaveAttribute("data-shell-ready", "true");
+    const header = page.getByTestId("crawl-header");
+    const field = page.getByLabel("Start URL");
+    const phase = header.locator("[data-phase]");
+    const crawlId = () => page.evaluate(async () => {
+      const { useSession } = await import(/* @vite-ignore */ String("/src/state/session.ts"));
+      return (useSession.getState() as { crawl: { crawlId: string } | null }).crawl?.crawlId ?? null;
+    });
+    const pause = async () => {
+      await header.getByRole("button", { name: "Pause", exact: true }).click();
+      await expect(phase).toHaveAttribute("data-phase", "paused", { timeout: 20_000 });
+    };
+
+    await field.click();
+    await page.keyboard.type(url);
+    await page.keyboard.press("Enter");
+    await expect(phase).toHaveAttribute("data-phase", "running", { timeout: 20_000 });
+    const id = await crawlId();
+    expect(id).toBeTruthy();
+
+    // Enter in the field with the unchanged start URL resumes.
+    await pause();
+    await field.click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await expect(phase).toHaveAttribute("data-phase", "running", { timeout: 20_000 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await crawlId()).toBe(id);
+
+    // Mod+Enter resumes as well. It is a global shortcut, so the focus leaves the text field first (UI-113 context
+    // rule: in a text field only Esc, Enter, Mod+F and F6 act globally).
+    await pause();
+    await field.click();
+    await field.blur();
+    expect(await page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+    await page.keyboard.press("Control+Enter");
+    await expect(phase).toHaveAttribute("data-phase", "running", { timeout: 20_000 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(await crawlId()).toBe(id);
+    // The start URL was fetched once: no second crawl began.
+    expect(hits.filter((h) => h === "/")).toHaveLength(1);
+
+    // A changed address takes the ordinary start path: confirmation, then a new crawl.
+    await pause();
+    await field.click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type(`${url}other/`);
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Replace", exact: true }).click();
+    await expect.poll(() => hits.includes("/other/"), { timeout: 20_000 }).toBe(true);
+    await expect.poll(crawlId, { timeout: 20_000 }).not.toBe(id);
+    await pause();
+  } finally { await new Promise<void>((resolve, reject) => server.close((e) => e ? reject(e) : resolve())); }
+});

@@ -134,6 +134,45 @@ it("leaves Enter to the suggestion list after the arrow keys and starts with the
   expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
 });
 
+// spec: UI-113
+// spec: UI-003
+it("resumes a paused crawl on Enter in the URL field and on Mod+Enter while the start URL is unchanged", async () => {
+  useSession.getState().applyTick({ ...tick, crawl: { ...tick.crawl!, phase: "paused", startUrl: "https://site.test/blog/" } });
+  render(<Header />);
+  const field = screen.getByLabelText("Start URL");
+  expect(field).toHaveValue("https://site.test/blog/");
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  await waitFor(() => expect(calls("crawl.resume")).toHaveLength(1));
+  // Mod+Enter (action crawl.start); the same address typed differently still counts as unchanged.
+  enterUrl("site.test/blog/");
+  act(() => { runAction("crawl.start"); });
+  await waitFor(() => expect(calls("crawl.resume")).toHaveLength(2));
+  // An interrupted crawl without a known start URL resumes as well; the field does not matter then.
+  act(() => useSession.getState().applyTick({ ...tick, seq: tick.seq + 1, crawl: { ...tick.crawl!, phase: "incomplete", startUrl: null } }));
+  enterUrl("other.test");
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  await waitFor(() => expect(calls("crawl.resume")).toHaveLength(3));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(calls("crawl.start")).toHaveLength(0);
+  expect(calls("crawl.validateStartUrl")).toHaveLength(0);
+});
+
+// spec: UI-113
+// spec: UI-003
+it("starts a new crawl after confirmation when the URL of a paused crawl was changed", async () => {
+  useSession.getState().applyTick({ ...tick, crawl: { ...tick.crawl!, phase: "paused", startUrl: "https://site.test/" } });
+  render(<Header />);
+  const field = screen.getByLabelText("Start URL");
+  enterUrl("next.test");
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  expect(await screen.findByRole("dialog")).toBeVisible();
+  expect(calls("crawl.start")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+  expect(calls("crawl.start")[0]?.args).toEqual({ source: { kind: "spider", url: "https://next.test/" }, scope: "domain" });
+  expect(calls("crawl.resume")).toHaveLength(0);
+});
+
 // spec: CRAWL-009 [M2]
 it("warns about a missing slash only for folder paths without a filename", () => {
   render(<Header />); enterUrl("https://site.test/blog");

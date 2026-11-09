@@ -19,7 +19,7 @@ import brandLight from "../../assets/brand/mark-light.svg";
 import brandDark from "../../assets/brand/mark-dark.svg";
 import { eventBus } from "../../ipc/events";
 import { reportError } from "../notifications/controller";
-import { enterStartsCrawl, missingFolderSlash, normalizeInput, rememberUrl, useHeader } from "./model";
+import { enterStartsCrawl, missingFolderSlash, normalizeInput, rememberUrl, startUrlDiffers, useHeader } from "./model";
 import { closeComparison, useComparison } from "../compare/model";
 import "./header.css";
 
@@ -57,7 +57,10 @@ export function Header() {
   const allowed = !busy && !pending && !foreign;
   const comparing = useComparison((c) => !!c.session);
   const shownMode: CrawlModeDto = comparing ? "compare" : mode;
-  const canStart = ["spider", "list", "apis"].includes(mode) && allowed && !running && !resumable && (mode === "spider" ? !!normalized : sitemapMode ? !!validSitemap : !!list.trim());
+  // UI-113 (OS-Festlegung, Orchestrator 09.11.2026): with a paused or interrupted crawl, Enter in the URL field and
+  // Mod+Enter resume it; only a start URL changed against that crawl's takes the ordinary start path (with confirmation).
+  const startUrlChanged = resumable && mode === "spider" && startUrlDiffers(normalized, status?.startUrl ?? null);
+  const canStart = ["spider", "list", "apis"].includes(mode) && allowed && !running && (!resumable || startUrlChanged) && (mode === "spider" ? !!normalized : sitemapMode ? !!validSitemap : !!list.trim());
 
   useEffect(() => {
     let live = true;
@@ -132,6 +135,7 @@ export function Header() {
   }
 
   function requestStart() {
+    if (resumable && !startUrlChanged) return pauseResume();
     if (!canStart) return false;
     void perform(async () => {
       let request: StartRequest;
