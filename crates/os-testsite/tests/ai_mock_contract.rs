@@ -695,6 +695,9 @@ async fn multipart_upload_and_token_counter_use_real_provider_shapes() {
     assert_eq!(counted["input_tokens"], 87);
     let r = value(&call(&s, "x", "POST", "/openai/v1/responses", "refusal", "{}").await);
     assert_eq!(r["usage"]["output_tokens"], 4);
+    let ollama = value(&call(&s, "x", "POST", "/ollama/api/chat", "refusal", "{}").await);
+    assert_eq!(ollama["message"]["content"], "Fixture refusal");
+    assert_eq!(ollama["eval_count"], 4);
     let r = value(
         &call(
             &s,

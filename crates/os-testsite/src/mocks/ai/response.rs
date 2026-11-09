@@ -295,7 +295,7 @@ pub(super) fn success(
             json!({"id":"chatcmpl_mock","object":"chat.completion","model":input["model"],"choices":[{"index":0,"message":message,"finish_reason":if refusal {"content_filter"} else {"stop"}}],"usage":{"prompt_tokens":tokens,"completion_tokens":out_tokens,"total_tokens":tokens+out_tokens}})
         }
         "ollama" => {
-            json!({"model":input["model"],"message":{"role":"assistant","content":output},"done":true,"prompt_eval_count":tokens,"eval_count":out_tokens})
+            json!({"model":input["model"],"message":{"role":"assistant","content":if refusal { "Fixture refusal" } else { &output }},"done":true,"prompt_eval_count":tokens,"eval_count":out_tokens})
         }
         _ if path.ends_with("decisions") => {
             let questions = input
