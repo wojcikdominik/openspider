@@ -124,6 +124,8 @@ export function Notifications() {
       {current?.args.status != null && <p>{t("notify-status", { status: String(current.args.status) })}</p>}
       {current?.args.path != null && <p>{String(current.args.path)} · {t("notify-free", { free: String(current.args.freeBytes ?? "–") })}</p>}
       {current?.args.target != null && <p>{String(current.args.target)}</p>}
+      {current?.code === "start-robots" && typeof current.args.url === "string" && <p data-testid="notify-robots-file">{t("notify-robots-file", { url: current.args.url })}</p>}
+      {/* UI-019: only points to the setting; the crawl configuration stays unchanged. */}
       {current?.code === "start-robots" && <Button onPress={() => openConfig({ anchor: "robots.mode" })}>{t("notify-robots-setting")}</Button>}
       {httpsFailure && <Button isDisabled={busy} onPress={() => {
         const startUrl = String(current.args.startUrl);

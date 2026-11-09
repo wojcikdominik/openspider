@@ -4,6 +4,7 @@ notify-details = Technische Details
 notify-status = Statuscode: { $status }
 notify-free = Freier Speicherplatz: { $free } Byte
 notify-robots-setting = Einstellung „robots.txt ignorieren“ öffnen
+notify-robots-file = Sperrende robots.txt: { $url }
 notify-try-http = HTTP-Adresse übernehmen (Start danach bestätigen)
 notify-log = Log öffnen
 notify-copy = Diagnose kopieren

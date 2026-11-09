@@ -62,9 +62,9 @@ export interface Site {
   stop(): Promise<void>;
 }
 
-/** Startet den Fixture-Server `os-testsite ui/fx-ui-basic` (25 interne URLs, 2 externe, Redirect, 404, noindex). */
-export async function startSite(): Promise<Site> {
-  const child = spawn(toolBinary("os-testsite"), ["ui/fx-ui-basic"], { stdio: ["ignore", "pipe", "inherit"] });
+/** Startet den Fixture-Server `os-testsite ui/fx-ui-basic` (25 interne URLs, 2 externe, Redirect, 404, noindex) bzw. das genannte Szenario. */
+export async function startSite(scenario = "ui/fx-ui-basic"): Promise<Site> {
+  const child = spawn(toolBinary("os-testsite"), [scenario], { stdio: ["ignore", "pipe", "inherit"] });
   const line = await new Promise<string>((ok, fail) => {
     let buf = "";
     const timer = setTimeout(() => fail(new Error("os-testsite meldet keine Adresse")), 20_000);
