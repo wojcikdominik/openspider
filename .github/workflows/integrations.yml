@@ -8,6 +8,8 @@ on:
       - crates/os-cli/**
       - tests/fixtures/out-basic-site/**
       - tests/fixtures/out-redirects/**
+      - Cargo.lock
+      - Cargo.toml
       - .github/workflows/integrations.yml
   pull_request:
     paths:
@@ -16,6 +18,8 @@ on:
       - crates/os-cli/**
       - tests/fixtures/out-basic-site/**
       - tests/fixtures/out-redirects/**
+      - Cargo.lock
+      - Cargo.toml
       - .github/workflows/integrations.yml
   workflow_dispatch:
 
