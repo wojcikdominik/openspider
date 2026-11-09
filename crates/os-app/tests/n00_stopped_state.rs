@@ -5,8 +5,14 @@
 #[path = "session_common.rs"]
 mod common;
 use common::*;
+use os_app::runtime::lifecycle_bus::CrawlEvent;
 use serde_json::json;
 use std::path::Path;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use std::time::Duration;
 
 /// Chain of pages that can only end after `CHAIN` × 50 ms, far beyond the stop (B3-FLAKES lesson: a stop or a
 /// pause must never race the natural end of the fixture).
@@ -22,6 +28,35 @@ fn chain_site() -> os_engine::testing::SimSite {
         site = site.page(&url, &format!("<a href='/p/{}'>weiter</a>", n + 1));
     }
     site
+}
+
+/// Set once `settle` has published the end status of a crawl that ended on its own (`CrawlEvent::Completed`).
+/// The session state turns `Completed` earlier, before the final status is written and published, so the state
+/// alone does not say that the status can be read (B4-FLAKY; same lesson as B4-STARTFIX `ends`).
+fn ended_on_its_own(app: &os_app::App) -> Arc<AtomicBool> {
+    let flag = Arc::new(AtomicBool::new(false));
+    let seen = flag.clone();
+    app.crawl_events().subscribe(Box::new(move |_, event| {
+        if matches!(event, CrawlEvent::Completed(_)) {
+            seen.store(true, Ordering::SeqCst);
+        }
+    }));
+    flag
+}
+
+/// Polls like [`completed`] until the end status has been published (event from [`ended_on_its_own`]).
+async fn settled(app: &os_app::App, ended: &AtomicBool) {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            os_app::session::poll(app).await.unwrap();
+            if ended.load(Ordering::SeqCst) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
 }
 
 async fn status_json(app: &os_app::App) -> serde_json::Value {
@@ -84,6 +119,7 @@ async fn a_stopped_crawl_reports_stopped_live_and_after_reopening_in_a_restarted
 async fn a_crawl_that_ends_on_its_own_reports_queue_empty_not_stopped() {
     let dir = tempfile::tempdir().unwrap();
     let app = app(dir.path());
+    let ended = ended_on_its_own(&app);
     let fetch = os_engine::testing::SimFetcher::new(
         os_engine::testing::SimSite::new()
             .page("https://fixture.test/", "<a href='/a'>A</a>")
@@ -98,6 +134,8 @@ async fn a_crawl_that_ends_on_its_own_reports_queue_empty_not_stopped() {
     )
     .await
     .unwrap();
+    // B4-FLAKY: wait for the published end status, not only for the session state (see `ended_on_its_own`).
+    settled(&app, &ended).await;
     completed(&app).await;
     let status = status_json(&app).await;
     assert_eq!(status["phase"], "completed");
