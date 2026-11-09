@@ -599,26 +599,48 @@ async fn notify_start_unreachable(app: &App, s: &SessionInfo) -> String {
     cause
 }
 
+/// Metadatum: Start-URL, für die die Meldung `start-robots` dieses Crawls schon erschien (UI-019, höchstens einmal je Crawl und
+/// Start-URL; OS-Festlegung 09.11.2026).
+const START_ROBOTS_NOTICE_META: &str = "notice.start_robots";
+
 /// UI-019: Sperrt robots.txt (`Disallow`) die Start-URL, endet der Lauf als „Abgeschlossen“ (CRAWL-128), aber nicht als stilles
-/// „0 URLs“: Die Meldung `start-robots` nennt die Sperre; der Dialog verweist auf die Einstellung, ändert sie aber nicht.
+/// „0 URLs“: Die Meldung `start-robots` nennt die Sperre; der Dialog verweist auf die Einstellung, ändert sie aber nicht. Je Crawl
+/// und Start-URL erscheint sie höchstens einmal, auch nicht erneut nach „URLs hinzufügen“ (Merker in der Crawl-Datei).
 async fn notify_start_robots(app: &App, s: &SessionInfo) {
     let found = app
         .read_pool()
         .run(s.key.clone(), |f, _| {
-            Ok(f.meta()?.start_url.and_then(|start| {
-                os_engine::start_robots_block(f, &start).map(|block| (start, block))
-            }))
+            let Some(start) = f.meta()?.start_url else {
+                return Ok(None);
+            };
+            if f.get_meta(START_ROBOTS_NOTICE_META)?.as_deref() == Some(start.as_str()) {
+                return Ok(None);
+            }
+            Ok(os_engine::start_robots_block(f, &start).map(|block| (start, block)))
         })
         .await;
     match found {
-        Ok(Some((start_url, block))) => app.push_notice(start_robots_notice(&start_url, &block)),
+        Ok(Some((start_url, block))) => {
+            app.push_notice(start_robots_notice(&start_url, &block));
+            let marker = start_url.clone();
+            if let Err(error) = app
+                .write_queue()
+                .submit(s.key.clone(), move |conn| {
+                    os_store::meta::set_meta(conn, START_ROBOTS_NOTICE_META, &marker)
+                })
+                .await
+            {
+                tracing::warn!(?error, "Merker der robots-Meldung nicht speicherbar");
+            }
+        }
         Ok(None) => {}
         Err(error) => tracing::warn!(?error, "Sperre der Start-URL per robots.txt nicht lesbar"),
     }
 }
 
 /// Meldung zur per robots.txt gesperrten Start-URL (UI-019): Code `start-robots`, Stufe Warnung (kein Fehlschlag, CRAWL-128),
-/// dazu Start-URL, robots.txt-URL (`url`) und die treffende Zeile (`line`).
+/// dazu Start-URL, robots.txt-URL (`url`), Zeilennummer (`lineNumber`) und Regeltext (`line`) der sperrenden Zeile, ohne
+/// sprachabhängigen Präfix (die Oberfläche formuliert per i18n).
 pub fn start_robots_notice(start_url: &str, block: &os_engine::StartRobotsBlock) -> Notice {
     Notice {
         level: NoticeLevel::Warning,
@@ -626,7 +648,8 @@ pub fn start_robots_notice(start_url: &str, block: &os_engine::StartRobotsBlock)
         args: [
             ("startUrl".into(), serde_json::json!(start_url)),
             ("url".into(), serde_json::json!(block.robots_url)),
-            ("line".into(), serde_json::json!(block.matched_line)),
+            ("lineNumber".into(), serde_json::json!(block.line_number)),
+            ("line".into(), serde_json::json!(block.rule)),
         ]
         .into(),
     }

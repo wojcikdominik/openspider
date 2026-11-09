@@ -44,6 +44,11 @@ async fn crawl(app: &App, start_url: &str, cfg: CrawlConfig) -> (CrawlState, Vec
     os_app::session::control::start_with_fetcher(app, ctx(), request(start_url.into()), cfg, fetch)
         .await
         .unwrap();
+    settled(app).await
+}
+
+/// Fragt die App ab, bis `settle` den Lauf abgeschlossen hat, und sammelt die Meldungen.
+async fn settled(app: &App) -> (CrawlState, Vec<Notice>) {
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut notices = Vec::new();
     loop {
@@ -97,15 +102,42 @@ async fn a_start_url_blocked_by_robots_completes_and_reports_the_block() {
     assert_eq!(n.level, NoticeLevel::Warning);
     assert_eq!(n.args["startUrl"], format!("{base}/").as_str());
     assert_eq!(n.args["url"], format!("{base}/robots.txt").as_str());
-    assert!(
-        n.args["line"]
-            .as_str()
-            .is_some_and(|l| l.ends_with("Disallow: /")),
-        "{n:?}"
-    );
+    // Zeilennummer und Regeltext getrennt, ohne sprachabhängigen Präfix (die Oberfläche formuliert).
+    assert_eq!(n.args["lineNumber"], 2, "{n:?}");
+    assert_eq!(n.args["line"], "Disallow: /", "{n:?}");
     // Nur ein Hinweis: die Konfiguration des Crawls bleibt „robots.txt beachten“.
     let session = app.sessions().current(&window()).unwrap();
     assert_eq!(session.config.robots.mode, RobotsMode::Respect);
+}
+
+// Je Crawl und Start-URL höchstens einmal (OS-Festlegung 09.11.2026): „URLs hinzufügen“ setzt denselben Crawl fort und endet
+// erneut mit der gesperrten Start-URL, die Meldung erscheint aber nicht noch einmal.
+// spec: UI-019
+// spec: CRAWL-131
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_robots_dialog_appears_once_per_crawl_also_after_adding_urls() {
+    let site = os_testsite::TestSite::start("ui/fx-ui-robots-start")
+        .await
+        .unwrap();
+    let base = site.base_url();
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let (state, notices) = crawl(&app, &format!("{base}/"), config(RobotsMode::Respect)).await;
+    assert_eq!(state, CrawlState::Completed);
+    assert_eq!(start_notices(&notices).len(), 1, "{notices:?}");
+
+    let op = call(
+        &app,
+        "crawl.addUrls",
+        json!({"urls":[format!("{base}/page.html")]}),
+    )
+    .await;
+    let status = app.ops().wait(op["opId"].as_str().unwrap()).await.unwrap();
+    assert!(status.error.is_none(), "{:?}", status.error);
+    assert_eq!(status.result.unwrap(), json!({"added":1,"skipped":0}));
+    let (state, notices) = settled(&app).await;
+    assert_eq!(state, CrawlState::Completed);
+    assert!(start_notices(&notices).is_empty(), "{notices:?}");
 }
 
 // Mit „robots.txt ignorieren“ wird die Start-URL abgerufen; es gibt keine Startmeldung.
@@ -137,14 +169,16 @@ fn the_robots_notice_carries_start_url_robots_url_and_line() {
         "https://site.test/",
         &os_engine::StartRobotsBlock {
             robots_url: "https://site.test/robots.txt".into(),
-            matched_line: Some("Zeile 2: Disallow: /".into()),
+            line_number: Some(2),
+            rule: Some("Disallow: /".into()),
         },
     );
     assert_eq!(n.code, "start-robots");
     assert_eq!(n.level, NoticeLevel::Warning);
     assert_eq!(n.args["startUrl"], "https://site.test/");
     assert_eq!(n.args["url"], "https://site.test/robots.txt");
-    assert_eq!(n.args["line"], "Zeile 2: Disallow: /");
+    assert_eq!(n.args["lineNumber"], 2);
+    assert_eq!(n.args["line"], "Disallow: /");
 }
 
 /// App mit Mail-Konto gegen den SMTP-Mock der Testsite und den Benachrichtigungs-Einstellungen.
