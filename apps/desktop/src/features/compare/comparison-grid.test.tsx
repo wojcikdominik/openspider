@@ -165,6 +165,7 @@ it("applies the ordinary column configuration of the tab and persists changes ma
 });
 
 // spec: OUT-142
+// spec: OUT-151
 it("falls back to the tab's default columns when the core rejects the ordinary projection", async () => {
   ordinaryCore(["Address", "Custom Extraction 9", "Status Code"]);
   fixture.core.handlers.set("catalog.columns", () => [...internalCatalog, { ...internalCatalog[1]!, key: "Custom Extraction 9", defaultVisible: false }]);
@@ -175,6 +176,16 @@ it("falls back to the tab's default columns when the core rejects the ordinary p
   const grid = await screen.findByRole("grid", { name: "Comparison table" });
   await waitFor(() => expect(within(grid).getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Address", "Comparison Status", "Status Code"]));
   expect(screen.queryByRole("alert")).toBeNull();
+  // A2 (B4-CMPUI2): the CSV export uses the projection the core accepted (the defaults), not the rejected one.
+  const original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  const created = vi.fn(() => "blob:comparison"); URL.createObjectURL = created; URL.revokeObjectURL = vi.fn();
+  const before = fixture.core.calls.filter(c => c.cmd === "view.rows").length;
+  fireEvent.click(screen.getByRole("button", { name: "Export view (CSV)" }));
+  await waitFor(() => expect(created).toHaveBeenCalledTimes(1));
+  const exportCalls = fixture.core.calls.filter(c => c.cmd === "view.rows").slice(before);
+  expect(exportCalls.map(c => (c.args as { columns: string[] }).columns)).toEqual([[]]);
+  expect(screen.queryByRole("alert")).toBeNull();
+  URL.createObjectURL = original.create; URL.revokeObjectURL = original.revoke;
 });
 
 // spec: CRAWL-144

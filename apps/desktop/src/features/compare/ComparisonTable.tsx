@@ -42,7 +42,7 @@ export function ComparisonTable() {
   const filters=changed ? ["All",...(state.session?.elements ?? []).map(e=>ELEMENT_FILTERS[e] ?? e)].map(f=>({id:f,label:elementLabel(t,f)}))
     : (state.snapshot?.overview.filter(r=>r.tab===state.query.tab) ?? []).map(r=>({id:r.filter,label:rowFilterLabel(t,r)}));
   const options=filters.length ? filters : [{id:"All",label:rowFilterLabel(t,{filter:"All",label:"All"})}];
-  const exportView=()=>{setExporting(true);void downloadComparison(state.query,"comparison.csv",changed ? [] : projection).catch(setError).finally(()=>setExporting(false));};
+  const exportView=()=>{setExporting(true);void downloadComparison(state.query,"comparison.csv",changed ? [] : source?.projection ?? []).catch(setError).finally(()=>setExporting(false));};
   // UI-004: the ordinary tab bar controls this panel (`aria-controls="data-panel"`), as it controls the ordinary table.
   const panelTab=useTabs(s=>s.view==="tabs" && s.active===state.query.tab && s.catalog.some(tab=>tab.id===s.active) ? s.active : null);
   return <section className="os-compare-table" role="tabpanel" id="data-panel" aria-labelledby={panelTab ? tabId("data-panel", panelTab) : undefined} aria-label={panelTab ? undefined : t("compare-table")}>
@@ -68,5 +68,6 @@ export function ComparisonTable() {
 /** „Übersicht“ of the grouped navigation during a comparison (UI-150: „Im Vergleichsmodus nicht verfügbar“). */
 export function ComparisonOverviewUnavailable() {
   const t=useT();
-  return <section className="os-compare-table" aria-label={t("compare-table")}><p role="status" className="os-compare-message">{t("compare-overview-unavailable")}</p></section>;
+  // A8: the tab bar's `aria-controls="data-panel"` must point at an element in this view as well.
+  return <section className="os-compare-table" id="data-panel" aria-label={t("compare-table")}><p role="status" className="os-compare-message">{t("compare-overview-unavailable")}</p></section>;
 }

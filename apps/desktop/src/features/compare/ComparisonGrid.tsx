@@ -47,6 +47,8 @@ export class ComparisonSource extends ViewDataSource {
   readonly side: Side;
   readonly filtersEnabled: boolean;
   readonly contentAvailable?: boolean;
+  /** The ordinary projection the core accepted for this source (empty = the tab's default columns); exports use the same. */
+  projection?: string[];
   private readonly known: { rows: Map<number, number>; partners: Map<number, number | null> };
   constructor(first: ComparisonPage, load: LoadPage, catalogColumns?: ColumnMeta[]) {
     const known = { rows: new Map<number, number>(), partners: new Map<number, number | null>() };
@@ -109,16 +111,16 @@ export function useComparisonSource(query: ComparisonQuery, revision: number, op
     setSource(undefined); setError(undefined);
     const loader = (projection: string[]): LoadPage => (offset, limit, signal) => comparisonRows(query, offset, signal, limit, projection);
     const catalogColumns = meta ? Promise.resolve(meta) : catalogTab ? catalog.columns({ tab: catalogTab }, controller.signal).catch(() => undefined) : Promise.resolve(undefined);
-    const first = async (): Promise<[ComparisonPage, LoadPage]> => {
-      try { const load = loader(columns); return [await load(0, BLOCK_SIZE, controller.signal), load]; }
+    const first = async (): Promise<[ComparisonPage, LoadPage, string[]]> => {
+      try { const load = loader(columns); return [await load(0, BLOCK_SIZE, controller.signal), load, columns]; }
       catch (e) {
         if (!columns.length || controller.signal.aborted) throw e;
-        const load = loader([]); return [await load(0, BLOCK_SIZE, controller.signal), load];
+        const load = loader([]); return [await load(0, BLOCK_SIZE, controller.signal), load, []];
       }
     };
-    void Promise.all([first(), catalogColumns]).then(([[page, load], known]) => {
+    void Promise.all([first(), catalogColumns]).then(([[page, load, projection], known]) => {
       if (controller.signal.aborted) return;
-      created = new ComparisonSource(page, load, known); setSource(created);
+      created = new ComparisonSource(page, load, known); created.projection = projection; setSource(created);
     }).catch(e => { if (!controller.signal.aborted) setError(e); });
     return () => { controller.abort(); void created?.dispose(); };
   }, [key]);
