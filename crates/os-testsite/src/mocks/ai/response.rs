@@ -167,14 +167,34 @@ pub(super) async fn scenario(
     }
     Some(r)
 }
-fn models(provider: &str) -> Value {
+fn models(provider: &str, host: &str) -> Value {
     match provider {
         "anthropic" => {
             let caps = |max: bool| json!({"structured_outputs":{"supported":true},"image_input":{"supported":true},"batch":{"supported":true},"effort":{"supported":true,"low":{"supported":true},"medium":{"supported":true},"high":{"supported":true},"max":{"supported":max}}});
             json!({"data":[{"id":"mock-claude","display_name":"A","max_input_tokens":200000,"max_tokens":8192,"capabilities":caps(true)}, {"id":"mock-claude-b","display_name":"B","capabilities":caps(false)}, {"id":"mock-claude-c","display_name":"C","capabilities":{"effort":{"supported":false},"structured_outputs":{"supported":false},"image_input":{"supported":false},"batch":{"supported":false}}}, {"id":"mock-claude-d","display_name":"D"}],"has_more":false})
         }
         "openrouter" => {
-            json!({"data":[{"id":"mock/text","name":"Mock text","context_length":200000,"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"supported_parameters":["response_format","structured_outputs"],"pricing":{"prompt":"0.000001","completion":"0.000005","request":"0","image":"0"}}, {"id":"mock/vision","name":"Mock vision","architecture":{"input_modalities":["text","image"],"output_modalities":["text"]},"supported_parameters":["response_format","structured_outputs"],"pricing":{"prompt":"0.000001","completion":"0.000005","request":"0.001","image":"0.002"}}, {"id":"mock/embedding","architecture":{"input_modalities":["text"],"output_modalities":["embeddings"]},"supported_parameters":[],"pricing":{"prompt":"0.000001","completion":"0"}}]})
+            let mut data = vec![
+                json!({"id":"mock/text","name":"Mock text","context_length":200000,"architecture":{"input_modalities":["text"],"output_modalities":["text"]},"supported_parameters":["response_format","structured_outputs"],"pricing":{"prompt":"0.000001","completion":"0.000005","request":"0","image":"0"}}),
+                json!({"id":"mock/vision","name":"Mock vision","architecture":{"input_modalities":["text","image"],"output_modalities":["text"]},"supported_parameters":["response_format","structured_outputs"],"pricing":{"prompt":"0.000001","completion":"0.000005","request":"0.001","image":"0.002"}}),
+                json!({"id":"mock/embedding","architecture":{"input_modalities":["text"],"output_modalities":["embeddings"]},"supported_parameters":[],"pricing":{"prompt":"0.000001","completion":"0"}}),
+            ];
+            for name in [
+                "text-small",
+                "text-large",
+                "global-a",
+                "global-b",
+                "global-c",
+            ] {
+                let mut model = data[0].clone();
+                model["id"] = json!(format!("mock/{name}"));
+                model["name"] = json!(name);
+                data.push(model);
+            }
+            if host.starts_with("eu.") {
+                data.truncate(5);
+            }
+            json!({"data":data})
         }
         "ollama" => {
             json!({"models":[{"name":"mock-llama","model":"mock-llama","details":{"family":"llama","parameter_size":"8B","quantization_level":"Q4_0"}}]})
@@ -187,6 +207,7 @@ fn models(provider: &str) -> Value {
 pub(super) fn success(
     book: &AnswerBook,
     provider: &str,
+    host: &str,
     method: &Method,
     path: &str,
     input: &Value,
@@ -231,7 +252,7 @@ pub(super) fn success(
         .into_response();
     }
     if path.ends_with("models") || path.ends_with("tags") {
-        return Json(models(provider)).into_response();
+        return Json(models(provider, host)).into_response();
     }
     if path.ends_with("key") {
         return Json(json!({"data":{"label":"fixture","limit":100,"limit_remaining":90,"usage":10,"is_free_tier":false,"rate_limit":{"requests":100,"interval":"1m"}}})).into_response();

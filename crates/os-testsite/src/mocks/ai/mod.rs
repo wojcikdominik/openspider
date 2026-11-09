@@ -254,6 +254,7 @@ async fn handle(
     response::success(
         &mock.answers,
         provider,
+        &host,
         &method,
         uri.path(),
         &input,

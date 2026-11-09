@@ -716,3 +716,25 @@ async fn model_catalog_changes_are_visible_without_restarting_the_mock() {
     mock.set_models("anthropic", catalog.clone());
     assert_eq!(value(&call(&s, "x", "GET", path, "ok", "").await), catalog);
 }
+
+// spec: INTEG-019 [M4]
+#[tokio::test]
+async fn openrouter_eu_catalog_is_a_five_model_subset_of_eight_global_models() {
+    let (mock, s) = server().await;
+    let path = "/openrouter/api/v1/models";
+    let global = value(&call(&s, "openrouter.mock.test", "GET", path, "ok", "").await);
+    let eu = value(&call(&s, "eu.openrouter.mock.test", "GET", path, "ok", "").await);
+    let global = global["data"].as_array().unwrap();
+    let eu = eu["data"].as_array().unwrap();
+    assert_eq!(global.len(), 8);
+    assert_eq!(eu.len(), 5);
+    assert!(eu.iter().all(|model| global.contains(model)));
+    let vision = eu
+        .iter()
+        .find(|model| model["id"] == "mock/vision")
+        .unwrap();
+    assert_eq!(vision["pricing"]["request"], "0.001");
+    assert_eq!(vision["pricing"]["image"], "0.002");
+    assert_eq!(mock.requests()[0].host, "openrouter.mock.test");
+    assert_eq!(mock.requests()[1].host, "eu.openrouter.mock.test");
+}

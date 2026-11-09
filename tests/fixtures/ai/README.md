@@ -27,6 +27,8 @@ Mock-Host und den ephemeren Port; so bleiben globale und EU-Hosts im Log getrenn
 Der Resolver-Vertrag ist in `crates/os-fetch/tests/ai_mock_hosts.rs` geprüft.
 `AiMock::set_models(provider, payload)` ersetzt eine Modellliste zur Laufzeit,
 um das erneute Laden geänderter Fähigkeiten oder Preise zu prüfen.
+Die Standardliste von OpenRouter enthält acht Modelle; am EU-Host liefert der
+Mock fünf davon mit denselben Preisen (einschließlich des Vision-Modells).
 Produktive Adapter und die Freigabe von Overrides in Release-Builds besitzen die
 jeweiligen Fachpakete. Gemini-Testserver besitzt M4-K03.
 
