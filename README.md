@@ -197,17 +197,19 @@ openspider --help export-tabs            # all valid tab:filter names
 
 ## Use it from your AI agent
 
-OpenSpider prints ready-to-paste MCP configurations for popular clients:
+The desktop app connects Claude Desktop, Claude Code, Codex and Cursor with one click (menu **MCP**). It backs up the client's config file, adds only its own `openspider` entry and saves your permission settings in the same step. On a server or without the app, the CLI prints a ready-to-paste configuration:
 
 ```bash
 openspider mcp --print-config claude-code     # also: claude-desktop, codex, cursor
 ```
 
+Agents can only read by default. Starting crawls requires the permission **Agent may start crawls** in the connect dialog (or `--allow read,crawl` on the CLI); tools that write files or use paid services have to be enabled separately.
+
 Then just ask your agent, for example:
 
 > *“List my OpenSpider crawls, show the overview of the latest one and explain the five most important issues with example URLs.”*
 
-Read-only tools available today: `list_crawls`, `crawl_overview`, `list_issues`, `query_urls`, `url_details`. Crawl control, a Claude Code plugin with slash commands (`/openspider-audit`, `/openspider-compare`, `/openspider-issues`) and a skill follow in the next milestone.
+Read tools: `list_crawls`, `crawl_overview`, `list_issues`, `query_urls`, `url_details`. With the crawl permission an agent can also use `start_crawl` and `crawl_status`; from beta.4 on, `pause_crawl`, `resume_crawl` and `stop_crawl` are added. A Claude Code plugin with slash commands (`/openspider-audit`, `/openspider-compare`, `/openspider-issues`) and a skill follow in the next milestone.
 
 ## Your crawl is a database
 
