@@ -1,7 +1,7 @@
-import { loadRecent, updateRecent } from "../help/recent";
+import { loadRecent, onRecentChanged, updateRecent } from "../help/recent";
 import { openComparison, useComparison } from "../compare/model";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useT, i18n, currentLanguage } from "../../i18n";
+import { useT, useFormat, i18n, currentLanguage } from "../../i18n";
 import { crawl } from "../../ipc/crawl";
 import { crawls } from "../../ipc/crawls";
 import { projects } from "../../ipc/projects";
@@ -13,12 +13,14 @@ import type { ProjectInfo } from "../../ipc/gen/ProjectInfo";
 import type { OpHandle } from "../../ipc/gen/OpHandle";
 import type { OpenCrawlArgs } from "../../ipc/gen/OpenCrawlArgs";
 import { useSession } from "../../state/session";
-import { useAction, registerAction } from "../../ui/actions";
+import { useAction } from "../../ui/actions";
 import { registerMenuContributions } from "../../ui/menu/registry";
 import type { MenuEntry } from "../../ui/primitives/Menu";
 import { Banner, Button, ContextMenu, Dialog, DialogFooter, ProgressBar, Tree } from "../../ui/primitives";
+import { fileName, recentCrawlTitle, splitPath } from "../../ui/recentCrawl";
+import type { RecentEntry } from "../../ui/menu/contributions/main";
 import { nativeCrawlDesktop, type CrawlDesktop, type RepairResult } from "./desktop";
-import { cell, columns, openCrawls, permissions, phaseKey, readRecent, sortRows, useCrawlsDialog, writeRecent, type Column } from "./model";
+import { cell, columns, openCrawls, permissions, phaseKey, sortRows, takeLegacyRecent, useCrawlsDialog, writeRecent, type Column } from "./model";
 import "./crawls.css";
 
 type Form = { kind: "rename" | "move" | "projectCreate" | "projectRename"; ids: string[]; projectId?: string; value: string; error?: string };
@@ -43,8 +45,16 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<{ text: string; path?: string; kind?: "info" | "error" } | null>(null);
-  const [recent, setRecent] = useState(readRecent);
+  // CRAWL-127 (OS-Festlegung 09.11.2026): the one recent list lives in the UI state (`help/recent.ts`, also File →
+  // Recently opened); its labels come from one index listing. Open management rows take precedence (fresh names).
+  const [recent, setRecent] = useState<RecentEntry[]>([]);
+  const lang = useFormat().lang;
   const [form, setForm] = useState<Form | null>(null);
+  const formInput = useRef<HTMLInputElement>(null);
+  const formKind = form?.kind ?? null;
+  // B4-PROJDLG: native `autoFocus` fires while the form's focus scope is not registered yet, so the dialog took focus
+  // back and typing right after opening went nowhere. Focus (and select) the field once the form is mounted instead.
+  useEffect(() => { if (formKind) { formInput.current?.focus(); formInput.current?.select(); } }, [formKind]);
   const [deletion, setDeletion] = useState<CrawlListing[] | null>(null);
   const [pendingOpen, setPendingOpen] = useState<OpenRequest | null>(null);
   const [active, setActive] = useState<{ handle: OpHandle; repair: boolean } | null>(null);
@@ -53,12 +63,42 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   const currentCrawl = useSession(s => s.crawl?.crawlId);
   useEffect(() => {
     let live = true;
-    void loadRecent().then(entries => { if (live) setRecent(writeRecent([...entries.map(e => e.path), ...readRecent()])); }).catch(() => undefined);
-    return () => { live = false; };
-  }, [currentCrawl, phase]);
+    const reload = () => loadRecent().then(entries => { if (live) setRecent(entries); }).catch(() => undefined);
+    void reload();
+    const off = onRecentChanged(() => { void reload(); });
+    return () => { live = false; off(); };
+  }, [currentCrawl, phase, lang]);
+  // Entries of the former local list (beta.3) are taken over once, after the entries already in the UI state.
+  useEffect(() => {
+    const legacy = takeLegacyRecent();
+    if (!legacy.length) return;
+    void updateRecent(entries => [...entries, ...legacy.filter(path => !entries.some(entry => entry.path === path)).map(path => ({ path }))])
+      .catch(() => { writeRecent(legacy); });
+  }, []);
+  const recentTitle = useMemo(() => {
+    const index = new Map(rows.map(row => [row.crawl.file, row] as const));
+    return ({ path, label }: RecentEntry) => {
+      const row = index.get(path);
+      return (row && recentCrawlTitle({ name: row.crawl.name, startUrl: row.startUrl, startedAt: row.crawl.startedAt }, lang)) ?? label;
+    };
+  }, [rows, lang]);
   const [cancelling, setCancelling] = useState(false);
   const requestVersion = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  // OUT-228: Mod+F focuses the search anywhere in the open management dialog, also while the dialog itself has focus
+  // (right after opening). Not inside a form opened on top of it (its own modal).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
+      const dialog = searchRef.current?.closest('[role="dialog"]');
+      if (!dialog || !(e.target instanceof Node) || !dialog.contains(e.target)) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
   const anchor = useRef<string | null>(null);
   const running = !!active && (!status || status.state === "running");
   const disabled = busy || running || loading;
@@ -76,7 +116,15 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
     };
     // Restore before paint/key input; a deferred animation frame can lose Escape on WebKit.
     keepFocus();
-    const onFocusOut = () => queueMicrotask(keepFocus);
+    // B4-PROJDLG: only when focus really falls to nothing. A click into a field fires `focusout` with the field as
+    // `relatedTarget` before the field is focused; a native click runs this microtask in between, and refocusing the
+    // dialog there cancels the click's focus, so typing never reached the field. An element removed together with a
+    // closing form is left to the form's focus restoration (back to its trigger).
+    const onFocusOut = (e: FocusEvent) => {
+      if (e.relatedTarget) return;
+      const target = e.target;
+      queueMicrotask(() => { if (!(target instanceof Node) || target.isConnected) keepFocus(); });
+    };
     document.addEventListener("focusout", onFocusOut);
     return () => { mounted = false; document.removeEventListener("focusout", onFocusOut); };
   }, [open, disabled]);
@@ -133,7 +181,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   const openNow = async ({ args, resume }: OpenRequest) => {
     try {
       const summary = await crawl.open(args);
-      setRecent(writeRecent([summary.file, ...readRecent()]));
+      void updateRecent(entries => [{ path: summary.file }, ...entries.filter(entry => entry.path !== summary.file)]).catch(() => undefined);
       if (resume) await crawl.resume();
       useCrawlsDialog.setState({ open: false });
     } catch (e) {
@@ -144,15 +192,15 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
       }
       const path = args.kind === "path" ? args.path : rows.find(r => r.crawl.crawlId === args.crawlId)?.crawl.file;
       let missing = err.code === "NotFound";
-      // Path canonicalization currently reports a missing file as Io. Verify it through the
-      // read-only file adapter before removing history; permissions and schema errors remain.
+      // CRAWL-127: the core reports a missing file as NotFound (with its path), which removes the entry with a hint.
+      // Older cores reported it as Io; such an Io is verified through the read-only file adapter before removing
+      // history. Permission and schema errors keep the entry.
       if (err.code === "Io" && path) {
         try { await desktop.check(path); } catch (checkError) { missing = toCmdError(checkError).code === "NotFound"; }
       }
       if (missing && path) {
-        const remaining = writeRecent(readRecent().filter(p => p !== path));
-        setRecent(remaining);
-        await updateRecent(entries => entries.filter(entry => entry.path !== path));
+        setRecent(entries => entries.filter(entry => entry.path !== path));
+        await updateRecent(entries => entries.filter(entry => entry.path !== path)).catch(() => undefined);
       }
       setError({ text: `${path ?? ""}: ${missing ? t("crawls-error-missing") : textError(e)}`, path: err.messageKey === "err-crawl-corrupt" ? path : undefined });
     }
@@ -177,15 +225,14 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   }));
   const importFiles = () => attempt(async () => { const paths = await desktop.chooseOpen(true, t("crawls-import")); if (paths?.length) startOp(await crawls.import({ paths })); });
   useEffect(() => {
-    const offs = recent.map((path, i) => registerAction(`crawls.recent.${i}`, () => attempt(() => requestOpen({ kind: "path", path }))));
-    offs.push(registerMenuContributions("features/crawls", [{ menu: "file", group: "management", order: 20, items: [
+    // File → Recently opened is the one submenu of the main menu (help/install.ts, same UI-state list); no second one here.
+    const offs = [registerMenuContributions("features/crawls", [{ menu: "file", group: "management", order: 20, items: [
       { id: "crawls.manage", labelKey: "crawls-title", action: "crawls.manage" },
       { id: "crawls.import", labelKey: "crawls-import", action: "crawls.import", enabled: () => !disabled },
       { id: "crawls.export", labelKey: "crawls-export", action: "crawls.export", enabled: c => c.hasCrawl === true && c.crawlRunning !== true && !disabled },
-      { id: "crawls.recent", labelKey: "crawls-recent", items: recent.map((path, i) => ({ id: `crawls.recent.${i}`, literalLabel: path, action: `crawls.recent.${i}`, enabled: () => !disabled })) },
-    ] }]));
+    ] }])];
     return () => { for (const off of offs.reverse()) off(); };
-  }, [recent, disabled, t, rows]);
+  }, [disabled, t]);
   const actions: MenuEntry[] = (Object.keys(allowed) as (keyof typeof allowed)[]).map(action => ({ id: action, label: t(action === "open" ? "crawls-open-selected" : `crawls-${action}`),
     isDisabled: disabled || !allowed[action], disabledReason: chosen.some(r => r.crawl.phase === "running") ? t("crawls-running") : t("crawls-selection-reason"),
     onAction: () => {
@@ -248,9 +295,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   return <>
     {!open && (error || active) && <div className="os-crawls-notices">{notices}</div>}
     <Dialog title={t("crawls-title")} isOpen={open} size="large" onOpenChange={value => useCrawlsDialog.setState({ open: value })}>
-      <div className="os-crawls" onKeyDown={e => {
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") { e.preventDefault(); searchRef.current?.focus(); }
-      }}>
+      <div className="os-crawls">
         <div className="os-crawls-toolbar">
           <label>{t("crawls-search")}<input ref={searchRef} type="search" value={search} onChange={e => setSearch(e.target.value)} /></label>
           <label>{t("crawls-show")}<select value={show} onChange={e => setShow(e.target.value)}>{["all", "crawls", "comparisons"].map(v => <option key={v} value={v}>{t(`crawls-show-${v}`)}</option>)}</select></label>
@@ -291,7 +336,16 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
         <div className="os-crawls-toolbar">{actions.map(a => <span key={a.id} title={a.isDisabled ? a.disabledReason : undefined}><Button isDisabled={a.isDisabled} onPress={a.onAction}>{a.label}</Button></span>)}</div>
         {chosen.length === 1 && <div className="os-crawls-toolbar"><Button isDisabled={disabled || chosen[0]!.crawl.phase === "running"} onPress={() => void attempt(async () => { const path = chosen[0]!.crawl.file; try { await desktop.check(path); setError({ text: t("crawls-integrity-ok"), kind: "info" }); } catch (e) { const err = toCmdError(e); setError({ text: `${path}: ${textError(e)}`, path: err.messageKey === "err-crawl-corrupt" ? path : undefined }); } })}>{t("crawls-check")}</Button>
           <Button isDisabled={disabled || phase === "running"} onPress={() => void attempt(async () => { await config.set(await desktop.configuration(chosen[0]!.crawl.file)); setError({ text: t("crawls-config-applied"), kind: "info" }); })}>{t("crawls-config")}</Button></div>}
-        {recent.length > 0 && <nav aria-label={t("crawls-recent")}><h3>{t("crawls-recent")}</h3>{recent.map(path => <Button key={path} isDisabled={disabled} onPress={() => void attempt(() => requestOpen({ kind: "path", path }))}>{path}</Button>)}</nav>}
+        {recent.length > 0 && <nav aria-label={t("crawls-recent")}><h3>{t("crawls-recent")}</h3><ul className="os-crawls-recent">{recent.map(entry => {
+          const { path } = entry;
+          const title = recentTitle(entry);
+          const { head, tail } = splitPath(path);
+          // Full path as tooltip and in the accessible name; the visible path shortens in the middle to the width.
+          return <li key={path} title={path}><Button aria-label={title ? `${title}, ${path}` : path} isDisabled={disabled} onPress={() => void attempt(() => requestOpen({ kind: "path", path }))}>
+            <span className="os-crawls-recent-title">{title ?? fileName(path)}</span>
+            <span className="os-crawls-recent-path" aria-hidden="true"><span className="os-crawls-recent-head">{head}</span><span>{tail}</span></span>
+          </Button></li>;
+        })}</ul></nav>}
         <Button onPress={() => useCrawlsDialog.setState({ open: false })}>{t("ui-dialog-close")}</Button>
       </div>
     </Dialog>
@@ -308,7 +362,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
     </Dialog>
     <Dialog title={t(`crawls-${form?.kind ?? "rename"}`)} isOpen={!!form} onOpenChange={v => !v && setForm(null)} footer={<DialogFooter okLabel={t("crawls-apply")} cancelLabel={t("ui-dialog-cancel")} okDisabled={disabled || (!form?.value.trim() && form?.kind !== "move")} onOk={submitForm} onCancel={() => setForm(null)} />}>
       {form?.error && <Banner kind="error">{form.error}</Banner>}
-      <label>{t(form?.kind === "move" ? "crawls-target-project" : "crawls-col-name")}<input autoFocus disabled={disabled} value={form?.value ?? ""} list={form?.kind === "move" ? "crawls-project-options" : undefined} onChange={e => setForm(f => f && ({ ...f, value: e.target.value, error: undefined }))} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitForm(); } }} /></label>
+      <label>{t(form?.kind === "move" ? "crawls-target-project" : "crawls-col-name")}<input ref={formInput} disabled={disabled} value={form?.value ?? ""} list={form?.kind === "move" ? "crawls-project-options" : undefined} onChange={e => setForm(f => f && ({ ...f, value: e.target.value, error: undefined }))} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitForm(); } }} /></label>
       <datalist id="crawls-project-options">{projectList.map(p => <option key={p.id} value={p.name} />)}</datalist>
       {form?.kind === "move" && <p>{t("crawls-move-help")}</p>}
     </Dialog>

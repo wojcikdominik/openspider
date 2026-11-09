@@ -97,7 +97,7 @@ test("5000 fixture URLs: live HTML, retained details, pause/resume, completed fi
       const { flattenItems } = await import(/* @vite-ignore */ String("/src/ui/menu/build.ts"));
       const file = window.__osMenu?.model.menus.find(menu => menu.id === "file");
       const recent = flattenItems(file?.items ?? []).find((entry: { id: string }) => entry.id === "recent.0");
-      if (!recent?.enabled || !/\d{4}-\d{2}-\d{2}/.test(recent.label)) throw new Error("Recent lacks metadata or is disabled");
+      if (!recent?.enabled || !/ – .*\b20\d{2}\b/.test(recent.label)) throw new Error("Recent lacks metadata or is disabled");
       if (!runAction(recent.action, { source: "menu" })) throw new Error("Recent menu action was not handled");
     });
     await expect(page.getByTestId("crawl-phase")).toHaveText("Completed", { timeout: 10_000 });

@@ -469,6 +469,9 @@ it("Ein nach Fensterende bestätigter nativer Dialog startet keinen Crawl", asyn
 // spec: UI-124
 it("enriches recent fixture paths from the crawl index without changing opening addresses", async () => {
   core.uiState = { version: 1, state: { recentCrawls: [{ path: "/fixture/uuid.ospider" }] } };
-  core.handlers.set("crawls.list", () => [{ crawl: { file: "/fixture/uuid.ospider", startedAt: "2026-10-29T12:00:00Z", name: "uuid" }, startUrl: "http://127.0.0.1:1234/fixture" }]);
-  expect(await loadRecent()).toEqual([{ path: "/fixture/uuid.ospider", label: "http://127.0.0.1:1234/fixture · 2026-10-29" }]);
+  // CRAWL-127 (OS-Festlegung 09.11.2026): crawl name (else host of the start URL) – date and time of the crawl.
+  core.handlers.set("crawls.list", () => [{ crawl: { file: "/fixture/uuid.ospider", startedAt: "2026-10-29T12:00:00", name: "uuid" }, startUrl: "http://127.0.0.1:1234/fixture" }]);
+  expect(await loadRecent()).toEqual([{ path: "/fixture/uuid.ospider", label: expect.stringMatching(/^uuid – Oct 29, 2026, 12:00\sPM$/) }]);
+  core.handlers.set("crawls.list", () => [{ crawl: { file: "/fixture/uuid.ospider", startedAt: "2026-10-29T12:00:00", name: "" }, startUrl: "http://127.0.0.1:1234/fixture" }]);
+  expect(await loadRecent()).toEqual([{ path: "/fixture/uuid.ospider", label: expect.stringMatching(/^127\.0\.0\.1:1234 – Oct 29, 2026/) }]);
 });
