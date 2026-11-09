@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { manifests } from '../../scripts/release/manifest.mjs';
 import { checksums } from '../../scripts/release/checksums.mjs';
-import { releaseNotes, releaseBody, checkNotes, versionNotes, withChangelogSection, feedbackLink, notesPath, changelogSection, updateNotes, splitNotesDocument, compareVersions, FIRST_SHORT_NOTES } from '../../scripts/release/notes.mjs';
+import { releaseNotes, releaseBody, checkNotes, versionNotes, withChangelogSection, feedbackLink, notesPath, changelogSection, updateNotes, updateNotesWarnings, splitNotesDocument, compareVersions, FIRST_SHORT_NOTES } from '../../scripts/release/notes.mjs';
 import { downloads, isPublished } from '../../scripts/release/assets.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -760,4 +760,37 @@ test('CLI und App tragen dieselbe Version aus einer Quelle (workspace.package.ve
   const setVersion = readFileSync(join(root, 'scripts/release/set-version.mjs'), 'utf8');
   assert.match(setVersion, /apps\/desktop\/src-tauri\/tauri\.conf\.json/);
   assert.match(setVersion, /\[workspace\\\.package\\\]/);
+});
+
+// spec: OUT-251 [M3]
+test('Kurzer Abschnitt: HTML und Kommentare sind Fehler, Fettdruck und Links nur Warnungen (beta.3-Clients zeigen roh)', t => {
+  const plain = '- Faster crawls\n- Skip versions\n- Shorter notes\n\n### Deutsch\n\n- Schnellere Crawls\n- Versionen überspringen\n- Kürzere Notes';
+  const doc = section => `<!-- update -->\n${section}\n<!-- /update -->\n\n- Long point\n\n### Deutsch\n\n- Langer Punkt\n`;
+  const version = '1.0.0-beta.4';
+  assert.equal(updateNotes(doc(plain), version), `${plain}\n`);
+  assert.deepEqual(updateNotesWarnings(doc(plain)), []);
+  for (const bad of ['- Faster <b>crawls</b>', '- Faster <!-- hidden --> crawls', '- <img src=x onerror=alert(1)>', '- Faster <script>x</script>']) {
+    assert.throws(() => updateNotes(doc(plain.replace('- Faster crawls', bad)), version), /kein HTML und keine Kommentare/, bad);
+  }
+  // A comparison sign is no HTML.
+  assert.equal(updateNotes(doc(plain.replace('- Faster crawls', '- Faster crawls (< 5 s per page)')), version).split('\n')[0], '- Faster crawls (< 5 s per page)');
+  const marked = doc(plain.replace('- Faster crawls', '- **Faster** crawls').replace('- Kürzere Notes', '- Kürzere Notes im [Handbuch](https://openspider.de/handbuch/)'));
+  assert.ok(updateNotes(marked, version).includes('**Faster**'));
+  const warnings = updateNotesWarnings(marked);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], /Fettdruck/);
+  assert.match(warnings[1], /Link/);
+  // The CLI reports them as GitHub warnings and in the run summary, and still passes.
+  const directory = mkdtempSync(join(tmpdir(), 'openspider-notes-warn-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  cpSync(join(root, 'scripts/release'), join(directory, 'scripts/release'), { recursive: true });
+  mkdirSync(join(directory, 'docs/release/notes'), { recursive: true });
+  writeFileSync(join(directory, 'docs/release/notes', `${version}.md`), marked);
+  writeFileSync(join(directory, 'CHANGELOG.md'), `# Changelog\n\n## [Unreleased]\n\n## [${version}] - 2026-11-12\n\n- Long point\n\n### Deutsch\n\n- Langer Punkt\n`);
+  const result = spawnSync(process.execPath, ['scripts/release/notes.mjs', '--check', version], { cwd: directory, encoding: 'utf8',
+    env: { ...process.env, GITHUB_ACTIONS: 'true', GITHUB_STEP_SUMMARY: join(directory, 'summary') } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^::warning title=Update-Notes::Fettdruck/m);
+  assert.match(result.stdout, /^::warning title=Update-Notes::Link/m);
+  assert.match(readFileSync(join(directory, 'summary'), 'utf8'), /Update-Notes \(Warnung\)/);
 });
