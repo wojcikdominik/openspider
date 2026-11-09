@@ -154,3 +154,15 @@ it("queues unexpected errors and preserves technical details separately", () => 
   expect(screen.getByText("fixture failure")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Open logs" })).toBeVisible();
 });
+
+// spec: CRAWL-127
+// spec: UI-124
+// B4-CMPUI: a failed open is reported once, in the status bar with its technical details; no modal with the raw code.
+it("does not open a dialog with the raw code for a failed crawl open", async () => {
+  render(<Notifications />);
+  notice("crawl-open-failed", { code: "NotFound", messageKey: "err-file-not-found", args: { path: "/tmp/gone.ospider" }, detail: null });
+  await waitFor(() => expect(useSession.getState().notices).toHaveLength(0));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByText(/crawl-open-failed/)).toBeNull();
+  expect(useSession.getState().openError?.code).toBe("crawl-open-failed");
+});
