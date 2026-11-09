@@ -113,7 +113,8 @@
       "$ref": "#/$defs/UpdateSettings",
       "default": {
         "check": true,
-        "last_check": null
+        "last_check": null,
+        "skipped_version": null
       }
     }
   },
@@ -501,6 +502,14 @@
         },
         "last_check": {
           "description": "Letzte Prüfung als ISO-8601-UTC-Zeitstempel; None vor der ersten Prüfung.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "skipped_version": {
+          "description": "OUT-251: version skipped in the update dialog; automatic checks do not report it again.",
           "type": [
             "string",
             "null"

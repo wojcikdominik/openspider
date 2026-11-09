@@ -19,6 +19,7 @@ import { client } from "../../ipc/client";
 import { chooseFile } from "./files";
 import { ABOUT_LINKS, openInBrowser } from "./feedback";
 import { useHelp } from "./state";
+import { versionLabel } from "./version";
 import license from "../../../../../LICENSE?raw";
 import brandLight from "../../assets/brand/mark-light.svg";
 import brandDark from "../../assets/brand/mark-dark.svg";
@@ -50,7 +51,7 @@ function About() {
       <div>
         <p className="os-about-name">Open<span>Spider</span></p>
         <p className="os-about-tagline">{t("u04-about-tagline")}</p>
-        {info && <p className="os-about-version" data-about="version">{t("u04-about-version", { version: info.version })}{info.build && <> · {t("u04-about-build", { build: info.build })}</>}</p>}
+        {info && <p className="os-about-version" data-about="version">{t("u04-about-version", { version: versionLabel(t, info) })}{info.build && <> · {t("u04-about-build", { build: info.build })}</>}</p>}
       </div>
     </header>{error && <p role="alert">{t(error)}</p>}
     <dl className="os-help-properties os-about-facts">
@@ -102,7 +103,7 @@ export function DebugHelp() {
     {error && <p role="alert">{t(error)}</p>}
     {info && <>
       <dl className="os-help-properties">
-        {Object.entries({ version: info.app.version, build: info.app.build, os: info.os, arch: info.app.arch, pid: info.pid, ramLimitBytes: info.ramLimitBytes, rssEngineBytes: info.rssEngineBytes, rssRendererBytes: info.rssRendererBytes, crawlFileBytes: info.crawlFileBytes, freeDiskBytes: info.freeDiskBytes, performanceProfile: info.performanceProfile, sqliteCacheKib: info.sqliteCacheKib }).map(([key, value]) => <div key={key}><dt>{t(`u04-debug-${key}`)}</dt><dd>{value ?? "—"}</dd></div>)}
+        {Object.entries({ version: versionLabel(t, info.app), build: info.app.build, os: info.os, arch: info.app.arch, pid: info.pid, ramLimitBytes: info.ramLimitBytes, rssEngineBytes: info.rssEngineBytes, rssRendererBytes: info.rssRendererBytes, crawlFileBytes: info.crawlFileBytes, freeDiskBytes: info.freeDiskBytes, performanceProfile: info.performanceProfile, sqliteCacheKib: info.sqliteCacheKib }).map(([key, value]) => <div key={key}><dt>{t(`u04-debug-${key}`)}</dt><dd>{value ?? "—"}</dd></div>)}
       </dl>
       <h3>{t("u04-paths")}</h3><dl className="os-help-properties">{Object.entries(paths ?? {}).map(([key, value]) => <div key={key}><dt>{t(`u04-path-${key}`)}</dt><dd>{value ?? "—"}</dd></div>)}</dl>
       <dl className="os-help-properties">{info.extra.map(({ name, value }, index) => <div key={index}><dt>{name}</dt><dd>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}</dd></div>)}</dl>

@@ -148,6 +148,9 @@ html[data-accent-warn="on"] .os-btn-primary { outline:var(--os-line) solid var(-
 .os-dialog { padding:var(--os-size-16); outline:none; display:flex; flex-direction:column; gap:var(--os-size-12); width:100%; min-height:0; }
 .os-dialog-title { font-size:var(--os-font-title); line-height:1.4; font-weight:600; margin:0; }
 .os-dialog-description { margin:0; color:var(--os-text-muted); }
+.os-dialog-head { display:flex; align-items:flex-start; gap:var(--os-size-16); }
+.os-dialog-icon { flex:none; display:inline-flex; }
+.os-dialog-head-text { display:flex; flex-direction:column; gap:var(--os-size-4); min-width:0; }
 .os-dialog-body { overflow:auto; min-height:0; }
 .os-dialog-footer { display:flex; justify-content:space-between; align-items:center; gap:var(--os-size-12); padding-top:var(--os-size-4); }
 .os-dialog-footer-actions { display:flex; gap:var(--os-size-8); margin-left:auto; }

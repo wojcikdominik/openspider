@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { manifests } from '../../scripts/release/manifest.mjs';
 import { checksums } from '../../scripts/release/checksums.mjs';
-import { releaseNotes, releaseBody, checkNotes, versionNotes, withChangelogSection, feedbackLink, notesPath, changelogSection } from '../../scripts/release/notes.mjs';
+import { releaseNotes, releaseBody, checkNotes, versionNotes, withChangelogSection, feedbackLink, notesPath, changelogSection, updateNotes, splitNotesDocument, compareVersions, FIRST_SHORT_NOTES } from '../../scripts/release/notes.mjs';
 import { downloads, isPublished } from '../../scripts/release/assets.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -595,4 +595,169 @@ test('Leichte Ersatzläufe sind billig, SHA-gepinnt und rufen die vorhandenen Pr
     assert.match(generate, /OPENSPIDER_LICENSE_CACHE: \$\{\{ runner\.temp \}\}\/license-texts/, workflow);
     assert.match(text, /path: \$\{\{ runner\.temp \}\}\/license-texts\n          key: license-texts-v1-\$\{\{ hashFiles\('scripts\/release\/licenses\/\*-sources\.json'\) \}\}/, workflow);
   }
+});
+
+// spec: OUT-251 [M3]
+test('Kurze Update-Notes: nur der Abschnitt <!-- update --> geht ins Manifest, Release-Text und CHANGELOG bleiben ausführlich', t => {
+  const short = '- Short one\n- Short **two**\n- Short [three](https://openspider.de/)\n\n### Deutsch\n\n- Kurz eins\n- Kurz **zwei**\n- Kurz [drei](https://openspider.de/)';
+  const detailed = 'Long summary.\n\n- Long point with details\n\n### Deutsch\n\nLange Zusammenfassung.\n\n- Langer Punkt mit Details';
+  const document = `<!-- update -->\n${short}\n<!-- /update -->\n\n${detailed}\n`;
+  const version = '1.0.0-beta.4';
+  assert.equal(FIRST_SHORT_NOTES, version);
+  assert.deepEqual(splitNotesDocument(document.replaceAll('\n', '\r\n')).update, short);
+  assert.equal(updateNotes(document, version), `${short}\n`);
+  assert.equal(versionNotes(document, version), `${detailed}\n`);
+  // Published versions up to beta.3 have no short section: their detailed notes stay the update notes.
+  const beta3 = readFileSync(join(root, 'docs/release/notes/1.0.0-beta.3.md'), 'utf8');
+  assert.equal(updateNotes(beta3, '1.0.0-beta.3'), versionNotes(beta3, '1.0.0-beta.3'));
+  assert.equal(compareVersions('1.0.0-beta.3', '1.0.0-beta.4'), -1);
+  assert.equal(compareVersions('1.0.0-beta.10', '1.0.0-beta.4'), 1);
+  assert.equal(compareVersions('1.0.0-rc.1', '1.0.0-beta.9'), 1);
+  assert.equal(compareVersions('1.0.0', '1.0.0-rc.1'), 1);
+  assert.equal(compareVersions('1.0.1', '1.0.1'), 0);
+  // From beta.4 on the short section is required and checked.
+  assert.throws(() => updateNotes(`${detailed}\n`, version), /Kurze Update-Notes 1\.0\.0-beta\.4 fehlen: .*<!-- update -->/);
+  assert.throws(() => updateNotes(`${detailed}\n`, '1.0.0'), /fehlen/);
+  const broken = [
+    [short.replace('- Short one\n', ''), /Englisch: 2 Punkte/],
+    [short.replace('- Kurz eins', '- Kurz eins\n- 4\n- 5\n- 6\n- 7'), /Deutsch: 7 Punkte/],
+    [short.replace('\n### Deutsch\n', '\n'), /genau eine Zeile ### Deutsch/],
+    [short.replace('- Short one', 'Short one'), /nur einzeilige Listenpunkte/],
+    [short.replace('- Short one', `- ${'x'.repeat(170)}`), /länger als 160 Zeichen/],
+    [short.replace('- Short one', '- TODO'), /Entwurfsmarkierungen/],
+  ];
+  for (const [section, pattern] of broken) {
+    assert.throws(() => updateNotes(`<!-- update -->\n${section}\n<!-- /update -->\n\n${detailed}\n`, version), pattern, String(pattern));
+  }
+  assert.throws(() => updateNotes(`<!-- update -->\n${short}\n\n${detailed}\n`, version), /genau ein Abschnitt/);
+  // CLI end to end: --changelog writes the detailed notes, --check passes, the manifest file gets the short notes,
+  // the release body the detailed ones.
+  const directory = mkdtempSync(join(tmpdir(), 'openspider-short-notes-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  cpSync(join(root, 'scripts/release'), join(directory, 'scripts/release'), { recursive: true });
+  mkdirSync(join(directory, 'docs/release/notes'), { recursive: true });
+  writeFileSync(join(directory, 'docs/release/notes', `${version}.md`), document);
+  writeFileSync(join(directory, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n\n## [1.0.0-beta.3] - 2026-11-09\n\n- alt\n');
+  const cli = (...args) => spawnSync(process.execPath, ['scripts/release/notes.mjs', ...args], { cwd: directory, encoding: 'utf8' });
+  assert.equal(cli('--changelog', version, '--date', '2026-11-12').status, 0);
+  assert.equal(releaseNotes(readFileSync(join(directory, 'CHANGELOG.md'), 'utf8'), version), `${detailed}\n`);
+  const check = cli('--check', version);
+  assert.equal(check.status, 0, check.stderr);
+  const built = cli(version, 'update-notes.md', '--body', 'release-notes.md', '--repository', 'example/openspider');
+  assert.equal(built.status, 0, built.stderr);
+  assert.equal(readFileSync(join(directory, 'update-notes.md'), 'utf8'), `${short}\n`);
+  const body = readFileSync(join(directory, 'release-notes.md'), 'utf8');
+  assert.equal(body, releaseBody({ version, repository: 'example/openspider', notes: `${detailed}\n` }));
+  assert.doesNotMatch(body, /<!-- update -->|Short one/);
+  // A document without the short section fails the gate before the build.
+  writeFileSync(join(directory, 'docs/release/notes', `${version}.md`), `${detailed}\n`);
+  const missing = cli('--check', version);
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /Kurze Update-Notes 1\.0\.0-beta\.4 fehlen/);
+});
+
+// spec: OUT-251 [M3]
+test('Vorlage für die nächste Version enthält den kurzen Abschnitt im erwarteten Format', () => {
+  const template = readFileSync(join(root, 'docs/release/notes-template.md'), 'utf8');
+  const { update, notes } = splitNotesDocument(template);
+  assert.match(update, /^- .*\n[\s\S]*\n### Deutsch\n\n- /);
+  assert.match(notes, /### Deutsch/);
+  // Filled in (placeholders replaced by text), the template passes the checks.
+  const filled = template.replace(/<(?!!)[^>\n]*>/g, 'Text');
+  assert.ok(updateNotes(filled, '1.0.0-beta.4').startsWith('- Text'));
+  assert.ok(versionNotes(filled, '1.0.0-beta.4').startsWith('Text'));
+});
+
+// Shell body of a named step in any workflow file (same dedent as `step`).
+const stepIn = (file, name) => readFileSync(join(root, '.github/workflows', file), 'utf8').split(`      - name: ${name}\n`)[1]
+  .split('        run: |\n')[1].split('      - ')[0].split('\n\n')[0]
+  .split('\n').map(line => line.startsWith('          ') ? line.slice(10) : line).join('\n');
+
+// spec: UI-127 [M3]
+// spec: OUT-181 [M3]
+test('Build-Nummer: prepare zählt die Commits nur im vollständigen Checkout, alle Bau-Jobs bekommen dieselbe, ohne sie ist der Lauf rot', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'openspider-build-number-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const git = (cwd, ...args) => {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid' } });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const repo = join(directory, 'repo');
+  mkdirSync(repo);
+  git(repo, 'init', '-q');
+  for (const n of [1, 2, 3]) git(repo, 'commit', '-q', '--allow-empty', '-m', `c${n}`);
+  const prepare = step('Build-Nummer ermitteln (UI-127)');
+  const run = (cwd, script, env = {}) => spawnSync('bash', ['-c', script], { cwd, encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '', ...env } });
+  const output = join(directory, 'output');
+  let result = run(repo, prepare, { GITHUB_OUTPUT: output });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(output, 'utf8'), 'build_number=3\n');
+  // A shallow checkout would count wrong: the step fails instead.
+  const shallow = join(directory, 'shallow');
+  git(directory, 'clone', '-q', '--depth', '1', `file://${repo}`, shallow);
+  result = run(shallow, prepare, { GITHUB_OUTPUT: join(directory, 'shallow-output'), GITHUB_ACTIONS: 'true' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /::error title=Build-Nummer::Flacher Checkout/);
+  // Without Git (no repository) the release run is red, too.
+  const plain = join(directory, 'plain');
+  mkdirSync(plain);
+  assert.notEqual(run(plain, prepare, { GITHUB_OUTPUT: join(directory, 'plain-output'), GIT_CEILING_DIRECTORIES: directory }).status, 0);
+
+  // Wiring: prepare has the full history and exports the number; every build job gets the same output.
+  const workflow = releaseWorkflow();
+  const prepareJob = workflow.split('\n  prepare:\n')[1].split('\n  macos:\n')[0];
+  assert.match(prepareJob, /fetch-depth: 0/);
+  assert.match(prepareJob, /build_number: \$\{\{ steps\.build\.outputs\.build_number \}\}/);
+  for (const job of ['macos', 'windows']) {
+    const body = workflow.split(`\n  ${job}:\n`)[1].split(/\n  [a-z-]+:\n/)[0];
+    assert.match(body, /build_number: \$\{\{ needs\.prepare\.outputs\.build_number \}\}/, job);
+  }
+  assert.match(workflow.split('\n  linux-core:\n')[1].split('\n  assemble:\n')[0], /OPENSPIDER_BUILD_NUMBER: \$\{\{ needs\.prepare\.outputs\.build_number \}\}/);
+
+  // Reusable build workflows: export the number for cargo; inside the release orchestration an empty one is red.
+  for (const file of ['release-macos.yml', 'release-windows.yml']) {
+    assert.match(readFileSync(join(root, '.github/workflows', file), 'utf8'), /workflow_call:\n    inputs:\n      build_number:\n/, file);
+    const script = stepIn(file, 'Build-Kennung (Hilfe → Über, Debug-Info, Absturzberichte)');
+    const env = join(directory, `${file}.env`);
+    const call = (number, workflowName) => { rmSync(env, { force: true }); return run(directory, script, { BUILD_NUMBER: number, GITHUB_ENV: env, GITHUB_SHA: '0123456789abcdef', GITHUB_WORKFLOW: workflowName }); };
+    result = call('2578', 'Release orchestration');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(env, 'utf8'), 'OPENSPIDER_BUILD=01234567\nOPENSPIDER_BUILD_NUMBER=2578\n', file);
+    result = call('', 'Release orchestration');
+    assert.notEqual(result.status, 0, file);
+    assert.match(result.stdout, /::error title=Build-Nummer::Release-Lauf ohne Build-Nummer/, file);
+    assert.notEqual(call('25a', 'Release orchestration').status, 0, file);
+    // A single manual run of the platform workflow is no release: it builds without a number.
+    assert.equal(call('', file === 'release-macos.yml' ? 'Release macOS' : 'Release Windows').status, 0, file);
+    assert.doesNotMatch(readFileSync(env, 'utf8'), /OPENSPIDER_BUILD_NUMBER/, file);
+  }
+
+  // The Linux CLI of the release must print the number.
+  const check = step('Build-Nummer im CLI prüfen (UI-127)');
+  const cli = join(directory, 'linux-cli');
+  mkdirSync(cli);
+  const fake = version => writeFileSync(join(cli, 'openspider'), `#!/bin/sh\necho "openspider ${version}"\n`, { mode: 0o755 });
+  fake('1.0.0-beta.4 (Build 2578, 0123456789, linux-x86_64)');
+  assert.equal(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '2578' }).status, 0);
+  fake('1.0.0-beta.4 (0123456789, linux-x86_64)');
+  assert.notEqual(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '2578' }).status, 0);
+  assert.notEqual(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '' }).status, 0);
+});
+
+// spec: UI-127 [M3]
+// spec: OUT-181 [M3]
+test('CLI und App tragen dieselbe Version aus einer Quelle (workspace.package.version, set-version.mjs)', () => {
+  const manifests = [...readdirSync(join(root, 'crates')).map(name => join('crates', name, 'Cargo.toml')), 'apps/desktop/src-tauri/Cargo.toml']
+    .filter(path => { try { readFileSync(join(root, path)); return true; } catch { return false; } });
+  assert.ok(manifests.includes(join('crates', 'os-cli', 'Cargo.toml')) && manifests.includes(join('crates', 'os-app', 'Cargo.toml')));
+  for (const path of manifests) {
+    const text = readFileSync(join(root, path), 'utf8');
+    const pkg = text.split(/^\[package\]\s*$/m)[1]?.split(/^\[/m)[0] ?? '';
+    assert.match(pkg, /^version\.workspace = true$/m, `${path}: Version nur aus workspace.package`);
+  }
+  // The released tag commit carries the release version for both (beta.3: rel/beta3), the App's tauri.conf too.
+  const setVersion = readFileSync(join(root, 'scripts/release/set-version.mjs'), 'utf8');
+  assert.match(setVersion, /apps\/desktop\/src-tauri\/tauri\.conf\.json/);
+  assert.match(setVersion, /\[workspace\\\.package\\\]/);
 });

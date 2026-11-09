@@ -10,9 +10,9 @@ const glossary = readFileSync("../../docs/plan/M2-acceptance/beta/begriffe.md", 
 const exceptions = new Set([...glossary.matchAll(/^\| `([^`]+)`/gm)].map(match => match[1]!));
 // Additional equal German words, data formats, product names and units outside U34's tab glossary.
 // Every value is explicit: a new identical English phrase must receive a translation or a reviewed exception.
-const equalGerman = ["OK", "Orange", "Name", "Segment", "System", "Zoom", "Crawls", "Operator", "Format", "Spider", "Cookies", "Text", "Regex", "Details", "Server", "Port", "Filter", "Standard", "Export", "Version", "Cache", "Subdomain", "Desktop", "Tablet", "Iframes", "Build"];
+const equalGerman = ["OK", "Orange", "Name", "Segment", "System", "Zoom", "Crawls", "Operator", "Format", "Spider", "Cookies", "Text", "Regex", "Details", "Server", "Port", "Filter", "Standard", "Export", "Version", "Cache", "Subdomain", "Desktop", "Tablet", "Iframes", "Build", "Commit"];
 const technical = ["XPath", "User-Agent", "Accept-Language", "KB", "ms", "MB", "px", "hreflang", "Hash (MD5)", "HTTP/1.1", "PNG", "JPEG", "Google Analytics 4", "GSC", "PSI", "Drive", "APIs", "SVG", "OPENSPIDER_HOME", "JavaScript…", "SERP-Snippet", "NoODP", "NoYDIR", "WCAG 2.0 A", "WCAG 2.0 AA", "WCAG 2.0 AAA", "WCAG 2.1 AA", "WCAG 2.2 AA", "Flash"];
-const dataTemplates = ["s", "URLs", "/  URLs", "URLs/s", "API:  %", "+ / −", "Export:", "Host:  · Realm:", "PNG ×", "Version"];
+const dataTemplates = ["s", "URLs", "/  URLs", "URLs/s", "API:  %", "+ / −", "Export:", "Host:  · Realm:", "PNG ×", "Version", "(Build )"];
 for (const value of [...equalGerman, ...technical, ...dataTemplates]) exceptions.add(value);
 
 // spec: UI-121

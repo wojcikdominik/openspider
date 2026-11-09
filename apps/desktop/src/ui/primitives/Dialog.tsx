@@ -16,6 +16,8 @@ export interface DialogProps {
   description?: string;
   size?: "small" | "medium" | "large";
   isDismissable?: boolean;
+  /** Optional symbol left of title and description (e.g. the app mark in the update dialog, OUT-251). */
+  icon?: ReactNode;
 }
 
 const slot = (s: Slot | undefined, close: () => void): ReactNode => (typeof s === "function" ? s(close) : s);
@@ -26,17 +28,31 @@ export function Dialog(props: DialogProps) {
   // header, detail frame) do not run the overlay machinery of their closed dialogs. Focus still returns on close.
   return props.isOpen ? <OpenDialog {...props} /> : null;
 }
-function OpenDialog({ title, isOpen, onOpenChange, children, footer, description, size = "medium", isDismissable = true }: DialogProps) {
+function OpenDialog({ title, isOpen, onOpenChange, children, footer, description, size = "medium", isDismissable = true, icon }: DialogProps) {
   return (
     <ModalOverlay className="os-overlay" isOpen={isOpen} onOpenChange={onOpenChange} isDismissable={isDismissable}>
       <Modal className={cx("os-modal", `os-modal-${size}`)}>
         <RacDialog className="os-dialog">
           {({ close }) => (
             <>
-              <Heading slot="title" className="os-dialog-title">
-                {title}
-              </Heading>
-              {description && <p className="os-dialog-description">{description}</p>}
+              {icon ? (
+                <div className="os-dialog-head">
+                  <span className="os-dialog-icon" aria-hidden>{icon}</span>
+                  <div className="os-dialog-head-text">
+                    <Heading slot="title" className="os-dialog-title">
+                      {title}
+                    </Heading>
+                    {description && <p className="os-dialog-description">{description}</p>}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Heading slot="title" className="os-dialog-title">
+                    {title}
+                  </Heading>
+                  {description && <p className="os-dialog-description">{description}</p>}
+                </>
+              )}
               <div className="os-dialog-body">{slot(children, close)}</div>
               {slot(footer, close)}
             </>

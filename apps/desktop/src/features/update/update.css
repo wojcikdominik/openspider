@@ -1,3 +1,19 @@
-/* Update dialog (OUT-251, B3-UI): actions stacked at full width; labels never wrap (de is the longest language). */
-.os-update-actions { display:flex; flex-direction:column; align-items:stretch; gap:var(--os-space-8); margin-top:var(--os-space-16); }
-.os-update-actions > .os-btn { white-space:nowrap; }
+/* Update dialog (OUT-251, Nutzerentscheidung 09.11.2026): head with the app mark, scrollable notes box, setting, one
+   button row in the footer pattern of the other dialogs. Labels never wrap; a narrow window wraps the row as a whole. */
+.os-update-mark { display:inline-flex; }
+.os-update-mark img { width:var(--os-size-60); height:var(--os-size-60); }
+.os-update-mark .os-brand-dark, [data-theme="dark"] .os-update-mark .os-brand-light { display:none; }
+[data-theme="dark"] .os-update-mark .os-brand-dark { display:block; }
+.os-update-notes { max-height:var(--os-size-280); overflow:auto; padding:var(--os-size-12) var(--os-size-16); border:var(--os-line) solid var(--os-border); border-radius:var(--os-radius); background:var(--os-bg-surface); overflow-wrap:anywhere; }
+.os-update-notes:focus-visible { outline:var(--os-focus-width) solid var(--os-focus); outline-offset:var(--os-line); }
+.os-update-notes > h3 { margin:0 0 var(--os-size-8); font-size:var(--os-font-body); font-weight:600; }
+.os-update-notes ul, .os-update-notes ol { margin:0; padding-inline-start:var(--os-size-20); }
+.os-update-notes li + li { margin-top:var(--os-size-4); }
+.os-update-notes p { margin:0 0 var(--os-size-8); }
+.os-update-notes a { color:var(--os-link); }
+.os-update-status:empty { display:none; }
+.os-update-status > p { margin:var(--os-size-8) 0 0; }
+.os-update-auto { margin-top:var(--os-size-12); }
+.os-update-footer { flex-wrap:wrap; row-gap:var(--os-size-8); }
+.os-update-footer .os-dialog-footer-actions { flex-wrap:wrap; justify-content:flex-end; }
+.os-update-footer .os-btn { white-space:nowrap; flex:none; }

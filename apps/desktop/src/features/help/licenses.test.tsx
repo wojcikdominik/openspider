@@ -18,7 +18,7 @@ it("About shows NOTICE and the bundled notices verbatim and searches both", asyn
   setClient(createClient(core.transport()));
   useHelp.setState({ page: "about" });
   render(<HelpDialogs />);
-  await screen.findByText(/Build fixture/);
+  await screen.findByText(/Commit fixture/);
   fireEvent.click(screen.getByText("Third-party notices"));
   for (const document of licenseDocuments) {
     const region = await screen.findByRole("region", { name: document.name });

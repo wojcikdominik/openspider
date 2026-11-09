@@ -13,6 +13,10 @@ on:
         default: false
   workflow_call:
     inputs:
+      build_number:
+        description: "Build-Nummer aus dem prepare-Job von release.yml (UI-127); leer bei Einzelläufen"
+        type: string
+        default: ""
       channel:
         type: string
         default: stable
@@ -70,7 +74,17 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build-Kennung (Hilfe → Über, Debug-Info, Absturzberichte)
         shell: bash
-        run: echo "OPENSPIDER_BUILD=${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          echo "OPENSPIDER_BUILD=${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+          # UI-127: Build-Nummer aus dem prepare-Job (für alle Plattformen dieselbe); ein Release-Lauf ohne sie ist rot.
+          if [[ -n "$BUILD_NUMBER" ]]; then
+            [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "::error title=Build-Nummer::Ungültige Build-Nummer '$BUILD_NUMBER'"; exit 1; }
+            echo "OPENSPIDER_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          elif [[ "$GITHUB_WORKFLOW" == "Release orchestration" ]]; then
+            echo "::error title=Build-Nummer::Release-Lauf ohne Build-Nummer (needs.prepare.outputs.build_number)"; exit 1
+          fi
       - name: Signierbereitschaft prüfen
         id: signing
         env:

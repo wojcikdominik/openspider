@@ -56,6 +56,7 @@ pub fn app_info(config: &AppConfig, settings: &AppSettings) -> AppInfo {
     AppInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         build: build_id().to_string(),
+        build_number: os_model::build_number::BUILD_NUMBER.map(str::to_owned),
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         paths: AppPaths {

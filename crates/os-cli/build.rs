@@ -1,9 +1,15 @@
 //! Build-Skript: Git-Hash, Betriebssystem und Architektur für `openspider --version` (OUT-181).
 //!
-//! Ausgabe der Version: `<semver> (<git-hash>, <os>-<arch>)`. Der Hash kommt aus `OPENSPIDER_GIT_HASH`
-//! (Release-Builds) oder aus `git rev-parse`; ohne Git steht `unknown` da.
+//! Ausgabe der Version: `<semver> (<git-hash>, <os>-<arch>)`, mit Build-Nummer
+//! `<semver> (Build <n>, <git-hash>, <os>-<arch>)` (Nutzerentscheidung 09.11.2026, Regeln in
+//! `os-model/src/build_number.rs`). Der Hash kommt aus `OPENSPIDER_GIT_HASH` (Release-Builds) oder aus
+//! `git rev-parse`; ohne Git steht `unknown` da.
 
 use std::process::Command;
+
+#[path = "../os-model/src/build_number.rs"]
+#[allow(dead_code)]
+mod build_number;
 
 fn git(args: &[&str]) -> Option<String> {
     let out = Command::new("git").args(args).output().ok()?;
@@ -78,10 +84,32 @@ fn main() {
         }
     }
 
+    // Same source and rules as os-model (UI-127): release workflow variable, else Git for release builds.
+    println!("cargo:rerun-if-env-changed={}", build_number::ENV);
+    println!("cargo:rerun-if-changed=../os-model/src/build_number.rs");
+    let release = std::env::var("PROFILE").as_deref() == Ok("release");
+    let number = build_number::resolve(
+        std::env::var(build_number::ENV).ok().as_deref(),
+        release,
+        || {
+            let canonical = |p: &std::path::Path| std::fs::canonicalize(p).ok();
+            let root = std::path::Path::new("..").join("..");
+            build_number::GitFacts {
+                count: git(&["rev-list", "--count", "HEAD"]),
+                shallow: git(&["rev-parse", "--is-shallow-repository"]),
+                own_repository: git(&["rev-parse", "--show-toplevel"])
+                    .and_then(|top| canonical(std::path::Path::new(&top)))
+                    .is_some_and(|top| Some(top) == canonical(&root)),
+            }
+        },
+    )
+    .unwrap_or_else(|message| panic!("{message}"));
+    let build = number.map(|n| format!("Build {n}, ")).unwrap_or_default();
+
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_else(|_| "unknown".into());
     let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "unknown".into());
     let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
 
     println!("cargo:rustc-env=OS_CLI_GIT_HASH={hash}");
-    println!("cargo:rustc-env=OS_CLI_VERSION={version} ({hash}, {os}-{arch})");
+    println!("cargo:rustc-env=OS_CLI_VERSION={version} ({build}{hash}, {os}-{arch})");
 }

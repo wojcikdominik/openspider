@@ -18,6 +18,32 @@ Beschlossen am 04.11.2026 (Nutzerwunsch, Termine vom Nutzer bestätigt): Ab der 
 
 Nutzerentscheidung 05.11.2026, ergänzt 06.11.2026: Die Notes (`docs/release/notes/<Version>.md`) sind auf Englisch, danach folgt unter `### Deutsch` dieselbe Liste vollständig auf Deutsch (nicht gekürzt; der Nutzer verwendet sie für Ankündigungen, z. B. LinkedIn). Erlaubt sind höchstens Überschriften der Ebene 3 (`notes.mjs --check`). Der Download-Kasten des Release-Texts ist unverändert zweisprachig, die Überschrift davor legt OUT-261 fest.
 
+### Kurze Update-Notes (ab 1.0.0-beta.4)
+
+Nutzerentscheidung 09.11.2026 (OUT-251, B4-UPDDLG): Der Update-Dialog der App zeigt nicht die ausführlichen Notes, sondern einen kurzen Abschnitt am Anfang derselben Datei. Vorlage: `docs/release/notes-template.md` nach `docs/release/notes/<Version>.md` kopieren und ausfüllen.
+
+```markdown
+<!-- update -->
+- Short point in English (one line)
+- …
+
+### Deutsch
+
+- Kurzer Punkt auf Deutsch (eine Zeile)
+- …
+<!-- /update -->
+
+<ausführliche Notes wie bisher: englische Liste, darunter ### Deutsch mit der vollständigen deutschen Liste>
+```
+
+Regeln (`notes.mjs --check` bricht sonst vor dem Bauen ab):
+
+- Die Zeilen `<!-- update -->` und `<!-- /update -->` stehen allein auf ihrer Zeile, genau einmal je Datei, am besten ganz oben.
+- Dazwischen: englische Liste, eine Zeile `### Deutsch`, deutsche Liste. Je Sprache 3 bis 6 Punkte, jeder Punkt eine Zeile „- …“ mit höchstens 160 Zeichen. Fettdruck und Links (`[Text](https://…)`) sind erlaubt; Links öffnen im Standardbrowser.
+- Nur dieser Abschnitt landet als `notes` in `latest.json`/`latest-beta.json` (`notes.mjs <Version> <Update-Notes>` schreibt ihn in die Datei, die `manifest.mjs` liest). Release-Text (OUT-261) und CHANGELOG-Eintrag bestehen aus dem Rest der Datei, den ausführlichen Notes; `notes.mjs --changelog` übernimmt den kurzen Abschnitt nicht.
+- Fehlt der Abschnitt ab 1.0.0-beta.4, ist der Release-Lauf rot. Bis 1.0.0-beta.3 (bereits veröffentlicht) bleiben die Dateien unverändert; ihr Manifest trug die ausführlichen Notes.
+- Die App wählt die Sprache wie beim Neuigkeiten-Dialog (OUT-257): deutsche Oberfläche → deutscher Teil, jede andere → englischer Teil.
+
 ## Versionen
 
 - Eine Beta pro Woche bis 1.0. Ausnahme (Nutzerentscheidungen 06.11. und 08.11.2026): beta.3 einmalig am Montag, 09.11.2026 – ursprünglich für Freitag, 06.11., geplant, verschoben für den Fix der Crawl-Datei-Beschädigung und ergänzt um B4-LIVEDETAIL; danach beta.4 am 12.11.2026, beta.5 am 19.11.2026 usw. im normalen Rhythmus.

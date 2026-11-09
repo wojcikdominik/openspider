@@ -14,6 +14,10 @@ version: string,
  */
 build: string, 
 /**
+ * Build-Nummer (Anzahl der Commits bis zum gebauten Stand, UI-127); fehlt ohne Git und in Entwickler-Builds.
+ */
+buildNumber?: string | null, 
+/**
  * `macos` oder `windows` (Linux nur für den Kernbetrieb).
  */
 platform: string, 

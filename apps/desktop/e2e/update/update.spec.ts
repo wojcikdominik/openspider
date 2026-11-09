@@ -25,13 +25,13 @@ for (const lang of ["de", "en"] as const) {
       const { runAction } = await import("/src/ui/actions.ts");
       runAction("help.updates", { source: "menu" });
     });
-    const dialog = page.getByRole("dialog", { name: lang === "de" ? "Updates" : "Software updates" });
+    const dialog = page.getByRole("dialog", { name: lang === "de" ? "Eine neue Version von OpenSpider ist verfügbar!" : "A new version of OpenSpider is available!" });
     await expect(dialog.getByText("Fixture notes <script>plain text</script>")).toBeVisible();
     await expect(dialog.getByRole("progressbar")).toHaveAttribute("value", "42");
     expect(await dialog.locator("script").count()).toBe(0);
     let axe = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(axe.violations.filter(v => v.impact === "critical" || v.impact === "serious")).toEqual([]);
-    await dialog.getByRole("button", { name: lang === "de" ? "Schließen" : "Close", exact: true }).click();
+    await dialog.getByRole("button", { name: lang === "de" ? "Später erinnern" : "Remind me later", exact: true }).click();
     await expect(dialog).not.toBeVisible();
     state = { ready: { version: "1.0.1" } };
     await page.evaluate(async () => {
@@ -39,7 +39,7 @@ for (const lang of ["de", "en"] as const) {
       const { useUpdate } = await import("/src/features/update/state.ts");
       useUpdate.setState({ open: true });
     });
-    await expect(dialog.getByRole("button", { name: lang === "de" ? "Jetzt installieren und neu starten" : "Install now and restart" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: lang === "de" ? "Update installieren" : "Install update" })).toBeEnabled();
     axe = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(axe.violations.filter(v => v.impact === "critical" || v.impact === "serious")).toEqual([]);
     await dialog.getByRole("button", { name: lang === "de" ? "Beim Beenden installieren" : "Install on quit", exact: true }).click();
@@ -63,10 +63,10 @@ for (const lang of ["de", "en"] as const) {
       const { useUpdate } = await import("/src/features/update/state.ts");
       useUpdate.setState({ open: true });
     }, tickFixture.crawl);
-    const dialog = page.getByRole("dialog", { name: lang === "de" ? "Updates" : "Software updates" });
+    const dialog = page.getByRole("dialog", { name: lang === "de" ? "Eine neue Version von OpenSpider ist verfügbar!" : "A new version of OpenSpider is available!" });
     const after = dialog.getByRole("button", { name: lang === "de" ? "Nach Crawl-Ende installieren" : "Install after crawl ends" });
     await expect(after).toBeVisible();
-    await expect(dialog.getByRole("button", { name: lang === "de" ? "Jetzt installieren und neu starten" : "Install now and restart" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: lang === "de" ? "Update installieren" : "Install update" })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: lang === "de" ? "Beim Beenden installieren" : "Install on quit", exact: true })).toHaveCount(0);
     const axe = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
     expect(axe.violations.filter(v => v.impact === "critical" || v.impact === "serious")).toEqual([]);
@@ -124,45 +124,4 @@ test("update setting defaults on, persists changes and explains environment over
   await expect(page.getByText("Update checks are disabled by OPENSPIDER_DISABLE_UPDATE_CHECK=1.")).toBeVisible();
   const axe = await new AxeBuilder({ page }).include('[data-settings-section="updates"]').analyze();
   expect(axe.violations.filter(v => v.impact === "critical" || v.impact === "serious")).toEqual([]);
-});
-// spec: OUT-251
-// spec: UI-121
-for (const lang of ["de", "en"] as const) test(`${lang}: update actions stay on one line at the minimum window size (B3-UI)`, async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 640 });
-  bridge = await startFakeBridge();
-  bridge.core.settings.general.language = lang;
-  state = { ready: { version: "1.0.1" } };
-  bridge.core.handlers.set("update.status", () => state);
-  await page.goto(`/?bridge=${encodeURIComponent(bridge.url)}`);
-  await page.waitForFunction(() => window.__osMenu !== undefined);
-  await expect.poll(() => page.evaluate(() => window.__osMenu?.model.lang)).toBe(lang);
-  await page.evaluate(async () => {
-    // @ts-expect-error Vite source module
-    const { useUpdate } = await import("/src/features/update/state.ts");
-    useUpdate.setState({ open: true, release: { version: "1.0.1", notes: "Fixture notes", pubDate: null } });
-  });
-  const dialog = page.getByRole("dialog", { name: lang === "de" ? "Updates" : "Software updates" });
-  const names = lang === "de" ? ["Jetzt installieren und neu starten", "Beim Beenden installieren"] : ["Install now and restart", "Install on quit"];
-  for (const name of names) {
-    const button = dialog.getByRole("button", { name, exact: true });
-    await expect(button).toBeVisible();
-    // One line box for the label, no clipped text, and the button as high as its single line plus padding.
-    const metrics = await button.evaluate((el) => {
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const lines = new Set([...range.getClientRects()].filter(r => r.width > 0).map(r => Math.round(r.top))).size;
-      const style = getComputedStyle(el);
-      const line = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
-      const content = el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-      return { lines, overflow: el.scrollWidth - el.clientWidth, content, line };
-    });
-    expect(metrics.lines, name).toBe(1);
-    expect(metrics.overflow, name).toBeLessThanOrEqual(0);
-    expect(metrics.content, name).toBeLessThan(metrics.line * 2);
-  }
-  const boxes = await Promise.all(names.map(name => dialog.getByRole("button", { name, exact: true }).boundingBox()));
-  // Stacked: the primary action above the second one, both inside the dialog.
-  expect(boxes[0]!.y).toBeLessThan(boxes[1]!.y);
-  const dialogBox = (await dialog.boundingBox())!;
-  for (const box of boxes) expect(box!.x + box!.width).toBeLessThanOrEqual(dialogBox.x + dialogBox.width);
 });

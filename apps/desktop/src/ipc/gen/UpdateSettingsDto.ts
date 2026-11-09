@@ -3,4 +3,4 @@
 /**
  * App-wide settings wire format; follows AppSettings.updates field for field.
  */
-export type UpdateSettingsDto = { check: boolean, lastCheck: string | null, };
+export type UpdateSettingsDto = { check: boolean, lastCheck: string | null, skippedVersion?: string | null, };

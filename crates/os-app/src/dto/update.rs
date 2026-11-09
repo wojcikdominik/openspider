@@ -61,4 +61,6 @@ pub struct UpdateSetAutoArgs {
 pub struct UpdateSettingsDto {
     pub check: bool,
     pub last_check: Option<String>,
+    #[ts(optional = nullable)]
+    pub skipped_version: Option<String>,
 }

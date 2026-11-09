@@ -351,6 +351,8 @@ impl<S: tracing::Subscriber + for<'a> LookupSpan<'a>> Layer<S> for LogLayer {
 pub fn system_info() -> Value {
     let system = sysinfo::System::new_all();
     json!({"version":env!("CARGO_PKG_VERSION"),"build":option_env!("OPENSPIDER_BUILD").unwrap_or("dev"),
+        "buildNumber":os_model::build_number::BUILD_NUMBER,
+        "versionDisplay":os_model::build_number::display(env!("CARGO_PKG_VERSION"), os_model::build_number::BUILD_NUMBER),
         "os":sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.into()),
         "architecture":std::env::consts::ARCH,"cpuCores":system.cpus().len(),
         "ramTotalBytes":system.total_memory(),"ramAvailableBytes":system.available_memory(),
