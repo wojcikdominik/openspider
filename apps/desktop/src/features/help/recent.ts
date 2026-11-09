@@ -4,6 +4,8 @@ import type { JsonValue } from "../../ipc/gen/serde_json/JsonValue";
 import { crawls } from "../../ipc/crawls";
 import { uistate } from "../../ipc/uistate";
 import type { RecentEntry } from "../../ui/menu/contributions/main";
+import { recentCrawlTitle } from "../../ui/recentCrawl";
+import { currentLanguage } from "../../i18n";
 
 export function normalizeRecent(value: unknown): RecentEntry[] {
   if (!Array.isArray(value)) return [];
@@ -26,7 +28,9 @@ export async function loadRecent(): Promise<RecentEntry[]> {
     const index = await crawls.list({ show: "all" });
     return entries.map(entry => {
       const row = index.find(row => row.crawl.file === entry.path);
-      return row ? { path: entry.path, label: `${row.startUrl || row.crawl.name} · ${row.crawl.startedAt.slice(0, 10)}` } : entry;
+      // CRAWL-127 (OS-Festlegung 09.11.2026): same readable title as the crawl management (name/domain – date).
+      const label = row && recentCrawlTitle({ name: row.crawl.name, startUrl: row.startUrl, startedAt: row.crawl.startedAt }, currentLanguage());
+      return label ? { path: entry.path, label } : entry;
     });
   } catch { return entries; }
 }

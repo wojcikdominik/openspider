@@ -17,3 +17,12 @@
 .os-modal-large:has(.os-crawls) { width:min(var(--os-size-1200), calc(100vw - var(--os-size-32))); max-width:calc(100vw - var(--os-size-32)); }
 .os-crawls td { height: var(--os-row-height); padding-block: 0; }
 .os-crawls th { height: var(--os-header-height); padding-block: 0; }
+/* CRAWL-127 (OS-Festlegung 09.11.2026): recent entries equally wide and left-aligned; path shortened in the middle. */
+.os-crawls > nav { min-width:0; }
+.os-crawls-recent { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:minmax(0, 1fr); gap:var(--os-size-4); }
+.os-crawls-recent .os-btn { box-sizing:border-box; width:100%; height:auto; min-height:var(--os-size-28); padding-block:var(--os-size-4); flex-direction:column; align-items:flex-start; gap:0; text-align:start; }
+.os-crawls-recent-title { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.os-crawls-recent-path { display:flex; width:100%; min-width:0; white-space:nowrap; font-size:var(--os-font-small); color:var(--os-text-muted); }
+.os-crawls-recent-path > span { flex:none; }
+.os-crawls-recent-path > .os-crawls-recent-head { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.os-crawls-recent .os-btn[data-disabled] .os-crawls-recent-path { color:var(--os-text-disabled); }

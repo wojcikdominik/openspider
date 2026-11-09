@@ -1,7 +1,7 @@
 import { loadRecent, updateRecent } from "../help/recent";
 import { openComparison, useComparison } from "../compare/model";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useT, i18n, currentLanguage } from "../../i18n";
+import { useT, useFormat, i18n, currentLanguage } from "../../i18n";
 import { crawl } from "../../ipc/crawl";
 import { crawls } from "../../ipc/crawls";
 import { projects } from "../../ipc/projects";
@@ -17,6 +17,7 @@ import { useAction, registerAction } from "../../ui/actions";
 import { registerMenuContributions } from "../../ui/menu/registry";
 import type { MenuEntry } from "../../ui/primitives/Menu";
 import { Banner, Button, ContextMenu, Dialog, DialogFooter, ProgressBar, Tree } from "../../ui/primitives";
+import { fileName, recentCrawlTitle, recentMenuLabel, splitPath } from "../../ui/recentCrawl";
 import { nativeCrawlDesktop, type CrawlDesktop, type RepairResult } from "./desktop";
 import { cell, columns, openCrawls, permissions, phaseKey, readRecent, sortRows, useCrawlsDialog, writeRecent, type Column } from "./model";
 import "./crawls.css";
@@ -44,6 +45,10 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   const busyRef = useRef(false);
   const [error, setError] = useState<{ text: string; path?: string; kind?: "info" | "error" } | null>(null);
   const [recent, setRecent] = useState(readRecent);
+  const lang = useFormat().lang;
+  // CRAWL-127 (OS-Festlegung 09.11.2026): recent entries show name/domain and date from the crawl index. The open
+  // management dialog supplies fresh rows; otherwise one index listing (no per-file query) labels the entries.
+  const [listed, setListed] = useState<CrawlListing[]>([]);
   const [form, setForm] = useState<Form | null>(null);
   const formInput = useRef<HTMLInputElement>(null);
   const formKind = form?.kind ?? null;
@@ -61,6 +66,21 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
     void loadRecent().then(entries => { if (live) setRecent(writeRecent([...entries.map(e => e.path), ...readRecent()])); }).catch(() => undefined);
     return () => { live = false; };
   }, [currentCrawl, phase]);
+  const recentKey = recent.join("\n");
+  useEffect(() => {
+    if (open || !recentKey) return;
+    let live = true;
+    void crawls.list({ show: "all" }).then(items => { if (live) setListed(items); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [open, recentKey, currentCrawl, phase]);
+  const recentMeta = useMemo(() => {
+    const index = new Map<string, CrawlListing>();
+    for (const row of [...listed, ...rows]) index.set(row.crawl.file, row);
+    return (path: string) => {
+      const row = index.get(path);
+      return row && { name: row.crawl.name, startUrl: row.startUrl, startedAt: row.crawl.startedAt };
+    };
+  }, [listed, rows]);
   const [cancelling, setCancelling] = useState(false);
   const requestVersion = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -195,10 +215,10 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
       { id: "crawls.manage", labelKey: "crawls-title", action: "crawls.manage" },
       { id: "crawls.import", labelKey: "crawls-import", action: "crawls.import", enabled: () => !disabled },
       { id: "crawls.export", labelKey: "crawls-export", action: "crawls.export", enabled: c => c.hasCrawl === true && c.crawlRunning !== true && !disabled },
-      { id: "crawls.recent", labelKey: "crawls-recent", items: recent.map((path, i) => ({ id: `crawls.recent.${i}`, literalLabel: path, action: `crawls.recent.${i}`, enabled: () => !disabled })) },
+      { id: "crawls.recent", labelKey: "crawls-recent", items: recent.map((path, i) => ({ id: `crawls.recent.${i}`, literalLabel: recentMenuLabel(path, recentMeta(path), lang), action: `crawls.recent.${i}`, enabled: () => !disabled })) },
     ] }]));
     return () => { for (const off of offs.reverse()) off(); };
-  }, [recent, disabled, t, rows]);
+  }, [recent, disabled, t, recentMeta, lang]);
   const actions: MenuEntry[] = (Object.keys(allowed) as (keyof typeof allowed)[]).map(action => ({ id: action, label: t(action === "open" ? "crawls-open-selected" : `crawls-${action}`),
     isDisabled: disabled || !allowed[action], disabledReason: chosen.some(r => r.crawl.phase === "running") ? t("crawls-running") : t("crawls-selection-reason"),
     onAction: () => {
@@ -304,7 +324,15 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
         <div className="os-crawls-toolbar">{actions.map(a => <span key={a.id} title={a.isDisabled ? a.disabledReason : undefined}><Button isDisabled={a.isDisabled} onPress={a.onAction}>{a.label}</Button></span>)}</div>
         {chosen.length === 1 && <div className="os-crawls-toolbar"><Button isDisabled={disabled || chosen[0]!.crawl.phase === "running"} onPress={() => void attempt(async () => { const path = chosen[0]!.crawl.file; try { await desktop.check(path); setError({ text: t("crawls-integrity-ok"), kind: "info" }); } catch (e) { const err = toCmdError(e); setError({ text: `${path}: ${textError(e)}`, path: err.messageKey === "err-crawl-corrupt" ? path : undefined }); } })}>{t("crawls-check")}</Button>
           <Button isDisabled={disabled || phase === "running"} onPress={() => void attempt(async () => { await config.set(await desktop.configuration(chosen[0]!.crawl.file)); setError({ text: t("crawls-config-applied"), kind: "info" }); })}>{t("crawls-config")}</Button></div>}
-        {recent.length > 0 && <nav aria-label={t("crawls-recent")}><h3>{t("crawls-recent")}</h3>{recent.map(path => <Button key={path} isDisabled={disabled} onPress={() => void attempt(() => requestOpen({ kind: "path", path }))}>{path}</Button>)}</nav>}
+        {recent.length > 0 && <nav aria-label={t("crawls-recent")}><h3>{t("crawls-recent")}</h3><ul className="os-crawls-recent">{recent.map(path => {
+          const title = recentCrawlTitle(recentMeta(path), lang);
+          const { head, tail } = splitPath(path);
+          // Full path as tooltip and in the accessible name; the visible path shortens in the middle to the width.
+          return <li key={path} title={path}><Button aria-label={title ? `${title}, ${path}` : path} isDisabled={disabled} onPress={() => void attempt(() => requestOpen({ kind: "path", path }))}>
+            <span className="os-crawls-recent-title">{title ?? fileName(path)}</span>
+            <span className="os-crawls-recent-path" aria-hidden="true"><span className="os-crawls-recent-head">{head}</span><span>{tail}</span></span>
+          </Button></li>;
+        })}</ul></nav>}
         <Button onPress={() => useCrawlsDialog.setState({ open: false })}>{t("ui-dialog-close")}</Button>
       </div>
     </Dialog>

@@ -165,3 +165,40 @@ test("Escape in a form closes only the form and returns focus to its trigger", a
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Manage", exact: true })).toBeFocused();
 });
+
+// CRAWL-127 (OS-Festlegung 09.11.2026): recent entries stay on one path line, shortened in the middle to the available
+// width; the file name stays visible, the buttons are equally wide and left-aligned.
+// spec: CRAWL-127
+test("recent entries show name and date, shorten long paths in the middle and keep the file name visible", async ({ page }) => {
+  const long = "/Users/fixture/Library/Application Support/de.openspider.app/some/deeply/nested/folder/structure/crawls/01a18894-1234-7000-8000-bbfe3c06b178.ospider";
+  await page.evaluate(paths => localStorage.setItem("openspider.recent-crawls.v1", JSON.stringify(paths)), ["/fixture/Alpha.ospider", long]);
+  await page.reload();
+  await page.getByRole("button", { name: "Manage", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "Recently opened" });
+  const known = nav.getByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/fixture\/Alpha\.ospider$/ });
+  const unknown = nav.getByRole("button", { name: long, exact: true });
+  await expect(known).toBeVisible();
+  await expect(unknown.locator("..")).toHaveAttribute("title", long);
+  await page.setViewportSize({ width: 640, height: 800 });
+  const layout = await unknown.evaluate(button => {
+    const box = (el: Element) => el.getBoundingClientRect();
+    const path = button.querySelector(".os-crawls-recent-path")!;
+    const head = path.firstElementChild as HTMLElement;
+    const tail = path.lastElementChild as HTMLElement;
+    return {
+      button: box(button), other: box(button.closest("ul")!.querySelector("button")!), body: box(button.closest(".os-dialog-body")!),
+      pathHeight: box(path).height, lineHeight: parseFloat(getComputedStyle(path).lineHeight) || parseFloat(getComputedStyle(path).fontSize) * 1.5,
+      headCut: head.scrollWidth > head.clientWidth, tailRight: box(tail).right, tailText: tail.textContent,
+      ellipsis: getComputedStyle(head).textOverflow, align: getComputedStyle(button).alignItems,
+    };
+  });
+  expect(layout.button.width).toBeCloseTo(layout.other.width, 0);
+  expect(layout.button.left).toBeCloseTo(layout.other.left, 0);
+  expect(layout.align).toBe("flex-start");
+  expect(layout.pathHeight).toBeLessThan(layout.lineHeight * 1.6);
+  expect(layout.headCut).toBe(true);
+  expect(layout.ellipsis).toBe("ellipsis");
+  expect(layout.tailText).toBe("/crawls/01a18894-1234-7000-8000-bbfe3c06b178.ospider");
+  expect(layout.tailRight).toBeLessThanOrEqual(layout.button.right);
+  expect(layout.button.right).toBeLessThanOrEqual(layout.body.right);
+});

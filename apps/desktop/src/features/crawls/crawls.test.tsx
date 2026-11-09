@@ -330,6 +330,38 @@ it("native recent menu labels preserve literal user paths without treating them 
 });
 
 // spec: CRAWL-127
+it("labels known recent crawls with name and date from one index listing and shortens unknown paths in the middle", async () => {
+  // OS-Festlegung 09.11.2026: readable recent entries in File → Recently opened.
+  const { buildMenuModel, flattenItems } = await import("../../ui/menu/build");
+  const long = "/Users/fixture/Library/Application Support/de.openspider.app/elsewhere/0199f000-0000-7000-8000-00000000abcd.ospider";
+  writeRecent(["/fixture/Alpha.ospider", long]);
+  await mount(false);
+  const label = (i: number) => buildMenuModel(allMenuContributions(), { platform: "mac", lang: "en", native: true, t: key => key, ctx: {} })
+    .menus.flatMap(m => flattenItems(m.items)).find(item => item.id === `crawls.recent.${i}`)?.label;
+  await waitFor(() => expect(label(0)).toMatch(/^Alpha – Oct 1, 2026, /));
+  expect(label(1)).toBe("/Users/f…/elsewhere/0199f000-0000-7000-8000-00000000abcd.ospider");
+  expect(calls("crawls.list")).toHaveLength(1);
+});
+
+// spec: CRAWL-127
+it("shows recent entries in the management dialog with readable title, middle-shortened path and the full path as tooltip", async () => {
+  const long = "C:\\Users\\Fixture\\AppData\\Roaming\\de.openspider.app\\elsewhere\\Outside.ospider";
+  writeRecent(["/fixture/Alpha.ospider", long]);
+  await mount();
+  const nav = screen.getByRole("navigation", { name: "Recently opened" });
+  const known = within(nav).getByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/fixture\/Alpha\.ospider$/ });
+  expect(known.closest("li")).toHaveAttribute("title", "/fixture/Alpha.ospider");
+  expect(known).toHaveTextContent(/^Alpha – Oct 1, 2026, .*\/fixture\/Alpha\.ospider$/);
+  const unknown = within(nav).getByRole("button", { name: long });
+  expect(unknown.closest("li")).toHaveAttribute("title", long);
+  expect(within(unknown).getByText("Outside.ospider")).toHaveClass("os-crawls-recent-title");
+  expect(within(unknown).getByText("C:\\Users\\Fixture\\AppData\\Roaming\\de.openspider.app")).toHaveClass("os-crawls-recent-head");
+  expect(within(unknown).getByText("\\elsewhere\\Outside.ospider")).toBeVisible();
+  fireEvent.click(known);
+  await waitFor(() => expect(calls("crawl.open")[0]?.args).toEqual({ kind: "path", path: "/fixture/Alpha.ospider" }));
+});
+
+// spec: CRAWL-127
 it("confirms missing files after the real core's Io canonicalization error before pruning history", async () => {
   writeRecent(["/missing.ospider"]);
   fixture.core.handlers.set("crawl.open", () => { throw new IpcError(localError("Io", "err-io")); });
