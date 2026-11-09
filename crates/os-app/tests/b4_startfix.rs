@@ -3,6 +3,7 @@
 #[path = "session_common.rs"]
 mod common;
 use common::*;
+use os_app::runtime::lifecycle_bus::CrawlEvent;
 use os_app::{
     dto::{Notice, NoticeLevel},
     App, AppConfig,
@@ -13,7 +14,10 @@ use os_sched::mail::{Account, AccountStore, Auth, Tls};
 use os_testsite::mocks::smtp::{Config, SmtpMock};
 use serde_json::json;
 use std::{
-    sync::Arc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
@@ -38,36 +42,55 @@ fn config(mode: RobotsMode) -> CrawlConfig {
     c
 }
 
+/// Zählt die Lauf-Enden (`Completed`, `Stopped`, `Paused`). `settle` sendet sie erst nach seinen Meldungen; erst danach liegen
+/// alle Meldungen des Laufs vor (der Zustand allein ist früher gesetzt).
+fn ends(app: &App) -> Arc<AtomicUsize> {
+    let count = Arc::new(AtomicUsize::new(0));
+    let seen = count.clone();
+    app.crawl_events().subscribe(Box::new(move |_, event| {
+        if matches!(
+            event,
+            CrawlEvent::Completed(_) | CrawlEvent::Stopped(_) | CrawlEvent::Paused(_)
+        ) {
+            seen.fetch_add(1, Ordering::SeqCst);
+        }
+    }));
+    count
+}
+
 /// Startet einen Spider-Crawl über den Produktionsweg der App und sammelt die Meldungen bis zum Ende des Laufs (`settle`).
 async fn crawl(app: &App, start_url: &str, cfg: CrawlConfig) -> (CrawlState, Vec<Notice>) {
+    let ended = ends(app);
     let fetch = os_app::session::control::fetcher(app, &cfg).unwrap();
     os_app::session::control::start_with_fetcher(app, ctx(), request(start_url.into()), cfg, fetch)
         .await
         .unwrap();
-    settled(app).await
+    settled(app, &ended).await
 }
 
-/// Fragt die App ab, bis `settle` den Lauf abgeschlossen hat, und sammelt die Meldungen.
-async fn settled(app: &App) -> (CrawlState, Vec<Notice>) {
+/// Fragt die App ab, bis der Lauf beendet ist (Ereignis aus [`ends`], Engine-Handle abgegeben, Zustand nicht mehr „Läuft“), und
+/// sammelt die Meldungen. „URLs hinzufügen“ meldet das Ende zusätzlich selbst (`follow_completion`), unter Umständen vor
+/// `settle`; deshalb wird danach noch eine Sekunde weiter gesammelt, damit eine Meldung aus `settle` nicht unbemerkt bleibt.
+async fn settled(app: &App, ended: &AtomicUsize) -> (CrawlState, Vec<Notice>) {
     let deadline = Instant::now() + Duration::from_secs(30);
     let mut notices = Vec::new();
+    let mut grace: Option<Instant> = None;
     loop {
         os_app::session::poll(app).await.unwrap();
         if let Some(tick) = app.assemble_tick() {
             notices.extend(tick.notices);
         }
         let session = app.sessions().current(&window()).unwrap();
-        let settled = session
+        let released = session
             .engine
             .as_ref()
             .is_none_or(|e| e.handle.lock().unwrap().is_none());
-        if session.state != CrawlState::Running && settled {
-            // Meldungen aus `settle` liegen spätestens im nächsten Tick.
-            os_app::session::poll(app).await.unwrap();
-            if let Some(tick) = app.assemble_tick() {
-                notices.extend(tick.notices);
-            }
-            return (session.state, notices);
+        let done =
+            ended.load(Ordering::SeqCst) > 0 && released && session.state != CrawlState::Running;
+        match grace {
+            Some(until) if Instant::now() >= until => return (session.state, notices),
+            None if done => grace = Some(Instant::now() + Duration::from_secs(1)),
+            _ => {}
         }
         assert!(Instant::now() < deadline, "kein Ende: {notices:?}");
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -126,6 +149,7 @@ async fn the_robots_dialog_appears_once_per_crawl_also_after_adding_urls() {
     assert_eq!(state, CrawlState::Completed);
     assert_eq!(start_notices(&notices).len(), 1, "{notices:?}");
 
+    let ended = ends(&app);
     let op = call(
         &app,
         "crawl.addUrls",
@@ -135,7 +159,7 @@ async fn the_robots_dialog_appears_once_per_crawl_also_after_adding_urls() {
     let status = app.ops().wait(op["opId"].as_str().unwrap()).await.unwrap();
     assert!(status.error.is_none(), "{:?}", status.error);
     assert_eq!(status.result.unwrap(), json!({"added":1,"skipped":0}));
-    let (state, notices) = settled(&app).await;
+    let (state, notices) = settled(&app, &ended).await;
     assert_eq!(state, CrawlState::Completed);
     assert!(start_notices(&notices).is_empty(), "{notices:?}");
 }
