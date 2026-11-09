@@ -52,3 +52,6 @@
    Trackpads, Shift+wheel and keyboard focus continue to scroll to every action. */
 .u10-toolbar { scrollbar-width: none; }
 .u10-toolbar::-webkit-scrollbar { display: none; }
+
+/* B4-CMPUI2 (A8): carries `id="data-panel"` around the overview dashboard without changing its layout. */
+.u10-panel-contents { display: contents; }

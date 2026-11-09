@@ -260,9 +260,15 @@ pub async fn open(
                 .ok_or_else(|| CmdError::new(ErrorCode::NotFound, "err-crawl-not-found"))?
         }
     };
+    // CRAWL-127: a file that no longer exists (stale "Recent" entry) is `NotFound` with its path, not a generic I/O failure;
+    // the menus remove such entries with a hint.
     let path = tokio::task::spawn_blocking(move || {
         std::fs::canonicalize(&path).map_err(|e| {
-            crate::runtime::error::store_error(&os_store::StoreError::Io { path, source: e })
+            crate::runtime::error::store_error(&if e.kind() == std::io::ErrorKind::NotFound {
+                os_store::StoreError::NotFound(path)
+            } else {
+                os_store::StoreError::Io { path, source: e }
+            })
         })
     })
     .await

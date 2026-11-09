@@ -6,9 +6,11 @@ import { useSession, attachSession } from "../../state/session";
 import { createEventBus } from "../../ipc/events";
 import { setLanguage } from "../../i18n";
 import { registerAction } from "../../ui/actions";
+import { useComparison } from "../compare/model";
+import { session as compareSession } from "../compare/fixtures/out-compare/core";
 
 beforeEach(async () => { setupHeader(); await setLanguage("en"); vi.useFakeTimers(); });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); useComparison.setState({ session: null }); });
 const publish = (seq: number, patch: Partial<NonNullable<typeof tick.crawl>>) => {
   act(() => { useSession.getState().applyTick({ ...tick, seq, crawl: { ...tick.crawl!, ...patch } }); vi.advanceTimersByTime(250); });
 };
@@ -154,6 +156,36 @@ it("keeps structured opening reasons inspectable when no free-text detail exists
   expect(screen.getByText("Technical details")).toBeInTheDocument();
 });
 
+// spec: CRAWL-127
+// spec: UI-124
+// B4-CMPUI: the beta.3 status line read "Ein Dateivorgang ist fehlgeschlagen.: No such file or directory (os error 2)".
+// The sentence ends with its own punctuation; the English technical detail stays in the details, never in the sentence.
+it("keeps the technical detail out of the failure sentence and names a missing file", async () => {
+  await setLanguage("de");
+  render(<Statusbar />);
+  act(() => {
+    useSession.getState().pushNotice({ level: "error", code: "crawl-open-failed", args: {
+      code: "Io", messageKey: "err-io", args: { path: "/tmp/x.ospider" }, detail: "Permission denied (os error 13)" } });
+    vi.advanceTimersByTime(250);
+  });
+  const text = screen.getByTestId("crawl-open-error-text");
+  expect(text).toHaveTextContent(/^Ein Dateivorgang ist fehlgeschlagen\.$/);
+  expect(screen.getByTestId("crawl-open-error")).not.toHaveTextContent(".:");
+  expect(screen.getByTestId("crawl-open-error")).toHaveTextContent("Permission denied (os error 13)");
+  act(() => {
+    useSession.getState().pushNotice({ level: "error", code: "crawl-open-failed", args: {
+      code: "NotFound", messageKey: "err-file-not-found", args: { path: "/tmp/gone/x.ospider" }, detail: null } });
+    vi.advanceTimersByTime(250);
+  });
+  expect(screen.getByTestId("crawl-open-error-text")).toHaveTextContent(/^Die Datei wurde nicht gefunden: \/tmp\/gone\/x\.ospider$/);
+  // An unknown key falls back to the error class, still without a dangling detail.
+  act(() => {
+    useSession.getState().pushNotice({ level: "error", code: "crawl-open-failed", args: { code: "Io", messageKey: "err-unknown-x", detail: "No such file or directory (os error 2)" } });
+    vi.advanceTimersByTime(250);
+  });
+  expect(screen.getByTestId("crawl-open-error-text")).toHaveTextContent(/^Ein Dateivorgang ist fehlgeschlagen\.$/);
+});
+
 // spec: CRAWL-126
 it("reports a paused crawl at once and notes the background file merge until it has ended", async () => {
   useSession.getState().applyTick(tick); render(<Statusbar />);
@@ -179,4 +211,15 @@ it("reports a stopped crawl at once and notes the background file merge until it
   expect(screen.getByTestId("crawl-phase")).toHaveTextContent("Gestoppt – Datei wird zusammengeführt");
   publish(5, { phase: "completed", endReason: "stopped", merging: null });
   expect(screen.getByTestId("crawl-phase")).toHaveTextContent(/^Gestoppt$/);
+});
+
+// spec: UI-013
+// B4-CMPUI: an open comparison is the mode „Vergleich“, even with a single Spider crawl loaded beside it.
+it("names the comparison mode while a comparison is open", async () => {
+  useSession.getState().applyTick(tick); await setLanguage("de"); render(<Statusbar />);
+  expect(screen.getByText("Modus: Spider")).toBeVisible();
+  act(() => { useComparison.setState({ session: compareSession }); vi.advanceTimersByTime(250); });
+  expect(screen.getByText("Modus: Vergleich")).toBeVisible();
+  act(() => { useComparison.setState({ session: null }); vi.advanceTimersByTime(250); });
+  expect(screen.getByText("Modus: Spider")).toBeVisible();
 });

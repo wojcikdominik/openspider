@@ -32,7 +32,7 @@ export function saveTableState(patch: Record<string, JsonValue>): Promise<void> 
  * Grouped navigation (UI-004, OS-Festlegung K2-77): the bar above the pill tabs. Default assignment from the spec; tabs of later
  * milestones get their group there, until then an unknown tab joins „Benutzerdefiniert“ so that it stays reachable.
  */
-export type TabGroupId = "urls" | "content" | "technical" | "links" | "performance" | "custom";
+export type TabGroupId = "urls" | "content" | "technical" | "links" | "performance" | "custom" | "changes";
 export const TAB_GROUPS: readonly { id: TabGroupId; tabs: readonly string[] }[] = [
   { id: "urls", tabs: ["Internal", "External", "Security", "Response Codes", "URL"] },
   { id: "content", tabs: ["Page Titles", "Meta Description", "Meta Keywords", "H1", "H2", "Content", "Images", "Structured Data"] },
@@ -40,6 +40,8 @@ export const TAB_GROUPS: readonly { id: TabGroupId; tabs: readonly string[] }[] 
   { id: "links", tabs: ["Links", "Link Metrics"] },
   { id: "performance", tabs: ["PageSpeed", "Analytics", "Search Console"] },
   { id: "custom", tabs: ["Custom Search", "Custom Extraction", "Custom JavaScript"] },
+  // K2-77: „Change Detection erscheint im Vergleichsmodus als eigener Eintrag“ – the core lists the tab only during a comparison.
+  { id: "changes", tabs: ["Change Detection"] },
 ];
 export function groupOf(tab: string): TabGroupId {
   return TAB_GROUPS.find(g => g.tabs.includes(tab))?.id ?? "custom";
@@ -109,7 +111,9 @@ export const useTabs = create<TabsState>((set, get) => {
       const hidden = Array.isArray(saved.hidden) ? saved.hidden.filter((v): v is string => typeof v === "string" && !isMandatory(v, tabs) && defaults.includes(v)) : [];
       const groupActive = Object.fromEntries(Object.entries(object(saved.groupActive))
         .filter(([group, id]) => GROUP_IDS.includes(group) && typeof id === "string" && defaults.includes(id) && !hidden.includes(id))) as Partial<Record<TabGroupId, string>>;
-      const active = typeof saved.active === "string" && defaults.includes(saved.active) && !hidden.includes(saved.active) ? saved.active : get().active;
+      // A tab that left the catalog (Change Detection after closing a comparison) falls back to Internal.
+      const fallback = defaults.includes(get().active) ? get().active : defaults.includes(MANDATORY_TAB) ? MANDATORY_TAB : defaults[0] ?? get().active;
+      const active = typeof saved.active === "string" && defaults.includes(saved.active) && !hidden.includes(saved.active) ? saved.active : fallback;
       set({ catalog: tabs, order: [...new Set([...order, ...defaults])], hidden, loaded: true, error: null, active, groupActive: { ...groupActive, [groupOf(active)]: active },
         view: saved.view === "overview" ? "overview" : "tabs" });
     } catch (error) { set({ error }); }

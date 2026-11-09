@@ -8,7 +8,9 @@ import { setLanguage } from "../../i18n";
 import { ComparisonControls } from "./ComparisonControls";
 import { ComparisonNumbers } from "./ComparisonNumbers";
 import { ComparisonLinks } from "./ComparisonLinks";
-import { ComparisonTable, ComparisonTabs } from "./ComparisonTable";
+import { ComparisonTable } from "./ComparisonTable";
+import { UpperTable } from "../table/UpperTable";
+import { useTabs } from "../../state/tabs";
 import { closeComparison, comparisonRows, navigateComparison, openComparison, selectComparisonUrl, useComparison } from "./model";
 import { comparisonFixture, current, previous, session, snapshot, pagedLinks } from "./fixtures/out-compare/core";
 // Contract harness: preserve the existing population/number assertions independently
@@ -66,7 +68,8 @@ it("keeps Previous-only issues with Current zero, sorts Change both ways, and ro
   active();render(<ComparisonNumbers issues />);
   let rows=screen.getAllByRole("row").slice(1);expect(rows[0]).toHaveTextContent("Page Titles: Missing");
   fireEvent.click(screen.getByRole("button",{name:"Change ↓"}));
-  rows=screen.getAllByRole("row").slice(1);expect(rows[0]).toHaveTextContent("Client Error (4xx)");
+  // UI-121: the row title uses the ordinary tab and filter names (en canon: „Client Error (4XX)“).
+  rows=screen.getAllByRole("row").slice(1);expect(rows[0]).toHaveTextContent("Response Codes: Client Error (4XX)");
   expect(within(rows[0]!).getAllByRole("button")[0]).toHaveTextContent("0");
   fireEvent.click(within(rows[0]!).getAllByRole("button")[4]!);
   expect(useComparison.getState().query).toMatchObject({tab:"Response Codes",filter:"Client Error (4xx)",class:"Removed"});
@@ -107,10 +110,10 @@ it("disables all change categories for a one-sided URL and still shows its exist
   expect(screen.getByRole("combobox",{name:"Link change"})).toBeDisabled();
 });
 // spec: TECH-301
-it("puts Change Detection last and sends the element and Changed population to the paired view",async()=>{
-  active();render(<><ComparisonTabs /><ComparisonTable /></>);
-  const tabs=screen.getAllByRole("tab");expect(tabs.at(-1)).toHaveTextContent("Change Detection");
-  fireEvent.click(tabs.at(-1)!);fireEvent.change(screen.getByLabelText("Filter"),{target:{value:"Page Titles"}});
+// The tab itself is chosen in the ordinary tab bar (toptabs.test.tsx, K2-77).
+it("sends the Change Detection element and Changed population to the paired view",async()=>{
+  active();render(<ComparisonTable />);
+  act(()=>navigateComparison("Change Detection","All"));fireEvent.change(screen.getByLabelText("Filter"),{target:{value:"Page Titles"}});
   fireEvent.change(screen.getByLabelText("Comparison status"),{target:{value:"changed"}});
   await waitFor(()=>expect(calls("view.rows").at(-1)?.args).toMatchObject({comparison:{tab:"Change Detection",filter:"Page Titles",class:"changed"}}));
 });
@@ -165,31 +168,36 @@ it("reopens the selection from Mode → Compare after the dialog was cancelled",
 });
 
 // spec: CRAWL-144
-it("resets the page when switching from 105 Inlinks to three Outlinks and back",async()=>{
+// spec: UI-140
+it("shows all 105 Inlinks in one virtualized table and starts at row 0 again after switching to three Outlinks and back",async()=>{
   active();
   fixture.core.handlers.set("view.rows",args=>{
     const a=args as {comparison:{tab:"inlinks"|"outlinks"};offset:number;limit:number};
     const all=pagedLinks[a.comparison.tab];
-    return {viewId:"paged-links",version:1,offset:a.offset,columns:["Source","Destination"],rowKeys:[],cells:all.slice(a.offset,a.offset+a.limit),total:all.length,side:"Current",filtersEnabled:true};
+    // Like the core: every row window carries one key per row (UI-142).
+    const cells=all.slice(a.offset,a.offset+a.limit);
+    return {viewId:"paged-links",version:1,offset:a.offset,columns:["Source","Destination"],rowKeys:cells.map((_,i)=>a.offset+i+1),cells,total:all.length,side:"Current",filtersEnabled:true};
   });
   const mounted=render(<ComparisonLinks direction="inlinks" urlId={1} />);
   await screen.findByText("https://site.test/in-0");
-  fireEvent.click(screen.getByRole("button",{name:"Next page"}));
-  await screen.findByText("https://site.test/in-100");
-  expect(screen.getAllByRole("row")).toHaveLength(6);
+  // UI-140: one scrollable population instead of client pages; the row 101 is reachable without a page button.
+  expect(screen.getByText("https://site.test/in-104")).toBeInTheDocument();
+  expect(screen.getAllByRole("row")).toHaveLength(106);
+  expect(screen.getByText("105 rows")).toBeVisible();
+  expect(screen.queryByRole("button",{name:"Next page"})).toBeNull();
+  expect(screen.queryByRole("button",{name:"Previous page"})).toBeNull();
   mounted.rerender(<ComparisonLinks direction="outlinks" urlId={1} />);
   await screen.findByText("https://site.test/out-0");
   expect(screen.getAllByRole("row")).toHaveLength(4);
   expect(screen.getByText("3 rows")).toBeVisible();
-  expect(screen.getByRole("button",{name:"Previous page"})).toBeDisabled();
-  expect(screen.getByRole("button",{name:"Next page"})).toBeDisabled();
   expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:0,comparison:{tab:"outlinks"}});
   mounted.rerender(<ComparisonLinks direction="inlinks" urlId={1} />);
   await screen.findByText("https://site.test/in-0");
-  expect(screen.getAllByRole("row")).toHaveLength(101);
+  expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:0,comparison:{tab:"inlinks"}});
+  expect(screen.getAllByRole("row")).toHaveLength(106);
 });
 // spec: TECH-301
-it("toggles Change % sorting through the core, resets paging, and exports the sorted query",async()=>{
+it("toggles Change % sorting through the core, reloads from row 0, and exports the sorted query",async()=>{
   active();navigateComparison("Change Detection","All");
   fixture.core.handlers.set("view.rows",args=>{
     const a=args as {offset:number;comparison:{sort?:{dir:string}}};
@@ -198,8 +206,7 @@ it("toggles Change % sorting through the core, resets paging, and exports the so
   });
   render(<ComparisonTable />);
   await screen.findByRole("button",{name:"Word Count Change %"});
-  fireEvent.click(screen.getByRole("button",{name:"Next page"}));
-  await waitFor(()=>expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:100}));
+  expect(screen.queryByRole("button",{name:"Next page"})).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:"Word Count Change %"}));
   await waitFor(()=>expect(calls("view.rows").at(-1)?.args).toMatchObject({offset:0,comparison:{sort:{column:"Word Count Change %",dir:"asc"}}}));
   expect(screen.getByRole("columnheader",{name:"Word Count Change %"})).toHaveAttribute("aria-sort","ascending");
@@ -227,4 +234,53 @@ it("opens comparison with the accessible compact launcher beside normal crawl ta
   await waitFor(()=>expect(screen.getByRole("button",{name:"Compare"})).toBeEnabled());
   fireEvent.click(screen.getByRole("button",{name:"Compare"}));
   await waitFor(()=>expect(useComparison.getState().session).toEqual(session));
+});
+
+// spec: OUT-142
+// spec: OUT-143
+// spec: UI-121
+// B4-CMPUI: the overview speaks the UI language (titles, column heads, numbers); clipped count columns get a visible hint.
+it("shows the overview with localized titles and numbers and hints at clipped columns", async () => {
+  await setLanguage("de");
+  useComparison.setState({ session, snapshot: { overview: [{ tab: "Internal", filter: "All", label: "All", current: 4438, previous: 4811, change: -373, classes: [0, 616, 0, 989] }], issues: [], notes: [] } });
+  const wide = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(280);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(280);
+  const mounted = render(<ComparisonNumbers />);
+  const row = within(screen.getByRole("rowheader", { name: "Intern: Alle" }).closest("tr")!);
+  expect(row.getAllByRole("cell").map(c => c.textContent)).toEqual(["4.438", "4.811", "-373", "0", "616", "0", "989"]);
+  expect(screen.getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Filter", "Current", "Previous", "Änderung", "Hinzugefügt", "Neu", "Entfernt", "Fehlend"]);
+  expect(screen.queryByTestId("compare-scroll-hint")).toBeNull();
+  // A sidebar narrower than the seven count columns: the table scrolls sideways and says so.
+  wide.mockReturnValue(900); mounted.unmount(); render(<ComparisonNumbers />);
+  expect(screen.getByTestId("compare-scroll-hint")).toHaveTextContent("Weitere Spalten rechts – horizontal scrollen");
+});
+
+// spec: OUT-149
+// spec: OUT-142
+// spec: UI-121
+it("shows localized select values and keeps the canonical values for the core", async () => {
+  active(); await setLanguage("de");
+  render(<><ComparisonTable /><ComparisonLinks direction="outlinks" urlId={1} /></>);
+  await screen.findByRole("table", { name: "Vergleich der Links" });
+  const change = screen.getByRole("combobox", { name: "Linkänderung" }) as HTMLSelectElement;
+  expect([...change.options].map(o => [o.value, o.textContent])).toEqual([["All", "Alle"], ["Added", "Hinzugefügt"], ["Removed", "Entfernt"], ["Anchor Changed", "Ankertext geändert"], ["Unchanged", "Unverändert"]]);
+  const sources = screen.getAllByRole("combobox", { name: "Quelle" }) as HTMLSelectElement[];
+  expect([...sources[1]!.options].map(o => [o.value, o.textContent])).toEqual([["Auto", "Automatisch"], ["Current", "Current"], ["Previous", "Previous"]]);
+  const category = screen.getByRole("combobox", { name: "Vergleichsstatus" }) as HTMLSelectElement;
+  expect([...category.options].map(o => [o.value, o.textContent])).toEqual([["", "Alle"], ["Added", "Hinzugefügt"], ["New", "Neu"], ["Removed", "Entfernt"], ["Missing", "Fehlend"]]);
+  fireEvent.change(change, { target: { value: "Anchor Changed" } });
+  await waitFor(() => expect(calls("view.rows").at(-1)?.args).toMatchObject({ comparison: { tab: "outlinks", change: "Anchor Changed" } }));
+  const filter = screen.getByRole("combobox", { name: "Filter" }) as HTMLSelectElement;
+  expect([...filter.options].find(o => o.value === "All")?.textContent).toBe("Alle");
+});
+
+// spec: UI-004
+// spec: UI-150
+// B4-CMPUI2 (A8): „Übersicht“ during a comparison shows the hint in the panel the tab bar names (`data-panel`).
+it("shows the overview hint of a comparison inside the data panel", () => {
+  active(); useTabs.setState({ view: "overview" });
+  render(<UpperTable />);
+  const panel = document.getElementById("data-panel");
+  expect(panel).toHaveTextContent("Not available in comparison mode.");
+  useTabs.setState({ view: "tabs" });
 });
