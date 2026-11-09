@@ -5,6 +5,9 @@ Stand 09.11.2026. Branch `m3/startfix`, Mac-Worktree `openspider-wt/c-startfix` 
 `srv-sync.sh` auf den Stand des Mac-Worktrees gebracht. Grundlage: UI-019 (05), CRAWL-128 (01), OUT-281, OUT-182,
 OUT-152 (06). Herkunft: Fables Prüfung von B4-UNREACH.
 
+**Hinweis:** Abschnitte 1–5 beschreiben den ersten Stand (bis 19ea06bd). Die Entscheidungen des Orchestrators vom
+09.11.2026 ändern Historie, Vergleich, CLI-Exit bei robots-Sperre, Zeilenanzeige und Wiederholung; siehe „Nachtrag“.
+
 ## 1. Fehler-Mail bei `Failed` (OUT-281)
 
 ### Befund je Weg (mit den neuen Tests gegen den alten Code geprüft)
@@ -130,20 +133,59 @@ Neu: `crates/os-app/tests/b4_startfix.rs`, `crates/os-cli/tests/b4_startfix_mail
 K2-63: Gelockert ist nur die beauftragte Zeitschranke ab App-Start in `b4_unreach.rs`; sonst wurde keine Prüfung entfernt
 oder abgeschwächt und keine bestehende Erwartung geändert.
 
-## Spec-Fragen und Befunde
+## Nachtrag: Entscheidungen des Orchestrators (09.11.2026)
 
-- **S1 Historie des Planers:** Ein Aufgabenlauf mit nicht erreichbarer Start-URL steht ohne Auto-Vergleich als
-  „Completed with warnings“ (Exit 0, OUT-182) in der Historie, mit Auto-Vergleich als „Failed“, weil der Vergleich einen
-  erfolgreich abgeschlossenen Crawl verlangt. Die Mail ist jetzt in beiden Fällen eine Fehler-Mail. Soll die Historie
-  einheitlich „Failed“ zeigen (CRAWL-128) oder bleibt es bei OUT-182? Nicht geändert.
-- **S2 Meldung beim Auto-Vergleich:** Der Lauf meldet dann „Crawl erfolgreich, aber Auto-Vergleich fehlgeschlagen“, obwohl
-  der Crawl als „Fehlgeschlagen“ endete. Der Text ist irreführend; nicht geändert (CLI-Ergebnistexte, nicht dieses Paket).
-- **S3 CLI-Warnung bei robots-Sperre:** `start_url_problem` (CLI) wertet jede Start-URL-Zeile mit Status 0 als „nicht
-  erreichbar“, also auch die Sperre per `Disallow` („Blocked by Robots.txt“). Mit `--fail-on-start-error` endet ein
-  gesperrter Start deshalb mit Exit 3, obwohl CRAWL-128 die Sperre nicht als Fehlschlag zählt. Nicht geändert; Klärung zu
-  OUT-182/OUT-204 nötig.
-- **S4 Treffende Zeile:** Der Kern liefert die Zeile als „Zeile N: Disallow: /“ (deutscher Präfix aus `os-fetch`). Die
-  Meldung trägt sie als `line`, der Dialog zeigt sie nicht an, um keinen deutschen Text in der englischen Oberfläche zu
-  zeigen; er zeigt die sperrende robots.txt-URL.
-- **S5 Wiederholung:** Die robots-Meldung erscheint bei jedem `settle` eines als „Fertig“ endenden Laufs mit gesperrter
-  Start-URL, also auch nach „URLs hinzufügen“ auf einem solchen Crawl. Die Spec sagt dazu nichts.
+Die ursprünglichen Fragen S1–S5 hat der Orchestrator entschieden. Umgesetzt im selben Branch (Commits 5a23a90f…a38028a2),
+die Spec ergänzt als **OS-Festlegung 09.11.2026 (Orchestrator)** in UI-019, OUT-152, OUT-169 und OUT-182.
+
+| Nr. | Entscheidung | Umsetzung | Test |
+|---|---|---|---|
+| 1 | Planer-Historie: nicht erreichbare Start-URL → „Failed“, mit und ohne Auto-Vergleich; der Crawl stuft ein | `run_task`: `Outcome::crawl_failed` → `RunResult::Failed`, `Message` = Fehler des Crawls; Exit-Code des Laufs unverändert (0, OUT-182) | `b4_startfix_mail.rs` `planner_*` (3): Historie `Failed`, Meldung „nicht erreichbar“, nie „erfolgreich“ |
+| 2 | Nie „Crawl erfolgreich, aber Auto-Vergleich fehlgeschlagen“ bei fehlgeschlagenem Crawl; Vergleich „übersprungen (Crawl fehlgeschlagen)“ | `exec`: kein Vergleich bei `Failed`, Warnung `Auto-Vergleich übersprungen (Crawl fehlgeschlagen)` (Konstante `exec::COMPARE_SKIPPED_FAILED`), zählt nicht als Fehler; Schlusszeile = Fehler des Crawls (auch bei Exporten/`--strict`); `run_task` ruft den Vergleichs-Hook nicht; Vergleichsmail trägt den Vermerk statt der Tabelle | `planner_with_auto_compare_treats_a_failed_crawl_as_failure` (Vermerk in den Warnungen und in der Mail, keine „auto comparison“-Warnung), `cli_the_final_line_of_a_failed_crawl_names_its_error` |
+| 3 | CLI folgt CRAWL-128: robots-Sperre kein Fehlschlag, kein Exit 3, Warnung mit robots.txt-URL und Zeile | `exec::start_url_problem` unterscheidet `Unreachable` und `Robots`. `Disallow` → „Start-URL … durch robots.txt gesperrt: <robots.txt>, Zeile N: <Regel>“; Regel „robots.txt nicht erreichbar“ ohne Fehlschlag (robots.txt mit 5xx/429) → Warnung mit Grund. Beides ohne Exit 3. | `cli_a_robots_block_is_no_start_error` (Exit 0 mit `--fail-on-start-error`, genaue Warnzeile; Gegenprobe geschlossener Port → Exit 3); `acceptance_resume` (robots.txt am Netz gescheitert → weiter Exit 3) |
+| 4 | Zeile strukturiert, Formulierung per i18n, Dialog zeigt sie | `os-fetch` `RobotsMatch::split_matched_line` (Umkehrung der gespeicherten Anzeigeform, neben dem Formatierer); `StartRobotsBlock { robots_url, line_number, rule }`; Meldung `lineNumber` + `line` ohne Präfix; Oberfläche `notify-robots-line` / `notify-robots-rule` (en/de) | `parser::the_matched_line_splits_into_number_and_rule`; `b4_startfix.rs` (`lineNumber` 2, `line` „Disallow: /“); `StartRobots.test.tsx` (en/de, ohne Nummer); Playwright „Blocking rule (line 2): Disallow: /“ |
+| 5 | Dialog je Crawl und Start-URL höchstens einmal, nicht erneut nach „URLs hinzufügen“ | Merker `notice.start_robots` (Start-URL) in den Metadaten der Crawl-Datei, geschrieben über die Schreibwarteschlange; gilt auch nach Neustart der App | `the_robots_dialog_appears_once_per_crawl_also_after_adding_urls` (`crawl.addUrls` setzt den Crawl fort, zweites `settle` ohne Meldung) |
+
+Zu 3: Kein Widerspruch zu OUT-182/OUT-204. Beide verlangen Exit 3 nur für „Start-URL nicht erreichbar“, und CRAWL-128
+grenzt „nicht erreichbar“ ein. Die Spec ist entsprechend ergänzt.
+
+### Gates Nachtrag (Server, Stand 56113a72; UI-Gates auf a38028a2, danach nur ein Rust-Test geändert)
+
+| Gate | Ergebnis |
+|---|---|
+| `cargo fmt --all --check` | grün |
+| `cargo clippy --workspace --all-targets -- -D warnings` | grün |
+| `cargo test --workspace --no-fail-fast` (nach `~/ws-slot.sh`, `CARGO_PROFILE_*_DEBUG=0`, `CARGO_INCREMENTAL=0`) | grün: 620 Testbinaries, 4515 bestanden, 0 fehlgeschlagen, 51 ignoriert (darin `b4_startfix` 6/6, `b4_startfix_mail` 7/7) |
+| `cargo test -p os-app --test b4_startfix --test b4_unreach --test cmd_crawl_add_m2 --test cmd_mail_lifecycle` | 6 + 6 + 2 + 4 grün; `b4_startfix` zusätzlich 12-mal hintereinander grün |
+| `cargo test -p os-cli --test b4_startfix_mail --test cli_basics --test acceptance_resume --test run_task_inproc --test run_task_cli`, `--lib` | 7 + 19 + 15 + 12 + 9, 69 grün |
+| `cargo test -p os-fetch --lib robots::parser` | 19 grün |
+| `npm run -w apps/desktop typecheck` | grün |
+| `npm run -w apps/desktop test` | 124 Dateien, 1052 Tests grün (`StartRobots.test.tsx` 3) |
+| Playwright Chromium + WebKit: `startrobots`, `unreach`, `control` | 8/8 grün |
+
+Zum Ablauf:
+
+- **Rennen im Test:** Der erste Workspace-Lauf auf a38028a2 hatte genau einen Fehlschlag:
+  `a_start_url_blocked_by_robots_completes_and_reports_the_block` sah keine Meldung. Ursache war ein Rennen im Test, kein
+  Produktfehler. Der Hintergrund-Poll der App ruft `settle` ebenfalls auf; der Test wartete nur auf den Zustand, und den
+  setzt `settle` vor seinen Meldungen. Seit 56113a72 wartet der Test auf das Lauf-Ende-Ereignis, das `settle` nach den
+  Meldungen sendet. Nach „URLs hinzufügen“ meldet `follow_completion` das Ende zusätzlich und unter Umständen früher;
+  dort sammelt der Test danach noch 1 s weiter.
+- **Gegenprobe:** Ohne den Merker scheitert `the_robots_dialog_appears_once_per_crawl_also_after_adding_urls` (3 von 3).
+- **ws-slot:** `~/ws-slot.sh` wartete rund 45 min bei 75–76 GB frei, ohne laufenden Workspace-Test (Grenze 80 GB). Das
+  eigene `target/` war vollständig gebaut. `cargo test --workspace --no-run` übersetzte nur 3 Testziele, der freie Platz
+  blieb unverändert. Deshalb wurde der eigene Warteprozess beendet und der Lauf ohne neuen Build gestartet: einzeln, kein
+  anderer Workspace-Test aktiv, Platz danach unverändert bei 75 GB. Das ist eine bewusste Abweichung von der 80-GB-Regel.
+
+Weitere fremde Dateien im Nachtrag (K2-92): `crates/os-fetch/src/robots/parser.rs` (neue Funktion, Format unverändert),
+`crates/os-cli/src/run_task.rs` (Ergebnis-Zuordnung, Vergleichs-Hook), `docs/spec/06-output-ops.md`.
+
+## Offene Punkte
+
+- **O1 Andere Status-0-Fälle mit `--fail-on-start-error`:** `malformed`, `too_many_redirects` und `blocked_private_target`
+  sind nach CRAWL-128 kein Fehlschlag. In der CLI führen sie mit `--fail-on-start-error` weiterhin zu Exit 3 und der Warnung
+  „nicht erreichbar“. Der Auftrag betraf nur die robots-Sperre; nicht geändert.
+- **O2 Exit-Code des Planerlaufs:** Ein Lauf mit Historie „Failed“ wegen des Crawls endet mit Exit 0 (OUT-182). Soll
+  `--run-task` dann einen anderen Code liefern (z. B. 3)? Nicht geändert.
+- **O3 robots.txt mit 5xx/429:** Hier sperrt die Regel „robots.txt nicht erreichbar“ die Start-URL, aber der Lauf ist kein
+  Fehlschlag. Die App zeigt dafür weder den Dialog „nicht erreichbar“ noch `start-robots` (UI-019 nennt nur `Disallow`).
