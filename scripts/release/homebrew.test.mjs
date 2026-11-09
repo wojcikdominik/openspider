@@ -66,7 +66,9 @@ test('Mindest-macOS 13 (Ventura) wie LSMinimumSystemVersion der App', () => {
   const conf = JSON.parse(readFileSync(join(root, 'apps/desktop/src-tauri/tauri.conf.json'), 'utf8'));
   assert.equal(conf.bundle.macOS.minimumSystemVersion, '13.0');
   for (const cask of Object.values(casks({ version: '1.0.0', sums: parseSums(stableSums('1.0.0')), repository }))) {
-    assert.match(cask, /^ {2}depends_on macos: ">= :ventura"$/m);
+    assert.match(cask, /^ {2}depends_on macos: :ventura$/m);
+    // Homebrew/OSDependsOn: das Symbol allein heißt „mindestens“; die Form mit ">=" wäre ein brew-style-Fehler.
+    assert.doesNotMatch(cask, /depends_on macos: ">=/);
   }
 });
 
@@ -74,7 +76,7 @@ test('Mindest-macOS 13 (Ventura) wie LSMinimumSystemVersion der App', () => {
 // spec: OUT-227 [M3]
 test('Deinstallation entfernt Aufgaben-Registrierungen; zap nur App-Daten aus OUT-227 und der Bundle-ID, sortiert', () => {
   const cask = casks({ version: '1.0.0-beta.2', sums: parseSums(beta2Sums), repository })['Casks/openspider@beta.rb'];
-  assert.match(cask, /^ {2}uninstall launchctl: "de\.openspider\.task\.\*",\n {12}delete: "~\/Library\/LaunchAgents\/de\.openspider\.task\.\*\.plist"$/m);
+  assert.match(cask, /^ {2}uninstall launchctl: "de\.openspider\.task\.\*",\n {12}delete:    "~\/Library\/LaunchAgents\/de\.openspider\.task\.\*\.plist"$/m);
   assert.match(cask, /^ {2}uninstall_preflight_steps do$/m);
   assert.match(cask, /^ {2}postflight_steps do$/m);
   const zap = cask.split('  zap trash: [\n')[1].split('\n  ]\n')[0].split('\n').map(line => /^ {4}"([^"]+)",$/.exec(line)[1]);
@@ -91,6 +93,35 @@ test('Deinstallation entfernt Aufgaben-Registrierungen; zap nur App-Daten aus OU
   assert.doesNotMatch(cask.split('uninstall launchctl:')[1].split('zap trash:')[0], /Application Support|Preferences|Caches|Logs/);
   // Keine Zeile mit Leerzeichen am Ende (RuboCop Layout/TrailingWhitespace gilt auch im Heredoc).
   assert.doesNotMatch(cask, /[ \t]$/m);
+});
+
+// spec: OUT-166 [M3]
+// Layout/HashAlignment in Homebrews RuboCop-Konfiguration (EnforcedColonStyle: table): bei mehrzeiligen Hashes beginnen
+// alle Werte in derselben Spalte. brew style läuft erst im Workflow (macOS); hier die erzeugte Form.
+test('Mehrzeilige Hashes im Cask sind im table-Stil ausgerichtet (Layout/HashAlignment)', () => {
+  const files = casks({ version: '1.0.0', sums: parseSums(stableSums('1.0.0')), repository });
+  for (const cask of Object.values(files)) {
+    // Eingebettetes Ruby-Skript (Heredoc) ist kein Cask-Code.
+    const lines = cask.replace(/<<~'RUBY'\n[\s\S]*?\n {2}RUBY\n/, '').split('\n');
+    let groups = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i].endsWith(',') || !/^ +\w+: /.test(lines[i + 1] ?? '')) continue;
+      // Gruppe: aktuelle Zeile bis zur letzten Folgezeile mit `schlüssel:`; erste Zeile darf `befehl "x", schlüssel:` sein.
+      const group = [lines[i]];
+      while (/^ +\w+: /.test(lines[i + 1] ?? '')) group.push(lines[++i]);
+      const columns = group.flatMap(line => {
+        const key = /\b\w+: +(?=\S)/.exec(line);
+        return key ? [key.index + key[0].length] : [];
+      });
+      assert.ok(columns.length >= 2, group.join('\n'));
+      assert.equal(new Set(columns).size, 1, `Werte nicht ausgerichtet:\n${group.join('\n')}`);
+      groups += 1;
+    }
+    // preflight- und postflight-run plus uninstall (zap trash ist ein Array, kein Hash).
+    assert.equal(groups, 3);
+    assert.match(cask, /^ {8}args:           \["\{\{staged_path\}\}\/openspider-launchagents\.rb", "restore", "\{\{temp\}\}\/launchagents\.json"\],\n {8}writable_paths: \["~\/Library\/LaunchAgents"\]$/m);
+    assert.match(cask, /^ {8}args:           \["\{\{staged_path\}\}\/openspider-launchagents\.rb", "save", "\{\{temp\}\}\/launchagents\.json"\],\n {8}writable_paths: \["~\/Library\/LaunchAgents"\]$/m);
+  }
 });
 
 // spec: OUT-261 [M3]

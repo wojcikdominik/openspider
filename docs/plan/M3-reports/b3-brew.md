@@ -76,7 +76,10 @@ habe den Cask-Text nicht dupliziert, sondern aus `generate()` in `caskSource()` 
   Die übrigen Pfade stammen aus OUT-227 (Einstellungen/Crawls, Logs, Cache) und der Bundle-ID (`tauri.conf.json`).
 - Leere Zeilen im eingebetteten Ruby-Skript ohne Einrückung (sonst Leerzeichen am Zeilenende, RuboCop
   `Layout/TrailingWhitespace` gilt auch im Heredoc).
-- Mindest-macOS weiter `depends_on macos: ">= :ventura"` (macOS 13, wie `minimumSystemVersion` 13.0, OUT-260; Test).
+- Mindest-macOS `depends_on macos: :ventura` (macOS 13, wie `minimumSystemVersion` 13.0, OUT-260; Test). Das Symbol allein
+  heißt bei Homebrew „mindestens“; `">= :ventura"` lehnt `Homebrew/OSDependsOn` ab (Lauf 42626366623).
+- Mehrzeilige Hashes (`run … args:/writable_paths:`, `uninstall launchctl:/delete:`) im `table`-Stil: Homebrews
+  `.rubocop.yml` setzt `Layout/HashAlignment` auf `EnforcedColonStyle: table`, alle Werte beginnen in einer Spalte (Test).
 
 ### Workflow `.github/workflows/homebrew.yml`
 

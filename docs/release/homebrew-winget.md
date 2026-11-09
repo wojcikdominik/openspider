@@ -13,6 +13,10 @@ Freigabe über das Environment `homebrew`; Einrichtung in `checkliste-release.md
 winget erst zur 1.0 mit `publish-packages.yml`. Die Beschreibung unten bleibt für den winget-Teil und
 die Smoke-Probe gültig; ihr Homebrew-Teil der Veröffentlichung wird zur 1.0 durch `homebrew.yml` abgelöst.
 
+Cask-Stil (`brew style --cask`, Lauf 42626366623): `depends_on macos: :ventura` (das Symbol allein heißt „mindestens“,
+macOS 13; `">= :ventura"` lehnt `Homebrew/OSDependsOn` ab) und mehrzeilige Hashes im `table`-Stil (Werte in einer Spalte,
+`Layout/HashAlignment` mit `EnforcedColonStyle: table` in Homebrews RuboCop-Konfiguration).
+
 ## Metadaten aus tatsächlichen Assets
 
 R01 kopiert Tauri-DMGs unverändert, R02 die MSI-/NSIS-Dateien, R04 sammelt sie über
