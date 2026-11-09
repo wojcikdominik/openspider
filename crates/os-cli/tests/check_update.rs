@@ -17,7 +17,7 @@ async fn manual_cli_returns_zero_for_current_and_ten_for_newer() {
         current: "1.0.0".parse().unwrap(),
         os: "darwin".into(),
         arch: "aarch64".into(),
-        installer: None,
+        installer: update::policy::Installer::Platform,
         disabled_by_environment: false,
         ..Default::default()
     };
