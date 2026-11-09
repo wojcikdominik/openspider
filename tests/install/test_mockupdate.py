@@ -1,4 +1,8 @@
-"""Tests für den Mock-Update-Server (M3-Q02): Szenarien, Proxy, TLS mit Test-CA, Protokoll."""
+"""Tests für den Mock-Update-Server (M3-Q02): Szenarien, Proxy, TLS mit Test-CA, Protokoll.
+
+Testinfrastruktur der Matrix, nicht das Produkt: bewusst ohne `# spec:`-Tags. Produktprüfungen mit
+Spec-Tags: test_cli_integration.py und die Matrix-Läufe von install-test.yml.
+"""
 import json
 import shutil
 import socket
@@ -64,7 +68,6 @@ class Prepare(Fixture):
                                                   f'/{REPO}/releases/latest/download/latest-beta.json'])
         self.assertTrue((self.tmp / 'mock' / 'scenarios.json').is_file())
 
-    # spec: OUT-252 [M3]
     def test_scenarios(self):
         s = self.info['scenarios']
         self.assertEqual(set(s), set(mockupdate.SCENARIOS))
@@ -123,7 +126,6 @@ class Server(Fixture):
     def fetch(self, url, **kwargs):
         return mockupdate.fetch(url, self.proxy, self.certs['ca.pem'], **kwargs)
 
-    # spec: OUT-250 [M3]
     def test_manifest_request_is_logged_with_query_and_user_agent(self):
         url = f'https://github.com{self.info["endpoints"][1]}?version=1.0.0&os=darwin&arch=aarch64'
         status, body = self.fetch(url)
@@ -135,7 +137,6 @@ class Server(Fixture):
         self.assertEqual(entry['query'], {'version': ['1.0.0'], 'os': ['darwin'], 'arch': ['aarch64']})
         self.assertEqual(len((self.tmp / 'log.jsonl').read_text().splitlines()), len(self.server.log()))
 
-    # spec: OUT-252 [M3]
     def test_valid_artifact_verifies_and_tampered_differs_in_exactly_one_byte(self):
         key = (FIXTURES / 'test.key.pub').read_text()
         signature = (FIXTURES / 'artifact.sig').read_text()
@@ -151,7 +152,6 @@ class Server(Fixture):
         self.assertEqual([e['bytes'] for e in self.server.log() if e.get('path') == self.artifact['request_path']],
                          [len(valid)] * 2)
 
-    # spec: OUT-252 [M3]
     def test_redirect_and_downgrade_scenarios(self):
         self.server.use('http-redirect')
         conn_status, _ = self.fetch(f'https://github.com{self.info["endpoints"][0]}')
@@ -170,7 +170,6 @@ class Server(Fixture):
             sock.sendall(request)
             return sock.recv(1024)
 
-    # spec: OUT-252 [M3]
     def test_plain_http_and_foreign_hosts_are_refused_and_logged(self):
         self.assertIn(b'403', self.raw(b'GET http://github.com/x HTTP/1.1\r\nHost: github.com\r\n\r\n'))
         self.assertIn(b'403', self.raw(b'CONNECT example.org:443 HTTP/1.1\r\nHost: example.org:443\r\n\r\n'))

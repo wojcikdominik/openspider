@@ -1,4 +1,8 @@
-"""Tests für tauri_sig.py gegen RFC-8032-Vektoren und die Update-Fixtures (M3-Q02)."""
+"""Tests für tauri_sig.py gegen RFC-8032-Vektoren und die Update-Fixtures (M3-Q02).
+
+Testinfrastruktur der Matrix, nicht das Produkt: bewusst ohne `# spec:`-Tags. Produktprüfungen mit
+Spec-Tags: test_cli_integration.py und die Matrix-Läufe von install-test.yml.
+"""
 import base64
 import io
 import tempfile
@@ -40,13 +44,11 @@ class TauriSignature(unittest.TestCase):
         self.signature = (FIXTURES / 'artifact.sig').read_text()
         self.key = (FIXTURES / 'test.key.pub').read_text()
 
-    # spec: OUT-252 [M3]
     def test_fixture_artifact_is_valid_for_its_signed_version(self):
         comment = tauri_sig.verify(self.payload, self.signature, self.key, '1.0.1')
         self.assertIn('version:1.0.1', comment)
         self.assertEqual(tauri_sig.trusted_fields(comment)['file'], ['artifact'])
 
-    # spec: OUT-252 [M3]
     def test_one_modified_byte_is_rejected(self):
         for index in (0, len(self.payload) // 2, len(self.payload) - 1):
             changed = bytearray(self.payload)
@@ -54,7 +56,6 @@ class TauriSignature(unittest.TestCase):
             with self.assertRaises(tauri_sig.SignatureError):
                 tauri_sig.verify(bytes(changed), self.signature, self.key, '1.0.1')
 
-    # spec: OUT-252 [M3]
     def test_replayed_signature_for_another_version_is_rejected(self):
         with self.assertRaisesRegex(tauri_sig.SignatureError, 'Version'):
             tauri_sig.verify(self.payload, self.signature, self.key, '1.0.2')
