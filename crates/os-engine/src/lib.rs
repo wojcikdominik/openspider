@@ -38,7 +38,8 @@ pub mod writer_thread;
 pub mod testing;
 
 pub use crawl::{
-    start_crawl, start_failure, start_robots_block, CrawlHandle, StartFailure, StartRobotsBlock,
+    start_crawl, start_failure, start_robots_block, start_robots_unavailable, CrawlHandle,
+    StartFailure, StartRobotsBlock, StartRobotsUnavailable,
 };
 pub use error::EngineError;
 pub use lifecycle::resume_crawl;

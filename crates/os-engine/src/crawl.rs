@@ -1247,6 +1247,89 @@ pub struct StartFailure {
     pub robots: bool,
 }
 
+impl StartFailure {
+    /// Fehlerklasse in Worten (Deutsch, wie der übrige Text der Abschlussmail und der Kommandozeile).
+    pub fn class_label(&self) -> &'static str {
+        use os_model::NoResponseReason as R;
+        match self.reason {
+            R::DnsLookupFailed => "DNS-Auflösung fehlgeschlagen",
+            R::ConnectionRefused => "Verbindung abgelehnt",
+            R::ConnectionTimeout => "Zeitüberschreitung beim Verbindungsaufbau",
+            R::ResponseTimeout => "Zeitüberschreitung bei der Antwort",
+            R::TlsError => "TLS-Fehler",
+            _ => "Verbindungsfehler",
+        }
+    }
+
+    /// Fehlermeldung zur nicht erreichbaren Start-URL für Mail, Kommandozeile und Planer-Historie (OUT-281, OS-Festlegung
+    /// 09.11.2026): Fehlerklasse in Worten und als Schlüssel, betroffene Adresse und Ursache (Start-URL selbst bzw. ihre robots.txt).
+    /// Adressen ohne Zugangsdaten.
+    pub fn describe(&self, start_url: &str) -> String {
+        let start = os_fetch::redact::url(start_url);
+        let class = format!("{} ({})", self.class_label(), self.reason.as_str());
+        if self.robots {
+            format!(
+                "Start-URL {start} nicht erreichbar: {class} bei {}; die robots.txt war nicht abrufbar, deshalb wurde die \
+                 Start-URL nicht gecrawlt",
+                os_fetch::redact::url(&self.url)
+            )
+        } else {
+            format!(
+                "Start-URL {start} nicht erreichbar: {class} bei {}",
+                os_fetch::redact::url(&self.url)
+            )
+        }
+    }
+}
+
+/// Sperre der Start-URL nach der Regel „robots.txt nicht erreichbar“, obwohl die robots.txt antwortete (5xx, 429): kein
+/// Fehlschlag (CRAWL-128). robots.txt-URL und ihr HTTP-Status bzw. Grund ohne Antwort.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartRobotsUnavailable {
+    /// Die robots.txt der Start-URL.
+    pub robots_url: String,
+    /// HTTP-Status der robots.txt (z. B. 503), wenn sie geantwortet hat.
+    pub status_code: Option<u16>,
+    /// Grund ohne Antwort (`no_response_reason` der robots.txt-Zeile), sonst `None`.
+    pub reason: Option<String>,
+}
+
+/// Liest aus der Crawl-Datei, ob die Start-URL nach der Regel „robots.txt nicht erreichbar“ gesperrt wurde, und den Zustand der
+/// robots.txt dazu. Ob das ein Fehlschlag ist, entscheidet [`start_failure`] (nur Netzfehler).
+pub fn start_robots_unavailable(
+    crawl: &CrawlFile,
+    start_url: &str,
+) -> Option<StartRobotsUnavailable> {
+    let robots_url: Option<String> = crawl
+        .conn()
+        .query_row(
+            "SELECT robots_txt_url FROM urls \
+             WHERE url = ?1 AND state = 'done' AND status_code = 0 AND no_response_reason = ?2",
+            [
+                start_url,
+                os_model::NoResponseReason::BlockedByRobotsUnreachable.as_str(),
+            ],
+            |r| r.get(0),
+        )
+        .ok()?;
+    let robots_url = robots_url?;
+    let (status_code, reason): (Option<i64>, Option<String>) = crawl
+        .conn()
+        .query_row(
+            "SELECT status_code, no_response_reason FROM urls WHERE url = ?1 AND discovered_via = 'robots_txt'",
+            [&robots_url],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap_or((None, None));
+    Some(StartRobotsUnavailable {
+        robots_url,
+        status_code: status_code
+            .filter(|c| *c > 0)
+            .and_then(|c| u16::try_from(c).ok()),
+        reason,
+    })
+}
+
 /// Liest aus der Crawl-Datei, ob und warum die Start-URL nicht erreichbar war: Grund der Start-URL-Zeile, bzw. – sperrt die Regel
 /// „robots.txt nicht erreichbar“ die Start-URL – Grund der robots.txt-Hilfszeile. Antwortete der Host dort mit 5xx oder 429, ist er
 /// erreichbar (`None`). Prüft nicht, ob die Start-URL die einzige abgerufene Seite ist; das entscheidet der Lauf (CRAWL-128).
