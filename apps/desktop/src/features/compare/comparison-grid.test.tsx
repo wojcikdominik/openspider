@@ -1,13 +1,17 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createClient, setClient } from "../../ipc/client";
-import { setLanguage } from "../../i18n";
+import { getT, setLanguage } from "../../i18n";
+import { comparisonCsv } from "./export";
+import { classLabel } from "./labels";
 import { ComparisonTable } from "./ComparisonTable";
 import { ComparisonLinks } from "./ComparisonLinks";
 import { ComparisonDetail } from "./ComparisonDetail";
-import { ComparisonPageSource } from "./ComparisonGrid";
+import { ComparisonSource } from "./ComparisonGrid";
+import { LOADING } from "../../data/ViewDataSource";
 import { comparisonFixture, session, snapshot } from "./fixtures/out-compare/core";
-import { useComparison } from "./model";
+import { type ComparisonPage, useComparison } from "./model";
+import { useColumns } from "../../state/columns";
 let fixture: ReturnType<typeof comparisonFixture>;
 beforeEach(async () => {
   fixture = comparisonFixture(); setClient(createClient(fixture.core.transport())); await setLanguage("en");
@@ -17,7 +21,7 @@ beforeEach(async () => {
   vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(360);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ x: 0, y: 0, width: 1800, height: 360, top: 0, left: 0, right: 1800, bottom: 360, toJSON() {} });
 });
-afterEach(() => { cleanup(); setClient(null); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); setClient(null); vi.restoreAllMocks(); useColumns.setState({ metadata: {}, byTab: {} }); });
 const lastRows = () => fixture.core.calls.filter(c => c.cmd === "view.rows").at(-1)?.args;
 // spec: CRAWL-144
 it("configures link columns with the main table menu and retains them across sorting", async () => {
@@ -60,21 +64,117 @@ it("selects a URL through DataGrid and opens its existing paired detail", async 
   expect(lastRows()).toMatchObject({ comparison: { tab: "inlinks", urlId: 1, side: "Current" } });
 });
 // spec: TECH-301
-it("keeps stable link keys separate from URL ids and preserves exact numeric cell contents", async () => {
-  const source = new ComparisonPageSource({ viewId: "comparison", version: 1, offset: 100, total: 101, columns: ["Address", "Change %"],
-    cells: [["https://site.test/a", 1.23456], ["https://site.test/b", null]], rowKeys: [-5, 204], side: "Previous", filtersEnabled: true });
-  expect(source.rowKey(0)).toBe(-5); expect(await source.locate(204)).toBe(1);
+// spec: UI-140
+it("keeps stable link keys separate from URL ids, preserves exact numeric cell contents and loads further windows on demand", async () => {
+  const rows = Array.from({ length: 202 }, (_, i) => i === 0 ? ["https://site.test/a", 1.23456] : i === 1 ? ["https://site.test/b", null] : [`https://site.test/${i}`, i]);
+  const keys = rows.map((_, i) => i === 0 ? -5 : i === 1 ? 204 : 1000 + i);
+  const page = (offset: number, limit: number): ComparisonPage => ({ viewId: "comparison", version: 1, offset, total: rows.length, columns: ["Address", "Change %"],
+    cells: rows.slice(offset, offset + limit), rowKeys: keys.slice(offset, offset + limit), partnerKeys: keys.slice(offset, offset + limit).map(k => k === 204 ? 304 : null), side: "Previous", filtersEnabled: true });
+  const load = vi.fn(async (offset: number, limit: number) => page(offset, limit));
+  const source = new ComparisonSource(page(0, 200), load);
+  expect(source.total).toBe(202);
+  expect(source.rowKey(0)).toBe(-5); expect(await source.locate(204)).toBe(1); expect(source.partner(204)).toBe(304);
   expect(await source.keys(0, 1)).toEqual([-5, 204]);
-  expect(source.getCell(1, 0)).toBe("1.23456"); expect(source.getCell(1, 1)).toBe("");
+  expect(source.getCell(1, 0)).toBe(1.23456); expect(source.getCell(1, 1)).toBeNull();
   expect(await source.locate(1000)).toBeNull();
+  // Rows beyond the first window are fetched from the core when they become visible, never paged by buttons.
+  expect(source.getCell(0, 201)).toBe(LOADING);
+  await source.ensureRange(195, 201);
+  expect(load).toHaveBeenCalledWith(200, 200, expect.anything());
+  expect(source.getCell(0, 201)).toBe("https://site.test/201");
+  expect(await source.locate(1201)).toBe(201);
   await act(() => source.dispose());
 });
 
 // spec: OUT-140
 it("does not offer core sorting for columns appended after the ordinary URL query", () => {
-  const source = new ComparisonPageSource({ viewId: "comparison", version: 1, offset: 0, total: 0, columns: ["Address", "Comparison Status", "Previous Address"],
-    cells: [], rowKeys: [], side: "Current", filtersEnabled: true });
+  const source = new ComparisonSource({ viewId: "comparison", version: 1, offset: 0, total: 0, columns: ["Address", "Comparison Status", "Previous Address"],
+    cells: [], rowKeys: [], side: "Current", filtersEnabled: true }, async () => { throw new Error("no rows"); });
   expect(source.columns.map(c => c.sortable)).toEqual([true, false, false]);
+});
+
+const internalCatalog = [
+  { key: "Address", kind: { kind: "url" }, defaultVisible: true, defaultWidth: 320, align: "left", sortable: true, searchable: [], extension: false },
+  { key: "Status Code", kind: { kind: "integer" }, defaultVisible: true, defaultWidth: 90, align: "right", sortable: true, searchable: [], extension: false },
+  { key: "Title 1 Length", kind: { kind: "integer" }, defaultVisible: false, defaultWidth: 110, align: "right", sortable: true, searchable: [], extension: false },
+];
+const cellsOf = (column: string) => column === "Address" ? "https://site.test/start" : column === "Status Code" ? 200 : column === "Title 1 Length" ? 56 : "Unchanged";
+function ordinaryCore(profile: string[] | undefined) {
+  let config = { schemaVersion: 2, generator: "fixture", config: { ui: { columns: profile ? { Internal: profile } : {} } } };
+  fixture.core.handlers.set("catalog.columns", args => (args as { tab: string }).tab === "Internal" ? internalCatalog : []);
+  fixture.core.handlers.set("config.get", () => structuredClone(config));
+  fixture.core.handlers.set("config.set", args => { config = structuredClone(args as typeof config); return { invalidatedSteps: [], deferred: [] }; });
+  fixture.core.handlers.set("view.rows", args => {
+    const a = args as { version: number; columns: string[] };
+    const columns = [...(a.columns.length ? a.columns : ["Address", "Status Code"]), "Comparison Status"];
+    return { viewId: "fixture-comparison", version: a.version, offset: 0, columns, cells: [columns.map(cellsOf)], rowKeys: [1], partnerKeys: [101], total: 1, side: "Current", filtersEnabled: true };
+  });
+  return () => config;
+}
+
+// spec: OUT-142
+// spec: OUT-151
+// spec: UI-007
+// spec: UI-121
+it("shows the tab's ordinary columns with catalog kinds and localized headers, the comparison status directly after Address", async () => {
+  ordinaryCore(undefined);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(360);
+  await setLanguage("de");
+  render(<ComparisonTable />);
+  const grid = await screen.findByRole("grid", { name: "Vergleichstabelle" });
+  // OS-Festlegung 09.11.2026 (OUT-142): „Vergleichsstatus“ directly after Address; Title 1 Length is hidden by default as in the normal mode.
+  await waitFor(() => expect(within(grid).getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Adresse", "Vergleichsstatus", "Statuscode"]));
+  // UI-007: numbers keep their type (formatted and right-aligned by the grid), not stringified text.
+  // OUT-142 (OS-Festlegung 09.11.2026): the status value is shown in the UI language …
+  await waitFor(() => expect(within(grid).getAllByRole("gridcell").map(c => c.textContent)).toEqual(["https://site.test/start", "Unverändert", "200"]));
+  expect(fixture.core.calls.filter(c => c.cmd === "view.rows").at(-1)?.args).toMatchObject({ columns: ["Address", "Status Code"] });
+  // … while the export keeps the canonical English value.
+  expect(await comparisonCsv(useComparison.getState().query, ["Address", "Status Code"])).toBe("Address,Status Code,Comparison Status\r\nhttps://site.test/start,200,Unchanged\r\n");
+});
+
+// spec: OUT-142
+// spec: UI-121
+it("localizes every comparison status value in the display only", () => {
+  const values = ["Added", "New", "Removed", "Missing", "Unchanged"];
+  const source = new ComparisonSource({ viewId: "comparison", version: 1, offset: 0, total: values.length, columns: ["Address", "Comparison Status"],
+    cells: values.map(v => [`https://site.test/${v}`, v]), rowKeys: values.map((_, i) => i + 1), side: "Current", filtersEnabled: true }, async () => { throw new Error("no rows"); });
+  expect(values.map((_, row) => source.getCell(1, row))).toEqual(values);
+  return setLanguage("de").then(() => {
+    source.statusLabel = value => classLabel(getT(), value);
+    expect(values.map((_, row) => source.getCell(1, row))).toEqual(["Hinzugefügt", "Neu", "Entfernt", "Fehlend", "Unverändert"]);
+    expect(source.getCell(0, 0)).toBe("https://site.test/Added");
+  });
+});
+
+// spec: OUT-142
+// spec: UI-009
+// B4-CMPUI round 2: the user's ordinary column configuration of a tab applies in the comparison, and changes made there persist in it.
+it("applies the ordinary column configuration of the tab and persists changes made in the comparison", async () => {
+  const saved = ordinaryCore(["Address", "Title 1 Length", "Status Code"]);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(360);
+  render(<ComparisonTable />);
+  const grid = await screen.findByRole("grid", { name: "Comparison table" });
+  await waitFor(() => expect(within(grid).getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Address", "Comparison Status", "Title 1 Length", "Status Code"]));
+  expect(fixture.core.calls.filter(c => c.cmd === "view.rows").at(-1)?.args).toMatchObject({ columns: ["Address", "Title 1 Length", "Status Code"] });
+  fireEvent.click(screen.getByRole("button", { name: "Configure columns" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("checkbox", { name: "Title 1 Length" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+  await waitFor(() => expect(saved().config.ui.columns).toEqual({ Internal: ["Address", "Status Code"] }));
+  await waitFor(() => expect(fixture.core.calls.filter(c => c.cmd === "view.rows").at(-1)?.args).toMatchObject({ offset: 0, columns: ["Address", "Status Code"] }));
+  await waitFor(() => expect(within(screen.getByRole("grid", { name: "Comparison table" })).getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Address", "Comparison Status", "Status Code"]));
+});
+
+// spec: OUT-142
+it("falls back to the tab's default columns when the core rejects the ordinary projection", async () => {
+  ordinaryCore(["Address", "Custom Extraction 9", "Status Code"]);
+  fixture.core.handlers.set("catalog.columns", () => [...internalCatalog, { ...internalCatalog[1]!, key: "Custom Extraction 9", defaultVisible: false }]);
+  const rows = fixture.core.handlers.get("view.rows")!;
+  fixture.core.handlers.set("view.rows", (args, ctx) => { if ((args as { columns: string[] }).columns.includes("Custom Extraction 9")) throw new Error("unknown column"); return rows(args, ctx); });
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(360);
+  render(<ComparisonTable />);
+  const grid = await screen.findByRole("grid", { name: "Comparison table" });
+  await waitFor(() => expect(within(grid).getAllByRole("columnheader").map(c => c.textContent)).toEqual(["Address", "Comparison Status", "Status Code"]));
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 // spec: CRAWL-144

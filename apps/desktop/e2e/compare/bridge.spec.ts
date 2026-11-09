@@ -103,7 +103,8 @@ test("real crawl pair: clickable classes, swap, mappings, link changes, source a
     await selectRow(page.getByRole("grid",{name:"Comparison table",exact:true}), /\/a$/);
     for(const change of ["Added","Removed","Anchor Changed","Unchanged"])await expect(out.getByRole("option",{name:change,exact:true})).toHaveJSProperty("disabled",true);
     await expect(out.getByRole("gridcell",{name:/\/same$/})).toHaveCount(1);
-    await page.getByRole("tab",{name:"Change Detection",exact:true}).click();await expect(page.getByRole("columnheader",{name:"Title 1 (Previous)",exact:true})).toBeVisible();
+    // K2-77: Change Detection is its own entry of the grouped navigation during a comparison.
+    await page.getByRole("button",{name:"Change Detection",exact:true}).click();await expect(page.getByRole("tab",{name:"Change Detection",exact:true})).toHaveAttribute("aria-selected","true");await expect(page.getByRole("columnheader",{name:"Title 1 (Previous)",exact:true})).toBeVisible();
     await expect(page.getByRole("grid",{name:"Comparison table",exact:true}).getByRole("row")).toHaveCount(4);
     await page.getByRole("button",{name:"Swap Current / Previous"}).click();
     await expect.poll(()=>page.evaluate(()=>window.compareHarness.state().session?.current.crawlId)).toBe(ids[0]);

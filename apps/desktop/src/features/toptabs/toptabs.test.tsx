@@ -12,6 +12,8 @@ import type { CrawlStatus } from "../../ipc/gen/CrawlStatus";
 import { fixtureTabs, tableFixture } from "../table/fixtures/core";
 import { TopTabs } from "./TopTabs";
 import { runAction } from "../../ui/actions";
+import { useComparison } from "../compare/model";
+import { session as compareSession } from "../compare/fixtures/out-compare/core";
 
 let fx: ReturnType<typeof tableFixture>;
 beforeEach(async () => {
@@ -19,7 +21,7 @@ beforeEach(async () => {
   useTabs.setState({ catalog: [], order: [], hidden: [], active: "Internal", queries: {}, loaded: false, focusId: undefined, focusRequest: 0, error: null });
   await setLanguage("en");
 });
-afterEach(async () => { await flushUiState(); cleanup(); vi.restoreAllMocks(); setClient(null); });
+afterEach(async () => { await flushUiState(); cleanup(); vi.restoreAllMocks(); setClient(null); useComparison.setState({ session: null, snapshot: null }); await setLanguage("en"); });
 
 // spec: UI-004 [P1]
 it("loads only catalog tabs, persists reordering and hiding, and resets to catalog defaults", async () => {
@@ -204,4 +206,32 @@ it.each(["overview", "tab"] as const)("keeps a %s navigation made while an older
   if (destination === "tab") expect(useTabs.getState().active).toBe("Images");
   await flushUiState();
   expect((await original()).state).toMatchObject({ topTabs: { view: destination === "overview" ? "overview" : "tabs" } });
+});
+
+// spec: OUT-140
+// spec: UI-004
+// spec: UI-121
+// B4-CMPUI: the comparison keeps the ordinary grouped tab bar (localized names, groups, overflow menu); the core adds
+// Change Detection, which is its own entry of the navigation (K2-77); a tab chosen there drives the comparison.
+it("keeps the ordinary tab bar during a comparison with Change Detection as its own entry", async () => {
+  const changeTab = { ...fixtureTabs[0]!, id: "Change Detection", defaultOrder: 30 };
+  fx.core.handlers.set("catalog.tabs", () => useComparison.getState().session ? [...fixtureTabs, changeTab] : fixtureTabs);
+  await setLanguage("de");
+  const mounted = render(<TopTabs />);
+  await screen.findByRole("tab", { name: "Intern" });
+  expect(screen.queryByRole("button", { name: "Änderungserkennung" })).toBeNull();
+  act(() => { useComparison.setState({ session: compareSession, snapshot: null, revision: 1, query: { tab: "Internal", filter: "All", side: "Current" } }); });
+  // Same component as without a comparison: grouped navigation and the overflow/configure menu stay.
+  const entry = await screen.findByRole("button", { name: "Änderungserkennung" });
+  expect(screen.getByRole("group", { name: "Bereiche" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Tabs konfigurieren" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Intern" })).toHaveAttribute("aria-selected", "true");
+  fireEvent.click(entry);
+  await waitFor(() => expect(screen.getByRole("tab", { name: "Änderungserkennung" })).toHaveAttribute("aria-selected", "true"));
+  expect(useComparison.getState().query).toMatchObject({ tab: "Change Detection", filter: "All" });
+  // Closing the comparison removes the entry; the bar falls back to Internal instead of a tab that no longer exists.
+  act(() => { useComparison.setState({ session: null, revision: 2 }); });
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Änderungserkennung" })).toBeNull());
+  await waitFor(() => expect(useTabs.getState().active).toBe("Internal"));
+  mounted.unmount();
 });

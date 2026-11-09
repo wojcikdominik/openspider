@@ -24,7 +24,9 @@ export async function notifyCompletion(title: string, body: string): Promise<voi
 
 const completion = (n: Notice) => n.code === "crawl-completed" || n.code === "analysis-completed";
 const pacing = (n: Notice) => n.code === "crawl-throttled" || n.code === "crawl-throttle-cleared";
-const modal = (n: Notice) => !completion(n) && !pacing(n) && (n.level === "error" || n.level === "warning");
+/** CRAWL-127/UI-124 (B4-CMPUI): a failed open is reported once, in the status bar, with its details there; no second, modal copy. */
+const inline = (n: Notice) => n.code === "crawl-open-failed";
+const modal = (n: Notice) => !completion(n) && !pacing(n) && !inline(n) && (n.level === "error" || n.level === "warning");
 /** UI-019/CRAWL-128: the core names the error class of an unreachable start URL (or its robots.txt) in `reason`. */
 const UNREACHABLE = new Set(["start-dns", "start-connection", "start-timeout", "start-tls"]);
 export const isStartUnreachable = (n: Notice | undefined): boolean => !!n && UNREACHABLE.has(n.code) && typeof n.args.reason === "string";

@@ -96,3 +96,21 @@ async fn list_file_preview_uses_engine_deduplication_rules() {
     assert_eq!(result["duplicates"], 1);
     assert_eq!(result["sample"][0], "https://fixture.test/");
 }
+
+// spec: CRAWL-127
+// A "Recent" entry whose file is gone (e.g. a deleted temporary folder) is reported as a missing file with its path,
+// so the menus remove it with a hint instead of showing a generic I/O failure (B4-CMPUI, beta.3 report).
+#[tokio::test]
+async fn opening_a_missing_path_reports_not_found_with_the_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    let path = dir.path().join("gone").join("missing.ospider");
+    let error = app
+        .dispatch(ctx(), "crawl.open", json!({"kind":"path","path":path}))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, os_app::ErrorCode::NotFound);
+    assert_eq!(error.message_key, "err-file-not-found");
+    assert_eq!(error.args["path"], json!(path.display().to_string()));
+    assert!(app.sessions().current(&window()).is_none());
+}

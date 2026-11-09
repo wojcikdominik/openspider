@@ -1,7 +1,7 @@
 import { LiveViewTotal } from "./LiveViewTotal";
 import { tabId } from "../../ui/primitives/TabBar";
 import { Dashboard } from "../dashboard/Dashboard";
-import { ComparisonTable } from "../compare/ComparisonTable";
+import { ComparisonOverviewUnavailable, ComparisonTable } from "../compare/ComparisonTable";
 import { useComparison } from "../compare/model";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { DataGrid, type GridController } from "../../grid/DataGrid";
@@ -56,7 +56,8 @@ import "./table.css";
 export function UpperTable() {
   const active = useComparison(s => !!s.session);
   const overview = useTabs(s => s.view === "overview");
-  return active ? <ComparisonTable /> : overview ? <Dashboard /> : <RegularUpperTable />;
+  // UI-150/UI-061 (OS-Festlegung): the overview dashboard is not available in a comparison; the tabs show the comparison.
+  return active ? overview ? <ComparisonOverviewUnavailable /> : <ComparisonTable /> : overview ? <Dashboard /> : <RegularUpperTable />;
 }
 function RegularUpperTable() {
   const t = useT(); const locale = currentLanguage(); const tabs = useTabs();

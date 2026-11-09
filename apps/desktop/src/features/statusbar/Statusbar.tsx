@@ -1,10 +1,11 @@
 import { loginStatus } from "../config/pages/auth-forms/session";
 import { useEffect, useState } from "react";
-import { useFormat, useT } from "../../i18n";
+import { currentLanguage, i18n, useFormat, useT } from "../../i18n";
 import { useSession, type SessionState } from "../../state/session";
 import { McpMenu } from "./McpMenu";
 import { ProgressBar } from "../../ui/primitives/Feedback";
 import { useHeader } from "../header/model";
+import { useComparison } from "../compare/model";
 import "./statusbar.css";
 
 /** Latest snapshot, at most four paints/s. Notices are handled immediately by their own subscriber. */
@@ -24,6 +25,13 @@ export function useStatusSnapshot(): SessionState {
   return snapshot;
 }
 
+/** CRAWL-127: the reason of a failed open as one localized sentence, with the file name where the core names it. */
+export function openErrorText(t: (key: string, args?: Record<string, unknown>) => string, args: Record<string, unknown>): string {
+  const key = typeof args.messageKey === "string" ? args.messageKey : undefined;
+  const params = typeof args.args === "object" && args.args !== null ? args.args as Record<string, unknown> : {};
+  return key && i18n.has(currentLanguage(), key) ? t(key, params) : t(`err-code-${String(args.code ?? "internal").toLowerCase()}`);
+}
+
 export function Statusbar() {
   const t = useT();
   const f = useFormat();
@@ -38,6 +46,8 @@ export function Statusbar() {
     return () => { live = false; clearInterval(timer); };
   }, [c?.crawlId]);
   const chosenMode = useHeader((s) => s.mode);
+  // UI-013: an open comparison is the mode „Vergleich“, whatever single crawl is loaded beside it.
+  const comparing = useComparison((s) => !!s.session);
   // CRAWL-126: "Paused"/"Stopped" are reported at once; the WAL merge may still finish in the background.
   const stopped = c?.endReason === "stopped";
   const phase = analysis?.running ? t("status-analysis") : stopped && c?.merging ? t("status-stopped-merging") : stopped ? t("n03-status-stopped") : c?.phase === "paused" && c.merging ? t("status-paused-merging") : t(`status-${c?.phase ?? "idle"}`);
@@ -48,11 +58,12 @@ export function Statusbar() {
   return <div className="os-crawl-status" data-testid="crawl-status">
     {openingCrawl && <span role="status" data-testid="crawl-opening">{t("shortcut-crawl-open")}<ProgressBar label={t("shortcut-crawl-open")} /></span>}
     {openError && <div role="alert" data-testid="crawl-open-error">
-      {t(`err-code-${String(openError.args.code ?? "internal").toLowerCase()}`)}{typeof openError.args.detail === "string" ? `: ${openError.args.detail}` : ""}
-      <details><summary>{t("notify-details")}</summary><pre>{JSON.stringify(openError.args)}</pre></details>
+      <span data-testid="crawl-open-error-text">{openErrorText(t, openError.args)}</span>
+      {/* M2-ui-concept 2.6: the technical (English) detail is never part of the sentence; it stays in the details. */}
+      <details><summary>{t("notify-details")}</summary>{typeof openError.args.detail === "string" && <p>{openError.args.detail}</p>}<pre>{JSON.stringify(openError.args)}</pre></details>
     </div>}
     <div className="os-status-scroll" role="group" aria-label={t("status-details")} tabIndex={0}>
-    <span>{t("status-mode", { mode: t(`header-${c?.mode ?? chosenMode}`) })}</span>
+    <span>{t("status-mode", { mode: t(`header-${comparing ? "compare" : c?.mode ?? chosenMode}`) })}</span>
     {sessionLost && <span role="status" className="os-status-warning">{t("form-login-session-lost")}</span>}
     <span data-testid="crawl-phase">{phase}{c?.endReason === "limit_reached" && ` (${t("status-limit")})`}</span>
     {Object.keys(throttled).length > 0 && <span className="os-status-warning">{t("status-throttled")}</span>}
