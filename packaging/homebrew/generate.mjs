@@ -40,11 +40,15 @@ export function caskSource({ channel = 'stable', version, sha256, url }) {
   if (!/^[0-9a-f]{64}$/.test(sha256 ?? '')) throw Error('Ungültige SHA-256');
   // Only characters of an encoded URL: nothing that could end the Ruby string or interpolate (#{…}).
   if (!/^https?:\/\/[A-Za-z0-9.:-]+\/[A-Za-z0-9._~%+\/-]+$/.test(url ?? '')) throw Error('Ungültige URL');
+  // brew audit wertet eine URL ohne Interpolation als unversioniert und verlangt dann `sha256 :no_check`
+  // (Probelauf 42646898922); die Version wird deshalb über #{version} eingesetzt.
+  const caskUrl = url.split(version).join('#{version}');
+  if (!caskUrl.includes('#{version}')) throw Error('URL enthält die Version nicht');
   return `cask "${token}" do
   version "${version}"
   sha256 "${sha256}"
 
-  url "${url}"
+  url "${caskUrl}"
   name "OpenSpider"
   desc "Website crawler and analysis desktop application"
   homepage "https://openspider.de/"

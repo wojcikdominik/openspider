@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { generate } from './generate.mjs';
+import { caskSource, generate } from './generate.mjs';
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures.json', import.meta.url)));
 function setup(t) {
@@ -36,7 +36,8 @@ test('Cask links the CLI at the stable app path and removes registrations withou
   assert.doesNotMatch(cask, /\b(?:uninstall_preflight|postflight) do/);
   assert.match(cask, /zap trash:[\s\S]*org.openspider.desktop/);
   assert.match(cask, new RegExp(createHash('sha256').update(fixture['OpenSpider_1.0.0_universal.dmg']).digest('hex')));
-  assert.match(cask, /\/v1.0.0\/OpenSpider_1.0.0_universal.dmg/);
+  assert.match(cask, /\/v#\{version\}\/OpenSpider_#\{version\}_universal\.dmg"/);
+  assert.match(cask, /^  version "1\.0\.0"$/m);
   const ruby = spawnSync('ruby', ['-c'], { input: cask, encoding: 'utf8' });
   if (ruby.error?.code === 'ENOENT') t.diagnostic('ruby unavailable; syntax check remains mandatory in macOS CI');
   else assert.equal(ruby.status, 0, ruby.stderr);
@@ -49,7 +50,7 @@ test('Cask uses exactly the published Universal DMG for Apple Silicon and Intel'
   const universal = createHash('sha256').update(fixture['OpenSpider_1.0.0_universal.dmg']).digest('hex');
   assert.equal(cask.match(/^  sha256 "([0-9a-f]{64})"$/gm)?.length, 1);
   assert.match(cask, new RegExp(`^  sha256 "${universal}"$`, 'm'));
-  assert.equal(cask.match(/^  url "[^"]+"$/gm)?.join('\n'), '  url "https://github.com/example/openspider/releases/download/v1.0.0/OpenSpider_1.0.0_universal.dmg"');
+  assert.equal(cask.match(/^  url "[^"]+"$/gm)?.join('\n'), '  url "https://github.com/example/openspider/releases/download/v#{version}/OpenSpider_#{version}_universal.dmg"');
   assert.doesNotMatch(cask, /on_arm|on_intel|_aarch64\.dmg|_x64\.dmg|OpenSpider-macOS\.dmg/);
   for (const name of ['OpenSpider_1.0.0_aarch64.dmg', 'OpenSpider_1.0.0_x64.dmg', 'OpenSpider-macOS.dmg']) {
     assert.doesNotMatch(cask, new RegExp(createHash('sha256').update(fixture[name]).digest('hex')));
@@ -185,4 +186,14 @@ test('publication has only release published trigger and defaults to no external
       assert.doesNotMatch(blocked.stderr, /fixture-unused/);
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Cask URL interpolates the version so brew audit treats it as versioned', () => {
+  const sha256 = 'a'.repeat(64);
+  const cask = caskSource({ channel: 'beta', version: '1.0.0-beta.4', sha256,
+    url: 'https://github.com/o/r/releases/download/v1.0.0-beta.4/OpenSpider_1.0.0-beta.4_universal.dmg' });
+  assert.match(cask, /^ {2}url "https:\/\/github\.com\/o\/r\/releases\/download\/v#\{version\}\/OpenSpider_#\{version\}_universal\.dmg"$/m);
+  assert.match(cask, /^ {2}version "1\.0\.0-beta\.4"$/m);
+  assert.throws(() => caskSource({ channel: 'beta', version: '1.0.0-beta.4', sha256,
+    url: 'https://example.com/OpenSpider-latest.dmg' }), /Version/);
 });

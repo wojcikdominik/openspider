@@ -53,7 +53,7 @@ test('Beta-Release: nur openspider@beta, Universal-DMG aus SHA256SUMS, versionie
   assert.match(cask, /^cask "openspider@beta" do\n {2}version "1\.0\.0-beta\.2"\n/);
   assert.equal(cask.match(/^ {2}sha256 "([0-9a-f]{64})"$/m)[1], beta2Universal);
   assert.equal(cask.match(/^ {2}url "[^"]+"$/gm).join('\n'),
-    '  url "https://github.com/wojcikdominik/openspider/releases/download/v1.0.0-beta.2/OpenSpider_1.0.0-beta.2_universal.dmg"');
+    '  url "https://github.com/wojcikdominik/openspider/releases/download/v#{version}/OpenSpider_#{version}_universal.dmg"');
   // OpenSpider-macOS.dmg hat dieselbe Prüfsumme, ist aber nur der feste latest/download-Link (OUT-261).
   assert.doesNotMatch(cask, /OpenSpider-macOS\.dmg|_aarch64\.dmg|_x64\.dmg|on_arm|on_intel/);
   assert.match(cask, /^ {2}conflicts_with cask: "openspider"$/m);
