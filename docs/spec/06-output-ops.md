@@ -1410,6 +1410,7 @@ Führung: Dieser Abschnitt ist führend für den Vergleichsablauf (Auswahl, Klas
   - **Missing:** u existiert nur in Previous und war dort in F.
 - **Ausgabe:** Im Overview je Filter die Spalten `Current`, `Previous`, `Change`, `Added`, `New`, `Removed`, `Missing`; in der Haupttabelle Unterfilter mit diesen vier Kategorien.
   - **OS-Festlegung (Orchestrator, 09.11.2026):** Die Haupttabelle zeigt die Spalten des Tabs wie im normalen Modus und dazu die Vergleichsspalten aus OUT-151; `Comparison Status` und (bei aktivem URL-Mapping) `Previous Address` stehen direkt nach `Address`. Anzeigetitel in der deutschen Oberfläche „Vergleichsstatus“ und „Vorherige Adresse“, in der englischen wie der kanonische Name.
+  - **OS-Festlegung (Orchestrator, 09.11.2026):** Die Werte der Spalte `Comparison Status` erscheinen in der Tabellenanzeige in der Oberflächensprache, mit denselben Begriffen wie die Kategorien der Übersicht und des Unterfilters (de: „Hinzugefügt“, „Neu“, „Entfernt“, „Fehlend“, „Unverändert“). Filter, Sortierung, Kopieren und Exporte arbeiten weiter mit den kanonischen englischen Werten (`Added`/`New`/`Removed`/`Missing`/`Unchanged`, OUT-151).
 - **Akzeptanzkriterien:**
   - [ ] Invariante für jeden Filter: `Current − Previous = Added + New − Removed − Missing` (automatisierter Test über alle Filter).
   - [ ] Im Fixture: Title-geänderte Seite, die vorher „Duplicate“ war und jetzt nicht mehr → Removed in „Page Titles:Duplicate“.
