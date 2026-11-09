@@ -744,3 +744,20 @@ test('Build-Nummer: prepare zählt die Commits nur im vollständigen Checkout, a
   assert.notEqual(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '2578' }).status, 0);
   assert.notEqual(run(directory, check, { RUNNER_TEMP: directory, OPENSPIDER_BUILD_NUMBER: '' }).status, 0);
 });
+
+// spec: UI-127 [M3]
+// spec: OUT-181 [M3]
+test('CLI und App tragen dieselbe Version aus einer Quelle (workspace.package.version, set-version.mjs)', () => {
+  const manifests = [...readdirSync(join(root, 'crates')).map(name => join('crates', name, 'Cargo.toml')), 'apps/desktop/src-tauri/Cargo.toml']
+    .filter(path => { try { readFileSync(join(root, path)); return true; } catch { return false; } });
+  assert.ok(manifests.includes(join('crates', 'os-cli', 'Cargo.toml')) && manifests.includes(join('crates', 'os-app', 'Cargo.toml')));
+  for (const path of manifests) {
+    const text = readFileSync(join(root, path), 'utf8');
+    const pkg = text.split(/^\[package\]\s*$/m)[1]?.split(/^\[/m)[0] ?? '';
+    assert.match(pkg, /^version\.workspace = true$/m, `${path}: Version nur aus workspace.package`);
+  }
+  // The released tag commit carries the release version for both (beta.3: rel/beta3), the App's tauri.conf too.
+  const setVersion = readFileSync(join(root, 'scripts/release/set-version.mjs'), 'utf8');
+  assert.match(setVersion, /apps\/desktop\/src-tauri\/tauri\.conf\.json/);
+  assert.match(setVersion, /\[workspace\\\.package\\\]/);
+});

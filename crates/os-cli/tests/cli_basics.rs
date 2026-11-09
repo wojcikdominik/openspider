@@ -39,7 +39,22 @@ fn version_has_the_documented_format() {
     let run = env.run(&["--version"]);
     assert_eq!(run.code, 0, "{}", run.dump());
     let line = run.stdout.trim();
-    let prefix = format!("openspider {} (", env!("CARGO_PKG_VERSION"));
+    // Same version source as the app (`app.info`, About, update dialog): `workspace.package.version`, which
+    // `scripts/release/set-version.mjs` sets for a release; no second place to maintain (UI-127).
+    let cargo =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml")).unwrap();
+    let workspace = cargo
+        .split("[workspace.package]")
+        .nth(1)
+        .and_then(|section| {
+            section
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("version = \""))
+        })
+        .and_then(|rest| rest.strip_suffix('"'))
+        .expect("workspace.package.version");
+    assert_eq!(workspace, env!("CARGO_PKG_VERSION"));
+    let prefix = format!("openspider {workspace} (");
     assert!(line.starts_with(&prefix), "{line}");
     let suffix = format!(", {}-{})", std::env::consts::OS, std::env::consts::ARCH);
     assert!(line.ends_with(&suffix), "{line}");
