@@ -207,3 +207,84 @@ Nicht angefasst: `apps/desktop/src/features/crawls/CrawlsHost.tsx`, `apps/deskto
 Der Kommentar in `CrawlsHost.tsx` Z. 147 („Path canonicalization currently reports a missing file as Io“) ist nach diesem
 Paket überholt. Die Prüfung über `desktop.check` bleibt dort harmlos; bitte den Kommentar beim Paket, dem die Datei
 gehört, anpassen.
+
+---
+
+## Runde 2 (Ziel beta.4, Entscheidungen des Orchestrators vom 09.11.2026)
+
+### Entscheidungen umgesetzt
+- `Comparison Status` und `Previous Address` stehen direkt nach `Address`. Titel de „Vergleichsstatus“/„Vorherige Adresse“,
+  en kanonisch (`src/i18n/canon/i18n/{de,en}.ftl`). Als OS-Festlegung in OUT-142 und OUT-151 eingetragen; die
+  Exportspaltennamen bleiben kanonisch.
+- **Spaltenkonfiguration des normalen Modus gilt im Vergleich (ohne Kernumbau).** Die Vergleichstabelle fordert die
+  sichtbaren Spalten des Tabs aus `useColumns` in deren Reihenfolge an (`columns` von `view.rows`, das der Kern für
+  Vergleiche schon als `ColumnSelection::Named` auswertet). Breiten und Anheftung kommen ebenfalls von dort. Änderungen
+  im Vergleich (ein-/ausblenden, verschieben, Breite) speichert die normale Konfiguration (`useColumns.change`). Die
+  zwei Vergleichsspalten behalten ihren Zustand für die Sitzung. Lehnt der Kern die Projektion ab (z. B. eine eigene
+  Spalte, die der verglichene Crawl nicht hat), zeigt die Tabelle die Standardspalten des Tabs, ohne Fehlermeldung.
+  Change Detection behält seine eigenen Spalten (TECH-301). Auch der CSV-Export nutzt diese Projektion.
+
+### Befund 5 – behoben
+| Punkt | Umsetzung | Test |
+|---|---|---|
+| Modus „Vergleich“ (UI-013) | Statusleiste und Modusauswahl im Kopf zeigen bei offenem Vergleich „Vergleich“; ein anderer Modus schließt den Vergleich zuerst | `Statusbar.test.tsx` „names the comparison mode …“, `Header.test.tsx` „shows the comparison mode …“, E2E `layout.spec.ts` („Mode: Comparison“, Auswahlwert `compare`) |
+| Tab-Leiste wie im normalen Modus | Keine zweite Komponente mehr: `TopTabs` zeigt immer die gruppierte Leiste (`DataTabs`, früher `RegularTopTabs`) mit lokalisierten Namen, Gruppen, Überlauf-/Konfigurationsmenü. Der Kern liefert Change Detection während eines Vergleichs im Katalog; die Navigation zeigt es als eigenen Eintrag (Gruppe `changes`, K2-77). Die Tab-Leiste steuert den Vergleich (`model.ts`, Abo auf `useTabs`); Sprünge aus der Übersicht wählen den Tab dort. Nach dem Schließen fällt ein verschwundener Tab auf Internal zurück (`state/tabs.ts`). „Übersicht“ (Dashboard) zeigt im Vergleich den Hinweis „Im Vergleichsmodus nicht verfügbar“ (UI-150). Die Vergleichstabelle ist das `tabpanel` der Leiste (`id="data-panel"`). | `toptabs.test.tsx` „keeps the ordinary tab bar during a comparison …“, E2E `layout.spec.ts`, `bridge.spec.ts` (Change Detection über den Navigationseintrag), axe-Lauf `a11y/views.spec.ts:72` |
+| Lokalisierte Auswahlwerte (OUT-149) | Linkänderung „Alle/Hinzugefügt/Entfernt/Ankertext geändert/Unverändert“, Vergleichsstatus „Hinzugefügt/Neu/Entfernt/Fehlend“ (Change Detection „Geändert/Nicht geändert“), Quelle „Automatisch“, Filter über `filterLabel`, Change-Detection-Elemente über Tab-/Spaltennamen. Optionswerte bleiben kanonisch (IPC/Export). | `comparison.test.tsx` „shows localized select values …“ |
+| Übersicht rechts | Zeilentitel über `tabLabel`/`filterLabel`, Zahlen über `useFormat().integer` (de: 4.438), Spaltenköpfe lokalisiert, Zahlen rechtsbündig. Engere Spalten; passen sie nicht, scrollt die Tabelle seitlich mit fester Titelspalte und dem sichtbaren Hinweis „Weitere Spalten rechts – horizontal scrollen“. | `comparison.test.tsx` „shows the overview with localized titles and numbers …“, E2E: `Missing` liegt in der Seitenleiste, sonst ist der Hinweis sichtbar |
+| Kein Modaldialog „Cause: crawl-open-failed“ | `crawl-open-failed` ist kein Modal mehr; die Statusleiste meldet einmal, Details unter „Technische Details“ | `Notifications.test.tsx` „does not open a dialog …“, E2E: Hauptfenster nach fehlgeschlagenem Öffnen zeigt genau „The file was not found: /os-b4-cmpui-missing/gone.ospider“ und keinen Dialog |
+
+### Folgepunkt – CSV-Export über den gemeinsamen Exportdialog (nicht umgesetzt, > 1 h)
+Der Exportdialog startet Kernoperationen, die selbst in die gewählte Datei schreiben (`export.view` mit `viewId`).
+Für den Vergleich gibt es keine solche Operation, die die Vergleichsabfrage der Oberfläche (Quelle, Vergleichsstatus,
+Suche, Sortierung, Spalten) kennt. `os_export::compare::export_tab` (CLI) kennt nur Tab/Filter/Unterfilter. Nötig:
+1. In `os-app` eine additive Abzweigung in `export.view` für `viewId` `comparison:*` mit dem Feld `comparison` wie bei
+   `view.rows`, als Operation mit Fortschritt und Abbruch, die die Zeilen wie `compare/ui.rs::rows` fensterweise
+   liest und über `os_export`-Writer (CSV/XLSX) schreibt.
+2. Im Frontend `ExportRequest` „view“ mit diesem Zusatz über `openExport` öffnen (Formatwahl, Dateiname); der
+   Vergleichsexport im Browser entfällt.
+3. Tests: os-app-Test (Spalten, Unterfilter, Sortierung, XLSX) und E2E über den Dialog.
+
+Schätzung 2–3 h. Ein Workspace-Test ist nicht nötig, die Änderung bleibt in `os-app`.
+
+### Offen bzw. bewusst so gelassen
+- „Current“/„Previous“ bleiben in Auswahl und Übersicht unübersetzt. Es sind die Rollennamen der beiden Crawls, wie im
+  Vergleichsdialog, in „Current / Previous tauschen“ und in den Spec-Texten. Wenn deutsche Namen gewünscht sind, bitte
+  festlegen.
+- Die Zellwerte der Spalte `Comparison Status` (`Added`, `Unchanged` …) sind kanonisch wie im Export; eine Übersetzung
+  in der Tabelle wäre eine eigene Festlegung.
+
+### Prüfungen Runde 2 (Build-Server)
+| Befehl | Ergebnis |
+|---|---|
+| `npm run -w apps/desktop typecheck` | ok |
+| `npm run -w apps/desktop test` | 123 Dateien, 1059 Tests passed |
+| `npx playwright test e2e/compare e2e/a11y/views.spec.ts e2e/crawls e2e/header e2e/statusbar e2e/table e2e/shell e2e/beta/n04-live.spec.ts --workers=1 --project=chromium` | 40 passed. Erster Lauf: axe-Befund `aria-controls="data-panel"` (behoben: Vergleichstabelle ist das tabpanel), `table/bridge.spec.ts` einmal Zeitüberschreitung (einzeln wiederholt: passed), `n04-live` ohne gebautes `os-testsite` (nach `cargo build -p os-testsite`: passed) |
+| erneut `e2e/compare`, `e2e/crawls/compare.pending.spec.ts` (chromium) | 3 passed |
+| `npx playwright test e2e/compare e2e/a11y/views.spec.ts:72 e2e/crawls/compare.pending.spec.ts --workers=1 --project=webkit` | 4 passed |
+| Visual-Suite `--config e2e/visual/playwright.config.ts --project=chromium-1` | 31 passed, 8 `screenshots.spec.ts` rot. Dieselben Fälle sind auch mit dem unveränderten Frontend (`a675fefa`) rot (Gegenprobe `en/light/normal`). Die Fixture enthält keinen Vergleich und keinen Change-Detection-Tab, die Navigation ist dort unverändert. Baselines nicht geändert. |
+| Rust | in Runde 2 unverändert (fmt/clippy/`cargo test -p os-app` aus Runde 1 gelten) |
+
+### Fremde Dateien Runde 2 (K2-92)
+| Datei | Bereich | Art der Änderung | Spec-ID |
+|---|---|---|---|
+| `docs/spec/06-output-ops.md` | Spec | OS-Festlegung (Orchestrator) in OUT-142/OUT-151 | OUT-142, OUT-151 |
+| `apps/desktop/src/i18n/canon/i18n/de.ftl`, `en.ftl` | Kanon-Titel | `column-comparison-status`, `column-previous-address` | OUT-142, UI-121 |
+| `apps/desktop/src/features/header/Header.tsx`, `Header.test.tsx` | Kopf | Modusanzeige „Vergleich“, Modus wechseln schließt den Vergleich | UI-013 |
+| `apps/desktop/src/features/statusbar/Statusbar.tsx`, `Statusbar.test.tsx` | Statusleiste | Modus „Vergleich“ | UI-013 |
+| `apps/desktop/src/features/notifications/Notifications.tsx`, `Notifications.test.tsx` | Meldungen | `crawl-open-failed` nicht modal | CRAWL-127, UI-124 |
+| `apps/desktop/src/features/toptabs/TopTabs.tsx`, `GroupNav.tsx`, `toptabs.test.tsx` | Tab-Leiste | Leiste auch im Vergleich, Nachladen bei Vergleichswechsel, Eintrag Change Detection | UI-004, K2-77 |
+| `apps/desktop/src/state/tabs.ts` | Tab-Zustand | Gruppe `changes`; aktiver Tab außerhalb des Katalogs → Internal | UI-004, K2-77 |
+| `apps/desktop/src/features/table/UpperTable.tsx` | Tabellenbereich | Hinweis statt Dashboard im Vergleich | UI-150 |
+| `apps/desktop/e2e/compare/bridge.spec.ts`, `harness.tsx` | E2E | Change Detection über den Navigationseintrag; Harness mit `DataTabs` | K2-77 |
+
+Nicht angefasst: `apps/desktop/src/features/crawls/**`, `apps/desktop/src/ui/**` (nur `tabId` aus `ui/primitives/TabBar` importiert).
+
+### Commits Runde 2
+| Commit | Inhalt |
+|---|---|
+| `8e66daec` | docs: OS-Festlegung OUT-142/OUT-151 |
+| `32792a67` | ui: Modus „Vergleich“ in Kopf und Statusleiste |
+| `898bec0b` | ui: kein Modaldialog für fehlgeschlagenes Öffnen |
+| `56a82dc5` | ui: normale gruppierte Tab-Leiste im Vergleich |
+| `9ba7c52c` | ui: normale Spaltenkonfiguration, lokalisierte Auswahlwerte und Übersicht |
+| (dieser) | docs: Bericht Runde 2 |
