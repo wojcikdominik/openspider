@@ -20,6 +20,7 @@ import brandDark from "../../assets/brand/mark-dark.svg";
 import { eventBus } from "../../ipc/events";
 import { reportError } from "../notifications/controller";
 import { missingFolderSlash, normalizeInput, rememberUrl, useHeader } from "./model";
+import { closeComparison, useComparison } from "../compare/model";
 import "./header.css";
 
 export function Header() {
@@ -52,6 +53,8 @@ export function Header() {
   const foreign = !!status && !status.controllable;
   const hasResults = !!status && status.phase !== "idle";
   const allowed = !busy && !pending && !foreign;
+  const comparing = useComparison((c) => !!c.session);
+  const shownMode: CrawlModeDto = comparing ? "compare" : mode;
   const canStart = ["spider", "list", "apis"].includes(mode) && allowed && !running && !resumable && (mode === "spider" ? !!normalized : sitemapMode ? !!validSitemap : !!list.trim());
 
   useEffect(() => {
@@ -176,6 +179,8 @@ export function Header() {
   useAction("header.focusUrl", () => input.current?.focus());
 
   function chooseMode(next: CrawlModeDto) {
+    // UI-013/OUT-140: while a comparison is open the mode reads „Vergleich“; another mode closes the comparison.
+    if (comparing) { if (next !== "compare") void closeComparison().then(() => useHeader.setState({ mode: next })); return; }
     if (!allowed || running || next === mode) return;
     if (hasResults) setConfirm({ mode: next });
     else useHeader.setState({ mode: next });
@@ -184,9 +189,9 @@ export function Header() {
   return <div className="os-crawl-header" data-testid="crawl-header">
     <h1 className="os-brand" aria-label="OpenSpider"><img className="os-brand-light" src={brandLight} alt="" /><img className="os-brand-dark" src={brandDark} alt="" /><span>Open<span>Spider</span></span></h1>
     <form onSubmit={(e) => { e.preventDefault(); requestStart(); }}>
-      <label className="os-header-mode"><span className="os-visually-hidden">{t("header-mode")}</span><select value={mode} disabled={!allowed || running} onChange={(e) => chooseMode(e.target.value as CrawlModeDto)}>
+      <label className="os-header-mode"><span className="os-visually-hidden">{t("header-mode")}</span><select value={shownMode} disabled={!allowed || running} onChange={(e) => chooseMode(e.target.value as CrawlModeDto)}>
         <option value="spider">{t("header-spider")}</option><option value="list">{t("header-list")}</option><option value="apis">APIs</option>
-        {(mode === "serp" || mode === "compare") && <option value={mode}>{t(`header-${mode}`)}</option>}
+        {(shownMode === "serp" || shownMode === "compare") && <option value={shownMode}>{t(`header-${shownMode}`)}</option>}
       </select></label>
       {mode === "spider" ? <>
         <label className="os-start-url"><span className="os-visually-hidden">{t("header-url")}</span><Globe size={16} aria-hidden="true" /><input ref={input} value={url} list="os-start-history" aria-invalid={!normalized} aria-describedby={!normalized ? "os-url-error" : undefined}

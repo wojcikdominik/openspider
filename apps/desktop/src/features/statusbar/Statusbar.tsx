@@ -5,6 +5,7 @@ import { useSession, type SessionState } from "../../state/session";
 import { McpMenu } from "./McpMenu";
 import { ProgressBar } from "../../ui/primitives/Feedback";
 import { useHeader } from "../header/model";
+import { useComparison } from "../compare/model";
 import "./statusbar.css";
 
 /** Latest snapshot, at most four paints/s. Notices are handled immediately by their own subscriber. */
@@ -45,6 +46,8 @@ export function Statusbar() {
     return () => { live = false; clearInterval(timer); };
   }, [c?.crawlId]);
   const chosenMode = useHeader((s) => s.mode);
+  // UI-013: an open comparison is the mode „Vergleich“, whatever single crawl is loaded beside it.
+  const comparing = useComparison((s) => !!s.session);
   // CRAWL-126: "Paused"/"Stopped" are reported at once; the WAL merge may still finish in the background.
   const stopped = c?.endReason === "stopped";
   const phase = analysis?.running ? t("status-analysis") : stopped && c?.merging ? t("status-stopped-merging") : stopped ? t("n03-status-stopped") : c?.phase === "paused" && c.merging ? t("status-paused-merging") : t(`status-${c?.phase ?? "idle"}`);
@@ -60,7 +63,7 @@ export function Statusbar() {
       <details><summary>{t("notify-details")}</summary>{typeof openError.args.detail === "string" && <p>{openError.args.detail}</p>}<pre>{JSON.stringify(openError.args)}</pre></details>
     </div>}
     <div className="os-status-scroll" role="group" aria-label={t("status-details")} tabIndex={0}>
-    <span>{t("status-mode", { mode: t(`header-${c?.mode ?? chosenMode}`) })}</span>
+    <span>{t("status-mode", { mode: t(`header-${comparing ? "compare" : c?.mode ?? chosenMode}`) })}</span>
     {sessionLost && <span role="status" className="os-status-warning">{t("form-login-session-lost")}</span>}
     <span data-testid="crawl-phase">{phase}{c?.endReason === "limit_reached" && ` (${t("status-limit")})`}</span>
     {Object.keys(throttled).length > 0 && <span className="os-status-warning">{t("status-throttled")}</span>}

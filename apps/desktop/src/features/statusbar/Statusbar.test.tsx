@@ -6,9 +6,11 @@ import { useSession, attachSession } from "../../state/session";
 import { createEventBus } from "../../ipc/events";
 import { setLanguage } from "../../i18n";
 import { registerAction } from "../../ui/actions";
+import { useComparison } from "../compare/model";
+import { session as compareSession } from "../compare/fixtures/out-compare/core";
 
 beforeEach(async () => { setupHeader(); await setLanguage("en"); vi.useFakeTimers(); });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); useComparison.setState({ session: null }); });
 const publish = (seq: number, patch: Partial<NonNullable<typeof tick.crawl>>) => {
   act(() => { useSession.getState().applyTick({ ...tick, seq, crawl: { ...tick.crawl!, ...patch } }); vi.advanceTimersByTime(250); });
 };
@@ -209,4 +211,15 @@ it("reports a stopped crawl at once and notes the background file merge until it
   expect(screen.getByTestId("crawl-phase")).toHaveTextContent("Gestoppt – Datei wird zusammengeführt");
   publish(5, { phase: "completed", endReason: "stopped", merging: null });
   expect(screen.getByTestId("crawl-phase")).toHaveTextContent(/^Gestoppt$/);
+});
+
+// spec: UI-013
+// B4-CMPUI: an open comparison is the mode „Vergleich“, even with a single Spider crawl loaded beside it.
+it("names the comparison mode while a comparison is open", async () => {
+  useSession.getState().applyTick(tick); await setLanguage("de"); render(<Statusbar />);
+  expect(screen.getByText("Modus: Spider")).toBeVisible();
+  act(() => { useComparison.setState({ session: compareSession }); vi.advanceTimersByTime(250); });
+  expect(screen.getByText("Modus: Vergleich")).toBeVisible();
+  act(() => { useComparison.setState({ session: null }); vi.advanceTimersByTime(250); });
+  expect(screen.getByText("Modus: Spider")).toBeVisible();
 });

@@ -8,10 +8,12 @@ import { setClient } from "../../ipc/client";
 import { eventBus } from "../../ipc/events";
 import { setLanguage } from "../../i18n";
 import { runAction } from "../../ui/actions";
+import { useComparison } from "../compare/model";
+import { session as compareSession } from "../compare/fixtures/out-compare/core";
 
 let core: ReturnType<typeof setupHeader>;
 beforeEach(async () => { core = setupHeader(); await setLanguage("en"); });
-afterEach(() => { cleanup(); setClient(null); });
+afterEach(() => { cleanup(); setClient(null); useComparison.setState({ session: null }); });
 const start = () => screen.getByRole("button", { name: "Start" });
 const calls = (cmd: string) => core.calls.filter((c) => c.cmd === cmd);
 const enterUrl = (value: string) => fireEvent.change(screen.getByLabelText("Start URL"), { target: { value } });
@@ -185,4 +187,23 @@ it("keeps a typed URL after clearing a reopened crawl, even if the cleared statu
   act(() => useSession.getState().applyTick({ ...opened, seq: 2, crawl: { ...opened.crawl, crawlId: "", phase: "idle" as const } }));
   act(() => useSession.getState().applyTick({ ...opened, seq: 3, crawl: { ...opened.crawl, crawlId: "", phase: "idle" as const, startUrl: null } }));
   expect(field.value).toBe("b.test");
+});
+
+// spec: UI-013
+// spec: OUT-140
+// B4-CMPUI: during a comparison the header mode reads „Vergleich“; choosing another mode closes the comparison first.
+it("shows the comparison mode while a comparison is open and closes it for another mode", async () => {
+  core.handlers.set("compare.close", () => null);
+  await setLanguage("de");
+  render(<Header />);
+  act(() => { useComparison.setState({ session: compareSession }); });
+  const mode = screen.getByLabelText("Modus") as HTMLSelectElement;
+  expect(mode.value).toBe("compare");
+  expect(mode.selectedOptions[0]).toHaveTextContent("Vergleich");
+  fireEvent.change(mode, { target: { value: "list" } });
+  await waitFor(() => expect(calls("compare.close")).toHaveLength(1));
+  await waitFor(() => expect(useComparison.getState().session).toBeNull());
+  expect(useHeader.getState().mode).toBe("list");
+  expect(mode.value).toBe("list");
+  await setLanguage("en");
 });
