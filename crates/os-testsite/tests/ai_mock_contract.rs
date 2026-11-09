@@ -437,7 +437,9 @@ async fn embeddings_are_deterministic_and_presets_support_threshold_pairs() {
     assert_eq!(a, embedding("fixture", 768));
     assert_ne!(a, embedding("different", 768));
     assert!((a.iter().map(|v| v * v).sum::<f64>() - 1.0).abs() < 1e-12);
-    let root = os_testsite::fixtures_root().join("ai/mock-answers.d");
+    let root = os_testsite::fixtures_root()
+        .join("ai")
+        .join("mock-answers.d");
     assert!(AnswerBook::load(root).is_ok());
 }
 // spec: CRAWL-123 [M4]
@@ -478,9 +480,10 @@ async fn host_header_survives_explicit_loopback_connection_and_regions_are_disti
 #[tokio::test]
 async fn fixture_site_counts_statuses_images_and_partial_changes() {
     let root = os_testsite::fixtures_root().join("ai");
-    let manifest: Value =
-        serde_json::from_str(&std::fs::read_to_string(root.join("site/manifest.json")).unwrap())
-            .unwrap();
+    let manifest: Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join("site").join("manifest.json")).unwrap(),
+    )
+    .unwrap();
     let pages = manifest["pages"].as_array().unwrap();
     assert_eq!(pages.len(), 25);
     assert_eq!(pages.iter().filter(|p| p["indexable"] == true).count(), 22);
@@ -640,8 +643,13 @@ async fn per_url_markers_timeout_delay_and_fragment_collisions() {
     // Each test gets an isolated directory without adding a crate dependency.
     let dir = std::env::temp_dir().join(format!("openspider-ai-fragments-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let base =
-        std::fs::read(os_testsite::fixtures_root().join("ai/mock-answers.d/base.json")).unwrap();
+    let base = std::fs::read(
+        os_testsite::fixtures_root()
+            .join("ai")
+            .join("mock-answers.d")
+            .join("base.json"),
+    )
+    .unwrap();
     std::fs::write(dir.join("a.json"), &base).unwrap();
     std::fs::write(dir.join("b.json"), &base).unwrap();
     assert!(AnswerBook::load(&dir)
