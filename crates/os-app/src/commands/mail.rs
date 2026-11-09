@@ -343,7 +343,7 @@ pub fn on_startup(app: &App) {
                     .unwrap_or_else(|p| p.into_inner())
                     .insert(key.0.clone());
             } else {
-                queue_ui(app, key, false);
+                queue_ui(app, key, None);
             }
         }
     }));
@@ -357,14 +357,19 @@ pub fn after_analysis(app: &App, key: &crate::pool::CrawlKey) {
         .unwrap_or_else(|p| p.into_inner())
         .remove(&key.0)
     {
-        queue_ui(app, key, false);
+        queue_ui(app, key, None);
     }
 }
 /// Engine failures do not emit Completed; this additive hook covers that exit (OUT-281).
 pub fn on_failed(app: &App, key: &crate::pool::CrawlKey) {
-    queue_ui(app, key, true);
+    queue_ui(app, key, Some("Crawl fehlgeschlagen".into()));
 }
-fn queue_ui(app: &App, key: &crate::pool::CrawlKey, failed: bool) {
+/// A run that ends regularly as `Failed` (CRAWL-128, e.g. unreachable start URL) is a failure for the mail (OUT-281), with
+/// `error` as the message. Delivery is once per run, so the following `Completed` event sends no success mail.
+pub fn on_failed_with(app: &App, key: &crate::pool::CrawlKey, error: String) {
+    queue_ui(app, key, Some(error));
+}
+fn queue_ui(app: &App, key: &crate::pool::CrawlKey, failure: Option<String>) {
     let settings = app.settings_snapshot();
     let policy = Policy {
         on_success: settings.accounts.notify_on_success,
@@ -398,8 +403,8 @@ fn queue_ui(app: &App, key: &crate::pool::CrawlKey, failed: bool) {
         match result {
             Ok(Ok(value)) => match serde_json::from_value::<Completion>(value) {
                 Ok(mut completion) => {
-                    if failed {
-                        completion.error = Some("Crawl fehlgeschlagen".into());
+                    if let Some(error) = failure {
+                        completion.error = Some(error);
                     }
                     if let Err(e) = os_sched::mail::notify_with_context(
                         &app.config().paths.settings,

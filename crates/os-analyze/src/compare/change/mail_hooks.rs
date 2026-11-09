@@ -25,18 +25,51 @@ impl TaskHooks for ComparisonMailHooks {
             .ok_or("Completion mail: crawl not found")?;
         let file = os_store::CrawlFile::open(&crawl.path, os_store::OpenMode::ReadOnly)
             .map_err(|e| e.to_string())?;
-        let content = os_analyze::compare::change::notification::content(
-            &file,
-            &task.name,
-            task.execution.auto_compare,
-            task.effective_exports().skip_empty,
-        )
+        let failed = matches!(record.result, RunResult::Failed | RunResult::Aborted);
+        // OUT-281: Ein als `Failed` beendeter Crawl (CRAWL-128) wird nicht verglichen; die Fehler-Mail geht ohne Änderungstabelle
+        // hinaus und vermerkt den übersprungenen Vergleich (OS-Festlegung 09.11.2026). Fehlt bei einem anderen Fehlschlag das
+        // Vergleichsergebnis, entfällt nur die Tabelle, nicht die Mail.
+        let crawl_failed = crawl.meta.state == os_model::CrawlState::Failed;
+        let compare = task.execution.auto_compare && !crawl_failed;
+        let build = |compare: bool| {
+            os_analyze::compare::change::notification::content(
+                &file,
+                &task.name,
+                compare,
+                task.effective_exports().skip_empty,
+            )
+        };
+        let content = match build(compare) {
+            Err(_) if failed && compare => build(false),
+            other => other,
+        }
         .map_err(|e| e.to_string())?;
+        let (mut text, mut html) = (content.text, content.html);
+        if task.execution.auto_compare && crawl_failed {
+            let skipped = crate::exec::COMPARE_SKIPPED_FAILED;
+            text.push_str(&format!("{skipped}\n"));
+            html.push_str(&format!("<p>{skipped}</p>"));
+        }
+        if failed {
+            // Fehlermeldung des Laufs (OUT-281) vor dem Überblick.
+            let message = record
+                .message
+                .clone()
+                .unwrap_or_else(|| record.result.label().into());
+            text = format!("Error: {message}\n{text}");
+            html = format!("<p>Error: {}</p>{html}", html_escape(&message));
+        }
         self.sender.send(
             &task.notify.to,
-            &format!("{}: {}", task.name, record.result.label()),
-            &content.text,
-            &content.html,
+            // OUT-281: Betreff-Präfix `[FAILED]` wie bei der Abschlussmail ohne Vergleich.
+            &format!(
+                "{}{}: {}",
+                if failed { "[FAILED] " } else { "" },
+                task.name,
+                record.result.label()
+            ),
+            &text,
+            &html,
         )
     }
 }
@@ -72,4 +105,12 @@ pub fn notify_configured(task: &Task, record: &RunRecord) -> Result<(), String> 
         sender: Arc::new(sender),
     }
     .notify(task, record)
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }

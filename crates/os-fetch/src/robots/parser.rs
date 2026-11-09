@@ -31,6 +31,14 @@ impl RobotsMatch {
     pub fn matched_line(&self) -> String {
         format!("Zeile {}: {}", self.line_no, self.line)
     }
+
+    /// Umkehrung von [`RobotsMatch::matched_line`]: Zeilennummer und Regeltext aus der gespeicherten Anzeigeform, damit
+    /// Oberflächen die Zeile selbst formulieren (i18n) statt den gespeicherten Präfix zu zeigen (UI-019). `None`, wenn der
+    /// Text nicht diese Form hat.
+    pub fn split_matched_line(text: &str) -> Option<(u32, &str)> {
+        let (number, line) = text.strip_prefix("Zeile ")?.split_once(": ")?;
+        Some((number.parse().ok()?, line))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -405,6 +413,26 @@ mod tests {
             txt.evaluate("x", "/y").expect("Treffer").matched_line(),
             "Zeile 2: Disallow: /y"
         );
+    }
+
+    // Zeilennummer und Regeltext getrennt für die Oberfläche (B4-STARTFIX).
+    // spec: UI-019
+    // spec: CRAWL-098
+    #[test]
+    fn the_matched_line_splits_into_number_and_rule() {
+        let txt = parse("User-agent: *\nDisallow: /\n");
+        let m = txt.evaluate("x", "/").expect("Treffer");
+        assert_eq!(
+            RobotsMatch::split_matched_line(&m.matched_line()),
+            Some((2, "Disallow: /"))
+        );
+        assert_eq!(
+            RobotsMatch::split_matched_line("Zeile 12: Disallow: /a: b"),
+            Some((12, "Disallow: /a: b"))
+        );
+        for text in ["Disallow: /", "Zeile x: Disallow: /", "Zeile 3 Disallow"] {
+            assert_eq!(RobotsMatch::split_matched_line(text), None, "{text}");
+        }
     }
 
     // spec: CRAWL-098

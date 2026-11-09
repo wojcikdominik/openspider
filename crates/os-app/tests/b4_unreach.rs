@@ -180,9 +180,8 @@ async fn a_closed_port_reports_the_refused_connection_of_the_start_url_within_tw
     assert_eq!(n.args["robots"], false);
     assert_eq!(n.args["url"], start.as_str());
     assert_eq!(n.args["startUrl"], start.as_str());
+    // UI-019: Die 2 s zählen ab dem letzten Abrufversuch, nicht ab dem Start der App (langsame Runner, B4-STARTFIX).
     assert!(after_fetch(&o) < Duration::from_secs(2), "{:?}", o.elapsed);
-    // Die Verweigerung kommt sofort: alles bis zum Dialog bleibt unter 2 s.
-    assert!(o.elapsed < Duration::from_secs(2), "{:?}", o.elapsed);
 }
 
 // robots.txt per Netzfehler nicht erreichbar (Standard „robots.txt beachten“, Regel „Host sperren“): Ursache aus der Hilfszeile.
@@ -199,8 +198,8 @@ async fn an_unreachable_robots_txt_reports_its_own_row_and_url() {
     assert_eq!(n.args["robots"], true);
     assert_eq!(n.args["url"], format!("{base}/robots.txt").as_str());
     assert_eq!(n.args["startUrl"], format!("{base}/").as_str());
+    // UI-019: Die 2 s zählen ab dem letzten Abrufversuch, nicht ab dem Start der App (langsame Runner, B4-STARTFIX).
     assert!(after_fetch(&o) < Duration::from_secs(2), "{:?}", o.elapsed);
-    assert!(o.elapsed < Duration::from_secs(2), "{:?}", o.elapsed);
 }
 
 // Unbekannte Domain (`.invalid` ist nach RFC 6761 nie auflösbar).
