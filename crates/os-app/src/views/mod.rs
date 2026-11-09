@@ -619,9 +619,7 @@ impl TabView {
         let (snapshot, _) = self.snapshot(app, version).await?;
         let (from_row, to_row) = (snapshot.locate(UrlId(from)), snapshot.locate(UrlId(to)));
         let keys = match (from_row, to_row) {
-            (Some(a), Some(b))
-                if !crate::commands::view::range_covers_large(a, b, snapshot.total()) =>
-            {
+            (Some(a), Some(b)) if !crate::commands::view::range_requires_export(a, b) => {
                 snapshot.keys(a.min(b), a.max(b))
             }
             _ => Vec::new(),

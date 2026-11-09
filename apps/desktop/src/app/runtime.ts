@@ -17,6 +17,7 @@ import { attachSession, useSession } from "../state/session";
 import { startAppearanceSync } from "./appearance";
 import { BASE_MENU } from "./baseMenu";
 import { installGlobalErrorLogging } from "./ErrorBoundary";
+import { bindDetailPersistence } from "../features/detail/frame/persistence";
 import { openSettingsWindow, quitApp } from "./windows";
 
 export type WindowKind = "main" | "settings" | "viz";
@@ -129,10 +130,17 @@ export function bootWindow(opts: BootOptions): Runtime {
     );
   }
 
+  let disposed = false;
   const ready = usePrefs
     .getState()
     .load()
-    .then(() => appearance.apply());
+    .then(async () => {
+      if (isMain) {
+        const off = await bindDetailPersistence();
+        if (disposed) off(); else offs.push(off);
+      }
+      await appearance.apply();
+    });
 
   return {
     client,
@@ -141,6 +149,7 @@ export function bootWindow(opts: BootOptions): Runtime {
     ready,
     menu,
     dispose() {
+      disposed = true;
       for (const off of offs.reverse()) off();
       setClient(null);
     },

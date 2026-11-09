@@ -296,7 +296,7 @@ fn range(app: &App, ctx: CallCtx, args: Value) -> BoxFuture<'_, CmdResult> {
             .zip(to_row)
             .is_some_and(|(a, b)| crate::commands::view::range_covers_large(a, b, TOTAL));
         let keys = match (from_row, to_row) {
-            (Some(a), Some(b)) if !all => {
+            (Some(a), Some(b)) if !crate::commands::view::range_requires_export(a, b) => {
                 (a.min(b)..=a.max(b)).map(|r| key(&v, r) as i64).collect()
             }
             _ => Vec::new(),
@@ -309,6 +309,10 @@ fn range(app: &App, ctx: CallCtx, args: Value) -> BoxFuture<'_, CmdResult> {
             total: TOTAL,
             keys,
             all,
+            export_required: !all
+                && from_row
+                    .zip(to_row)
+                    .is_some_and(|(a, b)| crate::commands::view::range_requires_export(a, b)),
         })
     })
 }

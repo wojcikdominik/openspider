@@ -590,3 +590,23 @@ it("retries a final revision discarded when a pending update's tab becomes hidde
   expect(updates).toBe(2);
   expect(within(screen.getByRole("table", { name: "Inlinks" })).getByText(updatedAddress)).toBeInTheDocument();
 }, 5000);
+
+// spec: UI-018
+// spec: UI-030
+it("clears a failed refresh message when the next 500-ms refresh succeeds", async () => {
+  render(<DetailFrame selection={selection} actions={actions} />); await settle();
+  await selectTab("Inlinks"); await settle();
+  const incoming = [...fixture.views.keys()][0];
+  const record = fixture.views.get(incoming)!;
+  let updates = 0;
+  fixture.core.handlers.set("view.update", () => {
+    if (++updates === 1) throw new IpcError({ code: "Io", messageKey: "err-io", args: {}, detail: "fixture refresh failure", retryable: true });
+    return { viewId: incoming, version: 2, total: record.rows.length, state: "ready" };
+  });
+  act(() => useSession.setState(state => ({ countsVersion: state.countsVersion + 1 })));
+  await settle(500);
+  expect(screen.getByRole("alert")).toHaveTextContent("fixture refresh failure");
+  await settle(500);
+  expect(updates).toBe(2);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
