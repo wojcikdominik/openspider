@@ -1290,8 +1290,10 @@ pub fn start_failure(crawl: &CrawlFile, start_url: &str) -> Option<StartFailure>
 pub struct StartRobotsBlock {
     /// Die robots.txt, deren Regel die Start-URL sperrt.
     pub robots_url: String,
-    /// Treffende Zeile, wie sie die Spalte „Gesperrt durch Zeile“ zeigt.
-    pub matched_line: Option<String>,
+    /// Zeilennummer der sperrenden Regel (1-basiert).
+    pub line_number: Option<u32>,
+    /// Regeltext der sperrenden Zeile ohne Präfix (z. B. `Disallow: /`); die Formulierung übernimmt die Oberfläche (i18n).
+    pub rule: Option<String>,
 }
 
 /// Liest aus der Crawl-Datei, ob die Start-URL per robots.txt gesperrt wurde (Grund `blocked_by_robots` der Start-URL-Zeile).
@@ -1308,9 +1310,17 @@ pub fn start_robots_block(crawl: &CrawlFile, start_url: &str) -> Option<StartRob
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .ok()?;
+    let (line_number, rule) = match matched_line.as_deref() {
+        Some(text) => match os_fetch::robots::RobotsMatch::split_matched_line(text) {
+            Some((number, rule)) => (Some(number), Some(rule.to_owned())),
+            None => (None, Some(text.to_owned())),
+        },
+        None => (None, None),
+    };
     Some(StartRobotsBlock {
         robots_url: robots_url?,
-        matched_line,
+        line_number,
+        rule,
     })
 }
 
