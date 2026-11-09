@@ -125,6 +125,9 @@ export function Notifications() {
       {current?.args.path != null && <p>{String(current.args.path)} · {t("notify-free", { free: String(current.args.freeBytes ?? "–") })}</p>}
       {current?.args.target != null && <p>{String(current.args.target)}</p>}
       {current?.code === "start-robots" && typeof current.args.url === "string" && <p data-testid="notify-robots-file">{t("notify-robots-file", { url: current.args.url })}</p>}
+      {current?.code === "start-robots" && typeof current.args.line === "string" && <p data-testid="notify-robots-line">{typeof current.args.lineNumber === "number"
+        ? t("notify-robots-line", { number: String(current.args.lineNumber), rule: current.args.line })
+        : t("notify-robots-rule", { rule: current.args.line })}</p>}
       {/* UI-019: only points to the setting; the crawl configuration stays unchanged. */}
       {current?.code === "start-robots" && <Button onPress={() => openConfig({ anchor: "robots.mode" })}>{t("notify-robots-setting")}</Button>}
       {httpsFailure && <Button isDisabled={busy} onPress={() => {

@@ -13,7 +13,7 @@ import { closeConfig, useConfigDialog } from "../config/frame/store";
 const blocked: Notice = {
   level: "warning",
   code: "start-robots",
-  args: { startUrl: "http://127.0.0.1:9/", url: "http://127.0.0.1:9/robots.txt", line: "Zeile 2: Disallow: /" },
+  args: { startUrl: "http://127.0.0.1:9/", url: "http://127.0.0.1:9/robots.txt", lineNumber: 2, line: "Disallow: /" },
 };
 
 let core: ReturnType<typeof setupHeader>;
@@ -28,6 +28,8 @@ it("names the robots.txt block and only points to the Ignore robots.txt setting"
   const dialog = await screen.findByRole("dialog", { name: "Crawl notice" });
   expect(within(dialog).getByText("robots.txt blocks the start address. The setting remains unchanged.")).toBeVisible();
   expect(within(dialog).getByTestId("notify-robots-file")).toHaveTextContent("Blocking robots.txt: http://127.0.0.1:9/robots.txt");
+  // Die blockierende Zeile formuliert die Oberfläche selbst (Kern liefert Nummer und Regeltext getrennt).
+  expect(within(dialog).getByTestId("notify-robots-line")).toHaveTextContent("Blocking rule (line 2): Disallow: /");
   // Kein Fehlschlag: weder der Titel noch der Zustand „Failed“ der nicht erreichbaren Start-URL.
   expect(dialog.textContent).not.toContain("Failed");
   fireEvent.click(within(dialog).getByRole("button", { name: "Open the “Ignore robots.txt” setting" }));
@@ -43,5 +45,14 @@ it("shows the German texts", async () => {
   const dialog = await screen.findByRole("dialog", { name: "Crawl-Meldung" });
   expect(within(dialog).getByText(/robots\.txt sperrt die Startadresse/)).toBeVisible();
   expect(within(dialog).getByTestId("notify-robots-file")).toHaveTextContent("Sperrende robots.txt: http://127.0.0.1:9/robots.txt");
+  expect(within(dialog).getByTestId("notify-robots-line")).toHaveTextContent("Sperrende Regel (Zeile 2): Disallow: /");
   expect(within(dialog).getByRole("button", { name: "Einstellung „robots.txt ignorieren“ öffnen" })).toBeVisible();
+});
+
+// spec: UI-019
+it("shows the rule without a line number when the core has none", async () => {
+  render(<Notifications />);
+  act(() => useSession.getState().pushNotice({ ...structuredClone(blocked), args: { ...blocked.args, lineNumber: null } }));
+  const dialog = await screen.findByRole("dialog", { name: "Crawl notice" });
+  expect(within(dialog).getByTestId("notify-robots-line")).toHaveTextContent("Blocking rule: Disallow: /");
 });

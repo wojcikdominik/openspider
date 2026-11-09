@@ -28,6 +28,8 @@ test("a start URL blocked by robots.txt opens a dialog that points to the Ignore
     await expect(dialog).toBeVisible({ timeout: 10_000 });
     await expect(dialog).toContainText("robots.txt blocks the start address.");
     await expect(dialog.getByTestId("notify-robots-file")).toHaveText(`Blocking robots.txt: ${site.base}/robots.txt`);
+    // Die blockierende Zeile der Fixture (Zeile 2), formuliert von der Oberfläche.
+    await expect(dialog.getByTestId("notify-robots-line")).toHaveText("Blocking rule (line 2): Disallow: /");
     // Kein Fehlschlag (CRAWL-128): Die Statusleiste zeigt „Completed“, der Dialog nicht den Zustand „Failed“.
     await expect(page.getByTestId("crawl-phase")).toHaveText("Completed");
     await expect(dialog).not.toContainText("Failed");
