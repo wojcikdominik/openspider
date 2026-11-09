@@ -127,6 +127,12 @@ jobs:
           mkdir -p "$tap/Casks"
           cp "$RUNNER_TEMP"/homebrew/Casks/*.rb "$tap/Casks/"
           ls "$tap/Casks"
+          # Neuere Homebrew-Versionen laden Casks aus nicht offiziellen Taps erst nach ausdrücklichem Vertrauen
+          # („Refusing to load cask … from untrusted tap“, Probelauf 42639860021). Vertraut wird nur den geprüften
+          # Casks, nicht dem ganzen Tap.
+          for file in "$tap"/Casks/*.rb; do
+            brew trust --cask "$CHECK_TAP/$(basename "$file" .rb)"
+          done
 
       # Lesender GITHUB_TOKEN (contents: read) nur gegen das Ratenlimit der GitHub-API in den Online-Prüfungen.
       - name: brew style und brew audit --strict --online
