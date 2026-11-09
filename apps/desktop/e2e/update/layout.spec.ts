@@ -149,7 +149,8 @@ for (const lang of ["de", "en"]) test(`${lang}: keyboard only — primary focuse
   const install = dialog.getByRole("button", { name: lang === "de" ? "Update installieren" : "Install update", exact: true });
   await expect(install).toBeEnabled();
   // Focus is in the dialog (on the primary action once the download is ready, before that on "Remind me later").
-  expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  // The status view ("Checking…") is replaced by the release view; wait until focus has settled inside the dialog.
+  await expect.poll(() => dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
   const reached = new Set<string>();
   for (let i = 0; i < 8; i++) {
     await page.keyboard.press("Tab");
