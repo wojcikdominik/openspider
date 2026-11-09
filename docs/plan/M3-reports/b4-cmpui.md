@@ -288,3 +288,73 @@ Nicht angefasst: `apps/desktop/src/features/crawls/**`, `apps/desktop/src/ui/**`
 | `56a82dc5` | ui: normale gruppierte Tab-Leiste im Vergleich |
 | `9ba7c52c` | ui: normale Spaltenkonfiguration, lokalisierte Auswahlwerte und Übersicht |
 | (dieser) | docs: Bericht Runde 2 |
+
+---
+
+## Runde 3 (Nachzug, Entscheidungen des Orchestrators vom 09.11.2026)
+
+### 1. „Current“/„Previous“
+Bleiben unübersetzt (Rollennamen, Spec). Keine Änderung.
+
+### 2. Werte der Spalte Vergleichsstatus lokalisiert
+- **Umsetzung:** `ComparisonSource.getCell` übersetzt nur die Anzeige der Spalte `Comparison Status`, über dieselben
+  Texte wie Unterfilter und Übersicht (`compare-class-*`). Die Kernanfrage für Filter und Sortierung bleibt
+  unverändert. Kopieren (`api.copy`, liest Rohwerte) und Export (`comparisonCsv`) behalten die englischen Werte.
+- **Begriffe (de):** „Hinzugefügt“, „Neu“, „Entfernt“, „Fehlend“, „Unverändert“. Den Vorschlag „Hinzugekommen/Fehlt“
+  habe ich nicht übernommen, damit Zellen, die Auswahl „Vergleichsstatus“, die Spaltenköpfe der Übersicht und die
+  Linkänderung (OUT-149: „Hinzugefügt“, „Entfernt“, „Unverändert“) dieselben Wörter benutzen. Falls die Formulierung
+  aus der Nachricht gewünscht ist: Es sind nur die Schlüssel `compare-class-*` in
+  `features/compare/i18n/de.ftl` zu ändern, an einer Stelle für alle Orte.
+- **Spec:** OS-Festlegung in OUT-142 eingetragen.
+- **Tests:** `comparison-grid.test.tsx` „localizes every comparison status value in the display only“ (alle fünf Werte,
+  `// spec: OUT-142`, `UI-121`). Dazu im Test mit echtem Raster: Zelle „Unverändert“ in de, CSV mit `Unchanged`.
+
+### 3. Visuelle Tests (`screenshots.spec.ts`, Projekt chromium-1, Build-Server)
+Alle 8 Fälle sind auch mit dem unveränderten Frontend (`git checkout a675fefa -- apps/desktop/src`) rot. Meine Änderungen
+machen keinen Fall rot.
+
+**Vorgehen:**
+1. Beide Stände laufen gelassen, normal und mit nur auf dem Server vorübergehend weichen Screenshot-Prüfungen
+   (`expect.soft`, danach per `git checkout` zurückgesetzt, nicht committet). So wird jede der sieben Szenen eines
+   Falls verglichen.
+2. Danach die erzeugten Bilder byteweise verglichen.
+
+**Ergebnis:**
+- 71 von 72 Ausgabebildern sind zwischen `a675fefa` und `m3/b4-cmpui` byte-identisch.
+- Die einzige Abweichung (`viz-en-dark-normal-actual.png`, 12 Pixel, x 28–29, y 220–296) war ein einmaliges Flackern:
+  Zwei Wiederholungen auf `m3/b4-cmpui` sind pixelgleich mit `a675fefa` (0 Pixel).
+- In jedem Fall weichen dieselben drei Szenen von der Baseline ab, auf beiden Ständen gleich:
+
+| Szene (je Fall de/en × hell/dunkel × kompakt/normal) | Abweichung von der Baseline | Ursache |
+|---|---|---|
+| `shell-*` | 41 Pixel, Bereich 888,625–894,632 (Statusleiste rechts) | Zahl in „Unavailable menu actions (…)“ hat sich seit der Baseline geändert (Menüeinträge anderer Pakete); nicht Tab-Leiste/Kopf/Statusleiste dieses Pakets |
+| `settings-*` | 4 453–6 104 Pixel, Bereich 220,256–749,328 | neue Zeile „After a crash, ask whether to send a report“ mit Hinweistext in den Einstellungen (Absturzbericht-Paket) |
+| `viz-*` | ≈ 372 000 Pixel, Bereich 296,16–1007,539 | andere Anordnung der Wortwolke als in der Baseline |
+
+Die übrigen vier Szenen (`empty`, `primitives`, `serp`, `source`) stimmen mit der Baseline überein. Kein
+„Baseline-Update nötig“ aus diesem Paket; die Baselines `baselines/linux` sind für die drei Szenen veraltet (Sache der
+Pakete, die Einstellungen, Menü und Wortwolke geändert haben). Baselines nicht geändert.
+
+### 4. Statusleistenmeldung in deutscher Oberfläche
+Erscheint deutsch: „Die Datei wurde nicht gefunden: <Pfad>“ (`err-file-not-found` in
+`src/i18n/errors/i18n/de.ftl`). Nachweis: `Statusbar.test.tsx` „keeps the technical detail out of the failure sentence
+and names a missing file“ (de, exakter Text `^Die Datei wurde nicht gefunden: /tmp/gone/x\.ospider$`). Unbekannte
+Schlüssel fallen auf den deutschen Satz der Fehlerklasse zurück („Ein Dateivorgang ist fehlgeschlagen.“), nie auf
+englischen Text oder Rohcodes.
+
+### Prüfungen Runde 3
+| Befehl | Ergebnis |
+|---|---|
+| `npm run -w apps/desktop typecheck` | ok |
+| `npm run -w apps/desktop test` | 123 Dateien, 1060 Tests passed |
+| `npx playwright test e2e/compare e2e/a11y/views.spec.ts:72 --workers=1 --project=chromium` | 3 passed |
+| `npx playwright test e2e/compare --workers=1 --project=webkit` | 2 passed |
+| Visual chromium-1 (`screenshots.spec.ts`), Stand `a675fefa` und `m3/b4-cmpui` | je 8 rot, Bilder identisch (siehe oben) |
+| Rust | unverändert seit Runde 1 |
+
+### Commits Runde 3
+| Commit | Inhalt |
+|---|---|
+| `2e0651a4` | docs: OS-Festlegung OUT-142 (lokalisierte Statuswerte) |
+| `bec5750d` | ui: Werte der Spalte Vergleichsstatus lokalisiert, Kopieren/Export kanonisch |
+| (dieser) | docs: Bericht Runde 3 |
