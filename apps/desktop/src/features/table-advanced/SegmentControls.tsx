@@ -19,7 +19,7 @@ export function SegmentControls({ crawlId }: { crawlId?: string }) {
   const ops = useSession(s => s.ops);
   const running = Object.values(ops).filter(op => isSegmentOp(op) && op.state === "running");
   const wasRunning = useRef(false);
-  useEffect(() => { void useSegments.getState().load(); }, [crawlId]);
+  useEffect(() => { void useSegments.getState().load({ crawlChanged: true }); }, [crawlId]);
   useEffect(() => {
     // Column, counts and badge refresh as soon as the core reports the reassignment finished; no recrawl.
     if (wasRunning.current && !running.length) void useSegments.getState().load();

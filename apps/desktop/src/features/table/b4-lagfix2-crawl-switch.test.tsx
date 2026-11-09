@@ -16,7 +16,6 @@ import { attachSession, useSession } from "../../state/session";
 import { setLanguage } from "../../i18n";
 import { flushUiState } from "../../state/uistate";
 import fixtureTick from "../../ipc/__fixtures__/Tick.json";
-import { useSegments } from "../table-advanced/stores";
 import { UpperTable } from "./UpperTable";
 import { fixtureColumns, fixtureTabs, tableFixture } from "./fixtures/core";
 
@@ -79,16 +78,18 @@ it("reopens with the catalog's columns when they changed for the new crawl", asy
 });
 
 // spec: UI-018
-it("reloaded segment definitions without an active segment filter keep the open view", async () => {
+it("loading the new crawl's segments does not open the table a second time", async () => {
+  fx.core.handlers.set("segment.list", () => []);
   render(<UpperTable />);
   await waitFor(() => expect(capture.grid?.source.rowKey(0)).toBe(1));
-  const source = capture.grid!.source;
   const opens = () => fx.core.calls.filter(c => c.cmd === "view.open").length;
-  const before = opens();
-  act(() => useSegments.setState({ revision: useSegments.getState().revision + 1 }));
-  await act(async () => { await Promise.resolve(); });
-  expect(opens()).toBe(before);
-  expect(capture.grid!.source).toBe(source);
+  const lists = () => fx.core.calls.filter(c => c.cmd === "segment.list").length;
+  const before = opens(); const listed = lists();
+  act(() => eventBus.emit({ kind: "tick", tick: tick(10, running("crawl-b", 0)) }));
+  await waitFor(() => expect(lists()).toBeGreaterThan(listed));
+  await waitFor(() => expect(capture.grid?.source.viewId).toBe(`fixture-${before + 1}`));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+  expect(opens()).toBe(before + 1);
   expect(screen.getByRole("button", { name: "All (3)" })).toBeVisible();
 });
 

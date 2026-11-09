@@ -38,7 +38,7 @@ export class TableController {
   /** Last `Tick.countsVersion` answered with a counts request. It is a tick counter of the core and not comparable with `FilterCounts.version` (change sequence of the file). */
   private countsTick = -1;
   private abortBuild?: () => void;
-  /** UI-018 (B4-LAGFIX2): what is open (crawl, tab, spec, segment revision if restricted), the last arguments and the tab's column keys. */
+  /** UI-018 (B4-LAGFIX2): what is open (crawl, tab, spec, segment revision), the last arguments and the tab's column keys. */
   private openKey?: string;
   private lastOpen?: { tab: string; query: TabQuery };
   private columnKeys = new Map<string, string[]>();
@@ -61,10 +61,7 @@ export class TableController {
   }
   resetCrawl() { this.countsEpoch++; this.countsRequest++; this.countsTick = -1; this.counts = { version: -1, filters: [] }; this.setSelection(SelectionModel.empty()); }
   async open(tab: string, query: TabQuery): Promise<void> {
-    // Segment definitions (revision) matter only for a view restricted to a segment; reloading them for a new crawl
-    // must not restart the open view (it cleared footer and chip once more at every crawl start).
-    const spec = tabSpec(tab, query);
-    const key = JSON.stringify([useSession.getState().crawl?.crawlId ?? null, tab, spec, spec.kind === "tab" && spec.segment ? useSegments.getState().revision : null]);
+    const key = JSON.stringify([useSession.getState().crawl?.crawlId ?? null, tab, tabSpec(tab, query), useSegments.getState().revision]);
     if (key === this.openKey && !this.error && !this.disposed) return this.opening;
     this.openKey = key; this.lastOpen = { tab, query };
     const generation = ++this.generation;
