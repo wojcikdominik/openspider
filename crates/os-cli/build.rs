@@ -11,8 +11,14 @@ use std::process::Command;
 #[allow(dead_code)]
 mod build_number;
 
+/// Runs Git in this package's directory (`CARGO_MANIFEST_DIR`), independent of the build script's working directory.
 fn git(args: &[&str]) -> Option<String> {
-    let out = Command::new("git").args(args).output().ok()?;
+    let dir = std::env::var_os("CARGO_MANIFEST_DIR")?;
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
@@ -93,7 +99,12 @@ fn main() {
         release,
         || {
             let canonical = |p: &std::path::Path| std::fs::canonicalize(p).ok();
-            let root = std::path::Path::new("..").join("..");
+            // Workspace root found from CARGO_MANIFEST_DIR, as in os-model/build.rs.
+            let root = std::path::PathBuf::from(
+                std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"),
+            )
+            .join("..")
+            .join("..");
             build_number::GitFacts {
                 count: git(&["rev-list", "--count", "HEAD"]),
                 shallow: git(&["rev-parse", "--is-shallow-repository"]),
