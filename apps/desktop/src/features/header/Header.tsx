@@ -214,14 +214,16 @@ export function Header() {
             // submission), so the start is triggered here; preventDefault keeps engines that would also submit from
             // starting twice.
             if (e.key === "ArrowDown" || e.key === "ArrowUp") { browsingSuggestions.current = history.length > 0; return; }
-            if (e.key === "Escape") { browsingSuggestions.current = false; return; }
-            if (e.key !== "Enter") return;
+            // Any other key leaves the suggestions (Escape mostly never gets here: the shortcut dispatcher takes it in the
+            // capture phase, hence also the keyup reset below).
+            if (e.key !== "Enter") { browsingSuggestions.current = false; return; }
             const starts = enterStartsCrawl(e.nativeEvent, browsingSuggestions.current);
             if (!e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) browsingSuggestions.current = false;
             if (!starts) return;
             e.preventDefault();
             requestStart();
           }}
+          onKeyUp={(e) => { if (e.key === "Escape") browsingSuggestions.current = false; }}
           onBlur={() => { browsingSuggestions.current = false; }} autoComplete="off" spellCheck={false} /></label>
         <datalist id="os-start-history">{history.map((u) => <option key={u} value={u} />)}</datalist>
         <label className="os-header-scope"><span className="os-visually-hidden">{t("header-scope")}</span><select value={scope} disabled={!allowed || running || resumable} onChange={(e) => useHeader.setState({ scope: e.target.value as StartRequest["scope"] })}>

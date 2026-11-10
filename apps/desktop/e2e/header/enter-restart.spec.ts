@@ -70,6 +70,14 @@ test("Enter in the start URL field starts the next crawl after a finished one", 
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(field).toHaveValue(second);
     expect(started()).toEqual([first, second]);
+
+    // UI-113 (OS-Festlegung 09.11.2026): Enter in the open question is its default action („Replace“).
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(() => hits.filter((h) => h === "/second/").length, { timeout: 30_000 }).toBe(2);
+    await expect(phase).toHaveAttribute("data-phase", "completed", { timeout: 30_000 });
   } finally { await new Promise<void>((resolve, reject) => server.close((e) => e ? reject(e) : resolve())); }
 });
 

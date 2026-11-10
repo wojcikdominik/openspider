@@ -8,6 +8,7 @@ import { setClient } from "../../ipc/client";
 import { eventBus } from "../../ipc/events";
 import { setLanguage } from "../../i18n";
 import { runAction } from "../../ui/actions";
+import { installShortcutDispatcher } from "../../ui/dispatcher";
 import { useComparison } from "../compare/model";
 import { session as compareSession } from "../compare/fixtures/out-compare/core";
 
@@ -171,6 +172,29 @@ it("starts a new crawl after confirmation when the URL of a paused crawl was cha
   await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
   expect(calls("crawl.start")[0]?.args).toEqual({ source: { kind: "spider", url: "https://next.test/" }, scope: "domain" });
   expect(calls("crawl.resume")).toHaveLength(0);
+});
+
+// spec: UI-003
+// spec: UI-113
+it("after the arrow keys, Escape or another key releases the suggestions: the next Enter starts (B4-ENTER)", async () => {
+  // The real dispatcher takes Escape in a text field in the capture phase (search.clear) and stops it there.
+  const off = installShortcutDispatcher({ platform: "win", onAction: () => true });
+  try {
+    core.uiState.state = { header: { history: ["https://old.test/"] } };
+    render(<Header />);
+    await waitFor(() => expect(document.querySelectorAll("datalist option")).toHaveLength(1));
+    enterUrl("next.test");
+    const field = screen.getByLabelText("Start URL");
+    fireEvent.keyDown(field, { key: "ArrowDown", keyCode: 40 });
+    expect(fireEvent.keyDown(field, { key: "Escape", keyCode: 27 })).toBe(false);
+    fireEvent.keyUp(field, { key: "Escape", keyCode: 27 });
+    expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+    await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+    // Arrow, then a cursor key (no input event): the next Enter is not held back either.
+    fireEvent.keyDown(field, { key: "ArrowUp", keyCode: 38 });
+    fireEvent.keyDown(field, { key: "End", keyCode: 35 });
+    expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  } finally { off(); }
 });
 
 // spec: CRAWL-009 [M2]
