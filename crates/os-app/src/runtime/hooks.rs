@@ -63,6 +63,13 @@ pub trait DesktopActions: Send + Sync {
 /// Auswahl der Fenster, deren nächster Tick fällig ist.
 pub trait TickPolicy: Send + Sync {
     fn due_windows(&self, app: &App) -> Vec<super::WindowId>;
+    /// Would a flush now send a tick to at least one window? Read-only, for aligning table data with the tick
+    /// (UI-018, B4-LAGFIX2). Without its own clock a policy is always due.
+    fn any_due(&self, _app: &App) -> bool {
+        true
+    }
+    /// Asks for one prompt tick (e.g. after a crawl was attached); the policy keeps its minimum spacing.
+    fn expedite(&self) {}
 }
 /// Wartet, bis ein Dienst seine Abschlussarbeit gespeichert hat.
 pub trait CompletionBarrier: Send + Sync {

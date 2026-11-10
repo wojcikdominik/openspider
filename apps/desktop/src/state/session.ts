@@ -37,6 +37,27 @@ export interface SessionState {
   dismissNotice(notice: Notice): void;
 }
 
+/**
+ * UI-018 (B4-LAGFIX2): „Completed“ appears only when the shown counts are exact. Views that show shared counts
+ * (Overview, Issues) register a refresh here; the end status of a running crawl is applied once they have reloaded
+ * (at most `END_GATE_MS`). Footer and chip already come with the end status (same tick as the final rows).
+ */
+const endBarriers = new Set<() => Promise<unknown>>();
+const END_GATE_MS = 3000;
+let heldEnd: CrawlStatus | null = null;
+export function registerEndBarrier(refresh: () => Promise<unknown>): () => void {
+  endBarriers.add(refresh);
+  return () => { endBarriers.delete(refresh); };
+}
+async function releaseEnd(apply: (crawl: CrawlStatus) => void) {
+  await Promise.race([Promise.allSettled([...endBarriers].map(refresh => refresh())), new Promise(resolve => setTimeout(resolve, END_GATE_MS))]);
+  // Shared-count views publish their answer in the next task (query notifications); the status follows after them.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const crawl = heldEnd;
+  heldEnd = null;
+  if (crawl) apply(crawl);
+}
+
 export const useSession = create<SessionState>((set, get) => ({
   seq: -1,
   throttled: {},
@@ -56,6 +77,15 @@ export const useSession = create<SessionState>((set, get) => ({
   notices: [],
   applyTick(tick) {
     if (tick.seq <= get().seq) return;
+    const current = get().crawl;
+    if (tick.crawl && current?.crawlId === tick.crawl.crawlId && (heldEnd || current.phase === "running" && tick.crawl.phase === "completed" && endBarriers.size > 0)) {
+      const start = !heldEnd;
+      heldEnd = tick.crawl;
+      tick = { ...tick, crawl: null };
+      if (start) queueMicrotask(() => void releaseEnd(crawl => {
+        if (get().crawl?.crawlId === crawl.crawlId) set(s => ({ crawl, throttled: Object.keys(s.throttled).length ? {} : s.throttled }));
+      }));
+    } else if (tick.crawl) heldEnd = null;
     set((s) => {
       let views = s.views;
       for (const v of tick.views) {

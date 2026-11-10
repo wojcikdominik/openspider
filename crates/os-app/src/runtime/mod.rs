@@ -393,6 +393,27 @@ impl App {
         *self.0.tick_policy.lock().unwrap_or_else(|p| p.into_inner()) = Some(p);
     }
 
+    fn tick_policy(&self) -> Option<Arc<dyn TickPolicy>> {
+        self.0
+            .tick_policy
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+
+    /// Wäre ein `flush_tick` jetzt für mindestens ein Fenster fällig? Ändert nichts. Ohne Taktpolitik immer.
+    /// Die Sitzung veröffentlicht Tabellendaten in diesem Takt (UI-018, B4-LAGFIX2).
+    pub fn tick_due(&self) -> bool {
+        self.tick_policy().is_none_or(|p| p.any_due(self))
+    }
+
+    /// Bittet um einen baldigen Tick für sichtbare Fenster (Mindestabstand der Taktpolitik bleibt, PERF-004).
+    pub fn expedite_tick(&self) {
+        if let Some(p) = self.tick_policy() {
+            p.expedite();
+        }
+    }
+
     /// Führt den Command `name` mit `args` aus (Tauri, Bridge, HTTP-MCP). Ein Panic im Handler wird zu `Internal`.
     pub async fn dispatch(&self, ctx: CallCtx, name: &str, args: serde_json::Value) -> CmdResult {
         let Some((_, handler)) = self.0.registry.get(name) else {
@@ -587,13 +608,8 @@ impl App {
     /// Baut einen Tick und sendet ihn an alle abonnierten Fenster; Anzahl der erreichten Fenster (0 = nichts zu
     /// melden oder kein Fenster). Ohne abonniertes Fenster bleibt alles vorgemerkt (Meldungen gehen nicht verloren).
     pub fn flush_tick(&self) -> usize {
-        let policy = self
-            .0
-            .tick_policy
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clone();
-        let due = policy
+        let due = self
+            .tick_policy()
             .map(|p| p.due_windows(self))
             .unwrap_or_else(|| self.subscribed_windows());
         self.flush_tick_to(due)

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { sidebar } from "../../../ipc/sidebar";
 import { analysis } from "../../../ipc/analysis";
 import type { IssuesArgs } from "../../../ipc/gen/IssuesArgs";
-import { useSession } from "../../../state/session";
+import { registerEndBarrier, useSession } from "../../../state/session";
 import { useSidebarNavigation } from "./state";
 
 /**
@@ -35,6 +35,8 @@ export function useOverview() {
   const revision = useSession(s => `${s.countsVersion}:${s.sidebarVersion}`);
   const query = useQuery({ queryKey: ["sidebar", "overview", crawl, scope], queryFn: ({ signal }) => sidebar.overview(scope, signal), enabled: !!crawl, gcTime: 0 });
   useBundledRefetch(crawl, revision, query.refetch, JSON.stringify(scope));
+  // UI-018 (B4-LAGFIX2): „Completed“ waits for the exact final Overview.
+  useEffect(() => crawl ? registerEndBarrier(() => query.refetch()) : undefined, [crawl, query.refetch]);
   return query;
 }
 
@@ -47,6 +49,7 @@ export function useIssues(args: IssuesArgs) {
   const revision = useSession(s => `${s.issuesVersion}:${s.countsVersion}`);
   const query = useQuery({ queryKey: ["sidebar", "issues", crawl, args], queryFn: ({ signal }) => sidebar.issues(args, signal), enabled: !!crawl, gcTime: 0 });
   useBundledRefetch(crawl, revision, query.refetch, JSON.stringify(args));
+  useEffect(() => crawl ? registerEndBarrier(() => query.refetch()) : undefined, [crawl, query.refetch]);
   return query;
 }
 

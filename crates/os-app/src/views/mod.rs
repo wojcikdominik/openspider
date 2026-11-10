@@ -175,6 +175,9 @@ struct Shared {
     views: Mutex<Vec<Weak<TabView>>>,
     links: Mutex<Vec<Weak<LinkView>>>,
     changed: Mutex<Vec<ViewChanged>>,
+    /// Running maintenance workers (one per view at most) and their end signal, see [`settle`].
+    busy: std::sync::atomic::AtomicUsize,
+    idle: tokio::sync::Notify,
 }
 impl TickSource for Shared {
     fn collect(&self, parts: &mut TickParts) {
@@ -652,6 +655,9 @@ impl TabView {
         }
         let view = self.clone();
         let weak = app.downgrade();
+        let shared = app.ext::<Shared>();
+        // Counted before the spawn: `settle` right after the feed's listeners must see this run.
+        shared.busy.fetch_add(1, Ordering::SeqCst);
         app.handle().spawn(async move {
             loop {
                 let Some(app) = weak.upgrade() else { break };
@@ -668,6 +674,8 @@ impl TabView {
                     tracing::warn!(error = ?e, view = %*lock(&view.view_id), "View maintenance failed");
                 }
             }
+            shared.busy.fetch_sub(1, Ordering::SeqCst);
+            shared.idle.notify_waiters();
         });
     }
 
@@ -762,6 +770,25 @@ impl TabView {
         }
         Ok(())
     }
+}
+
+/// Waits until the view maintenance started by the feed has published, at most `max` (UI-018, B4-LAGFIX2).
+/// The session loop calls this between a poll that published rows and the tick, so the totals travel with
+/// the status of the same poll. A slower maintenance run keeps going and is announced with a later tick.
+pub async fn settle(app: &App, max: Duration) {
+    let shared = app.ext::<Shared>();
+    let _ = tokio::time::timeout(max, async {
+        loop {
+            let idle = shared.idle.notified();
+            tokio::pin!(idle);
+            idle.as_mut().enable();
+            if shared.busy.load(Ordering::SeqCst) == 0 {
+                return;
+            }
+            idle.await;
+        }
+    })
+    .await;
 }
 
 fn on_change(app: &App, change: &ChangeSet) {

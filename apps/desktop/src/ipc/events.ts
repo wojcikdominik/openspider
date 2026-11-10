@@ -70,10 +70,13 @@ export function connectWindowEvents(client: IpcClient, windowLabel: string, bus:
 
 /**
  * Meldet die Sichtbarkeit des Fensters (UI-143, erste von zwei Quellen; die zweite sind die Fensterereignisse im Rust-Teil).
+ * Der aktuelle Stand wird sofort gemeldet: Beim Neuladen meldet das alte Dokument zuletzt „verdeckt“, und ohne eigene
+ * Meldung bliebe das Fenster für den Kern verdeckt (Ticks höchstens 1 Hz statt im Live-Intervall, UI-018; B4-LAGFIX2).
  * Gibt die Abmeldung zurück.
  */
 export function bindVisibility(windowLabel: string, doc: Document = document): () => void {
   const report = () => void events.setVisibility({ window: windowLabel, visible: doc.visibilityState === "visible" }).catch(() => undefined);
   doc.addEventListener("visibilitychange", report);
+  report();
   return () => doc.removeEventListener("visibilitychange", report);
 }

@@ -57,6 +57,36 @@ impl TickSource for SessionService {
     }
 }
 
+/// A due tick waits for the view maintenance its poll started until at most this long after the previous tick
+/// (UI-018, B4-LAGFIX2), so ticks stay at most about one second apart. Measured in the debug E2E bridge on two
+/// shared CPUs: maintenance median 120–180 ms, p90 260 ms, p99 670 ms. A slower run arrives with the next tick.
+pub const TICK_SETTLE_UNTIL: Duration = Duration::from_millis(1000);
+/// Shortest and longest wait of a due tick for its view maintenance.
+pub const TICK_SETTLE_RANGE: (Duration, Duration) =
+    (Duration::from_millis(100), Duration::from_millis(500));
+
+/// Wait of the tick that carries the end status of a crawl for its final table rows (UI-018 „nach Crawl-Ende exakt“).
+pub const TICK_SETTLE_ENDED: Duration = Duration::from_millis(1000);
+
+/// Longest wait of the end status of a crawl for its exact final count (Overview, Issues, filter counts; UI-018
+/// „nach Crawl-Ende exakt“). A larger crawl whose count takes longer sends it with a later tick.
+pub const TICK_SETTLE_COUNTS: Duration = Duration::from_millis(3000);
+
+/// Wait budget of a due tick whose previous tick went out `since` ago (see [`TICK_SETTLE_UNTIL`]).
+pub fn settle_budget(since: Duration) -> Duration {
+    TICK_SETTLE_UNTIL
+        .saturating_sub(since)
+        .clamp(TICK_SETTLE_RANGE.0, TICK_SETTLE_RANGE.1)
+}
+
+/// Does the session loop deliver due ticks (a crawl session was attached)? Other periodic flushers stand back
+/// then, so a tick is sent only after the session's aligned poll (UI-018, B4-LAGFIX2).
+pub fn delivers_ticks(app: &App) -> bool {
+    app.ext::<SessionService>()
+        .active
+        .load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Installed once by the service initializer. Weak ownership lets App shut down.
 pub fn init(app: &App) {
     app.add_tick_source(app.ext::<SessionService>());
@@ -65,6 +95,7 @@ pub fn init(app: &App) {
     app.handle().spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(100));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut sent = tokio::time::Instant::now();
         loop {
             interval.tick().await;
             let Some(app) = weak.upgrade() else { break };
@@ -75,12 +106,42 @@ pub fn init(app: &App) {
             {
                 continue;
             }
-            // Deliver due control status before starting potentially expensive reads.
-            app.flush_tick();
-            if let Err(e) = poll(&app).await {
-                tracing::warn!(error = ?e, "Session poll failed");
+            // UI-018 (B4-LAGFIX2): a tick carries the status and the table totals of the same poll.
+            // Rows are published only when a tick is due (`feed::refresh`); the tick waits a bounded
+            // time for the view maintenance this started. Periodic ticks are sent only from here while a
+            // session is active (`delivers_ticks`); control commands send their own acknowledgement, and
+            // while they hold the mutation lock `poll` returns at once.
+            let due = app.tick_due();
+            let ended = match poll_aligned(&app, due).await {
+                Ok(ended) => ended,
+                Err(e) => {
+                    tracing::warn!(error = ?e, "Session poll failed");
+                    false
+                }
+            };
+            if ended {
+                // The final rows of an ended crawl follow its end status promptly (≥ 100 ms, PERF-004).
+                app.expedite_tick();
             }
-            app.flush_tick();
+            if due || ended {
+                let budget = if ended {
+                    TICK_SETTLE_ENDED
+                } else {
+                    settle_budget(sent.elapsed())
+                };
+                crate::views::settle(&app, budget).await;
+                if ended {
+                    // The end status goes out with the exact final count (UI-018, B4-LAGFIX2).
+                    let until = tokio::time::Instant::now() + TICK_SETTLE_COUNTS;
+                    while !crate::commands::sidebar::counts::settled(&app)
+                        && tokio::time::Instant::now() < until
+                    {
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                }
+                app.flush_tick();
+                sent = tokio::time::Instant::now();
+            }
         }
     });
 }
@@ -112,9 +173,15 @@ pub fn state(app: &App, key: &CrawlKey, state: CrawlState) {
 }
 
 pub async fn poll(app: &App) -> Result<(), CmdError> {
+    poll_aligned(app, app.tick_due()).await.map(|_| ())
+}
+
+/// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`). `Ok(true)`:
+/// a crawl ended in this poll and its final rows were published.
+async fn poll_aligned(app: &App, due: bool) -> Result<bool, CmdError> {
     let service = app.ext::<SessionService>();
     let Ok(_guard) = service.mutation.try_lock() else {
-        return Ok(());
+        return Ok(false);
     };
     let cancel = os_model::CancelToken::new();
     *service
@@ -123,6 +190,7 @@ pub async fn poll(app: &App) -> Result<(), CmdError> {
         .unwrap_or_else(|p| p.into_inner()) = Some(cancel.clone());
     let result = crate::runtime::with_cancel(cancel, async {
         let mut seen = std::collections::HashSet::new();
+        let mut ended = false;
         for s in app.sessions().all() {
             if !seen.insert(s.key.clone()) {
                 continue;
@@ -137,9 +205,10 @@ pub async fn poll(app: &App) -> Result<(), CmdError> {
             if finished {
                 control::settle(app, &s, None).await?;
             }
-            feed::refresh(app, &s).await?;
+            feed::refresh_aligned(app, &s, due || finished, finished).await?;
+            ended |= finished;
         }
-        Ok(())
+        Ok(ended)
     })
     .await;
     service

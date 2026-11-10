@@ -449,6 +449,14 @@ fn announce(app: &App) {
     parts.sidebar_version = Some(version);
 }
 
+/// No exact count of a paused or final data version is pending for any crawl (UI-018, B4-LAGFIX2): the
+/// session loop sends the end status of a crawl only after its exact final count was announced.
+pub(crate) fn settled(app: &App) -> bool {
+    lock(&app.ext::<SharedCounts>().crawls)
+        .values()
+        .all(|c| c.settling == 0)
+}
+
 /// Engine and feed transitions of a crawl (`session::state`). Leaving `Running` counts the paused or
 /// final data version at once and announces it; no request or user action is needed.
 pub(crate) fn observe_state(app: &App, key: &CrawlKey, state: CrawlState) {
