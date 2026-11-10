@@ -8,6 +8,7 @@ import { describeError, toCmdError } from "../../ipc/errors";
 import { eventBus } from "../../ipc/events";
 import type { Notice } from "../../ipc/gen/Notice";
 import { viz } from "../../ipc/viz";
+import { useSession } from "../../state/session";
 import { Banner, Button, EmptyState, Select } from "../../ui/primitives";
 import { Graph3DView } from "./Graph3DView";
 import { GraphView } from "./GraphView";
@@ -51,6 +52,9 @@ export function VizWindow({ params, exportDir }: { params: VizWindowParams; expo
     };
     // Meldungen kommen einzeln oder gebündelt im Tick.
     const offs = [eventBus.on("notice", handle), eventBus.on("tick", (tick) => tick.notices.forEach(handle))];
+    // UI-090 (B4-LAGFIX3): Das Fenster abonniert seine Ereignisse vor dem ersten Rendern; eine Meldung aus dieser Lücke
+    // liegt nur in den Sitzungsmeldungen. Der Kern meldet „Daten geändert“ je Schnappschuss nur einmal.
+    useSession.getState().notices.forEach(handle);
     return () => offs.forEach((off) => off());
   }, [snapshotId]);
 
@@ -59,6 +63,9 @@ export function VizWindow({ params, exportDir }: { params: VizWindowParams; expo
     setRefreshing(true);
     try {
       await viz.open({ kind: coreKind(kind), rootUrlId: isWordKind(kind) ? params.rootUrlId : null, refreshSnapshotId: snapshotId });
+      // Die alte Meldung gilt dem alten Stand; sie darf nach einem erneuten Einhängen nicht wieder auftauchen.
+      const session = useSession.getState();
+      session.notices.filter((n) => n.code === "viz-data-changed" && n.args.snapshotId === snapshotId).forEach((n) => session.dismissNotice(n));
       setChanged(false);
       setGeneration((g) => g + 1);
     } catch (e) {

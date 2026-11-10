@@ -112,7 +112,12 @@ fn finished(app: &App, key: &CrawlKey) {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .crawl = Some(status);
-        app.flush_tick();
+        // While a crawl session is attached its loop delivers every due tick (UI-018, B4-LAGFIX2). A flush from here
+        // would send the end status of a crawl before the session loop's final rows and the automatic crawl analysis
+        // (B4-LAGFIX3, OUT-020); the loop sends this status with its next tick.
+        if !super::delivers_ticks(app) {
+            app.flush_tick();
+        }
     }
 }
 
