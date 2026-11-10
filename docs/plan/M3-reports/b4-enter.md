@@ -172,3 +172,92 @@ wurde ausgeführt. Ein Workspace-`cargo test` war nicht nötig, weil kein Rust g
 ws-slot.
 
 Branch `m3/b4-enter`, Hash: letzter Commit dieses Berichts (wird bei der Abgabe gemeldet).
+
+## Nachtrag 10.11.2026: Befunde der unabhängigen Abnahme (`m3/t-enter`, `77a4a2b5`)
+
+Übernahme vom Vorgänger, der mitten in der Arbeit gestoppt wurde. Der uncommittete Stand wurde gelesen, geprüft und
+übernommen. Die Abnahmetests (`e2e/acceptance/b4-enter.spec.ts`, `src/features/header/acceptance-enter.test.tsx`) sind
+byteweise gleich mit `77a4a2b5`. Sie sind hier nicht committet, weil sie zu `m3/t-enter` gehören. Für die Läufe lagen sie
+unverändert im Worktree.
+
+### Befund 1: Enter in der Rückfrage „Ersetzen“ (Test 3), behoben
+
+- `ui/primitives/Dialog.tsx`: `DialogFooter` hört auf `keydown` am Dokument (Bubble-Phase, also nach allen Handlern im
+  Dialog). Ob Enter die OK-Aktion auslöst, entscheidet `dialogEnterConfirms()`. Kein OK gibt es in diesen Fällen: Der
+  Fokus liegt auf einer Schaltfläche, einem Link, einer Textarea, einem Auswahlfeld oder einem Widget mit eigener
+  Enter-Bedeutung (Listbox, Grid, Menü, Tab, Tree, Combobox). Ebenso nicht bei deaktiviertem OK, IME (`isComposing`,
+  `keyCode` 229), Modifikator, Tastenwiederholung oder wenn ein Feld Enter schon behandelt hat (`preventDefault` oder
+  `stopPropagation`). Ein Textfeld in einem `<form>` behält die eigene Übermittlung.
+- Zerstörerisches OK (`okVariant="danger"`, z. B. Löschen): Enter löst nur auf dem fokussierten OK-Knopf aus
+  (native Aktivierung), sonst nie.
+- Tests: `src/ui/primitives/dialog-enter.test.tsx` (6, `// spec: UI-113`), `e2e/crawls/dialog-enter.spec.ts`
+  (2, `// spec: UI-113`, Fixture `e2e/crawls/index.html`: Löschen-Rückfrage, Umbenennen-Formular genau einmal) und ein
+  Abschnitt in `e2e/header/enter-restart.spec.ts` (Enter in der Rückfrage ersetzt, echter Crawl).
+
+### Befund 2: Nach ↓ und Escape ging das nächste Enter verloren (Test 12, WebKit headless), behoben
+
+Ursache wie in der Abnahme: Der Dispatcher nimmt Escape im Feld in der Capture-Phase (`search.clear`). Das
+`onKeyDown` des Felds sieht Escape nie. `Header.tsx`: Jede andere Taste außer ↑/↓/Enter setzt den Merker zurück. Dazu
+kommt `onKeyUp` für Escape, weil das `keyup` den Dispatcher passiert. Test in `Header.test.tsx` mit dem echten Dispatcher
+(`// spec: UI-003`, `// spec: UI-113`).
+
+### Hinweis IME im Submit-Zweig
+
+Nicht umgesetzt. Echte IMEs senden das bestätigende Enter als 229/„Process“ ohne Zeichenereignis. Das fängt der
+`keydown`-Zweig ab (Abnahmetest 14 grün). `onSubmit` gilt nur noch für den Klick auf „Start“.
+
+### Spec-Ergänzung (fremde Datei, ausgewiesen)
+
+`docs/spec/05-ui.md`, UI-113: Neue OS-Festlegung „Enter als Standardaktion modaler Dialoge mit OK-/Abbrechen-Fußleiste“
+samt Ausnahme für zerstörerische Aktionen. Sie schließt eine echte Lücke (Abnahme, Spec-Unklarheit 2): Die Kontextregel
+sagt nur „Enter (Standardaktion)“, aber nicht, welche Aktion das ist, und nicht, wie Löschen-Rückfragen sich verhalten.
+Der Vorgänger hat den Eintrag mit „Orchestrator, 09.11.2026“ beschriftet. Im Repo gibt es dafür keinen weiteren Beleg,
+deshalb **bitte bestätigen**. Die Umsetzung schließt mehr aus, als der Eintrag nennt: Modifikator,
+Tastenwiederholung, Felder mit eigener Enter-Behandlung, Textfelder in Formularen.
+
+### Läufe (Server, `srv-run.sh b4-enter`, Bridge unverändert, Playwright `--workers=2`)
+
+| Lauf | Ergebnis |
+|---|---|
+| `cargo fmt --all --check` | grün |
+| `cargo clippy --workspace --all-targets -- -D warnings` | grün |
+| `~/ws-slot.sh && cargo test --workspace` (Debug 0, inkrementell aus) | 621 Testläufe, 4 526 passed, 0 failed, 51 ignored |
+| `npm run -w apps/desktop typecheck` | grün |
+| `npm run -w apps/desktop test` | 130 Dateien, 1 154 Tests grün (inkl. Abnahme-Vitest 15) |
+| Abnahme `e2e/acceptance/b4-enter.spec.ts` Chromium + WebKit | 27 passed, 1 skipped (Test 14 nur Chromium, so im Test) |
+| `e2e/header` (Konfiguration) Chromium + WebKit | 12 passed |
+| `e2e/crawls` (Konfiguration) Chromium + WebKit | 28 passed |
+| `e2e/alpha` Chromium + WebKit | 90 passed |
+| `--repeat-each=10`: `header/enter-restart.spec.ts` | 40 passed |
+| `--repeat-each=10`: `crawls/dialog-enter.spec.ts` | 40 passed |
+| `--repeat-each=10`: Abnahme `b4-enter.spec.ts` | 269 passed, 10 skipped, **1 failed** (WebKit, Test 2, siehe unten) |
+| Dialog-Gegenprobe: `e2e/keyboard`, `config`, `settings`, `update`, `compare` | 490 passed |
+| Dialog-Gegenprobe: Konfigurationen `tasks`, `settings-sections`, `export`, `keyboard-suite`, `table-advanced` | 18 / 16 / 16 / 178 / 16 passed |
+
+### Offen: Abnahmetest 2 wackelt in WebKit (1 von 140 bzw. 1 von 20), Ursache vermutlich im Kern
+
+Reproduziert mit `--repeat-each=20 -g "same URL kept"` (WebKit). Das ergab 1 failed und 19 passed. Fehler im
+**ersten** Start (leere Vorschlagsliste, keine Rückfrage), `crawlFastByEnter`, Zeile 116:
+
+```
+Expected: "/fast/s1"
+Received: null
+- Timeout 5000ms exceeded while waiting on the predicate
+```
+
+Belegt ist Folgendes: Der Seiten-Snapshot zeigt die Kopfzeile mit „Completed“ und 100 %. Der Crawl wurde per Enter
+gestartet und lief durch. Nur `useSession.crawl.startUrl` blieb `null`. Der Enter-Pfad ist es also nicht.
+
+Vermutet, nicht belegt: `crates/os-app/src/session/feed.rs`, `settled()` übernimmt `start_url` nur aus
+`cursor.status`. Der Cursor ist je Crawl neu. Endet ein Crawl, bevor ein Feed-Abruf den Status gefüllt hat (die
+Fixture `/fast/` braucht Millisekunden), bleibt `start_url` im Endstatus `None`. Das ist Kerncode aus B3-UI
+(`85fa6f72`), nicht Teil dieses Pakets. Er bleibt hier unverändert und gehört an den Orchestrator.
+
+## Fremde Dateien (Nachtrag)
+
+| Datei | Bereich | Änderung |
+|---|---|---|
+| `docs/spec/05-ui.md` | Spec (UI-113) | OS-Festlegung Enter als Standardaktion modaler Dialoge (siehe oben, Bestätigung offen) |
+| `apps/desktop/src/ui/primitives/Dialog.tsx` | gemeinsamer Dialogbaustein | Enter-Standardaktion in `DialogFooter` (wirkt in allen Dialogen mit dieser Fußleiste) |
+
+Aufräumen: `target/` und `apps/desktop/test-results/` im Server-Worktree `b4-enter` gelöscht. Kein `pkill`.
