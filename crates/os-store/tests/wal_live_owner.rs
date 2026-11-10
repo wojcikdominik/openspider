@@ -18,6 +18,7 @@ use store_common::*;
 const CHILD_FILE: &str = "OS_STORE_WAL_TEST_FILE";
 const CHILD_DIR: &str = "OS_STORE_WAL_TEST_DIR";
 const CHILD_WRITE: &str = "OS_STORE_WAL_TEST_WRITE";
+#[cfg(unix)]
 const CHILD_LOCK: &str = "OS_STORE_WAL_TEST_LOCK";
 
 /// Rolle des zweiten Prozesses: liest wie die Crawl-Verwaltung und beendet sich. Ohne Umgebungsvariable keine Wirkung.
@@ -70,7 +71,8 @@ fn shared_lock_holder(path: &Path) -> Option<i32> {
     // SAFETY: gültiger Deskriptor und ein gültiger Zeiger auf `flock`, wie `F_GETLK` ihn erwartet.
     let rc = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETLK, &mut lock) };
     assert_eq!(rc, 0, "F_GETLK: {}", std::io::Error::last_os_error());
-    (i32::from(lock.l_type) != libc::F_UNLCK).then_some(lock.l_pid)
+    // Die Typen von `l_type` und `F_UNLCK` unterscheiden sich je Plattform; beide Seiten werden deshalb geweitet.
+    (i64::from(lock.l_type) != i64::from(libc::F_UNLCK)).then_some(lock.l_pid)
 }
 
 fn in_second_process(var: &str, value: &Path) {
