@@ -68,6 +68,15 @@ jobs:
       - name: Browser performance suite and absolute budget gate
         id: browser
         run: node apps/desktop/e2e/perf/run.mjs
+      - name: Live-detail first-click regression (UI-145, dev server)
+        # Median erster Klick im Live-Crawl (B4-LIVEDETAIL); gegen eine Basis (OS_LD_BASELINE_URLDETAILS_MS / OS_LD_BASELINE_LINKS_MS, UI-148 +10 %)
+        # nur, wenn die Repository-Variablen gesetzt sind. In der PR-CI läuft die Messung nicht (Projekt `<engine>-nightly`, siehe playwright.config.ts).
+        if: always() && steps.browser.outcome != 'skipped'
+        env:
+          OS_E2E_NIGHTLY: "1"
+          OS_LD_BASELINE_URLDETAILS_MS: ${{ vars.OS_LD_BASELINE_URLDETAILS_MS }}
+          OS_LD_BASELINE_LINKS_MS: ${{ vars.OS_LD_BASELINE_LINKS_MS }}
+        run: npm run -w apps/desktop e2e -- --project="${OS_E2E_PROJECTS}-nightly" --workers=1
       - name: Build native measurement entry
         if: always() && steps.browser.outcome != 'skipped'
         run: |

@@ -3,13 +3,17 @@
 // beim erneuten Öffnen zeigen sie den aktuellen Stand, Änderungen gehen nicht verloren (UI-004, UI-006, UI-008, UI-009, UI-030, UI-126).
 // acceptance: independent
 import type { Locator, Page } from "@playwright/test";
-import { expect, test, type Alpha } from "../alpha/fixture";
+import type { Alpha } from "../alpha/fixture";
 import {
   TALL,
+  crawlMore,
+  crawlTo,
+  expect,
+  test,
+  type Gate,
   activeChipCount,
   clickUpperRow,
   coreTotal,
-  crawledCount,
   filledCells,
   footer,
   openDetailTab,
@@ -19,10 +23,9 @@ import {
   readGrid,
   readUpper,
   selectedUpper,
-  startSlow,
+  startGated,
   upperGrid,
   upperHeaders,
-  waitCrawled,
 } from "./livedetail-support";
 
 const strip = (headers: string[]) => headers.map((h) => h.replace(/\s*[↑↓]\d?$/, ""));
@@ -35,12 +38,12 @@ const focusIs = (target: Locator) => target.evaluate((el) => el === document.act
 // spec: UI-126
 // spec: UI-018
 // acceptance: independent
-test("the column dialogs open from the keyboard, hold focus, restore it on Escape and show the current state when reopened", async ({ alpha }) => {
+test("the column dialogs open from the keyboard, hold focus, restore it on Escape and show the current state when reopened", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
   await page.setViewportSize(TALL);
-  await startSlow(alpha, 1, "Internal");
-  await waitCrawled(page, 4);
+  await startGated(alpha, gate, "Internal");
+  await crawlTo(page, gate, 4);
   const victim = "Status Code";
   const headers = async () => strip(await upperHeaders(page));
   expect(await headers()).toContain(victim);
@@ -53,11 +56,11 @@ test("the column dialogs open from the keyboard, hold focus, restore it on Escap
   await expect(menu).toBeVisible();
   expect(await focusInside(menu), "Fokus liegt im geöffneten Dialog").toBe(true);
   await menu.getByRole("checkbox", { name: victim, exact: true }).uncheck();
-  await expect.poll(headers, { timeout: 2000 }).not.toContain(victim);
+  await expect.poll(headers, { timeout: 15_000 }).not.toContain(victim);
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   // Esc entspricht „Abbrechen“ (UI-009): die Änderung ist verworfen
-  await expect.poll(headers, { timeout: 2000 }).toContain(victim);
+  await expect.poll(headers, { timeout: 15_000 }).toContain(victim);
   expect(await focusIs(plus), "Fokus kehrt zum Auslöser zurück (UI-126: Tastaturbedienung)").toBe(true);
 
   // 2. Konfigurator: Auslöser per Tastatur, Entfernen + OK übernimmt, erneutes Öffnen zeigt den aktuellen Stand
@@ -85,10 +88,9 @@ test("the column dialogs open from the keyboard, hold focus, restore it on Escap
   await configurator.getByRole("button", { name: "Remove", exact: true }).click();
   await configurator.getByRole("button", { name: "OK", exact: true }).click();
   await expect(configurator).toHaveCount(0);
-  await expect.poll(headers, { timeout: 2000 }).not.toContain(victim);
+  await expect.poll(headers, { timeout: 15_000 }).not.toContain(victim);
   // zwischenzeitlich kamen Zeilen dazu; Öffnen zeigt den aktuellen Stand, nicht den des ersten Öffnens
-  const crawled = await crawledCount(page);
-  await waitCrawled(page, crawled + 2);
+  await crawlMore(page, gate, 2);
   await opener.focus();
   await page.keyboard.press("Enter");
   await expect(configurator).toBeVisible();
@@ -101,11 +103,12 @@ test("the column dialogs open from the keyboard, hold focus, restore it on Escap
   // neu hinzugefügte Spalten stehen am Ende (außerhalb des Bildes): nach oben schieben, damit sie sichtbar sind
   await configurator.getByRole("button", { name: "To top", exact: true }).click();
   await configurator.getByRole("button", { name: "OK", exact: true }).click();
-  await expect.poll(headers, { timeout: 2000 }).toContain(victim);
+  await expect.poll(headers, { timeout: 15_000 }).toContain(victim);
   // die Tabelle läuft weiter, bis der Crawl fertig ist (25 interne URLs)
+  gate.open();
   await alpha.waitCompleted(60_000);
   await expect(page.locator("#data-panel .u10-counter")).toContainText("Showing: 25 of 25");
-  await expect.poll(() => filledCells(page, "Status Code"), { timeout: 8000 }).toBeGreaterThan(0);
+  await expect.poll(() => filledCells(page, "Status Code"), { timeout: 15_000 }).toBeGreaterThan(0);
   {
     const grid = (await readUpper(page))!;
     const col = strip(grid.headers).indexOf("Status Code");
@@ -127,13 +130,13 @@ async function openTabsConfig(page: Page, bar: "top" | "detail"): Promise<Locato
 // spec: UI-030
 // spec: UI-018
 // acceptance: independent
-test("the tab configuration dialogs of the data tabs and the detail tabs show the current state and keep applied changes", async ({ alpha }) => {
+test("the tab configuration dialogs of the data tabs and the detail tabs show the current state and keep applied changes", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
   await page.setViewportSize(TALL);
-  await startSlow(alpha, 2);
-  await waitCrawled(page, 4);
-  await clickUpperRow(page, alpha.startUrl);
+  await startGated(alpha, gate);
+  await crawlTo(page, gate, 4);
+  await clickUpperRow(page, gate.startUrl);
   const topList = page.getByRole("tablist", { name: "Data tabs" });
   const detailList = page.getByRole("tablist", { name: "Detail tabs" });
 
@@ -153,6 +156,7 @@ test("the tab configuration dialogs of the data tabs and the detail tabs show th
   await expect(topList.getByRole("tab", { name: "Security", exact: true })).toHaveCount(0);
   // der Crawl läuft weiter und die Tabellen aktualisieren sich unabhängig vom Dialog
   const shown = (await footer(page)).shown;
+  gate.allow(3);
   await expect.poll(async () => (await footer(page)).shown, { timeout: 10_000 }).toBeGreaterThan(shown);
   dialog = await openTabsConfig(page, "top");
   await expect(dialog.getByRole("checkbox", { name: "Security", exact: true }), "geänderter Stand wird beim erneuten Öffnen gezeigt").not.toBeChecked();
@@ -170,7 +174,7 @@ test("the tab configuration dialogs of the data tabs and the detail tabs show th
   await expect(dialog).toHaveCount(0);
   await page.locator("#data-panel .os-data-grid").focus();
   await page.keyboard.press("ArrowDown");
-  await expect.poll(async () => (await readDetail(page))?.rowcount, { timeout: 5000 }).toBeLessThan(4);
+  await expect.poll(async () => (await readDetail(page))?.rowcount, { timeout: 15_000 }).toBeLessThan(4);
   await expect(detailList.getByRole("tab", { name: "Resources", exact: true })).toHaveCount(0);
   dialog = await openTabsConfig(page, "detail");
   await expect(dialog.getByRole("checkbox", { name: "Resources", exact: true })).not.toBeChecked();
@@ -183,12 +187,12 @@ test("the tab configuration dialogs of the data tabs and the detail tabs show th
 // spec: UI-018
 // spec: UI-126
 // acceptance: independent
-test("the filter list opens during the crawl, shows current counts each time and equals the core after a pause", async ({ alpha }) => {
+test("the filter list opens during the crawl, shows current counts each time and equals the core after a pause", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
   await page.setViewportSize(TALL);
-  await startSlow(alpha, 3);
-  await waitCrawled(page, 5);
+  await startGated(alpha, gate);
+  await crawlTo(page, gate, 5);
   const combo = page.locator("#data-panel").getByRole("combobox", { name: "Filter" });
   const allCount = async () => {
     const value = await combo.inputValue();
@@ -204,7 +208,7 @@ test("the filter list opens during the crawl, shows current counts each time and
   const first = await optionAll();
   expect(first).toBeGreaterThan(0);
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await waitCrawled(page, 14);
+  await crawlTo(page, gate, 14);
   // Zweites Öffnen: Zähler sind neuer als beim ersten Öffnen (nicht aus dem ersten Öffnen zwischengespeichert)
   await expect.poll(optionAll, { timeout: 10_000, intervals: [500] }).toBeGreaterThan(first + 3);
   // Tastaturbedienung: Pfeil nach unten öffnet die Liste, Esc schließt, der Fokus bleibt im Feld
@@ -215,7 +219,7 @@ test("the filter list opens during the crawl, shows current counts each time and
   await expect(page.getByRole("listbox")).toHaveCount(0);
   expect(await focusIs(combo), "Fokus bleibt im Filterfeld").toBe(true);
 
-  await pauseCrawl(page);
+  await pauseCrawl(page, gate);
   const total = await coreTotal(page, "Response Codes", "All");
   await expect.poll(optionAll, { timeout: 12_000, intervals: [500] }).toBe(total);
   expect(await allCount()).toBe(total);
@@ -227,13 +231,13 @@ test("the filter list opens during the crawl, shows current counts each time and
 // spec: UI-030
 // spec: UI-018
 // acceptance: independent
-test("the View and Filter lists of the Inlinks table apply during the crawl and the table stays correct afterwards", async ({ alpha }) => {
+test("the View and Filter lists of the Inlinks table apply during the crawl and the table stays correct afterwards", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
   await page.setViewportSize(TALL);
-  await startSlow(alpha, 3);
-  await waitCrawled(page, 5);
-  await clickUpperRow(page, alpha.startUrl);
+  await startGated(alpha, gate);
+  await crawlTo(page, gate, 5);
+  await clickUpperRow(page, gate.startUrl);
   const panel = await openDetailTab(page, "Inlinks");
   await expect.poll(async () => (await readDetail(page))?.rowcount ?? 0, { timeout: 10_000 }).toBeGreaterThan(2);
 
@@ -244,34 +248,41 @@ test("the View and Filter lists of the Inlinks table apply during the crawl and 
   await expect.poll(async () => {
     const d = await readDetail(page);
     return d ? d.headers.join("|") : "";
-  }, { timeout: 5000 }).toContain("Anchor Text");
-  await expect.poll(async () => JSON.stringify((await readDetail(page))?.rows.map((r) => r.cells[0])), { timeout: 5000 }).toBe(JSON.stringify(["Home"]));
+  }, { timeout: 15_000 }).toContain("Anchor Text");
+  await expect.poll(async () => JSON.stringify((await readDetail(page))?.rows.map((r) => r.cells[0])), { timeout: 15_000 }).toBe(JSON.stringify(["Home"]));
   // … und zurück zu „All links“: Linkzeilen mit From/To, die Zeilenzahl wächst weiter
   await select("View").click();
   await page.getByRole("option", { name: "All links", exact: true }).click();
-  await expect.poll(async () => (await readDetail(page))?.headers.includes("From"), { timeout: 5000 }).toBe(true);
+  await expect.poll(async () => (await readDetail(page))?.headers.includes("From"), { timeout: 15_000 }).toBe(true);
   const rows0 = (await readDetail(page))!.rowcount;
+  gate.allow(3);
   await expect.poll(async () => (await readDetail(page))!.rowcount, { timeout: 10_000 }).toBeGreaterThan(rows0);
 
   // Filter „Hyperlinks only“: alle Links der Startseite sind Hyperlinks, Zahl bleibt gleich und wächst weiter
   await select("Filter").click();
   await page.getByRole("option", { name: "Hyperlinks only", exact: true }).click();
+  await expect.poll(async () => (await readDetail(page))?.rowcount ?? 0, { timeout: 10_000 }).toBeGreaterThan(2);
   const rows1 = (await readDetail(page))!.rowcount;
-  await expect.poll(async () => (await readDetail(page))!.rowcount, { timeout: 10_000 }).toBeGreaterThan(rows1 - 1);
+  gate.allow(2);
+  await expect.poll(async () => (await readDetail(page))!.rowcount, { timeout: 10_000 }).toBeGreaterThan(rows1);
+  gate.open();
   await alpha.waitCompleted(60_000);
-  await expect.poll(async () => ((await readDetail(page))?.rowcount ?? 0) - 1, { timeout: 8000 }).toBe(20);
+  await expect.poll(async () => ((await readDetail(page))?.rowcount ?? 0) - 1, { timeout: 15_000 }).toBe(20);
   // Die Listen zeigen nach dem Schließen die gewählten Werte (Zustand bleibt erhalten)
   await expect(select("Filter")).toContainText("Hyperlinks only");
   await expect(select("View")).toContainText("All links");
 });
 
-async function crawlPathFlow(alpha: Alpha, live: boolean): Promise<void> {
+async function crawlPathFlow(alpha: Alpha, gate: Gate, live: boolean): Promise<void> {
   const { page } = alpha;
   await page.setViewportSize(TALL);
-  await startSlow(alpha, live ? 2 : 12);
-  if (live) await waitCrawled(page, 7);
-  else await alpha.waitCompleted(60_000);
-  const base = alpha.site.base;
+  await startGated(alpha, gate);
+  if (live) await crawlTo(page, gate, 7);
+  else {
+    gate.open();
+    await alpha.waitCompleted(60_000);
+  }
+  const base = gate.base;
   const opener = page.getByRole("region", { name: "Details", exact: true }).getByRole("button", { name: "Crawl Path", exact: true });
   await expect(opener, "ohne Auswahl ist der Crawl-Pfad nicht verfügbar").toBeDisabled();
   await clickUpperRow(page, `${base}/page-3.html`);
@@ -286,7 +297,7 @@ async function crawlPathFlow(alpha: Alpha, live: boolean): Promise<void> {
   await expect(dialog).toBeVisible();
   expect(await focusInside(dialog), "Fokus liegt im Dialog").toBe(true);
   // Crawl-Pfad von page-3: Startseite (Tiefe 0) → page-3 (Tiefe 1); Länge der Liste − 1 = Crawl Depth (UI-050)
-  await expect.poll(pathOf, { timeout: 8000 }).toEqual({ rowcount: 3, addresses: [`${base}/`, `${base}/page-3.html`] });
+  await expect.poll(pathOf, { timeout: 15_000 }).toEqual({ rowcount: 3, addresses: [`${base}/`, `${base}/page-3.html`] });
   await expect(dialog.getByRole("alert"), "keine Fehlermeldung im Dialog").toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
@@ -300,7 +311,7 @@ async function crawlPathFlow(alpha: Alpha, live: boolean): Promise<void> {
   await opener.focus();
   await page.keyboard.press("Enter");
   await expect(dialog).toBeVisible();
-  await expect.poll(pathOf, { timeout: 8000 }).toEqual({ rowcount: 3, addresses: [`${base}/`, `${base}/page-5.html`] });
+  await expect.poll(pathOf, { timeout: 15_000 }).toEqual({ rowcount: 3, addresses: [`${base}/`, `${base}/page-5.html`] });
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).toHaveCount(0);
 }
@@ -308,18 +319,18 @@ async function crawlPathFlow(alpha: Alpha, live: boolean): Promise<void> {
 // spec: UI-050
 // spec: UI-126
 // acceptance: independent
-test("the Crawl Path dialog of a finished crawl shows the path of the current selection each time it is opened and returns the focus", async ({ alpha }) => {
+test("the Crawl Path dialog of a finished crawl shows the path of the current selection each time it is opened and returns the focus", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
-  await crawlPathFlow(alpha, false);
+  await crawlPathFlow(alpha, gate, false);
 });
 
 // spec: UI-050
 // spec: UI-126
 // spec: UI-018
 // acceptance: independent
-test("the Crawl Path dialog works during a running crawl", async ({ alpha }) => {
+test("the Crawl Path dialog works during a running crawl", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
-  await crawlPathFlow(alpha, true);
+  await crawlPathFlow(alpha, gate, true);
   expect(await phase(alpha.page)).toBe("running");
 });
 
@@ -327,32 +338,32 @@ test("the Crawl Path dialog works during a running crawl", async ({ alpha }) => 
 // spec: UI-126
 // spec: UI-018
 // acceptance: independent
-test("the Crawl Path dialog opens and closes with the keyboard and is built anew for each selection (row count = depth + 1)", async ({ alpha }) => {
+test("the Crawl Path dialog opens and closes with the keyboard and is built anew for each selection (row count = depth + 1)", async ({ alpha, gate }) => {
   test.setTimeout(120_000);
   const { page } = alpha;
   await page.setViewportSize(TALL);
-  await startSlow(alpha, 2);
-  await waitCrawled(page, 7);
+  await startGated(alpha, gate);
+  await crawlTo(page, gate, 7);
   const opener = page.getByRole("region", { name: "Details", exact: true }).getByRole("button", { name: "Crawl Path", exact: true });
   const dialog = page.getByRole("dialog", { name: "Crawl Path", exact: true });
   // Die Zeilenzahl kommt aus aria-rowcount: sie hängt nicht von der Höhe der Zeichenfläche ab.
   const rowcount = async () => (await readGrid(dialog))?.rowcount ?? -1;
-  await clickUpperRow(page, alpha.startUrl);
+  await clickUpperRow(page, gate.startUrl);
   await opener.focus();
   await page.keyboard.press("Enter");
   await expect(dialog).toBeVisible();
   expect(await focusInside(dialog)).toBe(true);
-  await expect.poll(rowcount, { timeout: 8000 }).toBe(2); // Startseite: Tiefe 0 → 1 Eintrag + Kopfzeile
+  await expect.poll(rowcount, { timeout: 15_000 }).toBe(2); // Startseite: Tiefe 0 → 1 Eintrag + Kopfzeile
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   expect(await focusIs(opener), "Fokus kehrt zum Auslöser zurück").toBe(true);
   await upperGrid(page).focus();
   await page.keyboard.press("ArrowDown");
-  await expect.poll(() => selectedUpper(page)).toEqual([`${alpha.site.base}/page-1.html`]);
+  await expect.poll(() => selectedUpper(page)).toEqual([`${gate.base}/page-1.html`]);
   await opener.focus();
   await page.keyboard.press("Enter");
   await expect(dialog).toBeVisible();
-  await expect.poll(rowcount, { timeout: 8000 }).toBe(3); // page-1: Tiefe 1 → 2 Einträge + Kopfzeile
+  await expect.poll(rowcount, { timeout: 15_000 }).toBe(3); // page-1: Tiefe 1 → 2 Einträge + Kopfzeile
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(await phase(page)).toBe("running");
