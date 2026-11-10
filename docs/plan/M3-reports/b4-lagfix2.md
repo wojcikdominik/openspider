@@ -298,6 +298,48 @@ Die Dateien `apps/desktop/e2e/acceptance/livedetail-*` dieses Branches sind unve
   (Chromium) plus einmal im Gate-Lauf, `main` 0/30; Varianten der Endmeldung (sofort/mit nächstem Tick) lagen bei
   1–2/30. Nicht behoben; ob die Endmeldung auf die exakte Endzählung warten soll, ist eine Produktfrage.
 
+## Nachtrag (Entscheidung Koordination, 09.11.2026)
+
+1. **Klick-Maximum Chromium:** Die Verschiebung 83–96 → 94–121 ms (Budget 150 ms, Median unverändert) ist als
+   **bekannte Verschiebung** akzeptiert.
+2. **„Completed“ erst mit exakter Endzählung:** umgesetzt (`ff83ad2a`, `d9f80135`).
+   - Kern (`session/mod.rs`, `commands/sidebar/counts.rs`): Endet ein Crawl im Poll, sendet die Sitzungsschleife den
+     Endstatus erst, wenn die exakte Endzählung (`observe_state`, Overview/Issues/Filterzähler) angekündigt ist,
+     höchstens 3 s (`TICK_SETTLE_COUNTS`); Endstatus, letzte Zeilen und neue Zählversion kommen in einem Tick.
+   - Oberfläche (`state/session.ts`, `features/sidebar/frame/useSidebarQuery.ts`): Overview und Issues melden sich
+     als Endschranke an. Der Übergang „running → completed“ eines Crawls wird erst angewendet, wenn sie mit der neuen
+     Version neu geladen und ihre Antwort veröffentlicht haben (höchstens 3 s); der Rest des Ticks gilt sofort. Ohne
+     angemeldete Ansicht gilt „Completed“ sofort. Damit sind Overview, Fuß und Chip unmittelbar nach „Completed“
+     exakt, auch bei einem Stopp über den Steuerpfad (die Overview-Anfrage wartet dort auf die Endzählung).
+   - Fixture-Test `apps/desktop/src/state/b4-lagfix2-end-gate.test.ts` (UI-018): Endstatus erst nach dem Neuladen,
+     mit der Zählversion des Endticks; späterer Tick ersetzt den gehaltenen Status; ohne Ansicht sofort; neuer Crawl
+     verwirft den gehaltenen Status.
+
+### Nachweis nach dem Nachzug (Orchestrator, 10.11.2026, Server, Integrationsstand `m3/int-lagfix2` = main `0aba2a4c` + `m3/lagfix2` + `m3/livedetail-tests-ci`)
+
+- `cargo fmt --all --check`: ok. `cargo clippy --workspace --all-targets -- -D warnings`: ok.
+- `cargo test --workspace`: 4584 bestanden, 0 fehlgeschlagen, 51 ignoriert.
+- `npm run -w apps/desktop typecheck`: ok. `npm run -w apps/desktop test`: 132 Dateien, 1136 Tests bestanden.
+- `alpha/detail-sidebar.spec.ts:135` mit `--repeat-each=30 --workers=2 --retries=0`: 60/60 in Chromium und WebKit
+  (vor dem Nachzug 29/30 je Engine).
+- Playwright `e2e/acceptance e2e/alpha e2e/statusbar e2e/sidebar`, beide Engines, `--workers=2 --retries=0`:
+  363 bestanden, 3 fehlgeschlagen, 2 übersprungen, 14 nicht gelaufen. Alle drei Fehler liegen in
+  `acceptance/b4-cmpui.spec.ts` (Vorbereitung `crawlOnce`, 150 s). Gegenprobe: dieselbe Spec einzeln auf diesem Stand
+  mit `--workers=1` 26/26, mit `--workers=2` 1 Fehler; auf unverändertem `main` (`0aba2a4c`) mit `--workers=2` in zwei
+  Läufen 2 bzw. 1 Fehler. Der Fehler besteht also schon auf `main` und hängt an der parallelen Ausführung der Spec
+  in beiden Engines; die Ursache ist nicht untersucht (Vermutung: gemeinsames vorbereitetes Home
+  `os-cmpui-<ppid>`). Folgepunkt, nicht Teil dieses Pakets.
+- Merge-Konflikte bei der Integration: `crates/os-engine/src/crawl.rs` (`is_finished` aus main und `flush_counted`
+  behalten), `apps/desktop/playwright.config.ts` (Ausnahme `visual/language.spec.ts` aus main und
+  Nightly-/Lag-Aufteilung behalten).
+
+### Folgepunkte aus der Diff-Prüfung (nicht blockierend)
+
+- Endet ein Crawl, wartet die Sitzungsschleife bis zu 4 s (`TICK_SETTLE_ENDED` + `TICK_SETTLE_COUNTS`); andere
+  Sitzungen werden in dieser Zeit nicht abgefragt.
+- Bricht ein View-Wartungslauf mit Panic ab, wird `busy` nicht zurückgezählt; `views::settle` wartet dann je Tick
+  sein volles Budget (höchstens 500 ms).
+
 ## Abschluss
 
 Produktcommits auf `m3/lagfix2` (kein Push): `033ae618`, `a4bc9da8`, `2c4a04c3`, `af329580`, `8ccd650b`, `408e5d38`,
