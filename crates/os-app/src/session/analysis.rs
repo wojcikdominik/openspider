@@ -55,6 +55,17 @@ pub async fn status(app: &App, s: &SessionInfo) -> Result<AnalysisStatus, CmdErr
         )
         .await
 }
+/// Is a crawl analysis running (registered by [`start_operation`] until its final status)? The session loop holds the
+/// end status of a crawl for the automatic analysis that the crawl end started (CRAWL-141, UI-018, B4-LAGFIX3).
+pub(crate) fn running(app: &App) -> bool {
+    app.ext::<SessionService>()
+        .analysis
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .values()
+        .any(|s| s.running)
+}
+
 fn publish(app: &App, key: &CrawlKey, status: AnalysisStatus) {
     let svc = app.ext::<SessionService>();
     svc.analysis
