@@ -201,7 +201,8 @@ jobs:
         # K2-64-Restarbeiten, Besitzer und fehlende Plattformnachweise: docs/plan/M2-reports/n01.md.
         # Erst nach belegter Laufzeit < 15 min auf allen Zielplattformen auf 15 zurücksetzen. Einschließlich Doctests.
         timeout-minutes: 50
-        run: cargo test --workspace --locked
+        # --no-fail-fast: Ein roter Test verdeckt sonst alle Testbinaries dahinter (10.11.: Windows).
+        run: cargo test --workspace --locked --no-fail-fast
 
       - name: Tauri build check (debug, no bundle)
         if: ${{ !cancelled() }}

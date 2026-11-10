@@ -46,6 +46,14 @@ fn closed_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
+/// Dauer, nach der das Betriebssystem einen Verbindungsaufbau zu dem nicht belegten Port ablehnt.
+fn refusal_time(port: u16) -> Duration {
+    let begin = Instant::now();
+    let refused = std::net::TcpStream::connect(("127.0.0.1", port));
+    assert!(refused.is_err(), "Port {port} ist belegt");
+    begin.elapsed()
+}
+
 /// Nimmt Verbindungen an und antwortet nie. Hält fest, wann der Client jede Verbindung wieder schließt: Das ist das Ende des
 /// jeweiligen Abrufversuchs (UI-019: „2 s nach dem Timeout, gemessen ab dem Ende des letzten Abrufversuchs“).
 fn silent_server() -> (u16, Arc<Mutex<Vec<Instant>>>) {
@@ -464,7 +472,9 @@ async fn a_robots_block_and_a_robots_500_are_reported_as_successes_not_failures(
 // UI-019: Dialog zur nicht erreichbaren Start-URL (Zeitrahmen, Ursache)
 // ---------------------------------------------------------------------------------------------------------
 
-// Nicht belegter Port: Die Meldung nennt die Fehlerklasse und erscheint innerhalb von 2 s (hier ist der Abruf sofort zu Ende).
+// Nicht belegter Port: Die Meldung nennt die Fehlerklasse und erscheint innerhalb von 2 s nach dem Ende des Abrufs. Wie lange
+// das Betriebssystem für die Ablehnung braucht, misst der Test vorab selbst (Linux und macOS lehnen sofort ab, Windows erst nach
+// rund 2 s); dieser Zeitpunkt nach dem Start ist das früheste Ende des Abrufversuchs.
 // spec: UI-019
 // spec: CRAWL-128
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -472,12 +482,14 @@ async fn an_unreachable_start_url_shows_a_notice_with_the_error_class_within_two
     let dir = tempfile::tempdir().unwrap();
     let app = app(dir.path());
     let port = closed_port();
+    let refusal = refusal_time(port);
     let (seen, started) = crawl(
         &app,
         &format!("http://127.0.0.1:{port}/"),
         config(RobotsMode::Ignore),
     )
     .await;
+    let fetch_end = started + refusal;
     assert_eq!(seen.state, CrawlState::Failed);
     let found: Vec<_> = seen
         .notices
@@ -497,9 +509,9 @@ async fn an_unreachable_start_url_shows_a_notice_with_the_error_class_within_two
     );
     assert!(has_any(&format!("{notice:?}"), &REFUSED), "{notice:?}");
     assert!(
-        at.saturating_duration_since(started) < Duration::from_secs(2),
-        "{:?}",
-        at.saturating_duration_since(started)
+        at.saturating_duration_since(fetch_end) < Duration::from_secs(2),
+        "Meldung {:?} nach dem Ende des Abrufs (Ablehnung dauert hier {refusal:?})",
+        at.saturating_duration_since(fetch_end)
     );
 }
 
