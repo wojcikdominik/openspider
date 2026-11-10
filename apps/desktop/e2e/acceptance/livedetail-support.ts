@@ -3,8 +3,23 @@
 // Erwartungen stammen aus docs/spec/05-ui.md (UI-018, UI-030 bis UI-033, UI-120/121, UI-140 bis UI-145) und den Zahlen der Fixture
 // fx-ui-basic (tests/fixtures/ui/fx-ui-basic: 25 interne + 2 externe URLs; die Startseite verlinkt page-1 … page-20, /redirect,
 // /missing, /noindex und zwei externe Adressen; jede page-N verlinkt nur zurück auf „/“). Der Code wird nur zum Aufrufen benutzt.
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import type { Locator, Page } from "@playwright/test";
-import { expect, type Alpha } from "../alpha/fixture";
+import { test as alphaTest, expect, type Alpha } from "../alpha/fixture";
+import { startGate, type Gate } from "./livedetail-gate";
+
+export { expect };
+export type { Gate };
+
+/** `test` mit dem Fixture `gate`: ein gesteuerter Fixture-Crawl (siehe livedetail-gate.ts), am Ende des Tests immer geöffnet und beendet. */
+export const test = alphaTest.extend<{ gate: Gate }>({
+  gate: async ({ alpha }, use) => {
+    const gate = await startGate(alpha.site.base);
+    await use(gate);
+    await gate.stop();
+  },
+});
 
 /** Hohes Fenster: obere Tabelle und Detailfenster zeigen mehr Zeilen auf einmal. */
 export const TALL = { width: 1280, height: 1500 };
@@ -33,9 +48,20 @@ export async function waitCrawled(page: Page, atLeast: number, timeout = 30_000)
   await expect.poll(() => crawledCount(page), { timeout, intervals: [100, 200] }).toBeGreaterThanOrEqual(atLeast);
 }
 
-export async function pauseCrawl(page: Page): Promise<void> {
+/**
+ * Hält den Crawl an. Die Pause wartet auf die gerade laufende Anfrage; am Tor wartet immer genau eine. Sie wird nach dem Klick (und
+ * einer kurzen Frist für den Befehl an den Kern) einmal freigegeben, damit der Crawl in den Zustand „Paused“ übergehen kann. Danach
+ * kommt keine weitere Anfrage mehr durch, bis der Test sie freigibt.
+ */
+export async function pauseCrawl(page: Page, gate: Gate): Promise<void> {
   await page.getByRole("button", { name: /^(Pause|Pausieren)$/ }).click();
-  await expect(page.getByTestId("crawl-phase")).toHaveText(/^(Paused|Pausiert)$/);
+  const clicked = Date.now();
+  await expect
+    .poll(async () => {
+      if (gate.waiting() > 0 && Date.now() - clicked > 300) gate.allow(1);
+      return page.getByTestId("crawl-phase").innerText();
+    }, { timeout: 20_000, intervals: [100] })
+    .toMatch(/^(Paused|Pausiert)$/);
 }
 
 export async function resumeCrawl(page: Page): Promise<void> {
@@ -147,18 +173,30 @@ export async function selectedUpper(page: Page): Promise<string[]> {
  * Die Zeile muss im sichtbaren Ausschnitt stehen; Zeilenhöhe 28 px (Standard „Kompakt“, UI-120), Kopf 32 px.
  */
 export async function clickUpperRow(page: Page, address: string, modifiers: ("Shift" | "ControlOrMeta")[] = []): Promise<void> {
-  let found = -1;
-  await expect
-    .poll(async () => {
-      const grid = await readUpper(page);
-      const row = grid?.rows.find((r) => r.cells[0] === address);
-      const first = grid?.rows[0]?.index ?? 0;
-      found = row ? row.index - first : -1;
-      return found;
-    }, { timeout: 15_000 })
-    .toBeGreaterThanOrEqual(0);
-  await upperGrid(page).locator("canvas").first().click({ position: { x: 160, y: 32 + 28 * found + 14 }, modifiers });
-  if (!modifiers.length) await expect.poll(() => selectedUpper(page), { timeout: 10_000 }).toEqual([address]);
+  // Ein einfacher Klick wird wiederholt, wenn sich das Layout zwischen Lesen und Klicken verschoben hat (z. B. eine Meldung über der
+  // Tabelle nach dem Ende des Crawls) und deshalb eine andere Zeile getroffen wurde; am Ende muss genau die Zielzeile markiert sein.
+  // Umschalt+Klicks werden nie wiederholt: ein verlorener Klick ist dort das Messergebnis.
+  for (let attempt = 0; ; attempt++) {
+    let found = -1;
+    await expect
+      .poll(async () => {
+        const grid = await readUpper(page);
+        const row = grid?.rows.find((r) => r.cells[0] === address);
+        const first = grid?.rows[0]?.index ?? 0;
+        found = row ? row.index - first : -1;
+        return found;
+      }, { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(0);
+    await upperGrid(page).locator("canvas").first().click({ position: { x: 160, y: 32 + 28 * found + 14 }, modifiers });
+    if (modifiers.length) return;
+    try {
+      await expect.poll(() => selectedUpper(page), { timeout: 5000 }).toEqual([address]);
+      return;
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      test.info().annotations.push({ type: "click-retry", description: `Klick auf ${address} traf eine andere Zeile (Versuch ${attempt + 1}); Layout hatte sich verschoben` });
+    }
+  }
 }
 
 /** Bewegt die Fokuszeile der oberen Tabelle mit der Tastatur (UI-012: Pfeiltasten). */
@@ -210,7 +248,7 @@ export interface Sample {
 export async function installRecorder(page: Page, intervalMs = 100): Promise<void> {
   await page.evaluate(async (intervalMs) => {
     const { useSession } = await import(/* @vite-ignore */ String("/src/state/session.ts"));
-    const w = window as unknown as { __ld?: { stop(): Sample[]; mark(label: string): number; samples: Sample[] } };
+    const w = window as unknown as { __ld?: { stop(): Sample[]; mark(label: string): number; samples: Sample[]; beats: number[] } };
     w.__ld?.stop();
     const samples: Sample[] = [];
     const text = (el: Element | null | undefined) => ((el as HTMLElement | null)?.innerText ?? "").replace(/\s+/g, " ").trim();
@@ -247,12 +285,14 @@ export async function installRecorder(page: Page, intervalMs = 100): Promise<voi
         upperSelected,
       };
     };
-    const timer = setInterval(() => samples.push(snapshot()), intervalMs);
+    const beats: number[] = [];
+    const timer = setInterval(() => { beats.push(performance.now()); samples.push(snapshot()); }, intervalMs);
     const root = document.querySelector("section.os-detail");
     const observer = new MutationObserver(() => samples.push(snapshot()));
     if (root) observer.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["aria-rowcount", "hidden", "aria-selected"] });
     w.__ld = {
       samples,
+      beats,
       mark(label: string) { const t = performance.now(); samples.push({ ...snapshot(label), t }); return t; },
       stop() { clearInterval(timer); observer.disconnect(); return samples; },
     };
@@ -272,12 +312,40 @@ export async function upperHeaders(page: Page): Promise<string[]> {
   return (await readUpper(page))?.headers ?? [];
 }
 
-/** Startet einen gedrosselten Crawl der Fixture `fx-ui-basic` (1 Thread, `rate` URL/s) und wählt vorher den oberen Tab. */
-export async function startSlow(alpha: Alpha, rate: number, tab = "Response Codes"): Promise<void> {
+/** Profil für gesteuerte Crawls: ein Thread, Antwort-Timeout so hoch, dass wartende Anfragen am Tor nicht ablaufen (Crawler-Einstellung). */
+export async function gatedProfile(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const { config } = await import(/* @vite-ignore */ String("/src/ipc/config.ts"));
+    const { profile } = await import(/* @vite-ignore */ String("/src/ipc/profile.ts"));
+    const dto = await config.get();
+    const root = dto.config as Record<string, Record<string, unknown>>;
+    const next = { ...root, speed: { ...(root.speed ?? {}), threads: 1 }, advanced: { ...(root.advanced ?? {}), response_timeout_s: 3600 } };
+    await profile.save({ name: "ld-gated", overwrite: true, config: { ...dto, config: next } });
+    await profile.setDefault({ name: "ld-gated" });
+  });
+}
+
+/**
+ * Startet den Crawl der Fixture `fx-ui-basic` über das Tor (1 Thread) und wählt vorher den oberen Tab. Das Tor ist zu Beginn
+ * geschlossen: `gate.allowTo(n)` / `crawlTo` lassen Anfragen durch, `gate.open()` lässt den Crawl enden.
+ */
+export async function startGated(alpha: Alpha, gate: Gate, tab = "Response Codes"): Promise<void> {
   await alpha.open();
-  await alpha.slowCrawl(rate);
+  await gatedProfile(alpha.page);
   if (tab !== "Internal") await alpha.selectTab(tab);
-  await alpha.startFromHeader();
+  await alpha.startFromHeader(gate.startUrl);
+}
+
+/** Lässt den Crawl bis zur `n`-ten URL laufen und wartet, bis die Oberfläche sie als gecrawlt führt; der Crawl bleibt am Tor stehen. */
+export async function crawlTo(page: Page, gate: Gate, n: number): Promise<void> {
+  gate.allowTo(n);
+  await waitCrawled(page, n);
+}
+
+/** Lässt `n` weitere URLs zu und wartet auf sie. */
+export async function crawlMore(page: Page, gate: Gate, n: number): Promise<void> {
+  gate.allow(n);
+  await waitCrawled(page, gate.budget());
 }
 
 /** Wartet, bis die Tabelle des oberen Bereichs keine Platzhalterzellen („…“) mehr zeigt, und liefert die Zeilen. */
@@ -362,18 +430,6 @@ export async function coreTotal(page: Page, tab: string, filter: string): Promis
   }, { tab, filter });
 }
 
-/** Wie `alpha.slowCrawl` für eine beliebige Seite: Standardprofil mit einem Thread und `rate` URL/s. */
-export async function slowProfile(page: Page, rate: number): Promise<void> {
-  await page.evaluate(async (rate) => {
-    const { config } = await import(/* @vite-ignore */ String("/src/ipc/config.ts"));
-    const { profile } = await import(/* @vite-ignore */ String("/src/ipc/profile.ts"));
-    const dto = await config.get();
-    const root = dto.config as Record<string, Record<string, unknown>>;
-    const next = { ...root, speed: { ...(root.speed ?? {}), threads: 1, max_urls_per_sec: rate } };
-    await profile.save({ name: "ld-slow", overwrite: true, config: { ...dto, config: next } });
-    await profile.setDefault({ name: "ld-slow" });
-  }, rate);
-}
 
 /**
  * Sortiert eine Spalte einer Tabelle per Tastatur: Fokus auf die Kopfzeile, zur Spalte `col` (0-basiert, sichtbare Spalten) gehen,
@@ -405,4 +461,137 @@ export async function filledCells(page: Page, header: string): Promise<number> {
   const col = grid.headers.map((h) => h.replace(/\s*[↑↓]\d?$/, "")).indexOf(header);
   if (col < 0) return -1;
   return grid.rows.filter((r) => (r.cells[col] ?? "") !== "" && r.cells[col] !== "…").length;
+}
+
+/** Gespeicherte Sichtbarkeit einer Spalte im Layout einer Detailtabelle (UI-Zustandsdatei, `detailColumns`); `undefined`, wenn nichts gespeichert ist. */
+export async function persistedDetailColumn(page: Page, layout: string, key: string): Promise<boolean | undefined> {
+  return page.evaluate(async ({ layout, key }) => {
+    const { uistate } = await import(/* @vite-ignore */ String("/src/ipc/uistate.ts"));
+    const dto = await uistate.load();
+    const root = (dto.state ?? {}) as Record<string, unknown>;
+    const layouts = (root.detailColumns ?? {}) as Record<string, { key: string; visible: boolean }[]>;
+    return layouts[layout]?.find((c) => c.key === key)?.visible;
+  }, { layout, key });
+}
+
+/**
+ * Maß für die Trägheit des Rechners: Faktor ≥ 1, um den der Seitenkontext hinter seinem Takt herhinkt (Median von `setTimeout(20)` über
+ * eine Sekunde, geteilt durch 20 ms, höchstens 8). Auf einem ruhigen Rechner ist er 1. Absolute Wartegrenzen für Anzeige-Verzögerungen
+ * (Nachlauf der Zähler, erste Seite nach einem Auswahlwechsel) werden mit ihm multipliziert, damit eine ausgelastete CI-Maschine
+ * keine Verzögerung der Oberfläche vortäuscht; Zählergrenzen der Spec und alle inhaltlichen Prüfungen bleiben unverändert.
+ */
+export async function machineFactor(page: Page): Promise<number> {
+  const factor = await page.evaluate(async () => {
+    const gaps: number[] = [];
+    let last = performance.now();
+    const end = last + 1000;
+    while (last < end) {
+      await new Promise((r) => setTimeout(r, 20));
+      const now = performance.now();
+      gaps.push(now - last);
+      last = now;
+    }
+    gaps.sort((a, b) => a - b);
+    return gaps[Math.floor(gaps.length / 2)]! / 20;
+  });
+  return Math.min(8, Math.max(1, factor));
+}
+
+/** Anzahl verschiedener Werte der Overview-Zeile „Total URLs Crawled“ in den bisherigen Stichproben des Recorders. */
+export async function recordedOverviewDistinct(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const samples = (window as unknown as { __ld?: { samples: { overview: string[] }[] } }).__ld?.samples ?? [];
+    const values = new Set<number>();
+    for (const s of samples) {
+      const row = s.overview.find((r) => /^Total URLs Crawled/.test(r));
+      if (row) values.add(Number(row.replace(/^Total URLs Crawled/, "").trim().split(" ")[0]!.replace(/[^\d]/g, "")));
+    }
+    return values.size;
+  });
+}
+
+/** URL-IDs mehrerer Adressen (Ansicht „Response Codes“, alle Zeilen). */
+export async function urlIdsOf(page: Page, addresses: string[]): Promise<number[]> {
+  return page.evaluate(async (addresses) => {
+    const { view } = await import(/* @vite-ignore */ String("/src/ipc/view.ts"));
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const handle = await view.open({ spec: { kind: "tab", tab: "Response Codes", filter: "All", search: null, sort: [] }, columns: ["Address"] });
+      try {
+        const rows = await view.rows({ viewId: handle.viewId, version: handle.version, offset: 0, limit: 200, columns: ["Address"] });
+        return addresses.map((a) => {
+          const index = rows.cells.findIndex((c: unknown[]) => c[0] === a);
+          if (index < 0) throw new Error(`${a} nicht in der Ansicht`);
+          return rows.rowKeys[index] as number;
+        });
+      } catch (error) {
+        if (!String((error as Error).message).includes("stale")) throw error;
+      } finally {
+        await view.close({ viewId: handle.viewId });
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    throw new Error("view.rows blieb veraltet");
+  }, addresses);
+}
+
+/**
+ * Auslastung des Rechners während der Aufzeichnung: Median der Abstände der Takt-Schläge des Recorders geteilt durch den Soll-Abstand
+ * (`raw`, ≥ 1). Dieses Maß steigt auch, wenn die Oberfläche selbst den Hauptthread belegt, also bei genau dem Rückschritt, den die Tests
+ * finden sollen. Deshalb wird es auf `max(2 × machine, 4)` gekappt (`capped`; `machine` = `machineFactor` vor dem Lauf): ein Rückschritt
+ * der Oberfläche kann die Verzögerungsgrenzen höchstens um diesen Faktor aufweichen, nicht beliebig. Beide Werte gehören ins Attachment.
+ */
+export async function recorderFactor(page: Page, intervalMs: number, machine: number): Promise<{ raw: number; capped: number; slow: number }> {
+  const raw = await page.evaluate((intervalMs) => {
+    const beats = (window as unknown as { __ld?: { beats: number[] } }).__ld?.beats ?? [];
+    const gaps = beats.slice(1).map((b, i) => b - beats[i]!).sort((a, b) => a - b);
+    return gaps.length ? gaps[Math.floor(gaps.length / 2)]! / intervalMs : 1;
+  }, intervalMs);
+  const capped = Math.min(Math.max(1, raw), Math.max(2 * machine, 4));
+  return { raw, capped, slow: Math.max(machine, capped) };
+}
+
+export const RATE = 3;
+export const INTERVAL = 100;
+
+// spec: UI-018, UI-145
+// Kein vom Prüfling bestimmter Start und keine reduzierte Last. Mindestens 60 s decken auch einen
+// anwachsenden Rückstand bei 2,5 statt 3 URL/s ab. Zehn Recorder-Takte Reserve beim maximalen Faktor.
+export function lagWindow(machine: number, boundMs: number, alreadyCrawled: number) {
+  const maxFactor = Math.max(2 * machine, 4);
+  const reserveMs = 10 * INTERVAL * maxFactor;
+  const durationMs = Math.max(60_000, boundMs * maxFactor + reserveMs);
+  const remaining = Math.ceil(RATE * durationMs / 1000);
+  return { maxFactor, reserveMs, durationMs, remaining, limit: alreadyCrawled + remaining };
+}
+
+// spec: UI-018, UI-032
+// Root + `pages` Rückverlinker + eine am Tor wartende Schlussseite. Alle Antworten 50 ms verzögert;
+// kein externes Netz, kein Weiterleitungslink, keine zusätzliche Linkquelle zur Startseite.
+export async function startLoadFixture(pages: number): Promise<Gate> {
+  const server = createServer((req, res) => {
+    if (req.url === "/robots.txt") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("User-agent: *\nAllow: /\n");
+      return;
+    }
+    const path = new URL(req.url ?? "/", "http://fixture.invalid").pathname;
+    const n = /^\/page-(\d+)\.html$/.exec(path);
+    const valid = path === "/" || path === "/hold.html" || (n && Number(n[1]) >= 1 && Number(n[1]) <= pages);
+    const links = path === "/"
+      ? Array.from({ length: pages }, (_, i) => `<a href="/page-${i + 1}.html">Page ${i + 1}</a>`).join("") + '<a href="/hold.html">Hold</a>'
+      : path === "/hold.html" ? "" : '<a href="/">Home</a>';
+    const timer = setTimeout(() => {
+      res.writeHead(valid ? 200 : 404, { "content-type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html lang="en"><head><title>${path}</title></head><body><h1>${path}</h1>${links}</body></html>`);
+    }, 50);
+    res.on("close", () => clearTimeout(timer));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const gate = await startGate(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+  const stop = gate.stop.bind(gate);
+  return { ...gate, async stop() {
+    await stop();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  } };
 }

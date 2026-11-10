@@ -8,6 +8,9 @@ use std::{
 };
 
 pub const CHANGE_LIMIT: u32 = 4096;
+/// Longest wait of a due poll for the engine to write the URLs it has already counted (UI-018, B4-LAGFIX2).
+/// The request is only made while the writer has nothing queued; then one commit takes a few milliseconds.
+pub const COUNTED_FLUSH_MAX: Duration = Duration::from_millis(100);
 #[derive(Clone, Default)]
 pub(crate) struct Cursor {
     seq: u64,
@@ -171,6 +174,18 @@ pub async fn snapshot(
 }
 
 pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
+    refresh_aligned(app, s, app.tick_due(), false).await
+}
+
+/// Like [`refresh`] with the caller's decision whether this poll belongs to a due tick (UI-018, B4-LAGFIX2): the
+/// session loop decides once, so the write of counted URLs, the row publication and the tick use the same answer.
+/// `ended`: the crawl has just ended in this poll; its final rows are published at once.
+pub(super) async fn refresh_aligned(
+    app: &App,
+    s: &SessionInfo,
+    due: bool,
+    ended: bool,
+) -> Result<(), CmdError> {
     let service = app.ext::<SessionService>();
     // The entry is created here, so concurrent first refreshes share its notice state (`Cursor::delays`).
     let mut old = service
@@ -181,9 +196,11 @@ pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
         .or_default()
         .clone();
     let now = app.config().clock.monotonic();
-    if old
-        .last
-        .is_some_and(|t| now.saturating_sub(t) < Duration::from_millis(50))
+    // A due poll always reads: skipping it would send the tick without the table data of its poll (B4-LAGFIX2).
+    if !due
+        && old
+            .last
+            .is_some_and(|t| now.saturating_sub(t) < Duration::from_millis(50))
     {
         return Ok(());
     }
@@ -204,13 +221,23 @@ pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
     let before = old.clone();
     let clock = app.config().clock.clone();
     let cfg = s.config.clone();
-    let progress = s.engine.as_ref().and_then(|e| {
-        e.handle
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .as_ref()
-            .map(|h| h.progress())
-    });
+    // UI-018 (B4-LAGFIX2): in a poll whose tick is due the engine first writes every URL it has counted, so
+    // the snapshot below contains them and the table totals of this tick reach the counter of this tick
+    // (otherwise up to one writer interval, 100 ms, later and thus one tick late). Read the progress first.
+    let (progress, counted) = s
+        .engine
+        .as_ref()
+        .and_then(|e| {
+            e.handle
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .as_ref()
+                .map(|h| (h.progress(), due.then(|| h.flush_counted()).flatten()))
+        })
+        .map_or((None, None), |(p, f)| (Some(p), f));
+    if let Some(counted) = counted {
+        let _ = tokio::time::timeout(COUNTED_FLUSH_MAX, counted).await;
+    }
     // A saturated catalog/count pool must not freeze progress or lifecycle delivery.
     // The fixed lane also retains the connection-local incremental aggregate cache.
     let (seq, reset, ids, mut status) = app
@@ -461,10 +488,17 @@ pub async fn refresh(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
     old.last = Some(now);
     // Counters above are independent of the configurable table cadence (K2-39).
     // Accumulate IDs between row publications; overflow becomes one full reset.
+    // UI-018 (B4-LAGFIX2): rows are published in a poll whose tick is due. View maintenance then
+    // starts with the status it belongs to, and the session loop sends both in the same tick instead of
+    // the totals following one tick later on an independent table clock. Should another flusher take
+    // the due tick, rows still follow after two intervals.
+    let interval = Duration::from_millis(u64::from(app.live_interval_ms()));
     if old.pending.is_some()
-        && old.rows_at.is_none_or(|t| {
-            now.saturating_sub(t) >= Duration::from_millis(u64::from(app.live_interval_ms()))
-        })
+        && (ended
+            || old.rows_at.is_none_or(|t| {
+                let elapsed = now.saturating_sub(t);
+                elapsed >= interval && (elapsed >= interval * 2 || due)
+            }))
     {
         let change = old.pending.take().expect("pending change");
         let listeners = service

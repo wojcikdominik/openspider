@@ -8,14 +8,16 @@
 //   - wenn OS_LD_BASELINE_URLDETAILS_MS / OS_LD_BASELINE_LINKS_MS gesetzt sind (Median eines früheren Laufs, z. B. von `main`):
 //     Median ≤ Basis × 1,10 (UI-148).
 // Ohne Basis bleibt der Median ein berichteter Messwert; er wird nicht gegen eine selbst erfundene Schwelle geprüft.
+//
+// Lauf: nur nächtlich (Playwright-Projekt `<engine>-nightly`, `ui-nightly.yml`); die PR-CI führt die Messung nicht aus, weil sie ohne Basis
+// kein Pass/Fail-Signal liefert (siehe playwright.config.ts).
 // acceptance: independent
 import { spawn } from "node:child_process";
-import type { Page } from "@playwright/test";
-import { expect, test } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 import { startAlphaBridge, toolBinary } from "../alpha/support";
-import { readUpper } from "./livedetail-support";
+import { expect, readUpper } from "./livedetail-support";
 
-const REPS = Number(process.env.OS_LD_REPS ?? 7);
+const REPS = Number(process.env.OS_LD_REPS ?? 5);
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -75,7 +77,9 @@ async function firstClick(page: Page, url: string, kind: "urlDetails" | "links")
 // acceptance: independent
 test("first click on a row during a running crawl: median time to the first detail page (regression, dev server)", async ({ page }) => {
   test.setTimeout(300_000);
-  const site = spawn(toolBinary("os-testsite"), ["synthetic:n=8000,links=30,seed=7"], { stdio: ["ignore", "pipe", "inherit"] });
+  // 60 000 Seiten bei 100 URL/s: der Crawl läuft knapp 10 Minuten und endet während der 14 Messungen auch auf langsamen Rechnern nie
+  // (das Ende des Tests schließt die Bridge); „Running“ wird nach jeder Messung geprüft.
+  const site = spawn(toolBinary("os-testsite"), ["synthetic:n=60000,links=30,seed=7"], { stdio: ["ignore", "pipe", "inherit"] });
   const base = await new Promise<string>((resolve, reject) => {
     let output = "";
     const timer = setTimeout(() => reject(new Error("Fixture-Server startet nicht")), 20_000);

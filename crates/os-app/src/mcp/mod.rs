@@ -165,8 +165,12 @@ pub fn init(app: &App) {
                 previous = Some(current);
             }
             // Retry queued startup notices/status after the coalescer's delivery deadline,
-            // including an unchanged Off status after a failed start.
-            app.flush_tick();
+            // including an unchanged Off status after a failed start. While a crawl session is
+            // active its loop delivers every due tick (MCP status included); a second flusher would
+            // send that tick before the session's poll and split status and table totals (UI-018).
+            if !crate::session::delivers_ticks(&app) {
+                app.flush_tick();
+            }
         }
     });
 }

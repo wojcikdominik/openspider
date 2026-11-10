@@ -89,6 +89,33 @@ jobs:
             browsers: webkit
             shard: 2/2
             timeout: 60
+          # Lag-Prüfungen B4-LIVEDETAIL (UI-018: Zähler/Chip und Inlinks bei 3 URL/s), je Engine und Plattform ein eigener Job: Die beiden
+          # Tests brauchen über eine Minute Zufluss plus Schlussfenster; in den Hauptjobs lagen linux-/windows-chromium schon bei 41–43 min
+          # des 50-min-Schritt-Limits. `OS_E2E_LAG=split` (Schritt E2E-A) verlegt sie aus dem Hauptprojekt in `<engine>-lag`; kein Test entfällt.
+          - name: macos-webkit-lag
+            os: macos-15
+            projects: webkit
+            browsers: webkit
+            lag: true
+            timeout: 30
+          - name: windows-chromium-lag
+            os: windows-latest
+            projects: chromium
+            browsers: chromium
+            lag: true
+            timeout: 30
+          - name: linux-chromium-lag
+            os: ubuntu-latest
+            projects: chromium
+            browsers: chromium
+            lag: true
+            timeout: 30
+          - name: linux-webkit-lag
+            os: ubuntu-latest
+            projects: webkit
+            browsers: webkit
+            lag: true
+            timeout: 30
     defaults:
       run:
         shell: bash
@@ -144,15 +171,20 @@ jobs:
         timeout-minutes: 50
         env:
           OS_E2E_PROJECTS: ${{ matrix.projects }}
+          # Lag-Prüfungen B4-LIVEDETAIL nur im Projekt `<engine>-lag` (Jobs `*-lag`), nicht im Hauptprojekt (siehe playwright.config.ts).
+          OS_E2E_LAG: split
           CI: "true"
           # Die Bridge-Binärdatei liegt im Workspace-Zielordner; der Pfad wird von e2e/support/bridge.ts gefunden.
         # Mit Shard nur das Hauptprojekt: `<engine>-perf` hängt davon ab, und Playwright teilt nur Projekte ohne
-        # Abhängige auf; die Abhängigkeit liefe sonst ungeteilt in jedem Shard mit.
+        # Abhängige auf; die Abhängigkeit liefe sonst ungeteilt in jedem Shard mit. Ohne Shard laufen Haupt- und Perf-Projekt
+        # (wie zuvor `npm run e2e`), aber nicht `<engine>-lag`: das Projekt gehört dem eigenen Job.
         run: |
-          if [ -n "${{ matrix.shard }}" ]; then
+          if [ -n "${{ matrix.lag }}" ]; then
+            npm run -w apps/desktop e2e -- --project=${{ matrix.projects }}-lag 2>&1 | tee e2e.log
+          elif [ -n "${{ matrix.shard }}" ]; then
             npm run -w apps/desktop e2e -- --project=${{ matrix.projects }} --shard=${{ matrix.shard }} 2>&1 | tee e2e.log
           else
-            npm run -w apps/desktop e2e 2>&1 | tee e2e.log
+            npm run -w apps/desktop e2e -- --project=${{ matrix.projects }} --project=${{ matrix.projects }}-perf 2>&1 | tee e2e.log
           fi
 
       # Laufzeitbudgets (UI-146) wie bisher nach den übrigen Tests (hier: des Shards) und ohne parallele Last, ohne die
