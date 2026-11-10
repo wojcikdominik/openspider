@@ -8,6 +8,7 @@ import { setClient } from "../../ipc/client";
 import { eventBus } from "../../ipc/events";
 import { setLanguage } from "../../i18n";
 import { runAction } from "../../ui/actions";
+import { installShortcutDispatcher } from "../../ui/dispatcher";
 import { useComparison } from "../compare/model";
 import { session as compareSession } from "../compare/fixtures/out-compare/core";
 
@@ -85,6 +86,115 @@ it("asks before recrawling completed data and serializes fast repeated Start act
   fireEvent.click(screen.getByRole("button", { name: "Replace" }));
   await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
   expect(calls("crawl.validateStartUrl")).toHaveLength(1);
+});
+
+// spec: UI-003
+// spec: UI-113
+it("starts on Enter in the URL field itself, not during an IME composition or with a modifier (B4-ENTER)", async () => {
+  useSession.getState().applyTick({ ...tick, crawl: { ...tick.crawl!, phase: "completed" } });
+  render(<Header />); enterUrl("next.test");
+  const field = screen.getByLabelText("Start URL");
+  // fireEvent returns false when the handler called preventDefault.
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13, isComposing: true })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 229 })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13, shiftKey: true })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Escape", keyCode: 27 })).toBe(true);
+  // Without suggestions the arrow keys do not hold Enter back.
+  expect(fireEvent.keyDown(field, { key: "ArrowDown", keyCode: 40 })).toBe(true);
+  await act(async () => { await Promise.resolve(); });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(calls("crawl.validateStartUrl")).toHaveLength(0);
+  // Handled (and the default prevented, so no engine submits the form a second time); completed data asks first.
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  expect(await screen.findByRole("dialog")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+  expect(calls("crawl.start")[0]?.args).toEqual({ source: { kind: "spider", url: "https://next.test/" }, scope: "domain" });
+});
+
+// spec: UI-003
+// spec: UI-113
+it("leaves Enter to the suggestion list after the arrow keys and starts with the next Enter (B4-ENTER)", async () => {
+  core.uiState.state = { header: { history: ["https://old.test/"] } };
+  render(<Header />);
+  await waitFor(() => expect(document.querySelectorAll("datalist option")).toHaveLength(1));
+  enterUrl("old");
+  const field = screen.getByLabelText("Start URL");
+  expect(fireEvent.keyDown(field, { key: "ArrowDown", keyCode: 40 })).toBe(true);
+  // This Enter adopts the highlighted suggestion (native behaviour), it does not start.
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(true);
+  enterUrl("https://old.test/");
+  await act(async () => { await Promise.resolve(); });
+  expect(calls("crawl.validateStartUrl")).toHaveLength(0);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+  expect(calls("crawl.start")[0]?.args).toEqual({ source: { kind: "spider", url: "https://old.test/" }, scope: "domain" });
+  // Arrow keys, then Enter without choosing: the following Enter starts again (no endless swallowing).
+  expect(fireEvent.keyDown(field, { key: "ArrowUp", keyCode: 38 })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+});
+
+// spec: UI-113
+// spec: UI-003
+it("resumes a paused crawl on Enter in the URL field and on Mod+Enter while the start URL is unchanged", async () => {
+  useSession.getState().applyTick({ ...tick, crawl: { ...tick.crawl!, phase: "paused", startUrl: "https://site.test/blog/" } });
+  render(<Header />);
+  const field = screen.getByLabelText("Start URL");
+  expect(field).toHaveValue("https://site.test/blog/");
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  await waitFor(() => expect(calls("crawl.resume")).toHaveLength(1));
+  // Mod+Enter (action crawl.start); the same address typed differently still counts as unchanged.
+  enterUrl("site.test/blog/");
+  act(() => { runAction("crawl.start"); });
+  await waitFor(() => expect(calls("crawl.resume")).toHaveLength(2));
+  // An interrupted crawl without a known start URL resumes as well; the field does not matter then.
+  act(() => useSession.getState().applyTick({ ...tick, seq: tick.seq + 1, crawl: { ...tick.crawl!, phase: "incomplete", startUrl: null } }));
+  enterUrl("other.test");
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  await waitFor(() => expect(calls("crawl.resume")).toHaveLength(3));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(calls("crawl.start")).toHaveLength(0);
+  expect(calls("crawl.validateStartUrl")).toHaveLength(0);
+});
+
+// spec: UI-113
+// spec: UI-003
+it("starts a new crawl after confirmation when the URL of a paused crawl was changed", async () => {
+  useSession.getState().applyTick({ ...tick, crawl: { ...tick.crawl!, phase: "paused", startUrl: "https://site.test/" } });
+  render(<Header />);
+  const field = screen.getByLabelText("Start URL");
+  enterUrl("next.test");
+  expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  expect(await screen.findByRole("dialog")).toBeVisible();
+  expect(calls("crawl.start")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+  expect(calls("crawl.start")[0]?.args).toEqual({ source: { kind: "spider", url: "https://next.test/" }, scope: "domain" });
+  expect(calls("crawl.resume")).toHaveLength(0);
+});
+
+// spec: UI-003
+// spec: UI-113
+it("after the arrow keys, Escape or another key releases the suggestions: the next Enter starts (B4-ENTER)", async () => {
+  // The real dispatcher takes Escape in a text field in the capture phase (search.clear) and stops it there.
+  const off = installShortcutDispatcher({ platform: "win", onAction: () => true });
+  try {
+    core.uiState.state = { header: { history: ["https://old.test/"] } };
+    render(<Header />);
+    await waitFor(() => expect(document.querySelectorAll("datalist option")).toHaveLength(1));
+    enterUrl("next.test");
+    const field = screen.getByLabelText("Start URL");
+    fireEvent.keyDown(field, { key: "ArrowDown", keyCode: 40 });
+    expect(fireEvent.keyDown(field, { key: "Escape", keyCode: 27 })).toBe(false);
+    fireEvent.keyUp(field, { key: "Escape", keyCode: 27 });
+    expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+    await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+    // Arrow, then a cursor key (no input event): the next Enter is not held back either.
+    fireEvent.keyDown(field, { key: "ArrowUp", keyCode: 38 });
+    fireEvent.keyDown(field, { key: "End", keyCode: 35 });
+    expect(fireEvent.keyDown(field, { key: "Enter", keyCode: 13 })).toBe(false);
+  } finally { off(); }
 });
 
 // spec: CRAWL-009 [M2]
