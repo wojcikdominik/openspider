@@ -70,6 +70,9 @@ pub const TICK_SETTLE_ENDED: Duration = Duration::from_millis(1000);
 
 /// Longest wait of the end status of a crawl for its exact final count (Overview, Issues, filter counts; UI-018
 /// „nach Crawl-Ende exakt“). A larger crawl whose count takes longer sends it with a later tick.
+/// B4-LAGFIX3: the same deadline also bounds the wait for the automatic crawl analysis (CRAWL-141) that the crawl
+/// end started; its results are part of the final data version. A longer analysis reports itself as running in the
+/// end tick and announces its rows with a later tick.
 pub const TICK_SETTLE_COUNTS: Duration = Duration::from_millis(3000);
 
 /// Wait budget of a due tick whose previous tick went out `since` ago (see [`TICK_SETTLE_UNTIL`]).
@@ -112,7 +115,7 @@ pub fn init(app: &App) {
             // session is active (`delivers_ticks`); control commands send their own acknowledgement, and
             // while they hold the mutation lock `poll` returns at once.
             let due = app.tick_due();
-            let ended = match poll_aligned(&app, due).await {
+            let ended = match poll_aligned(&app, due, false).await {
                 Ok(ended) => ended,
                 Err(e) => {
                     tracing::warn!(error = ?e, "Session poll failed");
@@ -131,12 +134,23 @@ pub fn init(app: &App) {
                 };
                 crate::views::settle(&app, budget).await;
                 if ended {
-                    // The end status goes out with the exact final count (UI-018, B4-LAGFIX2).
+                    // The end status goes out with the exact final count (UI-018, B4-LAGFIX2) and after the automatic
+                    // crawl analysis the end started (CRAWL-141, B4-LAGFIX3): its commits change the data version, so a
+                    // view opened on the end status would otherwise be out of date a moment later (OUT-020).
                     let until = tokio::time::Instant::now() + TICK_SETTLE_COUNTS;
-                    while !crate::commands::sidebar::counts::settled(&app)
+                    let analysing = analysis::running(&app);
+                    while (!crate::commands::sidebar::counts::settled(&app) || analysis::running(&app))
                         && tokio::time::Instant::now() < until
                     {
                         tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                    if analysing && !analysis::running(&app) {
+                        // The rows the analysis changed travel with the end status, not one tick later.
+                        if let Err(e) = poll_final(&app).await {
+                            tracing::warn!(error = ?e, "Session poll after the crawl analysis failed");
+                        }
+                        let rest = until.saturating_duration_since(tokio::time::Instant::now());
+                        crate::views::settle(&app, rest.min(TICK_SETTLE_ENDED)).await;
                     }
                 }
                 app.flush_tick();
@@ -173,12 +187,19 @@ pub fn state(app: &App, key: &CrawlKey, state: CrawlState) {
 }
 
 pub async fn poll(app: &App) -> Result<(), CmdError> {
-    poll_aligned(app, app.tick_due()).await.map(|_| ())
+    poll_aligned(app, app.tick_due(), false).await.map(|_| ())
+}
+
+/// Poll after the automatic crawl analysis of an ended crawl (B4-LAGFIX3): the rows of every crawl that no longer runs
+/// are published at once, like the final rows of the crawl end.
+async fn poll_final(app: &App) -> Result<bool, CmdError> {
+    poll_aligned(app, true, true).await
 }
 
 /// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`). `Ok(true)`:
-/// a crawl ended in this poll and its final rows were published.
-async fn poll_aligned(app: &App, due: bool) -> Result<bool, CmdError> {
+/// a crawl ended in this poll and its final rows were published. `last`: also publish the rows of crawls that no
+/// longer run at once (see [`poll_final`]).
+async fn poll_aligned(app: &App, due: bool, last: bool) -> Result<bool, CmdError> {
     let service = app.ext::<SessionService>();
     let Ok(_guard) = service.mutation.try_lock() else {
         return Ok(false);
@@ -205,7 +226,8 @@ async fn poll_aligned(app: &App, due: bool) -> Result<bool, CmdError> {
             if finished {
                 control::settle(app, &s, None).await?;
             }
-            feed::refresh_aligned(app, &s, due || finished, finished).await?;
+            let last = last && s.state != CrawlState::Running;
+            feed::refresh_aligned(app, &s, due || finished, finished || last).await?;
             ended |= finished;
         }
         Ok(ended)

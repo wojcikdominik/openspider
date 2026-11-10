@@ -24,6 +24,38 @@ export function missingFolderSlash(url: string | null, scope: StartScope): boole
   return !path.endsWith("/") && !path.slice(path.lastIndexOf("/") + 1).includes(".");
 }
 
+/** The parts of a `keydown` the start URL field decides on. */
+export type StartKey = Pick<KeyboardEvent, "key" | "keyCode" | "isComposing" | "defaultPrevented" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">;
+
+/**
+ * UI-003/UI-113 (B4-ENTER): does this `keydown` in the start URL field start the crawl itself?
+ *
+ * The field has a suggestion list (`<datalist>`). Once it holds an entry, WebKit (and so WKWebView) hands Enter to its
+ * suggestion picker and marks the `keydown` as handled: no `keypress` follows and the form is never submitted
+ * implicitly. Enter is therefore handled on `keydown`, except
+ * - while an IME composition is open or being committed (`isComposing`; Safari reports the committing Enter as
+ *   `keyCode` 229 after `compositionend`),
+ * - with a modifier (Mod+Enter is the global shortcut, UI-113; the others keep the native behaviour),
+ * - right after the arrow keys moved into the suggestions: that Enter adopts the highlighted entry (native), the next
+ *   one starts.
+ */
+export function enterStartsCrawl(e: StartKey, browsingSuggestions: boolean): boolean {
+  if (e.key !== "Enter" || e.defaultPrevented || e.isComposing || e.keyCode === 229) return false;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+  return !browsingSuggestions;
+}
+
+/**
+ * UI-113 (OS-Festlegung, Orchestrator 09.11.2026): is the address in the field another one than the start URL of the
+ * paused crawl? An empty or invalid field, or a crawl without a known start URL, counts as unchanged: Enter then
+ * resumes instead of replacing the crawl.
+ */
+export function startUrlDiffers(field: string | null, crawlStartUrl: string | null): boolean {
+  if (!field || !crawlStartUrl) return false;
+  const saved = normalizeInput(crawlStartUrl);
+  return !!saved && saved !== field;
+}
+
 export function rememberUrl(history: readonly string[], url: string): string[] {
   return [url, ...history.filter((u) => u !== url)].slice(0, 20);
 }
