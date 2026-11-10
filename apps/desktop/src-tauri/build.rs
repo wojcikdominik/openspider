@@ -153,7 +153,46 @@ fn main() {
             InlinedPlugin::new().permissions_path_pattern(leak(pattern)),
         );
     }
+    embed_test_manifest(&out_dir);
     tauri_build::try_build(attributes).expect("tauri-build fehlgeschlagen");
+}
+
+/// Common-Controls-v6-Abhängigkeit, inhaltsgleich mit dem Standardmanifest von `tauri-build`.
+const TEST_MANIFEST: &str = r#"<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"#;
+
+/// Windows/MSVC: Manifest für die Integrationstest-Binaries (`tests/*.rs`).
+///
+/// `tauri-build` bettet sein Manifest per `cargo:rustc-link-arg-bins` nur in die App-Binaries ein. Ohne Manifest lädt
+/// Windows `comctl32.dll` in Version 5; Testbinaries, die Tauri-App-Code linken (`tauri::test::mock_app`), brechen dann
+/// beim Start mit `STATUS_ENTRYPOINT_NOT_FOUND` ab. `rustc-link-arg-tests` gilt nur für Integrationstests – weder für
+/// die App noch für die Unit-Tests von `src/lib.rs` –, die ausgelieferte App bleibt also unverändert.
+fn embed_test_manifest(out_dir: &Path) {
+    let windows = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
+    let msvc = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+    if !(windows && msvc) {
+        return;
+    }
+    let manifest = out_dir.join("test-app-manifest.xml");
+    std::fs::write(&manifest, TEST_MANIFEST).expect("Testmanifest nicht schreibbar");
+    println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+    println!(
+        "cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}",
+        manifest.display()
+    );
 }
 
 /// Maskiert Glob-Sonderzeichen im Pfad.

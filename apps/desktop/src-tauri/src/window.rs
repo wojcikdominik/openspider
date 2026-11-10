@@ -103,7 +103,11 @@ pub fn focus_main<R: Runtime>(handle: &AppHandle<R>) {
 }
 
 /// UI-008/UI-030: pending frontend edits must reach the shared UI-state file before native close/menu/OS exit.
-async fn flush_frontend<R: Runtime>(handle: &AppHandle<R>) -> bool {
+///
+/// Öffentlich nur für den Integrationstest `tests/window_flush.rs` (der unter Windows ein eigenes Manifest braucht,
+/// siehe `build.rs`); die Hülle ruft die Funktion nur in diesem Modul auf.
+#[doc(hidden)]
+pub async fn flush_frontend<R: Runtime>(handle: &AppHandle<R>) -> bool {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     if handle.get_webview_window(MAIN_WINDOW).is_none() {
         return true;
@@ -130,31 +134,4 @@ async fn flush_frontend<R: Runtime>(handle: &AppHandle<R>) -> bool {
     };
     handle.unlisten(listener);
     saved
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // spec: UI-008
-    // spec: UI-030
-    #[tokio::test]
-    async fn native_close_waits_for_the_frontend_save_acknowledgement() {
-        let app = tauri::test::mock_app();
-        let window =
-            tauri::WebviewWindowBuilder::new(&app, MAIN_WINDOW, tauri::WebviewUrl::default())
-                .build()
-                .unwrap();
-        for success in [true, false] {
-            let reply_handle = app.handle().clone();
-            let listener = window.once("os:flush-ui-state", move |event| {
-                let reply: String = serde_json::from_str(event.payload()).unwrap();
-                reply_handle.emit(&reply, success).unwrap();
-            });
-            assert_eq!(flush_frontend(app.handle()).await, success);
-            window.unlisten(listener);
-        }
-        // A missing frontend must not make the native host discard unsaved edits.
-        assert!(!flush_frontend(app.handle()).await);
-    }
 }
