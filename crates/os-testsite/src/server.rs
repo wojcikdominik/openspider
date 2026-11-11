@@ -130,12 +130,63 @@ pub(crate) async fn accept_loop(listener: TcpListener, state: Arc<AppState>) {
     loop {
         tokio::select! {
             accepted = listener.accept() => match accepted {
-                Ok((tcp, _)) => {
-                    conns.spawn(serve(tcp, Arc::clone(&state)));
+                Ok((tcp, peer)) => {
+                    // CRAWL-151: Grenze offener Verbindungen je Client-Adresse, gezählt bei der Annahme.
+                    match ClientSlot::take(&state, peer.ip()) {
+                        Some(slot) => {
+                            conns.spawn(async move {
+                                let _slot = slot;
+                                serve(tcp, Arc::clone(&_slot.state)).await;
+                            });
+                        }
+                        None => {
+                            state.log.reject();
+                            #[allow(deprecated)]
+                            let _ = tcp.set_linger(Some(Duration::ZERO));
+                            drop(tcp);
+                        }
+                    }
                 }
                 Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
             },
             Some(_) = conns.join_next(), if !conns.is_empty() => {}
+        }
+    }
+}
+
+/// Belegt eine offene Verbindung der Client-Adresse; gibt sie beim Drop frei.
+struct ClientSlot {
+    state: Arc<AppState>,
+    ip: std::net::IpAddr,
+}
+
+impl ClientSlot {
+    fn take(state: &Arc<AppState>, ip: std::net::IpAddr) -> Option<Self> {
+        let mut open = state.client_conns.lock().unwrap_or_else(|p| p.into_inner());
+        let n = open.entry(ip).or_insert(0);
+        if state
+            .max_connections_per_client
+            .is_some_and(|max| *n >= max)
+        {
+            return None;
+        }
+        *n += 1;
+        Some(ClientSlot {
+            state: Arc::clone(state),
+            ip,
+        })
+    }
+}
+
+impl Drop for ClientSlot {
+    fn drop(&mut self) {
+        let mut open = self
+            .state
+            .client_conns
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if let Some(n) = open.get_mut(&self.ip) {
+            *n = n.saturating_sub(1);
         }
     }
 }
@@ -167,7 +218,11 @@ async fn serve(tcp: TcpStream, state: Arc<AppState>) {
         let acceptor = TlsAcceptor::from(config);
         match acceptor.accept(tcp).await {
             Ok(stream) => {
-                if stream.get_ref().1.alpn_protocol() == Some(b"h2") {
+                let h2 = stream.get_ref().1.alpn_protocol() == Some(b"h2");
+                state
+                    .log
+                    .conn_tls(conn_id, stream.get_ref().1.server_name(), h2);
+                if h2 {
                     serve_h2(stream, state, conn_id).await;
                     return;
                 }
@@ -282,7 +337,7 @@ async fn run(
         }
 
         let (written_before, framing_before, interim_before, body_before) = conn.counters();
-        let _inflight = state.log.begin();
+        let _inflight = state.log.begin_on(conn_id, &req.host);
         if let Some(counts) = &state.counts {
             *lock(counts).entry(req.path.clone()).or_insert(0) += 1;
         }
@@ -652,12 +707,12 @@ async fn serve_h2(stream: TlsStream<TcpStream>, state: Arc<AppState>, conn_id: u
                 let records = records.clone();
                 let stream_id = respond.stream_id().as_u32();
                 tasks.spawn(async move {
-                    let _inflight = state.log.begin();
                     let req = Request {
                         method: request.method().to_string(), target: request.uri().path_and_query().map_or("/", |p| p.as_str()).into(),
                         path: request.uri().path().into(), host: request.uri().host().unwrap_or("").to_ascii_lowercase(),
                         headers: request.headers().iter().map(|(n,v)| (n.to_string(), String::from_utf8_lossy(v.as_bytes()).into_owned())).collect(), tls: true,
                     };
+                    let _inflight = state.log.begin_on(conn_id, &req.host);
                     if let Some(counts) = &state.counts { *lock(counts).entry(req.path.clone()).or_insert(0) += 1; }
                     let token = state.detailed_log.then(|| state.log.push(RequestRecord { seq: 0, ts: crate::log::now_ts(), conn_id, method: req.method.clone(), host: req.host.clone(), path_and_query: req.target.clone(), headers: req.headers.clone(), tls: true, sni, sent_bytes: 0, sent_framing_bytes: 0, sent_interim_bytes: 0, sent_body_bytes: 0 }));
                     if let Some(token) = token { records.lock().unwrap_or_else(|p| p.into_inner()).insert(stream_id, (token, Sent::default())); }

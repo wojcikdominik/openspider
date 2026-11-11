@@ -98,6 +98,14 @@
 //!   Statuszeile, Header und Chunk-Rahmen – die Gegenstellung zu `transferred_bytes` des Clients.
 //!   0 bei HEAD, 204 und 304.
 //!
+//! # Verbindungen (CRAWL-151)
+//!
+//! [`TestSite::connection_stats`] liefert je angenommener TCP-Verbindung Host, Protokoll, Zahl der
+//! Requests und die höchste Zahl gleichzeitiger Requests auf ihr; [`TestSite::max_concurrency_for_host`]
+//! die Gleichzeitigkeit je Host. Mit `max_connections_per_client = n` auf oberster Ebene der
+//! `scenario.toml` nimmt der Server je Client-Adresse höchstens n offene Verbindungen an; jede weitere
+//! wird direkt nach der Annahme per RST geschlossen und in [`TestSite::rejected_connections`] gezählt.
+//!
 //! # Golden-Dateien
 //!
 //! [`golden::normalize`] und [`golden::assert_golden`] (mit `UPDATE_GOLDEN=1`).
@@ -147,7 +155,7 @@ use serde::Deserialize;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-pub use log::RequestRecord;
+pub use log::{ConnectionStat, RequestRecord};
 pub use media::{png_min_size, png_of_size, Encoding};
 pub use synthetic::{SyntheticConfig, SyntheticSite};
 
@@ -278,6 +286,9 @@ pub struct Scenario {
     pub routes: Vec<Route>,
     /// Optionale synthetische Site (`[synthetic]`); ersetzt die statischen Dateien.
     pub synthetic: Option<SyntheticConfig>,
+    /// Höchstzahl gleichzeitig offener TCP-Verbindungen je Client-Adresse (CRAWL-151); weitere Verbindungen
+    /// werden sofort nach der Annahme hart geschlossen (RST) und in [`TestSite::rejected_connections`] gezählt.
+    pub max_connections_per_client: Option<usize>,
 }
 
 impl Scenario {
@@ -343,6 +354,12 @@ pub struct SiteOptions {
     pub log_requests: bool,
 }
 
+/// Verbindungsgrenzen aus der `scenario.toml`.
+#[derive(Debug, Clone, Copy, Default)]
+struct Limits {
+    max_connections_per_client: Option<usize>,
+}
+
 pub(crate) struct AppState {
     pub(crate) dir: PathBuf,
     pub(crate) base_url: String,
@@ -357,6 +374,10 @@ pub(crate) struct AppState {
     pub(crate) detailed_log: bool,
     pub(crate) log: log::LogState,
     tls: OnceLock<Result<tls::TlsMaterial, String>>,
+    /// Grenze offener Verbindungen je Client-Adresse (CRAWL-151).
+    pub(crate) max_connections_per_client: Option<usize>,
+    /// Offene Verbindungen je Client-Adresse.
+    pub(crate) client_conns: Mutex<HashMap<std::net::IpAddr, usize>>,
 }
 
 impl AppState {
@@ -445,14 +466,25 @@ impl TestSite {
             .transpose()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         let host_dirs = list_host_dirs(&dir);
-        Self::launch(dir, scenario.routes, host_dirs, synthetic, opts).await
+        let limits = Limits {
+            max_connections_per_client: scenario.max_connections_per_client,
+        };
+        Self::launch(dir, scenario.routes, host_dirs, synthetic, opts, limits).await
     }
 
     /// Startet eine synthetische Site ohne Dateien auf Platte.
     pub async fn start_synthetic(cfg: SyntheticConfig, opts: SiteOptions) -> io::Result<Self> {
         let site =
             SyntheticSite::new(cfg).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        Self::launch(PathBuf::new(), Vec::new(), HashSet::new(), Some(site), opts).await
+        Self::launch(
+            PathBuf::new(),
+            Vec::new(),
+            HashSet::new(),
+            Some(site),
+            opts,
+            Limits::default(),
+        )
+        .await
     }
 
     /// Startet anhand einer Szenario-Angabe: `synthetic:n=1000,links=30` (Kurzform) oder
@@ -473,6 +505,7 @@ impl TestSite {
         host_dirs: HashSet<String>,
         synthetic: Option<SyntheticSite>,
         opts: SiteOptions,
+        limits: Limits,
     ) -> io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", opts.port)).await?;
         let addr = listener.local_addr()?;
@@ -504,6 +537,8 @@ impl TestSite {
             detailed_log,
             log: log::LogState::default(),
             tls: OnceLock::new(),
+            max_connections_per_client: limits.max_connections_per_client,
+            client_conns: Mutex::new(HashMap::new()),
         });
 
         let tasks = [Some(listener), Some(listener2), listener6, listener6_2]
@@ -672,6 +707,24 @@ impl TestSite {
     /// führt mehrere Requests über dieselbe Verbindung).
     pub fn connections(&self) -> usize {
         usize::try_from(self.state.log.connections()).unwrap_or(usize::MAX)
+    }
+
+    /// Angenommene TCP-Verbindungen seit Start bzw. Zurücksetzen mit Host (SNI bzw. `Host` des ersten Requests),
+    /// Protokoll, Zahl der Requests und höchster Zahl gleichzeitiger Requests auf der Verbindung (CRAWL-151).
+    pub fn connection_stats(&self) -> Vec<ConnectionStat> {
+        self.state.log.connection_stats()
+    }
+
+    /// Wegen `max_connections_per_client` abgelehnte Verbindungen seit Start bzw. Zurücksetzen.
+    pub fn rejected_connections(&self) -> usize {
+        self.state.log.rejected()
+    }
+
+    /// Höchste Zahl gleichzeitig bearbeiteter Requests an `host` (ohne Port, Kleinbuchstaben).
+    pub fn max_concurrency_for_host(&self, host: &str) -> usize {
+        self.state
+            .log
+            .max_concurrency_for_host(&host.to_ascii_lowercase())
     }
 
     /// Setzt das Request-Log (Pfadzähler, Einträge, Verbindungs- und Gleichzeitigkeitszähler)

@@ -1,0 +1,166 @@
+# CRAWL-151: h2 per ALPN (TLS) und http/1.1 (Klartext oder http.version = http1); jede Seite 200 ms.
+# Tests mit max_connections_per_client kopieren das Verzeichnis und ergänzen die Zeile am Anfang.
+[[route]]
+path = "/"
+delay_ms = 200
+
+[[route]]
+path = "/page-1.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-2.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-3.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-4.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-5.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-6.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-7.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-8.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-9.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-10.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-11.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-12.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-13.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-14.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-15.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-16.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-17.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-18.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-19.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-20.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-21.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-22.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-23.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-24.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-25.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-26.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-27.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-28.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-29.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-30.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-31.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-32.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-33.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-34.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-35.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-36.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-37.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-38.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-39.html"
+delay_ms = 200
+
+[[route]]
+path = "/page-40.html"
+delay_ms = 200
+

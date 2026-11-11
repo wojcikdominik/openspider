@@ -1,5 +1,6 @@
 //! Request-Log der Testsite: Einträge je Request plus Zähler für Verbindungen und Gleichzeitigkeit.
 
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -74,6 +75,31 @@ impl RequestRecord {
     }
 }
 
+/// Eine angenommene TCP-Verbindung (CRAWL-151).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionStat {
+    /// Nummer wie [`RequestRecord::conn_id`].
+    pub conn_id: u64,
+    /// Host der Verbindung: SNI, sonst `Host` des ersten Requests (Kleinbuchstaben ohne Port); `None`, solange
+    /// kein Request einging.
+    pub host: Option<String>,
+    /// HTTP/2 (nach ALPN).
+    pub h2: bool,
+    /// Requests auf dieser Verbindung.
+    pub requests: u64,
+    /// Höchste Zahl gleichzeitiger Requests auf dieser Verbindung.
+    pub max_concurrent: usize,
+}
+
+#[derive(Debug, Default)]
+struct ConnEntry {
+    host: Option<String>,
+    h2: bool,
+    requests: u64,
+    inflight: usize,
+    max_inflight: usize,
+}
+
 /// Zeitstempel im Format von [`RequestRecord::ts`].
 pub(crate) fn now_ts() -> String {
     let t = OffsetDateTime::now_utc();
@@ -99,6 +125,12 @@ pub(crate) struct LogState {
     max_inflight: AtomicUsize,
     /// Zählt Zurücksetzungen, damit ein verspätetes Verbuchen nicht in einen neuen Eintrag schreibt.
     generation: AtomicU64,
+    /// Verbindungen seit dem letzten Zurücksetzen (CRAWL-151).
+    conns: Mutex<BTreeMap<u64, ConnEntry>>,
+    /// Laufende und höchste Gleichzeitigkeit je Host.
+    hosts: Mutex<HashMap<String, (usize, usize)>>,
+    /// Abgelehnte Verbindungen (`max_connections_per_client`).
+    rejected: AtomicUsize,
 }
 
 /// Verweis auf einen Log-Eintrag, um die gesendeten Bytes nachzutragen.
@@ -120,7 +152,72 @@ pub(crate) struct Sent {
 impl LogState {
     pub(crate) fn new_conn(&self) -> u64 {
         self.connections.fetch_add(1, Ordering::Relaxed);
-        self.next_conn.fetch_add(1, Ordering::Relaxed) + 1
+        let id = self.next_conn.fetch_add(1, Ordering::Relaxed) + 1;
+        lock(&self.conns).insert(id, ConnEntry::default());
+        id
+    }
+
+    /// Ergebnis des TLS-Handshakes: SNI und ALPN der Verbindung.
+    pub(crate) fn conn_tls(&self, conn_id: u64, sni: Option<&str>, h2: bool) {
+        let mut conns = lock(&self.conns);
+        let entry = conns.entry(conn_id).or_default();
+        entry.h2 = h2;
+        if let Some(sni) = sni {
+            entry.host = Some(sni.to_ascii_lowercase());
+        }
+    }
+
+    /// Eine wegen `max_connections_per_client` abgelehnte Verbindung.
+    pub(crate) fn reject(&self) {
+        self.rejected.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub(crate) fn rejected(&self) -> usize {
+        self.rejected.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn connection_stats(&self) -> Vec<ConnectionStat> {
+        lock(&self.conns)
+            .iter()
+            .map(|(id, e)| ConnectionStat {
+                conn_id: *id,
+                host: e.host.clone(),
+                h2: e.h2,
+                requests: e.requests,
+                max_concurrent: e.max_inflight,
+            })
+            .collect()
+    }
+
+    pub(crate) fn max_concurrency_for_host(&self, host: &str) -> usize {
+        lock(&self.hosts).get(host).map_or(0, |(_, max)| *max)
+    }
+
+    /// Wie [`LogState::begin`], zusätzlich je Verbindung und je Host gezählt.
+    pub(crate) fn begin_on(&self, conn_id: u64, host: &str) -> RequestGuard<'_> {
+        let inflight = self.begin();
+        {
+            let mut conns = lock(&self.conns);
+            let entry = conns.entry(conn_id).or_default();
+            if entry.host.is_none() && !host.is_empty() {
+                entry.host = Some(host.to_string());
+            }
+            entry.requests += 1;
+            entry.inflight += 1;
+            entry.max_inflight = entry.max_inflight.max(entry.inflight);
+        }
+        {
+            let mut hosts = lock(&self.hosts);
+            let (now, max) = hosts.entry(host.to_string()).or_default();
+            *now += 1;
+            *max = (*max).max(*now);
+        }
+        RequestGuard {
+            _inflight: inflight,
+            log: self,
+            conn_id,
+            host: host.to_string(),
+        }
     }
 
     pub(crate) fn push(&self, mut rec: RequestRecord) -> LogToken {
@@ -171,6 +268,16 @@ impl LogState {
         self.connections.store(0, Ordering::Relaxed);
         self.max_inflight
             .store(self.inflight.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.rejected.store(0, Ordering::SeqCst);
+        // Verbindungen, die gerade Requests bearbeiten, bleiben mit ihrem laufenden Stand erhalten.
+        lock(&self.conns).retain(|_, e| e.inflight > 0);
+        for e in lock(&self.conns).values_mut() {
+            e.requests = 0;
+            e.max_inflight = e.inflight;
+        }
+        for (now, max) in lock(&self.hosts).values_mut() {
+            *max = *now;
+        }
     }
 
     /// Markiert einen Request als in Bearbeitung; der Guard beendet ihn beim Drop.
@@ -178,6 +285,29 @@ impl LogState {
         let now = self.inflight.fetch_add(1, Ordering::SeqCst) + 1;
         self.max_inflight.fetch_max(now, Ordering::SeqCst);
         InflightGuard(self)
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Guard eines Requests aus [`LogState::begin_on`].
+pub(crate) struct RequestGuard<'a> {
+    _inflight: InflightGuard<'a>,
+    log: &'a LogState,
+    conn_id: u64,
+    host: String,
+}
+
+impl Drop for RequestGuard<'_> {
+    fn drop(&mut self) {
+        if let Some(e) = lock(&self.log.conns).get_mut(&self.conn_id) {
+            e.inflight = e.inflight.saturating_sub(1);
+        }
+        if let Some((now, _)) = lock(&self.log.hosts).get_mut(&self.host) {
+            *now = now.saturating_sub(1);
+        }
     }
 }
 
@@ -228,6 +358,48 @@ mod tests {
         assert_eq!(r.seq, 1);
         assert_eq!(r.path(), "/a");
         assert_eq!(r.header_values("X-A"), vec!["1", "2"]);
+    }
+
+    // spec: CRAWL-151
+    #[test]
+    fn connections_hosts_and_rejections_are_counted() {
+        let log = LogState::default();
+        let a = log.new_conn();
+        let b = log.new_conn();
+        log.conn_tls(b, Some("B.test"), true);
+        {
+            let _x = log.begin_on(a, "a.test");
+            let _y = log.begin_on(b, "b.test");
+            let _z = log.begin_on(b, "b.test");
+        }
+        let _w = log.begin_on(b, "b.test");
+        log.reject();
+        let stats = log.connection_stats();
+        assert_eq!(stats.len(), 2);
+        assert_eq!(
+            (
+                stats[0].host.as_deref(),
+                stats[0].h2,
+                stats[0].max_concurrent
+            ),
+            (Some("a.test"), false, 1)
+        );
+        assert_eq!(
+            (
+                stats[1].host.as_deref(),
+                stats[1].h2,
+                stats[1].requests,
+                stats[1].max_concurrent
+            ),
+            (Some("b.test"), true, 3, 2)
+        );
+        assert_eq!(log.max_concurrency_for_host("b.test"), 2);
+        assert_eq!(log.rejected(), 1);
+        log.reset();
+        assert_eq!(log.rejected(), 0);
+        // die laufende Verbindung bleibt, mit ihrem laufenden Request
+        assert_eq!(log.connection_stats().len(), 1);
+        assert_eq!(log.max_concurrency_for_host("b.test"), 1);
     }
 
     fn record() -> RequestRecord {
