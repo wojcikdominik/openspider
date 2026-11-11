@@ -396,6 +396,8 @@ pub struct SpeedConfig {
     pub adaptive_throttle: bool,
     /// Threadzahl automatisch anpassen (CRAWL-147).
     pub auto: bool,
+    /// TCP-Verbindungen je Host (Schema, Host, Port): `auto` oder 1–6 (CRAWL-151).
+    pub connections_per_host: ConnectionsPerHost,
 }
 
 impl Default for SpeedConfig {
@@ -407,7 +409,114 @@ impl Default for SpeedConfig {
             threads: 5,
             max_per_host: None,
             max_urls_per_sec: None,
+            connections_per_host: ConnectionsPerHost::Auto,
         }
+    }
+}
+
+/// Verbindungen pro Host (CRAWL-151): `auto` (so viele wie Threads, höchstens
+/// [`ConnectionsPerHost::MAX`]) oder ein fester Wert 1–6.
+///
+/// In TOML und JSON steht `"auto"` oder eine Ganzzahl. Beim Laden wird jede nicht negative Ganzzahl
+/// angenommen; den Bereich prüft [`CrawlConfig::validate`] mit Feldpfad.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConnectionsPerHost {
+    /// So viele Verbindungen wie Threads, höchstens [`ConnectionsPerHost::MAX`].
+    #[default]
+    Auto,
+    /// Höchstens n Verbindungen je Host.
+    Fixed(u32),
+}
+
+impl ConnectionsPerHost {
+    /// Größter Wert (die Zahl, die Browser unter HTTP/1.1 je Host öffnen).
+    pub const MAX: u32 = 6;
+
+    /// Wirksame Verbindungszahl bei `threads` Threads (1 bis [`ConnectionsPerHost::MAX`]).
+    pub fn resolve(self, threads: u32) -> u32 {
+        match self {
+            ConnectionsPerHost::Auto => threads,
+            ConnectionsPerHost::Fixed(n) => n,
+        }
+        .clamp(1, Self::MAX)
+    }
+}
+
+impl std::fmt::Display for ConnectionsPerHost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectionsPerHost::Auto => f.write_str("auto"),
+            ConnectionsPerHost::Fixed(n) => write!(f, "{n}"),
+        }
+    }
+}
+
+impl Serialize for ConnectionsPerHost {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            ConnectionsPerHost::Auto => s.serialize_str("auto"),
+            ConnectionsPerHost::Fixed(n) => s.serialize_u32(*n),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ConnectionsPerHost {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = ConnectionsPerHost;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("\"auto\" oder eine Ganzzahl von 1 bis 6")
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                u32::try_from(v)
+                    .map(ConnectionsPerHost::Fixed)
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Unsigned(v), &self))
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                u64::try_from(v)
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Signed(v), &self))
+                    .and_then(|v| self.visit_u64(v))
+            }
+
+            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                // JSON aus der Oberfläche kann ganze Zahlen als Gleitkommazahl liefern.
+                if v.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&v) {
+                    Ok(ConnectionsPerHost::Fixed(v as u32))
+                } else {
+                    Err(E::invalid_value(serde::de::Unexpected::Float(v), &self))
+                }
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                let v = v.trim();
+                if v.eq_ignore_ascii_case("auto") {
+                    return Ok(ConnectionsPerHost::Auto);
+                }
+                v.parse::<u32>()
+                    .map(ConnectionsPerHost::Fixed)
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Str(v), &self))
+            }
+        }
+        d.deserialize_any(Visitor)
+    }
+}
+
+impl JsonSchema for ConnectionsPerHost {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ConnectionsPerHost")
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "anyOf": [
+                { "type": "string", "enum": ["auto"] },
+                { "type": "integer", "minimum": 1, "maximum": ConnectionsPerHost::MAX }
+            ]
+        })
     }
 }
 

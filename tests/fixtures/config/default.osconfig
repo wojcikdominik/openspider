@@ -80,6 +80,7 @@ max_links_per_url = 10000
 threads = 5
 adaptive_throttle = true
 auto = false
+connections_per_host = "auto"
 
 [user_agent]
 preset = "openspider"

@@ -114,6 +114,13 @@ enum Kind {
     Str,
     Enum(Vec<String>),
     StrList,
+    /// Ein Schlüsselwort (z. B. `auto`) oder eine Ganzzahl im Bereich (`anyOf` aus Text-Enum und Ganzzahl,
+    /// CRAWL-151).
+    WordOrInt {
+        words: Vec<String>,
+        min: i64,
+        max: Option<i64>,
+    },
 }
 
 struct Leaf {
@@ -133,7 +140,9 @@ fn classify(path: &str, node: &Value) -> Resolved {
     if node.get("properties").is_some() {
         return Resolved::Section;
     }
-    let kind = if let Some(values) = enum_values(node) {
+    let kind = if let Some(kind) = word_or_int(root, node) {
+        kind
+    } else if let Some(values) = enum_values(node) {
         Kind::Enum(values)
     } else if has_type(node, "boolean") {
         Kind::Bool
@@ -160,6 +169,28 @@ fn classify(path: &str, node: &Value) -> Resolved {
         return Resolved::NotSettable;
     };
     Resolved::Leaf(Leaf { kind, nullable })
+}
+
+/// `anyOf` aus genau einem Text-Enum und einer Ganzzahl (`"auto"` oder 1–6).
+fn word_or_int(root: &Value, node: &Value) -> Option<Kind> {
+    let alts = node.get("anyOf").and_then(Value::as_array)?;
+    let mut words = None;
+    let mut int = None;
+    for alt in alts {
+        let (alt, _) = deref(root, alt);
+        if has_type(alt, "string") {
+            words = Some(enum_values(alt)?);
+        } else if has_type(alt, "integer") {
+            int = Some((
+                alt.get("minimum").and_then(Value::as_i64).unwrap_or(0),
+                alt.get("maximum").and_then(Value::as_i64),
+            ));
+        } else {
+            return None;
+        }
+    }
+    let (words, (min, max)) = (words?, int?);
+    Some(Kind::WordOrInt { words, min, max })
 }
 
 /// Löst einen (vollen) Pfad im Schema auf; `None` = Schlüssel unbekannt.
@@ -326,6 +357,28 @@ fn parse_value(leaf: &Leaf, raw: &str) -> Result<Value, String> {
         }
         Kind::StrList => parse_list(raw)
             .ok_or_else(|| "Liste der Form [\"a\", \"b\"] oder ein einzelner Wert".to_string()),
+        Kind::WordOrInt { words, min, max } => {
+            let expected = || {
+                format!(
+                    "{} oder Ganzzahl {}",
+                    words.join(", "),
+                    range_text(*min, *max)
+                )
+            };
+            let norm = raw.to_lowercase();
+            if let Some(word) = words.iter().find(|w| **w == norm) {
+                return Ok(Value::String(word.clone()));
+            }
+            let n = raw
+                .strip_prefix('+')
+                .unwrap_or(raw)
+                .parse::<i64>()
+                .map_err(|_| expected())?;
+            if n < *min || max.is_some_and(|m| n > m) {
+                return Err(expected());
+            }
+            Ok(Value::Number(n.into()))
+        }
     }
 }
 

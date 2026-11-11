@@ -566,6 +566,21 @@
       },
       "type": "object"
     },
+    "ConnectionsPerHost": {
+      "anyOf": [
+        {
+          "enum": [
+            "auto"
+          ],
+          "type": "string"
+        },
+        {
+          "maximum": 6,
+          "minimum": 1,
+          "type": "integer"
+        }
+      ]
+    },
     "ContentAreaConfig": {
       "description": "Inhaltsbereich (ONPAGE-140).",
       "properties": {
@@ -2933,6 +2948,11 @@
           "description": "Threadzahl automatisch anpassen (CRAWL-147).",
           "type": "boolean"
         },
+        "connections_per_host": {
+          "$ref": "#/$defs/ConnectionsPerHost",
+          "default": "auto",
+          "description": "TCP-Verbindungen je Host (Schema, Host, Port): `auto` oder 1–6 (CRAWL-151)."
+        },
         "max_per_host": {
           "default": null,
           "description": "Höchstzahl paralleler Abrufe je Host.",
@@ -4134,6 +4154,7 @@
       "default": {
         "adaptive_throttle": true,
         "auto": false,
+        "connections_per_host": "auto",
         "max_per_host": null,
         "max_urls_per_sec": null,
         "threads": 5

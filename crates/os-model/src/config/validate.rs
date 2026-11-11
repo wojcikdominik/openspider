@@ -316,6 +316,17 @@ impl CrawlConfig {
             }
         }
 
+        if let crate::config::ConnectionsPerHost::Fixed(n) = self.speed.connections_per_host {
+            let max = crate::config::ConnectionsPerHost::MAX;
+            if !(1..=max).contains(&n) {
+                rep.errors.push(ConfigIssue::new(
+                    ConfigIssueKind::InvalidValue,
+                    "speed.connections_per_host",
+                    format!("muss \"auto\" oder eine Ganzzahl von 1 bis {max} sein (ist {n})"),
+                ));
+            }
+        }
+
         check_text_limits("title", &self.title, &mut rep);
         check_text_limits("meta_description", &self.meta_description, &mut rep);
 
