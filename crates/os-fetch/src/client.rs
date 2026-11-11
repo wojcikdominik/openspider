@@ -16,6 +16,7 @@
 mod classify;
 mod decode;
 mod hsts;
+mod lanes;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -96,6 +97,8 @@ pub struct FetchConfig {
     pub max_urls_per_sec: Option<f64>,
     /// Effektive Parallelität je Host aus Threads und Host-Limit (maximal 200).
     pub max_parallel_per_host: usize,
+    /// Höchstzahl TCP-Verbindungen je Host (Schema, Host, Port), 1–6 (CRAWL-151; `auto` ist aufgelöst).
+    pub connections_per_host: usize,
     /// Höchste Body-Größe in Bytes.
     pub max_body_bytes: u64,
     /// Zusätzliche Wurzelzertifikate (PEM), nur Tests.
@@ -114,6 +117,7 @@ impl std::fmt::Debug for FetchConfig {
             .field("resolve", &self.resolve)
             .field("max_urls_per_sec", &self.max_urls_per_sec)
             .field("max_parallel_per_host", &self.max_parallel_per_host)
+            .field("connections_per_host", &self.connections_per_host)
             .field("max_body_bytes", &self.max_body_bytes)
             .field("extra_root_certs", &self.extra_root_certs.len())
             .finish()
@@ -179,6 +183,8 @@ impl FetchConfig {
                 .unwrap_or(cfg.speed.threads)
                 .min(cfg.speed.threads)
                 .clamp(1, 200) as usize,
+            connections_per_host: cfg.speed.connections_per_host.resolve(cfg.speed.threads)
+                as usize,
             max_body_bytes: cfg.limits.max_page_kb.saturating_mul(1024),
             extra_root_certs: Vec::new(),
             clock,
@@ -192,6 +198,8 @@ pub struct HttpFetcher {
     hsts: hsts::Policies,
     connect_timeout: Duration,
     client: reqwest::Client,
+    /// Verbindungen je Host (CRAWL-151); Spur 0 ist `client`.
+    lanes: Arc<lanes::Lanes>,
     auth: AuthMatcher,
     digest: crate::auth::digest::DigestAuth,
     challenge_digest: AuthMatcher,
@@ -276,12 +284,9 @@ impl HttpFetcher {
                 "advanced.response_timeout_s muss größer als 0 sein".to_string(),
             ));
         }
-        let user_agent = HeaderValue::from_str(&cfg.user_agent).map_err(|_| {
-            FetchError::Config("User-Agent enthält unzulässige Zeichen".to_string())
-        })?;
+        user_agent_header(&cfg)?;
         let connect_timeout = cfg.response_timeout.min(MAX_CONNECT_TIMEOUT);
-        let resolver =
-            HostResolver::new(&cfg.resolve, connect_timeout).map_err(FetchError::Config)?;
+        HostResolver::new(&cfg.resolve, connect_timeout).map_err(FetchError::Config)?;
         let auth = AuthMatcher::new(&cfg.basic_auth).map_err(FetchError::Config)?;
         let limiter = cfg
             .max_urls_per_sec
@@ -291,36 +296,22 @@ impl HttpFetcher {
 
         validate_headers(&cfg.http)?;
         crate::net::certificates::roots(&cfg.network).map_err(FetchError::Config)?;
-        let mut builder =
-            crate::net::client_builder_with_password(&cfg.network, cfg.proxy_password.as_deref())
-                .tls_danger_accept_invalid_certs(cfg.http.ignore_certificate_errors)
-                .retry(reqwest::retry::never())
-                .user_agent(user_agent)
-                .redirect(reqwest::redirect::Policy::none())
-                .connect_timeout(connect_timeout)
-                .tcp_nodelay(true)
-                .dns_resolver(Arc::new(resolver));
-        if cfg.http.version == os_model::HttpVersion::Http1 {
-            builder = builder.http1_only();
-        }
-        let mut certs = Vec::new();
-        for pem in &cfg.extra_root_certs {
-            certs.extend(
-                reqwest::Certificate::from_pem_bundle(pem)
-                    .map_err(|e| FetchError::Config(format!("ungültiges Zertifikat: {e}")))?,
-            );
-        }
-        if !certs.is_empty() {
-            builder = builder.tls_certs_merge(certs);
-        }
-        let client = builder
-            .build()
-            .map_err(|e| FetchError::Config(redact::text(&e.to_string())))?;
+        let client = build_client(&cfg, connect_timeout)?;
+        let factory: lanes::ClientFactory = {
+            let cfg = cfg.clone();
+            Arc::new(move || build_client(&cfg, connect_timeout))
+        };
+        let lanes = Arc::new(lanes::Lanes::new(
+            cfg.connections_per_host,
+            client.clone(),
+            factory,
+        ));
         Ok(HttpFetcher {
             hsts: hsts::Policies::default(),
             cfg,
             connect_timeout,
             client,
+            lanes,
             auth,
             digest: crate::auth::digest::DigestAuth::default(),
             challenge_digest: AuthMatcher::default(),
@@ -329,6 +320,35 @@ impl HttpFetcher {
             auth_ids: Arc::new(os_model::RandomIds),
             limiter,
             global_jar: Arc::new(CookieJar::new()),
+        })
+    }
+
+    /// Abrufer mit einem auf `addresses` festgelegten Client (AGENT-020), ohne eigenes Rate-Limit.
+    fn pinned(&self, host: &str, addresses: &[std::net::SocketAddr]) -> Result<Self, FetchError> {
+        let client = build_pinned(&self.cfg, self.connect_timeout, host, addresses)?;
+        let factory: lanes::ClientFactory = {
+            let (cfg, timeout) = (self.cfg.clone(), self.connect_timeout);
+            let (host, addresses) = (host.to_string(), addresses.to_vec());
+            Arc::new(move || build_pinned(&cfg, timeout, &host, &addresses))
+        };
+        Ok(Self {
+            cfg: self.cfg.clone(),
+            connect_timeout: self.connect_timeout,
+            lanes: Arc::new(lanes::Lanes::new(
+                self.cfg.connections_per_host,
+                client.clone(),
+                factory,
+            )),
+            client,
+            auth: AuthMatcher::new(&self.cfg.basic_auth).map_err(FetchError::Config)?,
+            digest: crate::auth::digest::DigestAuth::default(),
+            challenge_digest: AuthMatcher::default(),
+            challenge_ntlm: AuthMatcher::default(),
+            ntlm_clients: std::sync::Mutex::default(),
+            auth_ids: Arc::new(os_model::RandomIds),
+            hsts: hsts::Policies::default(),
+            limiter: None,
+            global_jar: self.global_jar.clone(),
         })
     }
 
@@ -347,43 +367,8 @@ impl HttpFetcher {
         if addresses.is_empty() {
             return Err(FetchError::Config("empty resolved address set".into()));
         }
-        let mut builder = reqwest::Client::builder()
-            .user_agent(&self.cfg.user_agent)
-            .redirect(reqwest::redirect::Policy::none())
-            .no_proxy()
-            .connect_timeout(self.connect_timeout)
-            .tcp_nodelay(true)
-            .resolve_to_addrs(host, addresses);
-        let mut certs = Vec::new();
-        for pem in &self.cfg.extra_root_certs {
-            certs.extend(
-                reqwest::Certificate::from_pem_bundle(pem)
-                    .map_err(|e| FetchError::Config(format!("invalid certificate: {e}")))?,
-            );
-        }
-        if !certs.is_empty() {
-            builder = builder.tls_certs_merge(certs);
-        }
-        let pinned = Self {
-            cfg: self.cfg.clone(),
-            connect_timeout: self.connect_timeout,
-            client: builder
-                .build()
-                .map_err(|e| FetchError::Config(redact::text(&e.to_string())))?,
-            auth: AuthMatcher::new(&self.cfg.basic_auth).map_err(FetchError::Config)?,
-            digest: crate::auth::digest::DigestAuth::default(),
-            challenge_digest: AuthMatcher::default(),
-            challenge_ntlm: AuthMatcher::default(),
-            ntlm_clients: std::sync::Mutex::default(),
-            auth_ids: Arc::new(os_model::RandomIds),
-            hsts: hsts::Policies::default(),
-            limiter: None,
-            global_jar: self.global_jar.clone(),
-        };
-        if let Some(limiter) = &self.limiter {
-            limiter.acquire().await;
-        }
-        Ok(pinned.fetch_impl(req).await)
+        let pinned = self.pinned(host, addresses)?;
+        Ok(pinned.fetch_impl(req, self.limiter.as_ref()).await)
     }
 
     /// Create a reusable client pinned to an approved address set. Shares persistent cookies.
@@ -396,49 +381,14 @@ impl HttpFetcher {
         if addresses.is_empty() {
             return Err(FetchError::Config("empty resolved address set".into()));
         }
-        let mut builder = reqwest::Client::builder()
-            .user_agent(&self.cfg.user_agent)
-            .redirect(reqwest::redirect::Policy::none())
-            .no_proxy()
-            .connect_timeout(self.connect_timeout)
-            .tcp_nodelay(true)
-            .resolve_to_addrs(host, addresses);
-        let mut certs = Vec::new();
-        for pem in &self.cfg.extra_root_certs {
-            certs.extend(
-                reqwest::Certificate::from_pem_bundle(pem)
-                    .map_err(|e| FetchError::Config(format!("invalid certificate: {e}")))?,
-            );
-        }
-        if !certs.is_empty() {
-            builder = builder.tls_certs_merge(certs);
-        }
-        Ok(Self {
-            cfg: self.cfg.clone(),
-            connect_timeout: self.connect_timeout,
-            client: builder
-                .build()
-                .map_err(|e| FetchError::Config(redact::text(&e.to_string())))?,
-            auth: AuthMatcher::new(&self.cfg.basic_auth).map_err(FetchError::Config)?,
-            digest: crate::auth::digest::DigestAuth::default(),
-            challenge_digest: AuthMatcher::default(),
-            challenge_ntlm: AuthMatcher::default(),
-            ntlm_clients: std::sync::Mutex::default(),
-            auth_ids: Arc::new(os_model::RandomIds),
-            hsts: hsts::Policies::default(),
-            limiter: None,
-            global_jar: self.global_jar.clone(),
-        })
+        self.pinned(host, addresses)
     }
 
     /// Fetch with a cached pinned client, retaining the parent's rate limiter.
     pub async fn fetch_with_pinned(&self, req: FetchRequest, pinned: &Self) -> FetchResult {
-        if let Some(limiter) = &self.limiter {
-            limiter.acquire().await;
-        }
         // The protected fetch path is polled below the engine and robots state
         // machines. Bound its caller's frame independently of the HTTP future.
-        Box::pin(pinned.fetch_impl(req)).await
+        Box::pin(pinned.fetch_impl(req, self.limiter.as_ref())).await
     }
 
     /// Die wirksame Konfiguration.
@@ -473,7 +423,8 @@ impl HttpFetcher {
         }
     }
 
-    async fn fetch_impl(&self, req: FetchRequest) -> FetchResult {
+    /// Ein Abruf. `limiter` ersetzt das eigene Rate-Limit (festgelegte Clients nutzen das ihres Abrufers).
+    async fn fetch_impl(&self, req: FetchRequest, limiter: Option<&RateLimiter>) -> FetchResult {
         let clock = &self.cfg.clock;
         let mut url = req.url.clone();
         if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
@@ -519,7 +470,26 @@ impl HttpFetcher {
                 };
             }
         }
-        if let Some(limiter) = &self.limiter {
+        // CRAWL-151: Spur vor dem Rate-Limit, damit Anfragebeginne am Server die Rate einhalten und die Wartezeit
+        // nicht zur Antwortzeit zählt. NTLM nutzt eigene, gebundene Verbindungen (CRAWL-121).
+        let mut lane = None;
+        if self.challenge_ntlm.rendering_credentials(&url).is_none() {
+            match self.lanes.acquire(&url).await {
+                Ok(lease) => lane = Some(lease),
+                Err(failure) => {
+                    return FetchResult {
+                        started_at: clock.now(),
+                        outcome: FetchOutcome::NoResponse {
+                            reason: failure.reason,
+                            detail: failure.detail,
+                            elapsed_ms: 0,
+                        },
+                        url: req.url,
+                    }
+                }
+            }
+        }
+        if let Some(limiter) = limiter.or(self.limiter.as_ref()) {
             limiter.acquire().await;
         }
         let started_at = clock.now();
@@ -544,6 +514,7 @@ impl HttpFetcher {
             jar.as_deref(),
             max_body,
             req.body_limit.abort_media_after,
+            &mut lane,
         );
         let result = match tokio::time::timeout(budget, Box::pin(exchange)).await {
             Ok(r) => r,
@@ -610,6 +581,9 @@ impl HttpFetcher {
         if let FetchOutcome::NoResponse { elapsed_ms, .. } = &outcome {
             tracing::debug!(url = %redact::url(url.as_str()), status = "No Response", response_time_ms = elapsed_ms, "Abruf abgeschlossen");
         }
+        if let Some(lane) = lane {
+            lane.finish().await;
+        }
         FetchResult {
             url: req.url,
             started_at,
@@ -625,6 +599,7 @@ impl HttpFetcher {
         jar: Option<&CookieJar>,
         max_body: u64,
         media_limit: Option<u64>,
+        lane: &mut Option<lanes::Lease>,
     ) -> Result<Exchange, Failure> {
         let accept = match purpose {
             FetchPurpose::Page | FetchPurpose::External => ACCEPT_PAGE,
@@ -730,13 +705,29 @@ impl HttpFetcher {
             Some(pool) => Some(pool.acquire().await),
             None => None,
         };
-        let client = lease
-            .as_ref()
-            .map_or(&self.client, |(client, _guard)| *client);
+        let mut client = match (&lease, lane.as_ref()) {
+            (Some((client, _guard)), _) => (*client).clone(),
+            (None, Some(lane)) => lane.client().clone(),
+            (None, None) => self.client.clone(),
+        };
         if ntlm.is_some() {
             headers.remove(header::AUTHORIZATION);
         }
-        let mut response = send(client.get(url.clone()).headers(headers.clone())).await?;
+        let mut response = match send(client.get(url.clone()).headers(headers.clone())).await {
+            Ok(response) => response,
+            // CRAWL-151 Verhalten 3: abgelehnte zusätzliche Verbindung, über eine bestehende erneut stellen.
+            Err(failure) if lane.as_ref().is_some_and(|l| l.fall_back(&failure)) => {
+                *lane = None;
+                let retry = self.lanes.acquire(url).await?;
+                client = retry.client().clone();
+                *lane = Some(retry);
+                send(client.get(url.clone()).headers(headers.clone())).await?
+            }
+            Err(failure) => return Err(failure),
+        };
+        if let Some(lane) = lane.as_ref() {
+            lane.confirm(response.version());
+        }
         if let Some(c) = ntlm {
             if response.status().as_u16() == 401
                 && response
@@ -834,7 +825,7 @@ impl HttpFetcher {
             })?;
             value.set_sensitive(true);
             headers.insert(header::AUTHORIZATION, value);
-            response = send(self.client.get(url.clone()).headers(headers.clone())).await?;
+            response = send(client.get(url.clone()).headers(headers.clone())).await?;
         }
         let request_headers = headers
             .iter()
@@ -1052,6 +1043,72 @@ fn finish_response(ex: Exchange, response_time_ms: u32) -> HttpResponse {
     }
 }
 
+fn user_agent_header(cfg: &FetchConfig) -> Result<HeaderValue, FetchError> {
+    HeaderValue::from_str(&cfg.user_agent)
+        .map_err(|_| FetchError::Config("User-Agent enthält unzulässige Zeichen".to_string()))
+}
+
+fn root_certs(cfg: &FetchConfig, invalid: &str) -> Result<Vec<reqwest::Certificate>, FetchError> {
+    let mut certs = Vec::new();
+    for pem in &cfg.extra_root_certs {
+        certs.extend(
+            reqwest::Certificate::from_pem_bundle(pem)
+                .map_err(|e| FetchError::Config(format!("{invalid}: {e}")))?,
+        );
+    }
+    Ok(certs)
+}
+
+/// HTTP-Client des Abrufers; jede Spur (CRAWL-151) ist ein weiterer Client derselben Bauart.
+fn build_client(
+    cfg: &FetchConfig,
+    connect_timeout: Duration,
+) -> Result<reqwest::Client, FetchError> {
+    let resolver = HostResolver::new(&cfg.resolve, connect_timeout).map_err(FetchError::Config)?;
+    let mut builder =
+        crate::net::client_builder_with_password(&cfg.network, cfg.proxy_password.as_deref())
+            .tls_danger_accept_invalid_certs(cfg.http.ignore_certificate_errors)
+            .retry(reqwest::retry::never())
+            .user_agent(user_agent_header(cfg)?)
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(connect_timeout)
+            .tcp_nodelay(true)
+            .dns_resolver(Arc::new(resolver));
+    if cfg.http.version == os_model::HttpVersion::Http1 {
+        builder = builder.http1_only();
+    }
+    let certs = root_certs(cfg, "ungültiges Zertifikat")?;
+    if !certs.is_empty() {
+        builder = builder.tls_certs_merge(certs);
+    }
+    builder
+        .build()
+        .map_err(|e| FetchError::Config(redact::text(&e.to_string())))
+}
+
+/// Client, der `host` nur über `addresses` erreicht (AGENT-020): ohne Proxy und zweite Namensauflösung.
+fn build_pinned(
+    cfg: &FetchConfig,
+    connect_timeout: Duration,
+    host: &str,
+    addresses: &[std::net::SocketAddr],
+) -> Result<reqwest::Client, FetchError> {
+    let mut builder = reqwest::Client::builder()
+        .user_agent(&cfg.user_agent)
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .connect_timeout(connect_timeout)
+        .tcp_nodelay(true)
+        .resolve_to_addrs(host, addresses);
+    let certs = root_certs(cfg, "invalid certificate")?;
+    if !certs.is_empty() {
+        builder = builder.tls_certs_merge(certs);
+    }
+    builder
+        .build()
+        .map_err(|e| FetchError::Config(redact::text(&e.to_string())))
+}
+
 fn millis(d: Duration) -> u32 {
     u32::try_from(d.as_millis()).unwrap_or(u32::MAX)
 }
@@ -1128,7 +1185,7 @@ impl Fetch for HttpFetcher {
             .map_or(Duration::ZERO, RateLimiter::pending)
     }
     fn fetch(&self, req: FetchRequest) -> Pin<Box<dyn Future<Output = FetchResult> + Send + '_>> {
-        Box::pin(self.fetch_impl(req))
+        Box::pin(self.fetch_impl(req, None))
     }
 }
 
