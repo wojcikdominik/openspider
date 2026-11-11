@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { CrawlListing } from "../../ipc/gen/CrawlListing";
+import type { Formatters } from "../../i18n/format";
 
 export const useCrawlsDialog = create<{ open: boolean; returnFocus: HTMLElement | null }>(() => ({ open: false, returnFocus: null }));
 export const openCrawls = (opener?: HTMLElement) => useCrawlsDialog.setState({ open: true, returnFocus: opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null) });
@@ -8,6 +9,20 @@ export const columns: Column[] = ["project", "name", "mode", "startUrl", "starte
 export function cell(row: CrawlListing, column: Column): string | number | boolean {
   if (column === "project" || column === "startUrl" || column === "durationMs" || column === "locked") return row[column] ?? "";
   return row.crawl[column];
+}
+/**
+ * OUT-228/UI-121: the management shows start time, duration, URL count and size in the UI language with the app's
+ * shared formatters; sorting keeps the raw values of `cell`.
+ */
+export function displayCell(row: CrawlListing, column: Column, f: Formatters): string {
+  if (column === "startedAt") {
+    const started = new Date(row.crawl.startedAt);
+    return row.crawl.startedAt && !Number.isNaN(started.getTime()) ? f.dateTime(started) : row.crawl.startedAt;
+  }
+  if (column === "durationMs") return row.durationMs == null ? "" : f.duration(row.durationMs / 1000);
+  if (column === "urls") return f.integer(row.crawl.urls);
+  if (column === "fileBytes") return f.bytes(row.crawl.fileBytes);
+  return String(cell(row, column));
 }
 /** CRAWL-128: a stopped crawl stays `Completed` (export key) but the management shows „Abgeschlossen (gestoppt)“. */
 export function phaseKey(row: CrawlListing): string {
