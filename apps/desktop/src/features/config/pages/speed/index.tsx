@@ -1,4 +1,4 @@
-// Geschwindigkeit (CRAWL-112/113): Threads (wirken live, auch während „Läuft“), Verbindungen je Host, Rate, Drosselung.
+// Geschwindigkeit (CRAWL-112/113/151): Threads (wirken live, auch während „Läuft“), Verbindungen je Host, Rate, Drosselung.
 import { useT } from "../../../../i18n";
 import { Banner } from "../../../../ui/primitives";
 import { useConfig } from "../../frame/context";
@@ -11,6 +11,7 @@ export const HIGH_THREADS = 20;
 const fields: FieldDef[] = [
   f("speed.threads", { sectionKey: "config-sec-speed-parallel" }),
   f("speed.max_per_host"),
+  f("speed.connections_per_host", { hintKey: "config-hint-connections-per-host" }),
   f("speed.auto"),
   f("speed.max_urls_per_sec", { sectionKey: "config-sec-speed-rate", nullLabelKey: "config-unlimited-rate", hintKey: "config-hint-rate" }),
   f("speed.adaptive_throttle"),

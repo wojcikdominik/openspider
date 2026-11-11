@@ -202,6 +202,26 @@ export function EnumInput({ def, meta, radio }: { def: FieldDef; meta: FieldMeta
   return <Select label={label} value={value ?? ""} onChange={set} options={options} isDisabled={lock !== null} />;
 }
 
+/** Schlüsselwort oder Ganzzahl im Bereich als Auswahlliste (`auto`, 1–6; CRAWL-151). */
+export function ChoiceIntInput({ def, meta }: { def: FieldDef; meta: FieldMeta }) {
+  const t = useT();
+  const { value, set, lock } = useConfigValue<string | number>(def.path);
+  const words = meta.choices ?? [];
+  const numbers: number[] = [];
+  if (meta.minimum !== undefined && meta.maximum !== undefined) for (let n = meta.minimum; n <= meta.maximum; n++) numbers.push(n);
+  const options = [...words.map((w) => ({ value: w, label: t(enumLabelKey(def.path, w)) })), ...numbers.map((n) => ({ value: String(n), label: String(n) }))];
+  const current = value === undefined || value === null ? "" : String(value);
+  return (
+    <Select
+      label={t(def.labelKey ?? fieldLabelKey(def.path))}
+      value={current}
+      onChange={(v) => set(words.includes(v) ? v : Number(v))}
+      options={options}
+      isDisabled={lock !== null}
+    />
+  );
+}
+
 export function BoolInput({ def }: { def: FieldDef }) {
   const t = useT();
   const { draft } = useConfig();
@@ -252,6 +272,8 @@ export function ConfigField({ def }: { def: FieldDef }) {
   } else if (kind === "lines" || meta?.type === "array") {
     control = <LinesInput def={def} />;
     ownIssues = true;
+  } else if (meta?.choices) {
+    control = <ChoiceIntInput def={def} meta={meta} />;
   } else if (kind === "enum" || kind === "radio" || meta?.enum) {
     control = meta ? <EnumInput def={def} meta={meta} radio={kind === "radio"} /> : null;
   } else if (kind === "bool" || meta?.type === "boolean") {
@@ -266,7 +288,7 @@ export function ConfigField({ def }: { def: FieldDef }) {
     control = null;
   }
   return (
-    <FieldFrame path={def.path} showIssues={!ownIssues} hint={kind === "bool" || kind === "enum" || kind === "radio" || kind === "storeCrawl" ? (def.hintKey ? t(def.hintKey) : undefined) : undefined}>
+    <FieldFrame path={def.path} showIssues={!ownIssues} hint={kind === "bool" || kind === "enum" || kind === "radio" || kind === "storeCrawl" || meta?.choices ? (def.hintKey ? t(def.hintKey) : undefined) : undefined}>
       {control}
     </FieldFrame>
   );

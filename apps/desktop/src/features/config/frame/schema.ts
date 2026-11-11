@@ -19,6 +19,11 @@ export interface FieldMeta {
   default?: unknown;
   /** Elementtyp bei Listen. */
   items?: "string" | "object" | "unknown";
+  /**
+   * Schlüsselwörter neben einer Ganzzahl (`anyOf` aus Text-Enum und Ganzzahl, z. B. `"auto"` oder 1–6 bei
+   * `speed.connections_per_host`, CRAWL-151); `type` ist dann `integer` mit den Grenzen der Ganzzahl.
+   */
+  choices?: readonly string[];
 }
 
 export type ConfigSchema = Node;
@@ -50,9 +55,25 @@ export function nodeAt(schema: ConfigSchema | null, path: string): Node | undefi
   return node;
 }
 
+/** `anyOf` aus genau einem Text-Enum und einer Ganzzahl: Schlüsselwörter und Grenzen. */
+function wordOrInt(schema: ConfigSchema, node: Node): FieldMeta | null {
+  const alts = Array.isArray(node.anyOf) ? (node.anyOf as Node[]).map((a) => resolve(schema, a)) : null;
+  if (!alts || alts.length !== 2) return null;
+  const words = alts.find((a) => a?.type === "string" && Array.isArray(a.enum));
+  const int = alts.find((a) => a?.type === "integer");
+  if (!words || !int) return null;
+  const meta: FieldMeta = { type: "integer", nullable: false, choices: (words.enum as unknown[]).filter((v): v is string => typeof v === "string") };
+  if (typeof int.minimum === "number") meta.minimum = int.minimum;
+  if (typeof int.maximum === "number") meta.maximum = int.maximum;
+  if ("default" in node) meta.default = node.default;
+  return meta;
+}
+
 export function fieldMeta(schema: ConfigSchema | null, path: string): FieldMeta | null {
   const node = nodeAt(schema, path);
   if (!node) return null;
+  const choice = wordOrInt(schema as ConfigSchema, node);
+  if (choice) return choice;
   const rawType = node.type;
   const types = Array.isArray(rawType) ? (rawType as string[]) : typeof rawType === "string" ? [rawType] : [];
   const nullable = types.includes("null");
