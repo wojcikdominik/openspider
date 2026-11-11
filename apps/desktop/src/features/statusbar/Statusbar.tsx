@@ -32,6 +32,26 @@ export function openErrorText(t: (key: string, args?: Record<string, unknown>) =
   return key && i18n.has(currentLanguage(), key) ? t(key, params) : t(`err-code-${String(args.code ?? "internal").toLowerCase()}`);
 }
 
+type DelayEntry = { key: string; messageKey: string; seconds: number; effectiveSeconds: number; hosts: string[] };
+/**
+ * CRAWL-145/UI-013: one status entry per Crawl-delay cause. The core reports each robots.txt origin; the same host
+ * over http and https, or several hosts with the same delay and the same effect, read as one sentence and are shown
+ * once, with the hosts in the tooltip.
+ */
+export function delayEntries(delays: SessionState["crawlDelays"]): DelayEntry[] {
+  const entries = new Map<string, DelayEntry>();
+  for (const [origin, delay] of Object.entries(delays)) {
+    const messageKey = delay.applied ? delay.effectiveSeconds < delay.seconds ? "n03-status-delay-capped" : "n03-status-delay-applied" : "n03-status-delay-ignored";
+    const key = `${messageKey}|${delay.seconds}|${delay.effectiveSeconds}`;
+    let host = origin;
+    try { host = new URL(origin).hostname || origin; } catch { /* keep the origin as reported */ }
+    const entry = entries.get(key) ?? { key, messageKey, seconds: delay.seconds, effectiveSeconds: delay.effectiveSeconds, hosts: [] };
+    if (!entry.hosts.includes(host)) entry.hosts.push(host);
+    entries.set(key, entry);
+  }
+  return [...entries.values()];
+}
+
 export function Statusbar() {
   const t = useT();
   const f = useFormat();
@@ -67,7 +87,7 @@ export function Statusbar() {
     {sessionLost && <span role="status" className="os-status-warning">{t("form-login-session-lost")}</span>}
     <span data-testid="crawl-phase">{phase}{c?.endReason === "limit_reached" && ` (${t("status-limit")})`}</span>
     {Object.keys(throttled).length > 0 && <span className="os-status-warning">{t("status-throttled")}</span>}
-    {c?.phase === "running" && Object.entries(crawlDelays).map(([origin, delay]) => <span key={origin} title={origin}>{t(delay.applied ? delay.effectiveSeconds < delay.seconds ? "n03-status-delay-capped" : "n03-status-delay-applied" : "n03-status-delay-ignored", { seconds: f.decimal(delay.seconds), effectiveSeconds: f.decimal(delay.effectiveSeconds) })}</span>)}
+    {c?.phase === "running" && delayEntries(crawlDelays).map(entry => <span key={entry.key} title={entry.hosts.join(", ")}>{t(entry.messageKey, { seconds: f.decimal(entry.seconds), effectiveSeconds: f.decimal(entry.effectiveSeconds) })}</span>)}
     <span>{t("status-rate", { value: f.decimal(c?.rate ?? 0) })}</span>
     <span>{t("status-average", { value: f.decimal(c?.avgRate ?? 0) })}</span>
     <span>{t("status-count", { done: f.integer(c?.crawled ?? 0), total: f.integer((c?.crawled ?? 0) + (c?.queued ?? 0)), percent: c?.percent ?? 0 })}</span>

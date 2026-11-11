@@ -8,6 +8,11 @@ export const LOADING = Symbol("loading");
 export const BLOCK_SIZE = 200;
 export const MAX_BLOCKS = 100;
 export type CellValue = RowWindow["cells"][number][number];
+/** The core no longer knows the view (`view.*` answers `NotFound`/`err-view-not-found`, UI-142). */
+export function isViewGone(error: unknown): boolean {
+  const failure = toCmdError(error);
+  return failure.code === "NotFound" && failure.messageKey === "err-view-not-found";
+}
 export type ViewApi = Pick<typeof view, "rows" | "locate" | "copy" | "close"> & Partial<Pick<typeof view, "range">>;
 type Block = { keys: number[]; cells: CellValue[][] };
 
@@ -53,6 +58,8 @@ export class ViewDataSource {
       this.blocks.set(0, { keys: initial.rowKeys, cells: initial.cells });
     }
   }
+  /** Visible row range last requested by the grid (inclusive); a replacement view starts there (UI-018). */
+  get visible(): { first: number; last: number } { return { first: this.first, last: this.last }; }
   get cachedRows(): number { return [...this.blocks.values()].reduce((n, b) => n + b.keys.length, 0); }
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -256,6 +263,8 @@ export class ViewDataSource {
     if (this.disposed) return;
     this.disposed = true; this.generation++; this.controller.abort(); this.swap?.abort(); this.swap = undefined;
     this.blocks.clear(); this.pending.clear(); this.listeners.clear();
-    await this.api.close({ viewId: this.viewId });
+    // A view the core already released (crawl replaced or cleared) is closed: that is the goal, not an error (UI-142).
+    try { await this.api.close({ viewId: this.viewId }); }
+    catch (error) { if (!isViewGone(error)) throw error; }
   }
 }

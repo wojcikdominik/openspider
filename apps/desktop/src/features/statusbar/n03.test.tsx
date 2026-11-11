@@ -43,3 +43,23 @@ it.each(["en", "de"])("shows the original and capped effective delay in %s", asy
   render(<Statusbar />);
   expect(screen.getByText(language === "en" ? /Crawl-delay 120.0 s.*capped to 60.0 s.*applied/ : /Crawl-delay 120,0 s.*auf 60,0 s gekappt.*angewandt/)).toBeVisible();
 });
+
+// spec: CRAWL-145
+// spec: UI-013
+it("shows each Crawl-delay cause once, even when several robots.txt origins report it", async () => {
+  setupHeader(); await setLanguage("de");
+  useSession.setState({ crawlDelays: {} });
+  const delay = (origin: string, seconds: number) => ({ level: "info" as const, code: "crawl-delay", args: { origin, seconds, applied: true, effectiveSeconds: seconds } });
+  useSession.getState().applyTick({ ...tick, notices: [delay("https://site.test", 1), delay("http://site.test", 1), delay("https://social.test", 1), delay("https://slow.test", 5)] });
+  // The same notice again (feed refresh) must not add an entry either.
+  useSession.getState().pushNotice(delay("https://site.test", 1));
+  useSession.getState().clearNotices();
+  render(<Statusbar />);
+  const entries = screen.getAllByText(/Crawl-delay/);
+  expect(entries.map(e => e.textContent?.replace(/[⁦-⁩]/g, ""))).toEqual([
+    "Begrenzung: Crawl-delay 1,0 s in robots.txt – angewandt",
+    "Begrenzung: Crawl-delay 5,0 s in robots.txt – angewandt",
+  ]);
+  expect(entries[0]).toHaveAttribute("title", "site.test, social.test");
+  expect(entries[1]).toHaveAttribute("title", "slow.test");
+});

@@ -20,7 +20,7 @@ import { Banner, Button, ContextMenu, Dialog, DialogFooter, ProgressBar, Tree } 
 import { fileName, recentCrawlTitle, splitPath } from "../../ui/recentCrawl";
 import type { RecentEntry } from "../../ui/menu/contributions/main";
 import { nativeCrawlDesktop, type CrawlDesktop, type RepairResult } from "./desktop";
-import { cell, clearLegacyRecent, columns, openCrawls, permissions, phaseKey, readRecent, sortRows, useCrawlsDialog, type Column } from "./model";
+import { clearLegacyRecent, columns, displayCell, openCrawls, permissions, phaseKey, readRecent, sortRows, useCrawlsDialog, type Column } from "./model";
 import "./crawls.css";
 
 type Form = { kind: "rename" | "move" | "projectCreate" | "projectRename"; ids: string[]; projectId?: string; value: string; error?: string };
@@ -48,7 +48,8 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   // CRAWL-127 (OS-Festlegung 09.11.2026): the one recent list lives in the UI state (`help/recent.ts`, also File →
   // Recently opened); its labels come from one index listing. Open management rows take precedence (fresh names).
   const [recent, setRecent] = useState<RecentEntry[]>([]);
-  const lang = useFormat().lang;
+  const fmt = useFormat();
+  const lang = fmt.lang;
   const [form, setForm] = useState<Form | null>(null);
   const formInput = useRef<HTMLInputElement>(null);
   const formKind = form?.kind ?? null;
@@ -327,7 +328,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
               </tr></thead><tbody>{visible.slice(page * 100, page * 100 + 100).map(row => <tr key={row.crawl.crawlId} aria-selected={selected.has(row.crawl.crawlId)} onDoubleClick={() => !disabled && void attempt(() => requestOpen({ kind: "id", crawlId: row.crawl.crawlId }))}
                 onContextMenu={() => { if (!selected.has(row.crawl.crawlId)) setSelected(new Set([row.crawl.crawlId])); }}>
                 <td><input type="checkbox" aria-label={t("crawls-select", { name: row.crawl.name })} checked={selected.has(row.crawl.crawlId)} onChange={e => toggle(row.crawl.crawlId, e.target.checked, (e.nativeEvent as MouseEvent).shiftKey)} /></td>
-                {columns.map(c => <td key={c}>{c === "phase" ? t(phaseKey(row)) : c === "locked" ? t(row.locked ? "crawls-yes" : "crawls-no") : String(cell(row, c))}</td>)}
+                {columns.map(c => <td key={c}>{c === "phase" ? t(phaseKey(row)) : c === "locked" ? t(row.locked ? "crawls-yes" : "crawls-no") : displayCell(row, c, fmt)}</td>)}
               </tr>)}</tbody></table>
             </div>
           </ContextMenu>
@@ -359,7 +360,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
       if (!deletion || !permissions(deletion).delete) return;
       startOp(await crawls.delete({ ids: deletion.map(r => r.crawl.crawlId) })); setDeletion(null);
     })} />}>
-      <p>{t("crawls-delete-confirm", { count: deletion?.length ?? 0, bytes: deletion?.reduce((n, r) => n + r.crawl.fileBytes, 0) ?? 0 })}</p>
+      <p>{t("crawls-delete-confirm", { count: deletion?.length ?? 0, bytes: fmt.bytes(deletion?.reduce((n, r) => n + r.crawl.fileBytes, 0) ?? 0) })}</p>
     </Dialog>
     <Dialog title={t(`crawls-${form?.kind ?? "rename"}`)} isOpen={!!form} onOpenChange={v => !v && setForm(null)} footer={<DialogFooter okLabel={t("crawls-apply")} cancelLabel={t("ui-dialog-cancel")} okDisabled={disabled || (!form?.value.trim() && form?.kind !== "move")} onOk={submitForm} onCancel={() => setForm(null)} />}>
       {form?.error && <Banner kind="error">{form.error}</Banner>}

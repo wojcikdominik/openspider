@@ -41,8 +41,33 @@ it("registers the File menu action and opens the project tree and complete metad
   act(() => { runAction("crawls.manage"); });
   await screen.findByRole("checkbox", { name: "Select: Alpha" });
   expect(screen.getByRole("treegrid", { name: "Projects" })).toBeVisible();
-  for (const name of ["Project", "Name", "Mode", "Start URL", "Started", "Duration (ms)", "URLs", "Size on disk (bytes)", "Status", "Locked", "Database ID"]) expect(screen.getByRole("columnheader", { name })).toBeVisible();
+  for (const name of ["Project", "Name", "Mode", "Start URL", "Started", "Duration", "URLs", "Size on disk", "Status", "Locked", "Database ID"]) expect(screen.getByRole("columnheader", { name })).toBeVisible();
   expect(calls("crawls.list")[0]?.args).toEqual({ show: "all" });
+});
+
+// spec: OUT-228
+// spec: UI-121
+it("shows start time, duration, URL count and size localized in the UI language, never as raw values", async () => {
+  // Fixture rows (management.json) with values that need grouping, a unit and a readable duration.
+  fixture.core.handlers.set("crawls.list", () => fixtureRows.map((row, i) => i === 0 ? { ...row, durationMs: 3_723_000,
+    crawl: { ...row.crawl, startedAt: "2026-11-11T09:16:16Z", urls: 12_345, fileBytes: 1_234_567_890 } } : row));
+  await setLanguage("de");
+  useCrawlsDialog.setState({ open: true });
+  render(<CrawlsHost desktop={fixture.desktop} />);
+  const checkbox = await screen.findByRole("checkbox", { name: "Auswählen: Alpha" });
+  const alpha = checkbox.closest("tr")!;
+  const cells = within(alpha).getAllByRole("cell").map(cell => cell.textContent ?? "");
+  const header = screen.getAllByRole("columnheader").map(h => h.textContent ?? "");
+  const at = (name: string) => cells[header.indexOf(name)];
+  expect(header).toEqual(expect.arrayContaining(["Gestartet", "Dauer", "URLs", "Größe"]));
+  expect(at("Gestartet")).toBe(new Intl.DateTimeFormat("de", { dateStyle: "medium", timeStyle: "medium" }).format(new Date("2026-11-11T09:16:16Z")));
+  expect(at("Dauer")).toBe("1:02:03");
+  expect(at("URLs")).toBe("12.345");
+  expect(at("Größe")).toBe("1,23 GB");
+  expect(cells.join(" ")).not.toMatch(/2026-11-11T|3723000|1234567890/);
+  fireEvent.click(checkbox); fireEvent.click(screen.getByRole("button", { name: "Löschen" }));
+  const dialog = screen.getByRole("dialog", { name: "Löschen" });
+  expect(dialog.textContent?.replace(/[\u2066-\u2069]/g, "")).toContain("1 Crawls löschen und 1,23 GB freigeben?");
 });
 
 // spec: OUT-191 [M2]
@@ -126,7 +151,7 @@ it("protects running and locked crawls while paused and interrupted crawls can r
 it("requires explicit delete confirmation with exact count and space; Escape/cancel sends no delete", async () => {
   await mount(); select("Alpha"); select("Beta"); click("Delete");
   const dialog = screen.getByRole("dialog", { name: "Delete" });
-  expect(dialog.textContent?.replace(/[\u2066-\u2069,]/g, "")).toContain("Delete 2 crawls and free 3072 bytes? Deleted crawls cannot be recovered.");
+  expect(dialog.textContent?.replace(/[\u2066-\u2069,]/g, "")).toContain("Delete 2 crawls and free 3.07 KB? Deleted crawls cannot be recovered.");
   expect(calls("crawls.delete")).toHaveLength(0);
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   expect(calls("crawls.delete")).toHaveLength(0);
