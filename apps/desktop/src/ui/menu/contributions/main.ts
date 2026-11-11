@@ -83,7 +83,8 @@ export function mainMenuContributions(state: MainMenuState): MenuContribution[] 
     ...entry,
     ...(entry.action ? {
       enabled: (ctx: MenuContext) => menuContextAllows(entry.action!) && (state.available?.(entry.action!) ?? true) && (entry.enabled?.(ctx) ?? true),
-      disabledReasonKey: menuContextReason(entry.action!) ?? entry.disabledReasonKey ?? "u04-feature-unavailable",
+      // Ohne registrierte Aktion hilft kein Crawl-Zustand: dann nennt der Grund die fehlende Funktion (UI-002).
+      disabledReasonKey: menuContextReason(entry.action!) ?? (state.available?.(entry.action!) === false ? "u04-feature-unavailable" : entry.disabledReasonKey ?? "u04-feature-unavailable"),
     } : {}),
     ...(entry.items ? { items: entry.items.map(activate) } : {}),
   });

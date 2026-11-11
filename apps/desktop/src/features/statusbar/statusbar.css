@@ -25,7 +25,8 @@
 /* The footer scrolls as one strip so its siblings never paint over one another. */
 .os-crawl-status { flex: none; min-width: max-content; }
 .os-status-details { position: fixed; bottom: var(--os-statusbar-height); }
-.os-app-status .os-menu-availability ul { position: fixed; bottom: var(--os-statusbar-height); inset-inline-start: var(--os-space-12); }
+/* Opens above its trigger at the trailing edge; long reasons wrap instead of scrolling sideways (UI-002). */
+.os-app-status .os-menu-availability ul { position: fixed; bottom: var(--os-statusbar-height); inset-inline: auto var(--os-space-12); width: min(var(--os-size-720), calc(100vw - var(--os-size-24))); margin: 0; overflow: hidden auto; white-space: normal; overflow-wrap: anywhere; border-color: var(--os-border-strong); border-radius: var(--os-radius-card); box-shadow: 0 var(--os-size-4) var(--os-size-16) var(--os-shadow-strong); }
 
 /* Keep MCP and the footer actions visible while long telemetry scrolls independently. */
 .os-crawl-status { flex: 1; min-width: 0; height: 100%; gap: var(--os-space-8); }
@@ -34,3 +35,7 @@
 .os-status-scroll::-webkit-scrollbar { height: var(--os-space-4); }
 .os-status-scroll::-webkit-scrollbar-thumb { background: var(--os-border-strong); border-radius: var(--os-radius); }
 .os-crawl-status > .os-mcp-status, .os-crawl-status > details { flex: none; white-space: nowrap; }
+/* The open-error details open as a card above the footer; inside the strip they would be cut off (CRAWL-127). */
+.os-crawl-status > [role="alert"] { display: flex; flex: none; align-items: center; gap: var(--os-space-8); white-space: nowrap; }
+.os-status-error-detail { position: fixed; bottom: var(--os-statusbar-height); inset-inline-start: var(--os-space-12); z-index: 10; max-width: min(var(--os-size-720), calc(100vw - var(--os-size-24))); max-height: 50vh; margin: 0; padding: var(--os-space-12); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; background: var(--os-bg-surface); border: var(--os-line) solid var(--os-border-strong); border-radius: var(--os-radius-card); box-shadow: 0 var(--os-size-4) var(--os-size-16) var(--os-shadow-strong); }
+.os-status-error-detail > * { margin: 0; white-space: pre-wrap; }

@@ -30,6 +30,7 @@ export function MenuAvailability() {
   if (!entries.length) return null;
   return <details className="os-menu-availability">
     <summary>{t("u04-unavailable-actions", { count: entries.length })}</summary>
-    <ul>{entries.map(item => <li key={item.id}>{item.label}: {item.disabledReason}</li>)}</ul>
+    {/* Gründe aus dem Export-Katalog nennen ihren Eintrag bereits selbst. */}
+    <ul>{entries.map(item => <li key={item.id}>{item.disabledReason!.startsWith(`${item.label}:`) ? item.disabledReason : `${item.label}: ${item.disabledReason}`}</li>)}</ul>
   </details>;
 }

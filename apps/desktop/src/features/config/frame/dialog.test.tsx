@@ -7,9 +7,12 @@ import { createClient, setClient } from "../../../ipc/client";
 import type { CrawlStatus } from "../../../ipc/gen/CrawlStatus";
 import { MockCore } from "../../../ipc/transport/mock";
 import { useSession } from "../../../state/session";
-import { runAction } from "../../../ui/actions";
-import { ConfigHost } from "./ConfigHost";
-import { closeConfig, openConfig } from "./store";
+import { hasAction, runAction } from "../../../ui/actions";
+import { mainMenuContributions } from "../../../ui/menu/contributions/main";
+import { CONFIG_SECTION_ANCHORS, ConfigHost } from "./ConfigHost";
+import { pageForAnchor } from "./model";
+import { resolvePages } from "./registry";
+import { closeConfig, openConfig, useConfigDialog } from "./store";
 import { installConfigCore, withConfig, type FakeConfigCore } from "./testing";
 import type { ConfigJson } from "./model";
 
@@ -193,6 +196,34 @@ describe("Aktionen und Menü", () => {
     const { allMenuContributions } = await import("../../../ui/menu/registry");
     const items = allMenuContributions().filter((c) => c.menu === "config").flatMap((c) => c.items.map((i) => i.action));
     expect(items).toEqual(expect.arrayContaining(["config.spider", "config.profiles", "config.diff"]));
+  });
+
+  // spec: UI-002
+  // spec: UI-016
+  it("jeder Eintrag des Menüs „Konfiguration“ hat eine Aktion und öffnet den Dialog auf seiner Seite", async () => {
+    const menu = mainMenuContributions({ recent: [], mode: "spider", mcpRunning: false, mcpAutostart: false })
+      .filter((c) => c.menu === "config").flatMap((c) => c.items).flatMap((i) => [i, ...(i.items ?? [])])
+      .map((i) => i.action).filter((id): id is string => !!id && id.startsWith("config."));
+    expect(menu).toEqual(expect.arrayContaining(["config.content", "config.robots", "config.includeExclude", "config.api", "config.analysis", "config.search", "config.js"]));
+    for (const id of menu) expect(hasAction(id), id).toBe(true);
+    const pages = resolvePages().map((p) => ({ id: p.id, anchors: [...p.anchors, ...p.fields.map((f) => f.path)] }));
+    const expected: Record<string, string> = {
+      "config.content": "spider-presets", "config.robots": "robots", "config.rewrite": "rewrite", "config.includeExclude": "include-exclude",
+      "config.speed": "speed", "config.userAgent": "user-agent", "config.headers": "headers", "config.api": "api", "config.segments": "segments",
+      "config.analysis": "analysis", "config.search": "custom-search", "config.extraction": "custom-extraction", "config.js": "custom-js",
+    };
+    expect(Object.keys(CONFIG_SECTION_ANCHORS).sort()).toEqual(Object.keys(expected).sort());
+    for (const [id, page] of Object.entries(expected)) {
+      act(() => closeConfig());
+      act(() => { runAction(id); });
+      const { open: isOpen, anchor } = useConfigDialog.getState();
+      expect(isOpen, id).toBe(true);
+      expect(pageForAnchor(pages, anchor!)?.id, id).toBe(page);
+    }
+    act(() => closeConfig());
+    act(() => { runAction("config.speed"); });
+    const dialog = await screen.findByRole("dialog", { name: "Crawl configuration" });
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Speed" })).toHaveAttribute("aria-current", "page"));
   });
 });
 

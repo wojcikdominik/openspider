@@ -60,7 +60,7 @@ export function Statusbar() {
     {openError && <div role="alert" data-testid="crawl-open-error">
       <span data-testid="crawl-open-error-text">{openErrorText(t, openError.args)}</span>
       {/* M2-ui-concept 2.6: the technical (English) detail is never part of the sentence; it stays in the details. */}
-      <details><summary>{t("notify-details")}</summary>{typeof openError.args.detail === "string" && <p>{openError.args.detail}</p>}<pre>{JSON.stringify(openError.args)}</pre></details>
+      <details><summary>{t("notify-details")}</summary><div className="os-status-error-detail" data-testid="crawl-open-error-detail">{typeof openError.args.detail === "string" && <p>{openError.args.detail}</p>}<pre>{JSON.stringify(openError.args)}</pre></div></details>
     </div>}
     <div className="os-status-scroll" role="group" aria-label={t("status-details")} tabIndex={0}>
     <span>{t("status-mode", { mode: t(`header-${comparing ? "compare" : c?.mode ?? chosenMode}`) })}</span>
