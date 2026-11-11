@@ -2089,6 +2089,7 @@ Diese Punkte sind in der öffentlichen Doku nicht eindeutig. Sie werden per Blac
 - **Priorität:** P1
 - **Beschreibung:**  Crawl-delay beachten – `robots.respect_crawl_delay` (OS-Default aus, Paritätsprofil aus; **Nutzerentscheidung 28.10.2026, K2-76:** bis dahin OS-Default an); nennt die robots.txt des Hosts für den wirksamen robots-UA `Crawl-delay: n` (Dezimal, gekappt auf 0 … 60 s, Kappung als Ereignis), liegen zwischen zwei Anfragebeginnen an denselben Host:Port ≥ n s; gilt zusätzlich zu `max_urls_per_sec`/`max_per_host` (das strengere gewinnt); Hinweis „Crawl-delay: n s (angewandt)“ bzw. „(nicht angewandt)“; Akzeptanz mit simulierter Uhr. **(OS-Festlegung K2-76)** Nennt die robots.txt eines gecrawlten Hosts einen Crawl-delay, zeigt die Desktop-App das während des Crawls zusätzlich in der Statusleiste (UI-013): nicht angewandt als Hinweis „Crawl-delay n s in robots.txt – nicht angewandt“ mit Verweis auf die Option, angewandt als Grund der Begrenzung der Crawl-Rate.
 - **Testfixture:** lokale Host-Antworten mit simulierter Uhr.
+- **Anzeige (Nachtrag 11.11.2026, Fehlerbehebung rc.1):** Die Statusleiste (UI-013) zeigt jeden Crawl-delay-Hinweis mit gleichem Wortlaut (gleiche Ursache, gleiche Sekundenzahl) genau einmal, auch wenn er für mehrere Hosts gilt; die betroffenen Hosts stehen im Tooltip des Hinweises. `http` und `https` desselben Hosts zählen dabei als ein Host.
 
 ### CRAWL-146  adaptive Drosselung je Host
 - **Priorität:** P1
