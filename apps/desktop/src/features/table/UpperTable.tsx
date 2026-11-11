@@ -135,10 +135,15 @@ function RegularUpperTable() {
   useEffect(() => {
     void columnState.load(tabs.active).catch(fail);
   }, [tabs.active, crawlId]);
+  // UI-142: a new crawl releases the view; the same view is opened again while its rows stay on screen.
+  const openedView = useRef<{ crawlId?: string; key: string }>(undefined);
   useEffect(() => {
     if (!tabs.loaded) return;
     openedFor.current = !query.search && !query.rules && !segments.filter ? `${crawlId ?? ""}|${tabs.active}|${query.filter}` : null;
-    void controller.open(tabs.active, query);
+    const key = JSON.stringify([tabs.active, query.filter, query.search, query.sort, query.rules ?? null, segmentKey]);
+    const keepRows = openedView.current !== undefined && openedView.current.key === key && openedView.current.crawlId !== crawlId;
+    openedView.current = { crawlId, key };
+    void controller.open(tabs.active, query, { keepRows });
     setText(query.search);
     if (query.rules) setText(query.rules.text);
   }, [controller, tabs.loaded, tabs.active, query.filter, query.search, JSON.stringify(query.sort), JSON.stringify(query.rules ?? null), crawlId, segmentKey]);

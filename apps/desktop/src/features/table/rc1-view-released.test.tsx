@@ -18,7 +18,7 @@ import { setLanguage } from "../../i18n";
 import { flushUiState } from "../../state/uistate";
 import fixtureTick from "../../ipc/__fixtures__/Tick.json";
 import { UpperTable } from "./UpperTable";
-import { STALE_RECOVERY_MS } from "./controller";
+import { REPLACE_ATTEMPTS, REPLACE_BACKOFF_MS, REPLACE_PAUSE_MS, STALE_RECOVERY_MS } from "./controller";
 import { fixtureTabs, tableFixture } from "./fixtures/core";
 
 const capture = vi.hoisted(() => ({ grid: undefined as DataGridProps | undefined }));
@@ -108,3 +108,36 @@ it("a view that stays Stale without a newer version (outdated session) is replac
   expect(capture.grid!.source.rowKey(0)).toBe(1);
   expect(screen.queryByRole("alert")).toBeNull();
 });
+
+// spec: UI-142
+it("replacements that are released themselves are retried in bounded rounds; the old rows stay until one delivers rows", async () => {
+  render(<UpperTable />);
+  await waitFor(() => expect(capture.grid?.source.rowKey(0)).toBe(1));
+  const first = capture.grid!.source;
+  const opens = () => fx.core.calls.filter(c => c.cmd === "view.open").length;
+  const before = opens();
+  // The core releases every view right after opening it (e.g. repeated clearing).
+  let releasing = true;
+  const open = fx.core.handlers.get("view.open")!;
+  fx.core.handlers.set("view.open", async (args, ctx) => {
+    const handle = await open(args, ctx) as { viewId: string };
+    if (releasing) released.add(handle.viewId);
+    return handle;
+  });
+  released.add(first.viewId);
+  act(() => eventBus.emit({ kind: "tick", tick: tick(13, running("crawl-a", 4), [{ viewId: first.viewId, version: 2, total: 3 }]) }));
+  await waitFor(() => expect(opens()).toBe(before + REPLACE_ATTEMPTS), { timeout: REPLACE_BACKOFF_MS * REPLACE_ATTEMPTS * REPLACE_ATTEMPTS + 2000 });
+  // One round only: further failures of the old view (here a new tick) do not open views until the pause is over.
+  act(() => eventBus.emit({ kind: "tick", tick: tick(14, running("crawl-a", 5), [{ viewId: first.viewId, version: 3, total: 3 }]) }));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+  expect(opens()).toBe(before + REPLACE_ATTEMPTS);
+  expect(capture.grid!.source).toBe(first);
+  expect(first.rowKey(0)).toBe(1);
+  expect(banner()).toBeNull();
+  // The core keeps the next view: the following round replaces the old one.
+  releasing = false;
+  await waitFor(() => expect(capture.grid!.source.viewId).not.toBe(first.viewId), { timeout: REPLACE_PAUSE_MS + 2000 });
+  expect(capture.grid!.source.rowKey(0)).toBe(1);
+  expect(opens()).toBe(before + REPLACE_ATTEMPTS + 1);
+  expect(screen.queryByRole("alert")).toBeNull();
+}, REPLACE_PAUSE_MS + 10_000);
