@@ -216,6 +216,7 @@ Jede Funktion unten nennt den Fixture-Namen und die Routen, die das Verhalten pr
 - [CRAWL-148 Relative Sitemap-Angaben bei manueller Eingabe](#crawl-148-relative-sitemap-angaben-bei-manueller-eingabe) · P1
 - [CRAWL-149 Host-Pause bei Nichtantwort](#crawl-149-host-pause-bei-nichtantwort) · P1
 - [CRAWL-150 Rendering: Warten auf Netzwerkruhe](#crawl-150-rendering-warten-auf-netzwerkruhe) · P1
+- [CRAWL-151 Getrennte Verbindungen pro Host](#crawl-151-getrennte-verbindungen-pro-host) · P1
 
 **Q.** [Offene Punkte / zu verifizieren](#q-offene-punkte--zu-verifizieren)
 
@@ -1600,7 +1601,7 @@ Gemeinsame Regeln: Umschreibungen gelten ausschließlich für URLs, die **währe
 ### CRAWL-112 Parallele Threads
 - **Priorität:** P0
 - **Beschreibung:** Anzahl gleichzeitig laufender Abrufe.
-- **Eingaben/Konfiguration:** Konfiguration › Geschwindigkeit › „Max. Threads“ (Standard: 5; Referenz-Default; Bereich 1–200, OS-Grenze). Zusätzlich OS-Erweiterung „Max. gleichzeitige Verbindungen pro Host“ (Standard: = Threads).
+- **Eingaben/Konfiguration:** Konfiguration › Geschwindigkeit › „Max. Threads“ (Standard: 5; Referenz-Default; Bereich 1–200, OS-Grenze). Zusätzlich OS-Erweiterung „Max. gleichzeitige Verbindungen pro Host“ (Standard: = Threads). Diese Grenze zählt gleichzeitige Anfragen an einen Host; wie viele TCP-Verbindungen dafür geöffnet werden, regelt CRAWL-151 (Nachtrag 11.11.2026).
 - **Akzeptanzkriterien:**
   - [ ] Threads 1: Fixture-Server sieht nie mehr als 1 gleichzeitige Anfrage.
   - [ ] Threads 5: höchstens 5 gleichzeitige Anfragen, bei ausreichend Arbeit mindestens 4 im Mittel (Auslastungstest mit 200 ms Verzögerung je Seite, 100 Seiten: Dauer ≤ 100 × 0,2 / 5 × 1,3 s).
@@ -2180,3 +2181,31 @@ Die folgenden Einträge sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerent
   - [ ] `wait_strategy = fixed` verhält sich byte-gleich wie vor diesem Eintrag (Regressionstest CRAWL-080); die neuen Spalten zeigen dann `Fixed` und die feste Wartezeit.
 - **Testfixture:** `crawl-js` (CRAWL-077) mit neuen Seiten `chain3.html`, `polling.html`, `websocket.html`, `clock.html`, `static.html`.
 - **Entscheidung (Nutzer 09.11.2026):** `network_idle` bleibt vorerst Option, Standard bleibt `fixed` bis ein Paritäts- und Laufzeitvergleich auf realen Websites vorliegt (gerenderte Inhalte gleich oder besser, Gesamtdauer kürzer).
+
+### CRAWL-151 Getrennte Verbindungen pro Host
+- **Priorität:** P1
+- **Meilenstein:** 1.0 (rc.1; Nutzerentscheidung 11.11.2026)
+- **Beschreibung:** Bisher teilen sich bei HTTP/2 alle Threads eine einzige TCP-Verbindung je Host. Geht auf der Strecke ein Paket verloren, stehen bis zur Neuübertragung alle Anfragen dieser Verbindung, und das Sendefenster des Servers schrumpft für alle gemeinsam. Gemessen am 11.11.2026 (rund 3 % Paketverlust, 29 ms Laufzeit): eine geteilte Verbindung rund 0,8 URLs/s bei 300-KB-Dateien, getrennte Verbindungen rund fünfmal so schnell. OpenSpider öffnet deshalb je Host mehrere Verbindungen und verteilt die Anfragen darauf. Die Zahl der gleichzeitigen Anfragen (CRAWL-112), die URL-Rate (CRAWL-113) und alle Tempo-Regeln (CRAWL-145 bis CRAWL-147, CRAWL-149) bleiben unverändert; der Server erhält nicht mehr Anfragen als bisher.
+- **Eingaben/Konfiguration:** Konfiguration › Geschwindigkeit › „Verbindungen pro Host“ – `speed.connections_per_host` ∈ {`auto` (Standard), 1–6}.
+  - `auto`: so viele Verbindungen wie Threads, höchstens 6 (die Zahl, die Browser unter HTTP/1.1 je Host öffnen).
+  - Fester Wert n: höchstens n Verbindungen je Host. Bei 1 gilt das bisherige Verhalten unter HTTP/2.
+  - Die Grenze gilt je Host (Schema, Host, Port) und für HTTP/1.1 und HTTP/2 gleich. Unter HTTP/1.1 trägt eine Verbindung eine Anfrage zur Zeit; sind alle Verbindungen belegt, wartet die Anfrage, statt eine weitere zu öffnen.
+  - Änderbar während der Pause; wirkt auf danach gestartete Anfragen.
+- **Verhalten:**
+  1. Verbindungen entstehen nach Bedarf: Eine weitere wird erst geöffnet, wenn auf allen bestehenden Verbindungen des Hosts mindestens eine Anfrage läuft und die Grenze nicht erreicht ist.
+  2. Unter HTTP/2 geht eine neue Anfrage an die Verbindung mit den wenigsten laufenden Anfragen.
+  3. Lehnt der Server eine zusätzliche Verbindung ab (Verbindungsfehler, TLS-Fehler, HTTP/2 `GOAWAY` oder `REFUSED_STREAM` direkt nach dem Aufbau), während mindestens eine Verbindung zum Host besteht, wird die Anfrage ohne Fehlerzeile über eine bestehende Verbindung gestellt, und der Host bleibt für den Rest des Crawls bei der Zahl der bestehenden Verbindungen. Das zählt nicht als Wiederholung (CRAWL-096) und nicht für die Host-Pause (CRAWL-149).
+  4. Leerlauf-Verbindungen werden wie bisher wiederverwendet und nach dem bestehenden Leerlauf-Timeout geschlossen.
+  5. Das JavaScript-Rendering (CRAWL-078) ist nicht betroffen; dort verwaltet der Browser seine Verbindungen selbst.
+- **Ausgabe:** Keine neuen Spalten. Die Debug-Info nennt je Crawl den eingestellten Wert.
+- **Akzeptanzkriterien:**
+  - [ ] HTTP/2, Threads 5, `auto`, 100 Seiten mit `delay_ms=200`: der Fixture-Server sieht 5 TCP-Verbindungen und nie mehr als 5 gleichzeitige Anfragen.
+  - [ ] HTTP/2, Threads 20, `auto`: höchstens 6 TCP-Verbindungen; die gleichzeitigen Anfragen verteilen sich so, dass keine Verbindung mehr als 4 trägt.
+  - [ ] `speed.connections_per_host = 1`, HTTP/2, Threads 5: genau 1 TCP-Verbindung.
+  - [ ] HTTP/1.1, Threads 10, Wert 2: nie mehr als 2 TCP-Verbindungen und nie mehr als 2 gleichzeitige Anfragen an den Host.
+  - [ ] Threads 1: höchstens 2 TCP-Verbindungen für 20 Seiten (Kriterium aus CRAWL-011 gilt weiter).
+  - [ ] Zwei Hosts im selben Crawl: die Grenze gilt je Host getrennt.
+  - [ ] Server, der nur eine Verbindung je Client-Adresse annimmt (`max_connections_per_client = 1`): der Crawl läuft vollständig durch, keine URL erhält dadurch Statuscode 0, und nach der ersten Ablehnung folgt kein weiterer Verbindungsversuch über die eine Verbindung hinaus.
+  - [ ] Ergebnisgleichheit: Derselbe Crawl mit Wert 1 und mit `auto` liefert dieselben URLs mit denselben Statuscodes und Inhalten.
+  - [ ] CRAWL-113: Bei 2 URLs/s und `auto` bleibt die Rate am Fixture-Server bei höchstens 2 Anfragen je Sekunde.
+- **Testfixture:** `crawl-http2` (h2 + http/1.1) und `crawl-site-100` mit `delay_ms=200`; der Fixture-Server zählt TCP-Verbindungen und gleichzeitige Anfragen je Verbindung und kennt `max_connections_per_client`.
