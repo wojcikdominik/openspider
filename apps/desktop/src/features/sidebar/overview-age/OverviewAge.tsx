@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useT } from "../../../i18n";
 
-/** Shown from this age on (UI-018: the throttled count of a running crawl is at least 2 s apart). */
+/** The age is named from here on; below it the line reads "Up to date" (UI-018: the throttled count of a running crawl is at least 2 s apart). */
 export const SHOWN_FROM_MS = 2_000;
 
 /**
@@ -9,7 +9,8 @@ export const SHOWN_FROM_MS = 2_000;
  * Overview names the age of its state ("As of 12 s ago"). `ageMs` is the age at the answer, `receivedAt` its
  * arrival (ms since epoch); the label counts on every second until the next answer. The core omits `ageMs` for
  * exact answers, so a throttled answer keeps its age after a pause or the end until the exact count replaces it.
- * Hidden for exact answers and below {@link SHOWN_FROM_MS}.
+ * Hidden for exact answers. Below {@link SHOWN_FROM_MS} the line stays in place and reads "Up to date", so the
+ * content below it does not move with every fresh count.
  */
 export function OverviewAge({ ageMs, receivedAt }: { ageMs?: number | null; receivedAt: number }) {
   const t = useT();
@@ -23,6 +24,6 @@ export function OverviewAge({ ageMs, receivedAt }: { ageMs?: number | null; rece
   }, [active, receivedAt]);
   if (!active) return null;
   const age = ageMs + Math.max(0, now - receivedAt);
-  if (age < SHOWN_FROM_MS) return null;
-  return <p className="os-hint os-overview-age" data-overview-age={Math.round(age / 1_000)}>{t("n27-overview-age", { seconds: Math.round(age / 1_000) })}</p>;
+  const seconds = Math.round(age / 1_000);
+  return <p className="os-hint os-overview-age" data-overview-age={seconds}>{age < SHOWN_FROM_MS ? t("n27-overview-age-current") : t("n27-overview-age", { seconds })}</p>;
 }
