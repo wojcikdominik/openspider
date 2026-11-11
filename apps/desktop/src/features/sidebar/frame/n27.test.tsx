@@ -75,7 +75,7 @@ it("Issues tab keeps its list visible while a new data version is counted", asyn
 });
 
 // spec: UI-018
-it("Overview names the age of a running crawl's shared count from 2 s on, and never for exact answers", async () => {
+it("Overview names the age of a running crawl's shared count from 2 s on, keeps the line below that, and never shows it for exact answers", async () => {
   let ageMs: number | undefined = 12_000;
   core.handlers.set("sidebar.overview", () => ({ ...fixture.overview, ...(ageMs === undefined ? {} : { ageMs }) }));
   render(<Providers><SidebarFrame /></Providers>);
@@ -84,11 +84,15 @@ it("Overview names the age of a running crawl's shared count from 2 s on, and ne
   ageMs = undefined;
   newVersion(70);
   await waitFor(() => expect(screen.queryByText(/^As of/)).toBeNull(), { timeout: 3_000 });
-  // A fresh count of the running crawl (below 2 s): nothing shown.
-  ageMs = 1_500;
+  expect(screen.queryByText("Up to date")).toBeNull();
+  // A fresh count of the running crawl (below 2 s): the line stays in place and reads "Up to date".
+  ageMs = 0;
   newVersion(71);
-  await waitFor(() => expect(core.calls.filter(c => c.cmd === "sidebar.overview").length).toBeGreaterThanOrEqual(3), { timeout: 3_000 });
+  expect(await screen.findByText("Up to date", {}, { timeout: 3_000 })).toBeVisible();
   expect(screen.queryByText(/^As of/)).toBeNull();
+  // The same line names the age once it reaches 2 s.
+  expect(await screen.findByText("As of 2 s ago", {}, { timeout: 5_000 })).toBeVisible();
+  expect(screen.queryByText("Up to date")).toBeNull();
 });
 
 // spec: UI-018
@@ -113,4 +117,12 @@ it("names the age in German", async () => {
   render(<Providers><SidebarFrame /></Providers>);
   // Windows-Runner rendern den ersten Aufbau teils langsamer als die Standard-Wartezeit von 1 s.
   expect(await screen.findByText("Stand vor 12 s", {}, { timeout: 5_000 })).toBeVisible();
+});
+
+// spec: UI-018
+it("names a fresh state in German", async () => {
+  await setLanguage("de");
+  core.handlers.set("sidebar.overview", () => ({ ...fixture.overview, ageMs: 0 }));
+  render(<Providers><SidebarFrame /></Providers>);
+  expect(await screen.findByText("Stand aktuell", {}, { timeout: 5_000 })).toBeVisible();
 });
