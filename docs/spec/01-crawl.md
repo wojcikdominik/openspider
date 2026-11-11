@@ -2190,6 +2190,8 @@ Die folgenden Einträge sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerent
   - `auto`: so viele Verbindungen wie Threads, höchstens 6 (die Zahl, die Browser unter HTTP/1.1 je Host öffnen).
   - Fester Wert n: höchstens n Verbindungen je Host. Bei 1 gilt das bisherige Verhalten unter HTTP/2.
   - Die Grenze gilt je Host (Schema, Host, Port) und für HTTP/1.1 und HTTP/2 gleich. Unter HTTP/1.1 trägt eine Verbindung eine Anfrage zur Zeit; sind alle Verbindungen belegt, wartet die Anfrage, statt eine weitere zu öffnen.
+  - Folge unter HTTP/1.1 (Nutzerentscheidung 11.11.2026): Bei mehr Threads als Verbindungen laufen an einem Host höchstens so viele Anfragen gleichzeitig wie Verbindungen, bei `auto` also höchstens 6. Das ist die einzige Ausnahme vom Satz, dass die Zahl der gleichzeitigen Anfragen (CRAWL-112) unverändert bleibt; über mehrere Hosts hinweg gilt die Thread-Zahl weiter.
+  - Der Abruf der `robots.txt` läuft über dieselben Verbindungen und zählt zur Grenze.
   - Änderbar während der Pause; wirkt auf danach gestartete Anfragen.
 - **Verhalten:**
   1. Verbindungen entstehen nach Bedarf: Eine weitere wird erst geöffnet, wenn auf allen bestehenden Verbindungen des Hosts mindestens eine Anfrage läuft und die Grenze nicht erreicht ist.
