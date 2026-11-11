@@ -444,13 +444,33 @@ it("Statuszeile zeigt Deaktivierungsgründe für nicht verfügbare Aktionen", as
   expect(screen.getByText(/Unavailable menu actions/)).toBeVisible();
   fireEvent.click(screen.getByText(/Unavailable menu actions/));
   expect(screen.queryByText("Check for updates: Available from M3.")).not.toBeInTheDocument();
-  const entry = screen.getByText("Spider configuration: This action requires an idle crawl with data or an available service.");
+  // Without a registered action no crawl state helps: the reason names the missing feature, not the crawl.
+  const entry = screen.getByText("Spider configuration: This feature is not available yet.");
   expect(entry).toBeVisible();
+  expect(screen.queryByText("Spider configuration: This action requires an idle crawl with data or an available service.")).toBeNull();
   let off!: () => void;
   act(() => { off = registerAction("config.spider", () => {}); });
-  expect(screen.queryByText("Spider configuration: This action requires an idle crawl with data or an available service.")).toBeNull();
+  expect(screen.queryByText("Spider configuration: This feature is not available yet.")).toBeNull();
   act(() => off());
-  expect(screen.getByText("Spider configuration: This action requires an idle crawl with data or an available service.")).toBeVisible();
+  expect(screen.getByText("Spider configuration: This feature is not available yet.")).toBeVisible();
+});
+
+// spec: UI-002
+it("Statuszeile nennt den Eintrag je Zeile nur einmal und den Crawl-Grund nur bei registrierter Aktion", async () => {
+  dispose = installMainMenus();
+  const offAction = registerAction("n29.probe", () => {});
+  const off = registerMenuContributions("n29/probe", [{ menu: "file", group: "n29", order: 99, items: [
+    { id: "n29.named", label: "Probe report", enabled: () => false, disabledReasonKey: "Probe report: needs rendering" },
+    { id: "n29.probe", action: "n29.probe", label: "Probe action", enabled: () => false, disabledReasonKey: "u04-reason-unavailable" },
+  ] }]);
+  const { MenuAvailability } = await import("./MenuAvailability");
+  try {
+    render(<MenuAvailability />);
+    fireEvent.click(screen.getByText(/Unavailable menu actions/));
+    expect(await screen.findByText("Probe report: needs rendering")).toBeVisible();
+    expect(screen.queryByText(/Probe report: Probe report/)).toBeNull();
+    expect(screen.getByText("Probe action: This action requires an idle crawl with data or an available service.")).toBeVisible();
+  } finally { off(); offAction(); }
 });
 
 // spec: CRAWL-127 [M2]

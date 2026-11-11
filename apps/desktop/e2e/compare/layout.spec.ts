@@ -122,5 +122,17 @@ test("comparison fills the table region, shows the comparison columns, scrolls v
     await expect(page.getByTestId("crawl-open-error-text")).toHaveText("The file was not found: /os-b4-cmpui-missing/gone.ospider");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByText(/crawl-open-failed/)).toHaveCount(0);
+    // The technical details open as a readable card above the status bar, fully inside the window.
+    await page.getByTestId("crawl-open-error").locator("summary").click();
+    const detail = page.getByTestId("crawl-open-error-detail");
+    await expect(detail).toBeVisible();
+    const card = (await detail.boundingBox())!, bar = (await page.locator(".os-app-status").boundingBox())!, view = page.viewportSize()!;
+    expect(card.height).toBeGreaterThanOrEqual(24);
+    expect(card.y).toBeGreaterThanOrEqual(0);
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(view.width);
+    expect(card.y + card.height).toBeLessThanOrEqual(bar.y + 1);
+    const text = (await detail.locator("pre").boundingBox())!;
+    expect(text.y + text.height).toBeLessThanOrEqual(card.y + card.height);
   } finally { await bridge?.stop(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
