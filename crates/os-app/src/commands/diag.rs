@@ -130,6 +130,16 @@ fn debug_info<'a>(app: &'a App, ctx: CallCtx, _: Value) -> BoxFuture<'a, CmdResu
                 &serde_json::to_value(&settings.storage).unwrap_or(Value::Null),
             )),
         });
+        // CRAWL-151: eingestellter Wert des Crawls im Fenster (`auto` oder 1–6).
+        if let Some(s) = &session {
+            extra.push(NameValue {
+                name: "connectionsPerHost".into(),
+                value: Some(
+                    serde_json::to_value(s.config.speed.connections_per_host)
+                        .unwrap_or(Value::Null),
+                ),
+            });
+        }
         let sys = sysinfo::System::new_all();
         let rss = sysinfo::get_current_pid()
             .ok()
