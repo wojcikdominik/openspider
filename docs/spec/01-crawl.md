@@ -2201,13 +2201,13 @@ Die folgenden Einträge sind **OpenSpider-Festlegungen (OS-Festlegung, Nutzerent
   5. Das JavaScript-Rendering (CRAWL-078) ist nicht betroffen; dort verwaltet der Browser seine Verbindungen selbst.
 - **Ausgabe:** Keine neuen Spalten. Die Debug-Info nennt je Crawl den eingestellten Wert.
 - **Akzeptanzkriterien:**
-  - [ ] HTTP/2, Threads 5, `auto`, 100 Seiten mit `delay_ms=200`: der Fixture-Server sieht 5 TCP-Verbindungen und nie mehr als 5 gleichzeitige Anfragen.
-  - [ ] HTTP/2, Threads 20, `auto`: höchstens 6 TCP-Verbindungen; die gleichzeitigen Anfragen verteilen sich so, dass keine Verbindung mehr als 4 trägt.
-  - [ ] `speed.connections_per_host = 1`, HTTP/2, Threads 5: genau 1 TCP-Verbindung.
-  - [ ] HTTP/1.1, Threads 10, Wert 2: nie mehr als 2 TCP-Verbindungen und nie mehr als 2 gleichzeitige Anfragen an den Host.
-  - [ ] Threads 1: höchstens 2 TCP-Verbindungen für 20 Seiten (Kriterium aus CRAWL-011 gilt weiter).
-  - [ ] Zwei Hosts im selben Crawl: die Grenze gilt je Host getrennt.
-  - [ ] Server, der nur eine Verbindung je Client-Adresse annimmt (`max_connections_per_client = 1`): der Crawl läuft vollständig durch, keine URL erhält dadurch Statuscode 0, und nach der ersten Ablehnung folgt kein weiterer Verbindungsversuch über die eine Verbindung hinaus.
-  - [ ] Ergebnisgleichheit: Derselbe Crawl mit Wert 1 und mit `auto` liefert dieselben URLs mit denselben Statuscodes und Inhalten.
-  - [ ] CRAWL-113: Bei 2 URLs/s und `auto` bleibt die Rate am Fixture-Server bei höchstens 2 Anfragen je Sekunde.
+  - [x] HTTP/2, Threads 5, `auto`, 100 Seiten mit `delay_ms=200`: der Fixture-Server sieht 5 TCP-Verbindungen und nie mehr als 5 gleichzeitige Anfragen.
+  - [x] HTTP/2, Threads 20, `auto`: höchstens 6 TCP-Verbindungen; die gleichzeitigen Anfragen verteilen sich so, dass keine Verbindung mehr als 4 trägt.
+  - [x] `speed.connections_per_host = 1`, HTTP/2, Threads 5: genau 1 TCP-Verbindung.
+  - [x] HTTP/1.1, Threads 10, Wert 2: nie mehr als 2 TCP-Verbindungen und nie mehr als 2 gleichzeitige Anfragen an den Host.
+  - [x] Threads 1: höchstens 2 TCP-Verbindungen für 20 Seiten (Kriterium aus CRAWL-011 gilt weiter).
+  - [x] Zwei Hosts im selben Crawl: die Grenze gilt je Host getrennt.
+  - [x] Server, der nur eine Verbindung je Client-Adresse annimmt (`max_connections_per_client = 1`): der Crawl läuft vollständig durch, keine URL erhält dadurch Statuscode 0, und nach der ersten Ablehnung folgt kein weiterer Verbindungsversuch über die eine Verbindung hinaus.
+  - [x] Ergebnisgleichheit: Derselbe Crawl mit Wert 1 und mit `auto` liefert dieselben URLs mit denselben Statuscodes und Inhalten.
+  - [x] CRAWL-113: Bei 2 URLs/s und `auto` bleibt die Rate am Fixture-Server bei höchstens 2 Anfragen je Sekunde.
 - **Testfixture:** `crawl-http2` (h2 + http/1.1) und `crawl-site-100` mit `delay_ms=200`; der Fixture-Server zählt TCP-Verbindungen und gleichzeitige Anfragen je Verbindung und kennt `max_connections_per_client`.
