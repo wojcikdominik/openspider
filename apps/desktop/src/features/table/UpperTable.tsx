@@ -5,6 +5,7 @@ import { ComparisonOverviewUnavailable, ComparisonTable } from "../compare/Compa
 import { useComparison } from "../compare/model";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { DataGrid, type GridController } from "../../grid/DataGrid";
+import type { ViewDataSource } from "../../data/ViewDataSource";
 import { copySelection } from "../../grid/copy";
 import { currentLanguage, useT } from "../../i18n";
 import { ChevronDown, Columns3, FolderTree, List, Upload } from "lucide-react";
@@ -157,7 +158,12 @@ function RegularUpperTable() {
     return color ? { background: color, text: segmentLabelColor(color) } : undefined;
   }, [segments.segments]);
   const setGrid = useCallback((value: GridController | null) => { grid.current = value; }, []);
+  // A new view (tab, query, crawl) or a focus request shows the focus row. A silent replacement of the same view
+  // (UI-142) is no such event: the selection keeps its rows and anchor, the table its position (UI-012, UI-018).
+  const focused = useRef<{ source?: ViewDataSource; request?: number }>({});
   useEffect(() => {
+    const previous = focused.current; focused.current = { source, request: tabs.focusRequest };
+    if (source && previous.source && source.continues(previous.source) && previous.request === tabs.focusRequest) return;
     const id = tabs.focusId ?? controller.selection.focus;
     if (id === undefined || !source) return;
     let live = true;

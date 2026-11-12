@@ -43,7 +43,16 @@ export class ViewDataSource {
   onError?: (error: unknown) => void;
   onStale?: () => void;
 
-  constructor(handle: ViewHandle, readonly api: ViewApi = view) {
+  /** Shared by a view and its silent replacements (UI-142): for the table they are the same view under a new handle. */
+  private readonly lineage: object;
+
+  /**
+   * `predecessor`: the released or outdated view this one replaces silently (UI-142). Focus row and the hold on the
+   * position carry over, so live updates keep anchoring on the row the user works on (UI-018).
+   */
+  constructor(handle: ViewHandle, readonly api: ViewApi = view, predecessor?: ViewDataSource) {
+    this.lineage = predecessor?.lineage ?? {};
+    if (predecessor) { this.focus = predecessor.focus; this.hold = predecessor.hold; }
     this.viewId = handle.viewId;
     this.version = handle.version;
     this.total = handle.total ?? 0;
@@ -58,6 +67,8 @@ export class ViewDataSource {
       this.blocks.set(0, { keys: initial.rowKeys, cells: initial.cells });
     }
   }
+  /** This source replaces `other` silently (or is it): selection, focus and position belong to both (UI-142, UI-018). */
+  continues(other: ViewDataSource): boolean { return this.lineage === other.lineage; }
   /** Visible row range last requested by the grid (inclusive); a replacement view starts there (UI-018). */
   get visible(): { first: number; last: number } { return { first: this.first, last: this.last }; }
   get cachedRows(): number { return [...this.blocks.values()].reduce((n, b) => n + b.keys.length, 0); }

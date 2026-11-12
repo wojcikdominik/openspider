@@ -105,8 +105,8 @@ export class TableController {
     this.opening = job();
     await this.opening;
   }
-  private adopt(handle: ViewHandle, query: TabQuery): ViewDataSource {
-    const source = new ViewDataSource(handle);
+  private adopt(handle: ViewHandle, query: TabQuery, predecessor?: ViewDataSource): ViewDataSource {
+    const source = new ViewDataSource(handle, view, predecessor);
     source.setSorted(query.sort.length > 0); source.onError = this.fail;
     source.onStale = () => this.stale(source);
     return source;
@@ -153,7 +153,8 @@ export class TableController {
           const opened = await view.open({ spec: tabSpec(target.tab, target.query), columns: columns.map(c => c.key) });
           const handle = await this.built(opened, generation);
           if (!handle || !live()) { await view.close({ viewId: opened.viewId }).catch(() => undefined); return; }
-          source = this.adopt(handle, target.query);
+          // A silent replacement continues the released view (selection, focus row, position); a new crawl does not (UI-018).
+          source = this.adopt(handle, target.query, opening ? undefined : released);
         } catch (error) {
           if (!live()) return;
           if (isViewGone(error)) continue;
