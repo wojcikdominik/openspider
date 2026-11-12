@@ -76,7 +76,13 @@ fn clear<'a>(app: &'a App, ctx: CallCtx, _: serde_json::Value) -> BoxFuture<'a, 
         let svc = app.ext::<SessionService>();
         let _guard = svc.mutation.lock().await;
         control::replace_allowed(app, &ctx).await?;
+        let key = app.sessions().current(&ctx.window).map(|s| s.key);
         session::close(app, &ctx.window, true);
+        // UI-003/OUT-228: a cleared crawl stays in the crawl management and must be deletable there (and by the file
+        // manager) right away. Closing its write connection is queued behind pending writes; wait for it here.
+        if key.is_some_and(|k| !app.read_pool().is_registered(&k)) {
+            app.write_queue().flush().await;
+        }
         Ok(serde_json::Value::Null)
     })
 }
