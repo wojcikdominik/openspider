@@ -6,6 +6,7 @@ import { ViewDataSource } from "../data/ViewDataSource";
 import { SelectionModel } from "../state/selection";
 import { resolveTokens } from "../ui/tokens/tokens";
 import type { ViewHandle } from "../ipc/gen/ViewHandle";
+import { IpcError, localError } from "../ipc/errors";
 import fixture from "./fixtures/fx-ui-basic.json";
 
 afterEach(() => vi.restoreAllMocks());
@@ -156,6 +157,47 @@ it("keeps a Shift range when the view version changes while the range is resolve
   expect(vi.mocked(props.onSelectionChange).mock.lastCall![0].focus).toBe(2);
   expect(props.onError).not.toHaveBeenCalled();
   mounted.unmount(); await source.dispose();
+});
+// spec: UI-012
+// spec: UI-018
+// spec: UI-142
+it("a Shift range on its way finishes against the silent replacement of its view (RC1-SEL)", async () => {
+  const { props, source } = setup();
+  let fail: (error: unknown) => void = () => undefined;
+  (source.api as { range?: unknown }).range = vi.fn(() => new Promise((_, reject) => { fail = reject; }));
+  const successor = new ViewDataSource({ ...(fixture as ViewHandle), viewId: "replacement" }, {
+    ...source.api,
+    range: vi.fn(async (args: { from: number; to: number }) => ({ viewId: "replacement", version: 1, fromRow: args.from - 1, toRow: args.to - 1, total: source.total, keys: [args.from, args.to], all: false, exportRequired: false })),
+  }, source);
+  const mounted = render(<DataGrid {...props} />);
+  await waitFor(() => expect(mounted.getAllByRole("gridcell").some(c => c.textContent === "12.345")).toBe(true));
+  fireEvent.keyDown(mounted.getByRole("grid"), { key: "ArrowDown", shiftKey: true });
+  await waitFor(() => expect(source.api.range).toHaveBeenCalledWith({ viewId: source.viewId, from: 1, to: 2 }));
+  // The table installs the replacement and closes the released view: its pending range answers NotFound.
+  mounted.rerender(<DataGrid {...props} source={successor} />);
+  await act(async () => { fail(new IpcError(localError("NotFound", "err-view-not-found"))); });
+  await waitFor(() => expect(vi.mocked(props.onSelectionChange).mock.lastCall?.[0].value).toEqual({ kind: "ids", ids: [1, 2] }));
+  expect(vi.mocked(props.onSelectionChange).mock.lastCall![0].focus).toBe(2);
+  expect(successor.api.range).toHaveBeenCalledWith({ viewId: "replacement", from: 1, to: 2 });
+  expect(props.onError).not.toHaveBeenCalled();
+  mounted.unmount(); await successor.dispose(); await source.dispose();
+});
+// spec: UI-012
+// spec: UI-142
+it("a different view ends a Shift range on its way", async () => {
+  const { props, source } = setup();
+  let answer: (value: unknown) => void = () => undefined;
+  (source.api as { range?: unknown }).range = vi.fn(() => new Promise(resolve => { answer = resolve; }));
+  const other = new ViewDataSource({ ...(fixture as ViewHandle), viewId: "other" }, source.api);
+  const mounted = render(<DataGrid {...props} />);
+  await waitFor(() => expect(mounted.getAllByRole("gridcell").some(c => c.textContent === "12.345")).toBe(true));
+  fireEvent.keyDown(mounted.getByRole("grid"), { key: "ArrowDown", shiftKey: true });
+  await waitFor(() => expect(source.api.range).toHaveBeenCalled());
+  mounted.rerender(<DataGrid {...props} source={other} />);
+  await act(async () => { answer({ viewId: source.viewId, version: 1, fromRow: 0, toRow: 1, total: source.total, keys: [1, 2], all: false, exportRequired: false }); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  expect(props.onSelectionChange).not.toHaveBeenCalledWith(expect.objectContaining({ value: { kind: "ids", ids: [1, 2] } }));
+  mounted.unmount(); await other.dispose(); await source.dispose();
 });
 // spec: UI-012
 it("Shift+arrow keys in quick succession continue from the keyboard row while earlier ranges are answered (F3)", async () => {
