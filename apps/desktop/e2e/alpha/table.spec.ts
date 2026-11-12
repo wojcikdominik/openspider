@@ -42,6 +42,12 @@ test("the Internal tab lists all 25 internal URLs with the default columns after
   await alpha.waitCompleted();
   await expect(alpha.page.getByRole("tab", { name: "Internal", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(alpha.table()).toContainText("Showing: 25 of 25");
+  // UI-018 tail mode: a table that showed its last row while the crawl was still running follows new rows and ends
+  // scrolled to the bottom (slow runners). A wheel gesture up returns to the first row before reading the window.
+  const area = await alpha.table().locator("canvas").boundingBox();
+  expect(area).not.toBeNull();
+  await alpha.page.mouse.move(area!.x + area!.width / 2, area!.y + area!.height / 2);
+  await alpha.page.mouse.wheel(0, -100_000);
   const rows = (await alpha.settledGrid()).rows;
   expect(rows.length).toBeGreaterThan(0);
   expect(addresses(rows)[0]).toBe(alpha.startUrl);
