@@ -354,7 +354,7 @@ impl TabView {
     /// Baut `spec` privat auf und veröffentlicht erst bei Erfolg (Doppelpuffer). Ein Abbruch über `token` gibt
     /// sofort `Cancelled` zurück; die bisherige View bleibt unverändert lesbar.
     pub async fn build(
-        &self,
+        self: &Arc<Self>,
         app: &App,
         session: SessionInfo,
         spec: ViewSpec,
@@ -431,6 +431,10 @@ impl TabView {
             meta: meta.clone(),
             state: state.clone(),
         };
+        // Publication and the check for changes queued during the build happen under the lock of `pending`, which
+        // `enqueue` holds while it decides whether to start maintenance: a change either finds the view published
+        // or is applied right after this publication (UI-018, UI-142).
+        let queued = lock(&self.pending);
         let mut st = lock(&self.state);
         st.snapshot = Some(snapshot);
         st.core = core;
@@ -446,6 +450,12 @@ impl TabView {
             state,
             cache_stamp,
         });
+        drop(st);
+        let catch_up = queued.is_some();
+        drop(queued);
+        if catch_up {
+            self.start_worker(app);
+        }
         Ok(built)
     }
 
@@ -638,18 +648,34 @@ impl TabView {
         });
     }
 
-    /// Merkt Änderungen vor und startet höchstens einen Pflege-Lauf je View.
+    /// Merkt Änderungen vor und startet höchstens einen Pflege-Lauf je View. Eine View, deren erster Aufbau noch läuft,
+    /// behält die Änderungen, bis der Aufbau veröffentlicht hat; [`TabView::build`] startet dann die Pflege. Der Aufbau
+    /// liest einen Stand, der vor diesen Änderungen liegen kann, und der Änderungsfeed meldet sie kein zweites Mal.
     fn enqueue(self: &Arc<Self>, app: &App, change: &ChangeSet) {
         {
             let mut pending = lock(&self.pending);
+            let building = lock(&self.state).published.is_none();
             let p = pending.get_or_insert_with(Pending::default);
             p.reset |= change.reset;
             if p.reset {
                 p.ids.clear();
             } else {
                 p.ids.extend_from_slice(&change.ids);
+                // A long first build collects like the feed (`CHANGE_LIMIT`): a larger set becomes one rebuild.
+                if building && p.ids.len() > crate::session::feed::CHANGE_LIMIT as usize {
+                    p.reset = true;
+                    p.ids.clear();
+                }
+            }
+            if building {
+                return;
             }
         }
+        self.start_worker(app);
+    }
+
+    /// Startet den Pflege-Lauf der View, falls keiner läuft.
+    fn start_worker(self: &Arc<Self>, app: &App) {
         if self.worker.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -793,7 +819,7 @@ pub async fn settle(app: &App, max: Duration) {
 
 fn on_change(app: &App, change: &ChangeSet) {
     for view in live(&shared(app)) {
-        if view.key == change.key && view.published().is_some() {
+        if view.key == change.key {
             view.enqueue(app, change);
         }
     }

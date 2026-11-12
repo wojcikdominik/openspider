@@ -493,3 +493,96 @@ async fn waiting_overview_ends_while_a_writer_keeps_changing_the_data_version() 
     let overview = answer.expect("the waiting request must end under a running feed");
     assert!(!overview["tabs"].as_array().unwrap().is_empty());
 }
+
+/// Adds an internal URL as the writer of a running crawl would (copy of an internal row, next `change_seq`).
+fn add_internal_url(path: &std::path::Path) -> (os_model::UrlId, u64) {
+    let file = CrawlFile::open(path, OpenMode::ReadWrite).unwrap();
+    let seq = os_store::queries::change_seq(file.conn()).unwrap() + 1;
+    let id: i64 = file
+        .conn()
+        .query_row("SELECT MAX(id) + 1 FROM urls", [], |r| r.get(0))
+        .unwrap();
+    file.conn()
+        .execute_batch(&format!(
+            "CREATE TEMP TABLE added AS SELECT * FROM urls WHERE is_internal = 1 ORDER BY id LIMIT 1;
+             UPDATE added SET id = {id}, url = 'https://site.test/added-{id}', address = 'https://site.test/added-{id}',
+                 change_seq = {seq};
+             INSERT INTO urls SELECT * FROM added;
+             DROP TABLE added;"
+        ))
+        .unwrap();
+    file.set_meta("change_seq", &seq.to_string()).unwrap();
+    (os_model::UrlId(id), seq)
+}
+
+// spec: UI-018
+// spec: UI-142
+// A view whose first build read the data before a URL was written, and which publishes only after the change feed
+// reported that URL, still shows it: the feed reports every change once, so the view must not drop a report that
+// arrives while it is being built (the table would otherwise stay one URL short for good, e.g. "18 of 20").
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_change_reported_while_the_first_build_runs_reaches_the_view() {
+    use futures_util::FutureExt;
+    let (_dir, app, _clock, path) = fixture();
+    open_crawl(&app, &path).await;
+    // The session loop delivers no change set of its own while the test holds the mutation lock: the only report is
+    // the one below.
+    let service = app.ext::<crate::session::SessionService>();
+    let _no_feed = service.mutation.lock().await;
+    let session = app
+        .sessions()
+        .current(&CallCtx::for_window("main").window)
+        .unwrap();
+    let spec: crate::dto::ViewSpec = serde_json::from_value(
+        json!({"kind":"tab","tab":"Internal","filter":"All","search":null,"sort":[]}),
+    )
+    .unwrap();
+    let tab = super::TabView::new(&app, "first-build".into(), session.key.clone());
+    let mut build = Box::pin(tab.build(
+        &app,
+        session.clone(),
+        spec,
+        vec!["Address".into()],
+        os_model::CancelToken::default(),
+    ));
+    // One poll hands the read to the pool; the build publishes only when it is polled again.
+    assert!(build.as_mut().now_or_never().is_none());
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let read_seq = loop {
+        let seq = tab
+            .session
+            .try_lock()
+            .ok()
+            .and_then(|s| s.as_ref().and_then(|s| s.built_seq()));
+        if let Some(seq) = seq {
+            break seq;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "build read did not finish"
+        );
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    };
+    assert!(tab.published().is_none(), "precondition: not yet published");
+    // The writer adds a URL after the build's read; the feed reports it before the build publishes.
+    let (added, seq) = add_internal_url(&path);
+    assert!(seq > read_seq);
+    super::on_change(
+        &app,
+        &crate::session::feed::ChangeSet {
+            key: session.key.clone(),
+            seq,
+            ids: vec![added],
+            reset: false,
+        },
+    );
+    let built = build.await.unwrap();
+    assert_eq!(built.version, read_seq);
+    super::settle(&app, Duration::from_secs(30)).await;
+    let published = tab.published().unwrap();
+    assert_eq!(
+        (published.version, published.total),
+        (seq, built.total + 1),
+        "the URL reported during the first build is in the view"
+    );
+}
