@@ -687,7 +687,8 @@ test.describe("Fehlende Crawl-Datei beim Öffnen aus „Zuletzt geöffnet“", (
     await expect.poll(async () => (await recentOf(page)).length, { message: "Eintrag in „Zuletzt geöffnet“" }).toBeGreaterThan(0);
     await page.getByRole("button", { name: "Löschen", exact: true }).click();
     await expect(page.getByTestId("crawl-phase")).not.toHaveText(/Fertig|Abgeschlossen/);
-    for (const suffix of ["", "-wal", "-shm", "-journal"]) rmSync(file + suffix, { force: true });
+    // Windows: Der Kern gibt die Datei nach dem Schließen des Crawls nicht im selben Augenblick frei (EBUSY), daher mit Wiederholung.
+    for (const suffix of ["", "-wal", "-shm", "-journal"]) rmSync(file + suffix, { force: true, maxRetries: 20, retryDelay: 100 });
     // Die native Menüleiste gibt es im Browser nicht; die Aktion ist dieselbe wie beim Klick auf den Menüeintrag.
     const entries = await recentOf(page);
     const entry = entries[0]!;

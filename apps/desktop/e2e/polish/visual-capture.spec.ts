@@ -12,6 +12,13 @@ async function readyTable(alpha: Alpha, theme: string) {
   await expect(alpha.page.locator('html')).toHaveAttribute('data-theme', theme);
   await alpha.settledGrid();
   await expect.poll(() => alpha.counter()).toMatch(/^Angezeigt: 25 von 25(?: · 1 markiert)?$/);
+  // UI-018 tail mode: a table that showed its last row while the crawl was still running ends scrolled to the bottom
+  // (slow runners). A wheel gesture up returns to the first row before the click at its position.
+  const area = await alpha.table().locator('canvas').boundingBox();
+  expect(area).not.toBeNull();
+  await alpha.page.mouse.move(area!.x + area!.width / 2, area!.y + area!.height / 2);
+  await alpha.page.mouse.wheel(0, -100_000);
+  await alpha.settledGrid();
   await alpha.table().locator('canvas').click({ position: { x: 60, y: 46 } });
   await expect(alpha.page.locator('.os-proptable').getByRole('cell', { name: alpha.startUrl, exact: true }).first()).toBeVisible();
 }
