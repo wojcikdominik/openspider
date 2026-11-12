@@ -158,10 +158,18 @@ jobs:
             projects: webkit
             browsers: webkit
             shard: 2/2
-          - name: windows-chromium
+          # Wie ui-e2e.yml in zwei Shards: ein Job lief ins 60-min-Limit (Lauf 43241134806).
+          - name: windows-chromium-1
             os: windows-latest
             projects: chromium
             browsers: chromium
+            shard: 1/2
+            perf: true
+          - name: windows-chromium-2
+            os: windows-latest
+            projects: chromium
+            browsers: chromium
+            shard: 2/2
           # Getrennt wie ui-e2e.yml: beide Engines nacheinander überschreiten 60 min (Lauf 41183672386).
           - name: linux-chromium
             os: ubuntu-latest
