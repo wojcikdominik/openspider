@@ -126,8 +126,18 @@ The macOS app is signed and notarized; on first launch Gatekeeper asks once, and
 signing certificate is new (see the user guide for what to check).
 Version 1.0 has not been released yet; beta users receive it as a normal update.
 
-**Packages.** A Homebrew tap (`wojcikdominik/homebrew-openspider`, cask `openspider@beta`) is planned and will follow
-shortly; it is not published yet. winget is planned from 1.0 on. Until then use the installers above.
+**Packages.** The Homebrew tap `wojcikdominik/homebrew-openspider` provides the cask `openspider@beta` for macOS.
+Homebrew loads casks from third-party taps only after you trust the tap explicitly:
+
+```sh
+brew tap wojcikdominik/openspider
+brew trust wojcikdominik/openspider
+brew install --cask wojcikdominik/openspider/openspider@beta
+```
+
+The cask installs the same signed DMG as the download. The app updates itself afterwards, so an upgrade through
+Homebrew needs `brew upgrade --cask --greedy wojcikdominik/openspider/openspider@beta`.
+winget is planned from 1.0 on; until then use the Windows installers above.
 
 **JavaScript rendering.** Chromium is not part of the installer. On request the app downloads a verified Chromium
 (Configuration → Spider → Rendering, about 200 MB, SHA-256 check); an installed Chrome works as well.
