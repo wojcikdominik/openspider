@@ -120,6 +120,12 @@ test('selection boxes and row ellipsis use the existing selection and context me
   await alpha.open(); await alpha.startFromHeader(); await alpha.waitCompleted();
   await alpha.settledGrid();
   const canvas = alpha.table().locator('canvas');
+  // UI-018 tail mode: a table that showed its last row while the crawl was still running follows new rows and ends
+  // scrolled to the bottom (slow runners). A wheel gesture up returns to the first row before the clicks at its position.
+  const area = await canvas.boundingBox();
+  expect(area).not.toBeNull();
+  await alpha.page.mouse.move(area!.x + area!.width / 2, area!.y + area!.height / 2);
+  await alpha.page.mouse.wheel(0, -100_000);
   const row = alpha.table().locator('.os-grid-a11y [aria-rowindex="2"]');
   await expect(row).toHaveAttribute('aria-selected', 'false');
   await canvas.click({ position: { x: 14, y: 46 } });
