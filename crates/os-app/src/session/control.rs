@@ -199,7 +199,7 @@ pub async fn start_with_fetcher<F: os_fetch::Fetch>(
         h,
         CrawlEvent::Started(key.clone()),
     );
-    remember_crawl(app, file.to_string_lossy().into_owned()).await;
+    remember_crawl(app, file.to_string_lossy().into_owned(), &key.0).await;
     Ok(CrawlRef {
         crawl_id: key.0,
         file: file.to_string_lossy().into_owned(),
@@ -300,6 +300,7 @@ pub async fn open(
         remember_crawl(
             app,
             super::recent::remembered_spelling(&requested, &path, &summary.file),
+            &summary.crawl_id,
         )
         .await;
         return Ok(summary);
@@ -346,6 +347,7 @@ pub async fn open(
     remember_crawl(
         app,
         super::recent::remembered_spelling(&requested, &path, &summary.file),
+        &summary.crawl_id,
     )
     .await;
     app.crawl_events().emit(app, CrawlEvent::Opened(key));
@@ -832,7 +834,7 @@ async fn start_apis(
         .emit(app, CrawlEvent::Started(key.clone()));
     app.crawl_events()
         .emit(app, CrawlEvent::Completed(key.clone()));
-    remember_crawl(app, path.to_string_lossy().into_owned()).await;
+    remember_crawl(app, path.to_string_lossy().into_owned(), &key.0).await;
     Ok(CrawlRef {
         crawl_id: key.0,
         file: path.to_string_lossy().into_owned(),
@@ -896,13 +898,15 @@ async fn stop_checkpoint(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
 }
 
 /// Persist every newly created/opened crawl, including starts outside the header.
-/// CRAWL-127: one entry per file, whatever spelling it was opened with (`session::recent`).
-async fn remember_crawl(app: &App, path: String) {
+/// CRAWL-127: one entry per file, whatever spelling it was opened with (`session::recent`). The crawl ID lets the UI
+/// match the entry to the crawl index independently of the path spelling.
+async fn remember_crawl(app: &App, path: String, crawl_id: &str) {
     let saved = app.clone();
+    let crawl_id = crawl_id.to_owned();
     let result = tokio::task::spawn_blocking(move || {
         saved
             .uistate()
-            .update(|ui| super::recent::remember(&mut ui.state, &path))
+            .update(|ui| super::recent::remember(&mut ui.state, &path, Some(&crawl_id)))
     })
     .await;
     let error = match result {

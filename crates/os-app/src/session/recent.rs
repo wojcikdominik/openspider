@@ -5,6 +5,11 @@
 //! kennt: unter mehreren Schreibweisen derselben Datei gewinnt die nicht aufgelöste (eingegebene oder konfigurierte)
 //! vor der vom Kern aufgelösten, und eine aufgelöste Windows-Form `\\?\…` wird nie angezeigt. Die Position des
 //! zusammengeführten Eintrags ist die des jüngsten (die Liste ist neueste zuerst).
+//!
+//! Kennt der Kern die Crawl-ID der Datei (Öffnen, Anlegen), speichert er sie als `crawlId` mit; die Oberfläche ordnet
+//! den Eintrag darüber einem Crawl im Index zu, unabhängig von der Pfadschreibweise. Beim Zusammenführen gilt die
+//! `crawlId` des jüngsten Eintrags (eine ersetzte Datei hat eine neue ID); ein Eintrag ohne ID erbt die eines älteren
+//! Eintrags derselben Datei. Einträge ohne `crawlId` (ältere Stände) bleiben gültig.
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -15,6 +20,8 @@ pub const MAX_RECENT: usize = 10;
 const MAX_SCANNED: usize = 4 * MAX_RECENT;
 /// Schlüssel der Liste im UI-Zustand.
 pub const RECENT_KEY: &str = "recentCrawls";
+/// Feld eines Eintrags mit der Crawl-ID der Datei, sofern bekannt.
+pub const CRAWL_ID_KEY: &str = "crawlId";
 
 /// Vergleichsschlüssel einer Pfadschreibweise: der aufgelöste Pfad. Fehlt die Datei, der aufgelöste Elternordner mit
 /// dem Dateinamen; fehlt auch er, der Pfad wie geschrieben. Schlägt nie fehl.
@@ -74,7 +81,8 @@ struct Group {
 
 /// Führt Einträge derselben Datei zusammen (neueste zuerst bleibt neueste zuerst, höchstens [`MAX_RECENT`]).
 /// Der zusammengeführte Eintrag steht an der Position des jüngsten; fehlende Felder (z. B. `label`) ergänzt ein
-/// älterer Eintrag derselben Datei. Einträge ohne Pfad entfallen; fehlende Dateien bleiben erhalten.
+/// älterer Eintrag derselben Datei (ein Feld mit `null` gilt als fehlend). Einträge ohne Pfad entfallen; fehlende
+/// Dateien bleiben erhalten.
 pub fn merge(entries: &[Value]) -> Vec<Value> {
     let mut groups: Vec<Group> = Vec::new();
     for entry in entries.iter().take(MAX_SCANNED) {
@@ -96,10 +104,10 @@ pub fn merge(entries: &[Value]) -> Vec<Value> {
                 group.user_spelling = true;
             }
             for (name, value) in object {
-                group
-                    .entry
-                    .entry(name.clone())
-                    .or_insert_with(|| value.clone());
+                let slot = group.entry.entry(name.clone()).or_insert(Value::Null);
+                if slot.is_null() {
+                    *slot = value.clone();
+                }
             }
             continue;
         }
@@ -133,12 +141,17 @@ pub fn merge_in_state(state: &mut Value) {
     }
 }
 
-/// Setzt `path` an die Spitze der Liste und führt zusammen.
-pub fn remember(state: &mut Value, path: &str) {
+/// Setzt `path` (mit der Crawl-ID der Datei, sofern bekannt) an die Spitze der Liste und führt zusammen.
+pub fn remember(state: &mut Value, path: &str, crawl_id: Option<&str>) {
     let Some(object) = state.as_object_mut() else {
         return;
     };
-    let mut list = vec![serde_json::json!({ "path": path })];
+    let mut entry = serde_json::Map::new();
+    entry.insert("path".into(), Value::String(path.to_owned()));
+    if let Some(id) = crawl_id.filter(|id| !id.is_empty()) {
+        entry.insert(CRAWL_ID_KEY.into(), Value::String(id.to_owned()));
+    }
+    let mut list = vec![Value::Object(entry)];
     if let Some(Value::Array(old)) = object.get(RECENT_KEY) {
         list.extend(old.iter().cloned());
     }

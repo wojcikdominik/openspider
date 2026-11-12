@@ -164,3 +164,88 @@ async fn recently_opened_never_shows_verbatim_windows_paths() {
     .await
     .expect("RC1-RECENT fixture exceeded its deadline");
 }
+
+// spec: CRAWL-127
+// The core remembers the crawl ID with the entry, so the UI can match it to the index whatever the path spelling.
+// Opening replaces a stale ID of an older entry of the same file (the newest entry wins).
+#[tokio::test]
+async fn opening_remembers_the_crawl_id_and_replaces_a_stale_one() {
+    tokio::time::timeout(Duration::from_secs(30), async {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let file = dir.path().join("site.ospider");
+        drop(create(&file, cfg()));
+        let app = app(&home);
+        app.uistate()
+            .update(|saved| {
+                saved.state = json!({
+                    "recentCrawls": [{"path": file, "crawlId": "stale-id", "label": "alt"}]
+                })
+            })
+            .unwrap();
+        let summary = open(&app, &file).await;
+        let entries = recent(&app);
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        assert_eq!(entries[0]["crawlId"], summary.crawl_id);
+        assert_eq!(entries[0]["label"], "alt");
+
+        // The UI prepends the reported file with its crawl ID: still one entry, ID kept.
+        let mut saved = call(&app, "uistate.load", json!(null)).await;
+        let mut list = vec![json!({"path": summary.file, "crawlId": summary.crawl_id})];
+        list.extend(saved["state"]["recentCrawls"].as_array().cloned().unwrap());
+        saved["state"]["recentCrawls"] = Value::Array(list);
+        call(&app, "uistate.save", saved).await;
+        let entries = loaded_recent(&app).await;
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        assert_eq!(entries[0]["crawlId"], summary.crawl_id);
+    })
+    .await
+    .expect("RC1-RECENT fixture exceeded its deadline");
+}
+
+// spec: CRAWL-127
+// Merging two spellings of one file: the crawl ID of the newest entry wins (file replaced), an entry without ID
+// inherits the ID of an older entry of the same file, and entries saved without any ID stay valid.
+#[cfg(unix)]
+#[tokio::test]
+async fn merging_keeps_the_newest_crawl_id_and_inherits_a_missing_one() {
+    tokio::time::timeout(Duration::from_secs(30), async {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let real = dir.path().join("real");
+        std::fs::create_dir_all(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        for name in ["replaced.ospider", "inherit.ospider", "legacy.ospider"] {
+            drop(create(&real.join(name), cfg()));
+        }
+        let resolved = |name: &str| std::fs::canonicalize(real.join(name)).unwrap();
+        let app = app(&home);
+        app.uistate()
+            .update(|saved| {
+                saved.state = json!({
+                    "recentCrawls": [
+                        {"path": resolved("replaced.ospider"), "crawlId": "new-id"},
+                        {"path": link.join("inherit.ospider"), "crawlId": null},
+                        {"path": link.join("legacy.ospider")},
+                        {"path": link.join("replaced.ospider"), "crawlId": "old-id", "label": "alt"},
+                        {"path": resolved("inherit.ospider"), "crawlId": "kept-id"},
+                        {"path": resolved("legacy.ospider")},
+                    ]
+                })
+            })
+            .unwrap();
+
+        let loaded = loaded_recent(&app).await;
+        assert_eq!(
+            Value::Array(loaded),
+            json!([
+                {"path": link.join("replaced.ospider"), "crawlId": "new-id", "label": "alt"},
+                {"path": link.join("inherit.ospider"), "crawlId": "kept-id"},
+                {"path": link.join("legacy.ospider")},
+            ])
+        );
+    })
+    .await
+    .expect("RC1-RECENT fixture exceeded its deadline");
+}
