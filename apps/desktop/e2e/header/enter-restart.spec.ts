@@ -40,6 +40,10 @@ test("Enter in the start URL field starts the next crawl after a finished one", 
     await expect(page.locator("[data-shell-ready]")).toHaveAttribute("data-shell-ready", "true");
     const field = page.getByLabel("Start URL");
     const phase = page.getByTestId("crawl-header").locator("[data-phase]");
+    const crawlId = () => page.evaluate(async () => {
+      const { useSession } = await import(/* @vite-ignore */ String("/src/state/session.ts"));
+      return (useSession.getState() as { crawl: { crawlId: string } | null }).crawl?.crawlId ?? null;
+    });
 
     // Crawl 1: focus the field, type, Enter.
     await field.click();
@@ -49,6 +53,8 @@ test("Enter in the start URL field starts the next crawl after a finished one", 
     expect(started()).toEqual([first]);
     // The first start URL is now a suggestion of the field (UI-003: last 20 start URLs).
     await expect(page.locator("#os-start-history option")).toHaveCount(1);
+    const firstId = await crawlId();
+    expect(firstId).toBeTruthy();
 
     // Crawl 2: new address in the same field, Enter. A finished crawl is replaced after the confirmation (UI-003).
     await field.click();
@@ -59,6 +65,8 @@ test("Enter in the start URL field starts the next crawl after a finished one", 
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Replace", exact: true }).click();
     await expect.poll(started, { timeout: 30_000 }).toEqual([first, second]);
+    // The header shows crawl 2 only from its first status tick on (UI-018); until then "completed" is still crawl 1's.
+    await expect.poll(crawlId, { timeout: 30_000 }).not.toBe(firstId);
     await expect(phase).toHaveAttribute("data-phase", "completed", { timeout: 30_000 });
 
     // Enter on the unchanged address asks again; Escape cancels without starting and keeps the field.
@@ -68,6 +76,8 @@ test("Enter in the start URL field starts the next crawl after a finished one", 
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    // UI-126: the focus returns to the field after the question closes; only then is Enter the field's again.
+    await expect(field).toBeFocused();
     await expect(field).toHaveValue(second);
     expect(started()).toEqual([first, second]);
 
