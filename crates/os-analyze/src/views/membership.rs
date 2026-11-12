@@ -40,6 +40,9 @@ pub(super) struct Membership {
     persisted: AtomicBool,
     /// `PRAGMA data_version` of the file's watcher when these facts were read (see [`changed`]).
     baseline: AtomicI64,
+    /// The watcher `baseline` belongs to. The facts keep it alive: the watcher's connection is a handle on the
+    /// crawl file and lives exactly as long as facts that compare against it.
+    watcher: Option<Arc<Watcher>>,
 }
 
 impl Membership {
@@ -53,6 +56,7 @@ impl Membership {
             html_2xx: 0,
             persisted: AtomicBool::new(false),
             baseline: AtomicI64::new(i64::MIN),
+            watcher: None,
         }
     }
 
@@ -67,6 +71,7 @@ impl Membership {
             html_2xx: self.html_2xx,
             persisted: AtomicBool::new(false),
             baseline: AtomicI64::new(i64::MIN),
+            watcher: None,
         }
     }
 
@@ -258,7 +263,8 @@ pub(super) fn load(
 ) -> Result<Arc<Membership>, ViewError> {
     let key = cache_key(file, seq, stamp)?;
     // Read before the facts: a commit during the pass is detected by the next lookup.
-    let version = data_version(file.path());
+    let watch = watcher(file.path());
+    let version = watch.as_ref().and_then(|w| w.version());
     let shared = {
         let mut entries = registry().lock().unwrap_or_else(|e| e.into_inner());
         entries.retain(|_, v| v.strong_count() > 0);
@@ -281,7 +287,7 @@ pub(super) fn load(
             .filter(|e| e.built_seq == seq && e.step_stamp == stamp)
             .and_then(|e| Membership::decode(&e.data, seq, stamp))
     };
-    let facts = match stored {
+    let mut facts = match stored {
         Some(facts) => {
             facts.persisted.store(true, Ordering::Relaxed);
             facts
@@ -291,50 +297,68 @@ pub(super) fn load(
     facts
         .baseline
         .store(version.unwrap_or(i64::MIN), Ordering::Relaxed);
+    facts.watcher = watch;
     let facts = Arc::new(facts);
     remember(key, &facts);
     Ok(facts)
 }
 
-type Watchers = Mutex<HashMap<std::path::PathBuf, rusqlite::Connection>>;
+/// A dedicated read-only connection per file whose `PRAGMA data_version` changes with every commit of any other
+/// connection. Its values only compare with each other, so facts keep the watcher they took their baseline from;
+/// the registry holds it weakly. Once no facts of the file are left (views released, crawl cleared or closed), the
+/// connection closes and no handle on the file remains (UI-003: a cleared crawl stays deletable, OUT-228).
+pub(super) struct Watcher(Mutex<rusqlite::Connection>);
+
+impl Watcher {
+    /// `None` if the version cannot be read (no sharing then).
+    fn version(&self) -> Option<i64> {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .query_row("PRAGMA data_version", [], |r| r.get(0))
+            .ok()
+    }
+}
+
+type Watchers = Mutex<HashMap<std::path::PathBuf, Weak<Watcher>>>;
 fn watchers() -> &'static Watchers {
     static WATCHERS: OnceLock<Watchers> = OnceLock::new();
     WATCHERS.get_or_init(Default::default)
 }
 
-/// `PRAGMA data_version` of a dedicated read-only connection per file: it changes with every
-/// commit of any other connection. `None` if the file cannot be watched (no sharing then).
-fn data_version(path: &std::path::Path) -> Option<i64> {
+/// The file's live watcher, opened if there is none. `None` if the file cannot be watched (no sharing then).
+fn watcher(path: &std::path::Path) -> Option<Arc<Watcher>> {
     let mut watchers = watchers().lock().unwrap_or_else(|e| e.into_inner());
-    if !watchers.contains_key(path) {
-        let conn = rusqlite::Connection::open_with_flags(
-            path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .ok()?;
-        watchers.insert(path.to_path_buf(), conn);
+    if let Some(live) = watchers.get(path).and_then(Weak::upgrade) {
+        return Some(live);
     }
-    watchers
-        .get(path)?
-        .query_row("PRAGMA data_version", [], |r| r.get(0))
-        .ok()
+    watchers.retain(|_, w| w.strong_count() > 0);
+    let conn = rusqlite::Connection::open_with_flags(
+        path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    let live = Arc::new(Watcher(Mutex::new(conn)));
+    watchers.insert(path.to_path_buf(), Arc::downgrade(&live));
+    Some(live)
 }
 
 /// Our own derivable-cache writes (`view_cache`) do not change the data: shared passes of the
-/// file stay valid. Call right after such a write.
+/// file stay valid. Call right after such a write. Without live facts there is nothing to keep valid,
+/// so no watcher is opened.
 pub(crate) fn note_cache_write(path: &std::path::Path) {
-    let Some(version) = data_version(path) else {
-        return;
-    };
     let prefix = format!("{path:?}:");
-    for facts in registry()
+    let live: Vec<_> = registry()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .iter()
         .filter(|(key, _)| key.starts_with(&prefix))
         .filter_map(|(_, v)| v.upgrade())
-    {
-        facts.baseline.store(version, Ordering::Relaxed);
+        .collect();
+    for facts in live {
+        if let Some(version) = facts.watcher.as_ref().and_then(|w| w.version()) {
+            facts.baseline.store(version, Ordering::Relaxed);
+        }
     }
 }
 
@@ -484,8 +508,13 @@ pub(super) fn repair(
         return Ok(None);
     }
     let mut facts = previous.derived(seq);
+    facts.watcher = watcher(file.path());
     facts.baseline.store(
-        data_version(file.path()).unwrap_or(i64::MIN),
+        facts
+            .watcher
+            .as_ref()
+            .and_then(|w| w.version())
+            .unwrap_or(i64::MIN),
         Ordering::Relaxed,
     );
     let mut stmt = file.conn().prepare(&format!("{FACTS} WHERE id=?1"))?;
