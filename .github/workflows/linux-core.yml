@@ -56,7 +56,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Runde 11: ubuntu-latest hatte < 1 GB frei, der Ressourcenschutz pausierte Crawls in Tests.
       - name: Speicherplatz schaffen (ungenutzte SDKs des Runners)
@@ -83,7 +83,7 @@ jobs:
           rustc --version
           cargo --version
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: linux-core
 
@@ -116,7 +116,7 @@ jobs:
           python3 --version
           cargo test -p os-cli --test read_api_export --locked -- --nocapture
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: openspider-linux-x86_64
           path: |

@@ -58,8 +58,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt
       - run: cargo fmt --all --check
@@ -69,8 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: EmbarkStudios/cargo-deny-action@d755fbddac377c2d538f556dd0f9c7728c7f73e4 # v2.0.14
         with:
           command: check licenses bans sources advisories
 
@@ -128,7 +128,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Integrationsrunde 8: macOS-arm64 lief beim Linken der Testprogramme voll ("ld: write() failed, errno=28"), seit os-engine
       # und os-app viele Chromium-/Render-Tests tragen. Nicht gewählte Xcode-Versionen belegen auf dem Runner mehrere zehn GB und
@@ -153,12 +153,12 @@ jobs:
           sudo nohup rm -rf "$HOME/Library/Android" > /dev/null 2>&1 &
           sleep 1
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         timeout-minutes: 10
         with:
           node-version: 22
@@ -238,7 +238,7 @@ jobs:
           test -s "$out/internal_all.csv"
           test -s "$out/links_all_inlinks.csv"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ !cancelled() }}
         with:
           name: crawlfile-${{ matrix.name }}
@@ -256,7 +256,7 @@ jobs:
           cp "$bin" ci-bin/
           ls -l ci-bin
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ !cancelled() }}
         with:
           name: cli-bin-${{ matrix.name }}
@@ -294,7 +294,7 @@ jobs:
         if: always()
         run: cat target/loadtest/report.json || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: loadtest-small-${{ matrix.name }}
@@ -318,12 +318,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: cli-bin-${{ matrix.name }}
           path: bin
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: crawlfile-*
           path: crawlfiles
@@ -365,7 +365,7 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Runde 10: spec-coverage lief auf macOS-14 mit < 1 GB frei; die Engine pausiert Crawls darunter (Ressourcenschutz) und
       # Engine-/CLI-/Export-Tests scheitern. Gleicher Aufräumschritt wie im Job ci.
@@ -390,8 +390,8 @@ jobs:
           sleep 1
 
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: spec-coverage
 
@@ -421,7 +421,7 @@ jobs:
           cat coverage.txt >> "$GITHUB_STEP_SUMMARY"
           exit $status
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: spec-coverage
