@@ -66,10 +66,20 @@ jobs:
             browsers: webkit
             shard: 2/2
             timeout: 60
-          - name: windows-chromium
+          # windows-chromium überschritt mit 698 Tests das Schritt-Limit von 50 min (Lauf 43225675760: 686 Tests in 50 min),
+          # deshalb wie macOS zwei Shards; das Perf-Projekt läuft im ersten.
+          - name: windows-chromium-1
             os: windows-latest
             projects: chromium
             browsers: chromium
+            shard: 1/2
+            perf: true
+            timeout: 60
+          - name: windows-chromium-2
+            os: windows-latest
+            projects: chromium
+            browsers: chromium
+            shard: 2/2
             timeout: 60
           - name: linux-chromium
             os: ubuntu-latest
