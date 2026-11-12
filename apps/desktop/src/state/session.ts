@@ -45,17 +45,24 @@ export interface SessionState {
 const endBarriers = new Set<() => Promise<unknown>>();
 const END_GATE_MS = 3000;
 let heldEnd: CrawlStatus | null = null;
+/**
+ * RC1-FLAKES (UI-018, UI-013): the analysis status that arrives while the end status is held. The status bar names the
+ * running analysis instead of the crawl phase; applied early it showed a finished crawl ("Analysis running") with the
+ * counts of the last running tick, which then changed once the end status was released. Both apply together.
+ */
+let heldAnalysis: AnalysisStatus | null = null;
 export function registerEndBarrier(refresh: () => Promise<unknown>): () => void {
   endBarriers.add(refresh);
   return () => { endBarriers.delete(refresh); };
 }
-async function releaseEnd(apply: (crawl: CrawlStatus) => void) {
+async function releaseEnd(apply: (crawl: CrawlStatus, analysis: AnalysisStatus | null) => void) {
   await Promise.race([Promise.allSettled([...endBarriers].map(refresh => refresh())), new Promise(resolve => setTimeout(resolve, END_GATE_MS))]);
   // Shared-count views publish their answer in the next task (query notifications); the status follows after them.
   await new Promise(resolve => setTimeout(resolve, 0));
   const crawl = heldEnd;
-  heldEnd = null;
-  if (crawl) apply(crawl);
+  const analysis = heldAnalysis;
+  heldEnd = null; heldAnalysis = null;
+  if (crawl) apply(crawl, analysis);
 }
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -81,11 +88,14 @@ export const useSession = create<SessionState>((set, get) => ({
     if (tick.crawl && current?.crawlId === tick.crawl.crawlId && (heldEnd || current.phase === "running" && tick.crawl.phase === "completed" && endBarriers.size > 0)) {
       const start = !heldEnd;
       heldEnd = tick.crawl;
-      tick = { ...tick, crawl: null };
-      if (start) queueMicrotask(() => void releaseEnd(crawl => {
-        if (get().crawl?.crawlId === crawl.crawlId) set(s => ({ crawl, throttled: Object.keys(s.throttled).length ? {} : s.throttled }));
+      heldAnalysis = tick.analysis ?? heldAnalysis;
+      tick = { ...tick, crawl: null, analysis: null };
+      if (start) queueMicrotask(() => void releaseEnd((crawl, analysis) => {
+        if (get().crawl?.crawlId === crawl.crawlId) set(s => ({ crawl, throttled: Object.keys(s.throttled).length ? {} : s.throttled,
+          ...(analysis ? { analysis, analysisStarting: false } : {}) }));
       }));
-    } else if (tick.crawl) heldEnd = null;
+    } else if (tick.crawl) { heldEnd = null; heldAnalysis = null; }
+    else if (heldEnd && tick.analysis) { heldAnalysis = tick.analysis; tick = { ...tick, analysis: null }; }
     set((s) => {
       let views = s.views;
       for (const v of tick.views) {
