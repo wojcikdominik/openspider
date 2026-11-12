@@ -120,6 +120,7 @@ export function Header() {
   }
 
   async function start(request: StartRequest, guardConfirmed = false) {
+    let started = false;
     await perform(async () => {
       try {
         if (!guardConfirmed && needsGuardConfirmation((await config.get()).config)) {
@@ -127,42 +128,47 @@ export function Header() {
           return;
         }
         await crawl.start(request);
-        if (request.source.kind === "spider") await saveHistory(request.source.url);
+        started = true;
       } catch (e) {
         reportError(e, request.source.kind === "spider" ? { startUrl: request.source.url } : {});
       }
     });
+    // UI-003: the suggestion list is bookkeeping, not part of the start command. Its read/modify/write of the UI state can
+    // outlast a short crawl; holding the command lock for it swallowed Enter and Start after that crawl had finished.
+    if (started && request.source.kind === "spider") await saveHistory(request.source.url);
   }
 
   function requestStart() {
     if (resumable && !startUrlChanged) return pauseResume();
     if (!canStart) return false;
-    void perform(async () => {
-      let request: StartRequest;
-      if (mode === "spider") {
-        if (!normalized) return;
-        const validated = await crawl.validateStartUrl({ input: normalized });
-        useHeader.setState({ url: validated.normalized });
-        request = { source: { kind: "spider", url: validated.normalized }, scope };
-      } else if (sitemapMode && normalizedSitemap) {
-        const validated = await crawl.validateStartUrl({ input: normalizedSitemap });
-        request = { source: { kind: "list", items: [validated.normalized], label: t("header-sitemap") }, scope: "domain" };
-      } else {
-        const items = list.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-        const preview = await crawl.parseList({ kind: "text", text: list });
-        if (preview.invalid > 0 || preview.valid === 0) {
-          useSession.getState().pushNotice({ level: "error", code: "header-list-invalid", args: { count: preview.invalid } });
-          return;
+    void (async () => {
+      let request = null as StartRequest | null;
+      await perform(async () => {
+        if (mode === "spider") {
+          if (!normalized) return;
+          const validated = await crawl.validateStartUrl({ input: normalized });
+          useHeader.setState({ url: validated.normalized });
+          request = { source: { kind: "spider", url: validated.normalized }, scope };
+        } else if (sitemapMode && normalizedSitemap) {
+          const validated = await crawl.validateStartUrl({ input: normalizedSitemap });
+          request = { source: { kind: "list", items: [validated.normalized], label: t("header-sitemap") }, scope: "domain" };
+        } else {
+          const items = list.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+          const preview = await crawl.parseList({ kind: "text", text: list });
+          if (preview.invalid > 0 || preview.valid === 0) {
+            useSession.getState().pushNotice({ level: "error", code: "header-list-invalid", args: { count: preview.invalid } });
+            return;
+          }
+          request = { source: mode === "apis" ? { kind: "apis", items } : { kind: "list", items, label: listLabel || t("header-list") }, scope: "domain" };
         }
-        request = { source: mode === "apis" ? { kind: "apis", items } : { kind: "list", items, label: listLabel || t("header-list") }, scope: "domain" };
-      }
+      });
+      if (!request) return;
+      // UI-003: the question opens only after the validation released the command lock, so its default action (UI-113:
+      // Enter = Replace) is never dropped by that lock. Without results the start follows at once (no task in between, so
+      // still one command at a time).
       if (hasResults) setConfirm({ request });
-      else {
-        // release the lock before delegating to start; still one command at a time
-        busyRef.current = false;
-        await start(request);
-      }
-    });
+      else await start(request);
+    })();
   }
 
   const pauseResume = () => {

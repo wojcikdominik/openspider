@@ -338,3 +338,25 @@ it("confirms the replacement when leaving a comparison for another mode while re
   await waitFor(() => expect(useHeader.getState().mode).toBe("list"));
   expect(calls("crawl.clear")).toHaveLength(1);
 });
+
+// spec: UI-003
+// spec: UI-113
+it("Enter after a finished crawl asks again although saving the suggestion list is still pending", async () => {
+  // RC1-ENTER: the start of a short crawl kept the command lock until the start URL was written to the suggestion list;
+  // that UI-state write can outlast the crawl, and Enter (and Start) in that window did nothing.
+  let releaseSave: () => void = () => undefined;
+  core.handlers.set("uistate.save", () => new Promise<void>((resolve) => { releaseSave = resolve; }));
+  useSession.getState().applyTick({ ...tick, seq: 1, crawl: { ...tick.crawl!, phase: "completed" } });
+  render(<Header />); enterUrl("next.test");
+  const field = screen.getByLabelText("Start URL");
+  fireEvent.keyDown(field, { key: "Enter", code: "Enter", keyCode: 13 });
+  fireEvent.click(await screen.findByRole("button", { name: "Replace" }));
+  await waitFor(() => expect(calls("crawl.start")).toHaveLength(1));
+  await waitFor(() => expect(calls("uistate.save")).toHaveLength(1));
+  // The new crawl finishes while the suggestion list is still being saved.
+  act(() => useSession.getState().applyTick({ ...tick, seq: 2, crawl: { ...tick.crawl!, phase: "running" } }));
+  act(() => useSession.getState().applyTick({ ...tick, seq: 3, crawl: { ...tick.crawl!, phase: "completed" } }));
+  fireEvent.keyDown(field, { key: "Enter", code: "Enter", keyCode: 13 });
+  expect(await screen.findByRole("dialog")).toBeVisible();
+  releaseSave();
+});
