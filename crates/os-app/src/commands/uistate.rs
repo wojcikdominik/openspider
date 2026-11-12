@@ -17,20 +17,29 @@ fn join_error(e: tokio::task::JoinError) -> CmdError {
 fn load<'a>(app: &'a App, _ctx: CallCtx, _args: serde_json::Value) -> BoxFuture<'a, CmdResult> {
     Box::pin(async move {
         let app = app.clone();
-        let state = tokio::task::spawn_blocking(move || app.uistate().load())
-            .await
-            .map_err(join_error)?;
+        // CRAWL-127: duplicates of one crawl file (beta.4, symbolic links) are merged on load.
+        let state = tokio::task::spawn_blocking(move || {
+            let mut state = app.uistate().load();
+            crate::session::recent::merge_in_state(&mut state.state);
+            state
+        })
+        .await
+        .map_err(join_error)?;
         to_json(&state)
     })
 }
 
 fn save<'a>(app: &'a App, _ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a, CmdResult> {
     Box::pin(async move {
-        let state: UiStateJson = parse_args(args)?;
+        let mut state: UiStateJson = parse_args(args)?;
         let app = app.clone();
-        let saved = tokio::task::spawn_blocking(move || app.uistate().save(&state))
-            .await
-            .map_err(join_error)??;
+        // CRAWL-127: the frontend compares paths as text; the core merges spellings of one file before storing.
+        let saved = tokio::task::spawn_blocking(move || {
+            crate::session::recent::merge_in_state(&mut state.state);
+            app.uistate().save(&state)
+        })
+        .await
+        .map_err(join_error)??;
         to_json(&saved)
     })
 }
