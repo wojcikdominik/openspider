@@ -192,6 +192,9 @@ async fn reopening_legacy_crawl_preserves_previous_migrations_and_occupied_names
     let first = {
         let app = app(dir.path());
         let summary = open(&app, &source).await;
+        // Close the crawl before taking the reference bytes: background cache writes of the opened copy end there,
+        // and the last write connection folds its WAL into the file (no handle stays open, UI-003).
+        call(&app, "crawl.clear", serde_json::json!(null)).await;
         PathBuf::from(summary.file)
     };
     let migrated = fs::read(&first).unwrap();
