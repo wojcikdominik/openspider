@@ -38,6 +38,12 @@ OpenSpider crawls websites the way a search engine does and finds the technical 
 
 What makes it different: **AI agents are first-class users.** A built-in MCP server lets Claude, Codex, Cursor and other agents start crawls, ask precise questions about the results and run full audits – safely: by default an agent can only read; starting crawls, writing files or using paid services has to be enabled explicitly. And every crawl is an open SQLite file, so your data never gets locked into a proprietary format.
 
+## What's new
+
+**1.0.0-beta.4** (12 November 2026): new update dialog, live counters that follow the crawl within a second, clear messages when the start URL cannot be reached, repaired comparison view.
+
+Full list: [openspider.de/en/changelog](https://openspider.de/en/changelog/) · [GitHub Releases](https://github.com/wojcikdominik/openspider/releases)
+
 ## Why OpenSpider?
 
 | | |

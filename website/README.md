@@ -45,14 +45,24 @@ bleibt vorgesehen. Die Download-Seiten nennen nur Mindestplattformen und
 Keine Leistungszahlen oder Veröffentlichungstermine. Der dokumentierte
 Funktionsumfang wird auf der Funktionsseite vom Umfang einzelner Beta-Builds abgegrenzt.
 
+## Changelog-Seiten
+
+`/neuigkeiten/` und `/en/changelog/` werden erzeugt, nicht von Hand gepflegt:
+`python3 website/build-changelog.py` liest `docs/release/notes/<Version>.md` (dieselbe Quelle wie
+Update-Dialog und GitHub-Release) und `website/changelog/releases.json` (veröffentlichte Versionen
+mit Datum, neueste zuerst). Bei einem Release: Version und Datum in `releases.json` eintragen,
+Skript ausführen, beide Seiten mit committen. Notes, die nur deutsch vorliegen, brauchen
+`website/changelog/en/<Version>.md`.
+
 ## Prüfung
 
 ```sh
+python3 website/build-changelog.py --check
 node website/check-site.mjs
 bash scripts/check-neutral.sh
 ```
 
-Der Node-Check benötigt keine Abhängigkeiten. Er prüft alle 20 HTML-Seiten,
+Der Node-Check benötigt keine Abhängigkeiten. Er prüft alle 22 HTML-Seiten,
 interne Links einschließlich Sprungmarken, Assets, erlaubte externe Links,
 eindeutige Titel/Beschreibungen, Canonicals, gegenseitige hreflang-Paare,
 Sprachwechsel, Überschriften, alt-Attribute, Social-Metadaten, JSON-LD,
