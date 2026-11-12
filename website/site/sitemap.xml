@@ -16,4 +16,6 @@
 <url><loc>https://openspider.de/en/manual/</loc><xhtml:link rel="alternate" hreflang="de" href="https://openspider.de/handbuch/"/><xhtml:link rel="alternate" hreflang="en" href="https://openspider.de/en/manual/"/></url>
 <url><loc>https://openspider.de/beta/</loc><xhtml:link rel="alternate" hreflang="de" href="https://openspider.de/beta/"/><xhtml:link rel="alternate" hreflang="en" href="https://openspider.de/en/beta/"/></url>
 <url><loc>https://openspider.de/en/beta/</loc><xhtml:link rel="alternate" hreflang="de" href="https://openspider.de/beta/"/><xhtml:link rel="alternate" hreflang="en" href="https://openspider.de/en/beta/"/></url>
+<url><loc>https://openspider.de/neuigkeiten/</loc><xhtml:link rel="alternate" hreflang="de" href="https://openspider.de/neuigkeiten/"/><xhtml:link rel="alternate" hreflang="en" href="https://openspider.de/en/changelog/"/></url>
+<url><loc>https://openspider.de/en/changelog/</loc><xhtml:link rel="alternate" hreflang="de" href="https://openspider.de/neuigkeiten/"/><xhtml:link rel="alternate" hreflang="en" href="https://openspider.de/en/changelog/"/></url>
 </urlset>
