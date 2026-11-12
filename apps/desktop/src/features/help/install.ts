@@ -61,8 +61,9 @@ export function installMainMenus(): () => void {
   };
   const openPath = async (path: string, recent = false) => {
     await recentReady;
+    let summary: Awaited<ReturnType<typeof crawl.open>>;
     try {
-      await crawl.open({ kind: "path", path });
+      summary = await crawl.open({ kind: "path", path });
     } catch (e) {
       if (recent && toCmdError(e).code === "NotFound") {
         setRecent(state.recent.filter((entry) => entry.path !== path));
@@ -73,7 +74,8 @@ export function installMainMenus(): () => void {
       throw e;
     }
     if (!live) return;
-    const entry = state.recent.find(entry => entry.path === path) ?? { path };
+    // CRAWL-127: the crawl ID of the file just opened (a replaced file has a new one) matches the entry to the index.
+    const entry = { ...(state.recent.find(entry => entry.path === path) ?? { path }), crawlId: summary.crawlId };
     setRecent([entry, ...state.recent.filter((e) => e.path !== path)]);
     await persist(entries => [entry, ...entries.filter(entry => entry.path !== path)]);
   };

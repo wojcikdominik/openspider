@@ -3,6 +3,7 @@ pub mod analysis;
 pub mod control;
 pub mod feed;
 pub mod merge;
+pub mod recent;
 pub mod selection;
 
 use crate::{

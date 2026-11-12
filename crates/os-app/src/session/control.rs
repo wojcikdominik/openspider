@@ -199,7 +199,7 @@ pub async fn start_with_fetcher<F: os_fetch::Fetch>(
         h,
         CrawlEvent::Started(key.clone()),
     );
-    remember_crawl(app, file.to_string_lossy().into_owned()).await;
+    remember_crawl(app, file.to_string_lossy().into_owned(), &key.0).await;
     Ok(CrawlRef {
         crawl_id: key.0,
         file: file.to_string_lossy().into_owned(),
@@ -263,6 +263,8 @@ pub async fn open(
                 .ok_or_else(|| CmdError::new(ErrorCode::NotFound, "err-crawl-not-found"))?
         }
     };
+    // CRAWL-127: "Recently opened" keeps the spelling the user knows (e.g. `/tmp/…`, not `/private/tmp/…`).
+    let requested = path.clone();
     // CRAWL-127: a file that no longer exists (stale "Recent" entry) is `NotFound` with its path, not a generic I/O failure;
     // the menus remove such entries with a hint.
     let path = tokio::task::spawn_blocking(move || {
@@ -295,14 +297,19 @@ pub async fn open(
             }
             app.sessions().set_current(ctx.window, updated);
         }
-        remember_crawl(app, summary.file.clone()).await;
+        remember_crawl(
+            app,
+            super::recent::remembered_spelling(&requested, &path, &summary.file),
+            &summary.crawl_id,
+        )
+        .await;
         return Ok(summary);
     }
     replace_allowed(app, &ctx).await?;
     let temporary = CrawlKey(format!("opening:{}", path.display()));
     let report = app
         .read_pool()
-        .prepare_open(temporary.clone(), path)
+        .prepare_open(temporary.clone(), path.clone())
         .await?;
     let result = feed::snapshot(app, temporary.clone()).await;
     app.read_pool().unregister(&temporary);
@@ -337,7 +344,12 @@ pub async fn open(
         );
     }
     super::activate(app);
-    remember_crawl(app, summary.file.clone()).await;
+    remember_crawl(
+        app,
+        super::recent::remembered_spelling(&requested, &path, &summary.file),
+        &summary.crawl_id,
+    )
+    .await;
     app.crawl_events().emit(app, CrawlEvent::Opened(key));
     Ok(summary)
 }
@@ -822,7 +834,7 @@ async fn start_apis(
         .emit(app, CrawlEvent::Started(key.clone()));
     app.crawl_events()
         .emit(app, CrawlEvent::Completed(key.clone()));
-    remember_crawl(app, path.to_string_lossy().into_owned()).await;
+    remember_crawl(app, path.to_string_lossy().into_owned(), &key.0).await;
     Ok(CrawlRef {
         crawl_id: key.0,
         file: path.to_string_lossy().into_owned(),
@@ -886,40 +898,15 @@ async fn stop_checkpoint(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
 }
 
 /// Persist every newly created/opened crawl, including starts outside the header.
-async fn remember_crawl(app: &App, path: String) {
+/// CRAWL-127: one entry per file, whatever spelling it was opened with (`session::recent`). The crawl ID lets the UI
+/// match the entry to the crawl index independently of the path spelling.
+async fn remember_crawl(app: &App, path: String, crawl_id: &str) {
     let saved = app.clone();
+    let crawl_id = crawl_id.to_owned();
     let result = tokio::task::spawn_blocking(move || {
-        saved.uistate().update(|ui| {
-            let Some(state) = ui.state.as_object_mut() else {
-                return;
-            };
-            let old = state
-                .get("recentCrawls")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-            let mut paths = vec![path];
-            for entry in &old {
-                if let Some(path) = entry.get("path").and_then(|v| v.as_str()) {
-                    if !path.is_empty() && !paths.iter().any(|p| p == path) {
-                        paths.push(path.to_owned());
-                    }
-                }
-            }
-            state.insert(
-                "recentCrawls".into(),
-                serde_json::json!(paths
-                    .into_iter()
-                    .take(10)
-                    .map(|path| old
-                        .iter()
-                        .find(|entry| entry.get("path").and_then(|value| value.as_str())
-                            == Some(path.as_str()))
-                        .cloned()
-                        .unwrap_or_else(|| serde_json::json!({"path":path})))
-                    .collect::<Vec<_>>()),
-            );
-        })
+        saved
+            .uistate()
+            .update(|ui| super::recent::remember(&mut ui.state, &path, Some(&crawl_id)))
     })
     .await;
     let error = match result {
