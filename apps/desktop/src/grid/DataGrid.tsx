@@ -1,6 +1,6 @@
 import { cellBadge, gridHeaderHeight } from "./theme";
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { LOADING, type ViewDataSource } from "../data/ViewDataSource";
+import { LOADING, isViewGone, type ViewDataSource } from "../data/ViewDataSource";
 import type { ColumnMeta } from "../ipc/gen/ColumnMeta";
 import type { SortKey } from "../ipc/gen/SortKey";
 import { SelectionModel } from "../state/selection";
@@ -170,8 +170,16 @@ export function DataGrid(props: DataGridProps) {
     source.onError = error => latest.current.onError(error);
     // A new version brings a new total before the next render: clamp against the source's current total, not the rendered one (A01-10).
     source.onScrollTo = row => actions.current.move(row, undefined, rowWindow(source.total, runtime.current.size.height, latest.current.rowHeight).maxFirst);
-    return () => { unsubscribe(); cancelAnimationFrame(frame); source.onError = undefined; source.onScrollTo = undefined; selectionRequest.current++; };
+    return () => { unsubscribe(); cancelAnimationFrame(frame); source.onError = undefined; source.onScrollTo = undefined; };
   }, [source]);
+  // A different view ends pending selections. A silent replacement of the same view (UI-142) does not: a click or key
+  // press on its way finishes against the successor (UI-012, UI-018).
+  const selectedIn = useRef(source);
+  useEffect(() => {
+    if (!source.continues(selectedIn.current)) selectionRequest.current++;
+    selectedIn.current = source;
+  }, [source]);
+  useEffect(() => () => { selectionRequest.current++; }, []);
   useEffect(() => { void source.ensureRange(first, first + Math.max(1, count) - 1); }, [source, source.version, first, count]);
   useEffect(() => {
     const current = selection.forVersion(source.viewId, source.version);
@@ -291,6 +299,8 @@ export function DataGrid(props: DataGridProps) {
   const selectRow = async (row: number, col: number, shift = false, toggle = false) => {
     if (!source.total) return;
     const request = ++selectionRequest.current;
+    // The source on screen: a silent replacement (UI-142) may take over while this selection waits.
+    const live = () => latest.current.source;
     source.holdPosition();
     row = clamp(row, source.total - 1);
     // A click targets the row on screen: resolve its URL id synchronously when the block is loaded, so a view update that
@@ -298,51 +308,60 @@ export function DataGrid(props: DataGridProps) {
     // crawl: the row stays the target, the request follows the new version.
     let key = source.rowKey(row);
     for (let attempt = 0; key === undefined && attempt < 40 && request === selectionRequest.current; attempt++) {
-      await source.settled();
-      await source.ensureRow(row);
-      key = source.rowKey(row);
+      await live().settled();
+      await live().ensureRow(row);
+      key = live().rowKey(row);
       if (key === undefined) await new Promise(resolve => setTimeout(resolve, 25));
     }
     if (key === undefined || request !== selectionRequest.current) return;
     const anchor = shift ? latest.current.selection.anchor : undefined;
     if (anchor !== undefined) {
       // Focus and scroll position answer at once; the following key press continues from here.
-      source.setFocus(key, row); setFocus({ col, row }); actions.current.reveal(row, col);
+      live().setFocus(key, row); setFocus({ col, row }); actions.current.reveal(row, col);
       rangesInFlight.current++;
       try {
-        const next = await rangeSelection(anchor, key, row, request);
+        const next = await rangeSelection(live(), anchor, key, row, request);
         if (next && request === selectionRequest.current) latest.current.onSelectionChange(next);
       } finally { rangesInFlight.current--; }
       return;
     }
-    source.setFocus(key, row); setFocus({ col, row }); latest.current.onSelectionChange(latest.current.selection.select(key, toggle));
+    live().setFocus(key, row); setFocus({ col, row }); latest.current.onSelectionChange(latest.current.selection.select(key, toggle));
     actions.current.reveal(row, col);
   };
   /**
    * UI-012/UI-018: anchor and target are URL ids; the core resolves the range between them in one state of the view, so a
    * running crawl cannot invalidate it at any rate. Only sources without that command read row windows of one version.
    */
-  const rangeSelection = async (anchor: number, key: number, row: number, request: number): Promise<SelectionModel | undefined> => {
+  const rangeSelection = async (asked: ViewDataSource, anchor: number, key: number, row: number, request: number): Promise<SelectionModel | undefined> => {
     const current = () => latest.current.selection;
-    const range = await source.range(anchor, key);
+    let target = asked;
+    let range: Awaited<ReturnType<ViewDataSource["range"]>>;
+    try { range = await target.range(anchor, key); }
+    catch (error) {
+      // The view was replaced silently while the range was on its way (UI-142): its successor answers in its place.
+      const successor = latest.current.source;
+      if (!isViewGone(error) || successor === target || !successor.continues(target) || request !== selectionRequest.current) throw error;
+      target = successor;
+      range = await target.range(anchor, key);
+    }
     if (request !== selectionRequest.current) return undefined;
     if (range) {
       if (range.exportRequired) { props.onError({ code: "InvalidInput", messageKey: "err-range-export", args: {}, retryable: false }); return undefined; }
       if (range.fromRow === null || range.fromRow === undefined || range.toRow === null || range.toRow === undefined) return current().select(key);
       if (!range.all) return current().range(range.keys, key);
       // An all-selection belongs to the settled view, including newer versions queued during adoption.
-      await source.onViewChanged(range.version, range.total);
-      await source.settled();
-      return request === selectionRequest.current ? current().range([], key).all(source.viewId, source.version) : undefined;
+      await target.onViewChanged(range.version, range.total);
+      await target.settled();
+      return request === selectionRequest.current ? current().range([], key).all(target.viewId, target.version) : undefined;
     }
-    const version = source.version;
-    const located = await source.locate(anchor);
-    if (located === null) return version === source.version ? current().select(key) : undefined;
+    const version = target.version;
+    const located = await target.locate(anchor);
+    if (located === null) return version === target.version ? current().select(key) : undefined;
     const first = Math.min(located, row), last = Math.max(located, row);
-    const next = first === 0 && last === source.total - 1
-      ? current().range([], key).all(source.viewId, version)
-      : current().range(await source.keys(first, last), key);
-    return version === source.version ? next : undefined;
+    const next = first === 0 && last === target.total - 1
+      ? current().range([], key).all(target.viewId, version)
+      : current().range(await target.keys(first, last), key);
+    return version === target.version ? next : undefined;
   };
   const sort = (col: number, multi: boolean) => {
     const c = visible[col];
