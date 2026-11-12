@@ -122,6 +122,8 @@ jobs:
           sudo nohup rm -rf "$HOME/Library/Android" > /dev/null 2>&1 &
           sleep 1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.99.1"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
@@ -263,6 +265,8 @@ jobs:
 
       # Ohne rust-cache: ein signierter Release-Build soll nicht von einem Cache abhängen.
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.99.1"
         if: steps.check.outputs.ready == 'true'
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin

@@ -88,6 +88,7 @@ jobs:
         run: echo 'Signatur-Gate separat; unsigniert erlaubt. Diese Suite prüft Installation und Laufzeit.' >> "$GITHUB_STEP_SUMMARY"
       - name: Fixture server bauen (kein Ersatz für die installierte CLI)
         run: |
+          rustup toolchain install
           rustup show active-toolchain
           cargo build -p os-testsite -j 4 --locked
       - name: System-Chromium bestimmen (macOS)

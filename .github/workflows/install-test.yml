@@ -153,6 +153,7 @@ jobs:
           fi
       - name: Fixture-Server bauen (os-testsite, kein Ersatz für die installierte CLI)
         run: |
+          rustup toolchain install
           rustup show active-toolchain
           cargo build -p os-testsite -j 4 --locked
       - name: Öffentlichen Updater-Schlüssel bereitlegen (Repository-Variable, kein Secret)

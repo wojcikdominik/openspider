@@ -136,7 +136,7 @@ jobs:
       - name: L01-Artefakt prüfen
         run: test -s third-party-notices/THIRD_PARTY_NOTICES.txt
       - name: Rust-Toolchain aus rust-toolchain.toml
-        run: rustup show active-toolchain
+        run: rustup toolchain install && rustup show active-toolchain
       - name: Linux-CLI mit bestehendem linux-core-Build bauen
         run: timeout 3600s nice -n 10 bash scripts/ci/linux-core.sh release
       - name: CLI-Golden-Smoke (OUT-273)

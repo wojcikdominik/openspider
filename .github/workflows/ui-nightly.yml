@@ -49,6 +49,8 @@ jobs:
           node-version: "22"
           cache: npm
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.99.1"
       - name: Verify native architecture
         run: node -e 'const expected=process.platform==="darwin"?"arm64":"x64"; if(process.arch!==expected) throw new Error(`Expected ${expected}, got ${process.arch}`)'
       - name: Dependencies and regression gate tests
