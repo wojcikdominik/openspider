@@ -59,7 +59,7 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # Runde 11: ubuntu-latest lief beim Cache-Speichern voll (No space left on device).
       - name: Speicherplatz schaffen (ungenutzte SDKs des Runners)
         run: |
@@ -69,11 +69,11 @@ jobs:
             /opt/hostedtoolcache/Ruby /opt/hostedtoolcache/PyPy
           sudo docker image prune --all --force > /dev/null 2>&1 || true
           df -h / | tail -n 1
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: spec-coverage-m2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -120,7 +120,7 @@ jobs:
             -e 's#</testsuites>#</testsuite></testsuites>#' integrations-raw.xml > integrations-m2.xml
           echo "Integrations-Exit: $status" >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: vitest-junit
@@ -178,12 +178,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: ui-e2e
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         timeout-minutes: 10
         with:
           node-version: '22'
@@ -253,7 +253,7 @@ jobs:
             --output=test-results-perf 2>&1 | tee -a e2e.log || status=$?
           echo "E2E-A Laufzeitbudgets (${{ matrix.name }}): Exit: $status" >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: playwright-junit-${{ matrix.name }}
@@ -262,7 +262,7 @@ jobs:
             playwright-m2-perf.xml
           if-no-files-found: error
       # Report, Traces und error-context.md auch bei Fehlschlag oder Schritt-Zeitüberschreitung sichern.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: playwright-report-m2-${{ matrix.name }}
@@ -282,19 +282,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: spec-coverage-m2-report
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: ${{ env.M2_GATE != 'true' }}
         with:
           name: vitest-junit
           path: evidence/core
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: ${{ env.M2_GATE != 'true' }}
         with:
           pattern: playwright-junit-*
@@ -342,7 +342,7 @@ jobs:
             if [[ "$missing" -ne 0 ]]; then exit 1; fi
             exit "$status"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: spec-coverage-m2
