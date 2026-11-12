@@ -78,9 +78,11 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
       .then(clearLegacyRecent, () => undefined);
   }, []);
   const recentTitle = useMemo(() => {
-    const index = new Map(rows.map(row => [row.crawl.file, row] as const));
-    return ({ path, label }: RecentEntry) => {
-      const row = index.get(path);
+    // CRAWL-127: by crawl ID first (the remembered spelling may differ from the index file), else by path.
+    const byId = new Map(rows.map(row => [row.crawl.crawlId, row] as const));
+    const byFile = new Map(rows.map(row => [row.crawl.file, row] as const));
+    return ({ path, label, crawlId }: RecentEntry) => {
+      const row = (crawlId ? byId.get(crawlId) : undefined) ?? byFile.get(path);
       return (row && recentCrawlTitle({ name: row.crawl.name, startUrl: row.startUrl, startedAt: row.crawl.startedAt }, lang)) ?? label;
     };
   }, [rows, lang]);
@@ -183,7 +185,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
   const openNow = async ({ args, resume }: OpenRequest) => {
     try {
       const summary = await crawl.open(args);
-      void updateRecent(entries => [{ path: summary.file }, ...entries.filter(entry => entry.path !== summary.file)]).catch(() => undefined);
+      void updateRecent(entries => [{ path: summary.file, crawlId: summary.crawlId }, ...entries.filter(entry => entry.path !== summary.file)]).catch(() => undefined);
       if (resume) await crawl.resume();
       useCrawlsDialog.setState({ open: false });
     } catch (e) {

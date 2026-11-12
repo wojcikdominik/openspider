@@ -533,3 +533,40 @@ it("Debug-Info: version row with build number, the commit hash row is labelled �
     unmount();
   }
 });
+
+// spec: CRAWL-127
+it("matches recent entries to the crawl index by crawl ID when the remembered path spelling differs, else by path", async () => {
+  core.uiState = { version: 1, state: { recentCrawls: [
+    { path: "/private/fixture/link/uuid.ospider", crawlId: "crawl-uuid" },
+    { path: "/fixture/other.ospider" },
+    { path: "/fixture/replaced.ospider", crawlId: "crawl-gone" },
+    { path: "/fixture/unknown.ospider", crawlId: "crawl-unknown" },
+  ] } };
+  core.handlers.set("crawls.list", () => [
+    { crawl: { crawlId: "crawl-uuid", file: "/fixture/uuid.ospider", startedAt: "2026-10-29T12:00:00", name: "uuid" }, startUrl: "http://127.0.0.1:1234/fixture" },
+    { crawl: { crawlId: "crawl-other", file: "/fixture/other.ospider", startedAt: "2026-10-29T12:00:00", name: "other" }, startUrl: null },
+    { crawl: { crawlId: "crawl-new", file: "/fixture/replaced.ospider", startedAt: "2026-10-29T12:00:00", name: "replaced" }, startUrl: null },
+  ]);
+  expect(await loadRecent()).toEqual([
+    { path: "/private/fixture/link/uuid.ospider", crawlId: "crawl-uuid", label: expect.stringMatching(/^uuid – Oct 29, 2026/) },
+    { path: "/fixture/other.ospider", label: expect.stringMatching(/^other – Oct 29, 2026/) },
+    { path: "/fixture/replaced.ospider", crawlId: "crawl-gone", label: expect.stringMatching(/^replaced – Oct 29, 2026/) },
+    { path: "/fixture/unknown.ospider", crawlId: "crawl-unknown" },
+  ]);
+});
+
+// spec: CRAWL-127
+it("keeps the crawl ID of recent entries when normalizing and stores the ID of the crawl opened from the menu", async () => {
+  expect(normalizeRecent([{ path: "/a.ospider", crawlId: "id-a", label: "A" }, { path: "/b.ospider", crawlId: 7 }, { path: "/c.ospider", crawlId: "" }]))
+    .toEqual([{ path: "/a.ospider", crawlId: "id-a", label: "A" }, { path: "/b.ospider" }, { path: "/c.ospider" }]);
+  core.uiState = { version: 1, state: { recentCrawls: [{ path: "/fixture/older.ospider", crawlId: "id-older" }, { path: "/fixture/typed.ospider", crawlId: "id-stale" }] } };
+  core.handlers.set("crawl.open", () => ({ crawlId: "id-typed", file: "/fixture/resolved/typed.ospider" }));
+  core.handlers.set("crawls.list", () => []);
+  dispose = installMainMenus();
+  await waitFor(() => expect(hasAction("recent.1")).toBe(true));
+  runAction("recent.1", { source: "menu" });
+  await waitFor(async () => expect((await loadRecent())[0]).toEqual({ path: "/fixture/typed.ospider", crawlId: "id-typed" }));
+  expect((core.uiState.state as { recentCrawls: unknown }).recentCrawls).toEqual([
+    { path: "/fixture/typed.ospider", crawlId: "id-typed" }, { path: "/fixture/older.ospider", crawlId: "id-older" },
+  ]);
+});
