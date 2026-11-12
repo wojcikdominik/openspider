@@ -14,7 +14,9 @@ const item = (id: string, labelKey: string, enabled?: MenuItemSpec["enabled"]): 
 });
 const action = (id: string, enabled?: MenuItemSpec["enabled"]) => item(id, shortcutById(id)?.labelKey ?? `u04-${id.replaceAll(".", "-")}`, enabled);
 const group = (menu: TopMenuId, name: string, order: number, items: MenuItemSpec[]): MenuContribution => ({ menu, group: name, order, items });
-export interface RecentEntry { path: string; label?: string }
+// CRAWL-127: `crawlId` (from the core or the open summary) matches the entry to the crawl index whatever the path
+// spelling; entries without it (older states) are matched by path.
+export interface RecentEntry { path: string; label?: string; crawlId?: string }
 export interface MainMenuState {
   catalog?: ExportCatalog;
   recent: readonly RecentEntry[];

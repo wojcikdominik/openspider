@@ -189,6 +189,14 @@ async function gridWindow(grid: Locator) {
     };
   });
 }
+/** Wartet, bis die sichtbaren Zeilen geladen sind (keine Platzhalter „…“); Spiegelung und Canvas entstehen im selben Rendern. */
+const settled = (grid: Locator) =>
+  expect
+    .poll(async () => {
+      const win = await gridWindow(grid);
+      return win.rows.length > 0 && win.rows.every((r) => r.cells.every((c) => c !== "…"));
+    })
+    .toBe(true);
 const box = async (loc: Locator) => {
   const b = await loc.boundingBox();
   expect(b, "Element sichtbar").not.toBeNull();
@@ -221,14 +229,19 @@ function parseCsv(text: string): string[][] {
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 test.describe("Vergleichsmodus gegen den echten Kern", () => {
+  // RC1-FLAKES: all tests of this group share one bridge home (the two prepared crawls, settings such as language and
+  // columns). With `fullyParallel` several workers ran the group at once against the same home: each crawled into it
+  // (`crawlOnce` then never saw exactly one new crawl), and the worker that prepared it removed it while others used it.
+  // The group therefore runs in one worker per project, in order; the home is separate per project.
+  test.describe.configure({ mode: "default" });
   let bridge: AlphaBridge;
   let site: { server: Server; port: number };
   // B4-CMPUI2 (A7, teardown only): the home this run prepared is removed afterwards; a given OS_CMPUI_HOME or a home
   // prepared by an earlier run stays.
   let preparedHome: string | undefined;
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, workerInfo) => {
     test.setTimeout(420_000);
-    const home = process.env.OS_CMPUI_HOME ?? join(tmpdir(), `os-cmpui-${process.ppid}`);
+    const home = process.env.OS_CMPUI_HOME ?? join(tmpdir(), `os-cmpui-${process.ppid}-${workerInfo.project.name}`);
     bridge = await startBridgeAt(home);
     site = await startSite();
     if (existsSync(join(home, "prepared"))) return;
@@ -439,6 +452,8 @@ test.describe("Vergleichsmodus gegen den echten Kern", () => {
       }, pinnedRight);
     const scroller = grid.locator(".os-grid-scroll");
     expect(await scroller.evaluate((el) => el.scrollWidth > el.clientWidth), "bei 1280 px gibt es weitere Spalten rechts").toBe(true);
+    // Pixel vergleichen erst, wenn die Zeilen geladen sind: ein Platzhalter „…“ im Referenzbild ist kein Überzeichnen.
+    await settled(grid);
     const reference = await region();
     for (let i = 0; i < 6; i++) await page.mouse.wheel(500, 0);
     await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(300);
@@ -450,6 +465,7 @@ test.describe("Vergleichsmodus gegen den echten Kern", () => {
     expect(headersNow.some((h) => /^Address$|^Adresse$/.test(h)), "Adresse bleibt sichtbar").toBe(true);
     expect(headersNow).not.toContain("Statuscode");
     // … aber die angeheftete Spalte (Pixel links von ihrer rechten Kante) ist unverändert.
+    await settled(grid);
     expect(await region(), "angeheftete Spalte unverändert").toBe(reference);
     // Adresse bleibt als erste Spalte in der Spiegelung vorhanden.
     expect(headersNow.some((h) => /^Address$|^Adresse$/.test(h))).toBe(true);

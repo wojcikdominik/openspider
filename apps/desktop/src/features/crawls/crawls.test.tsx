@@ -521,3 +521,28 @@ it("keeps the lock error when the subsequent refresh also fails", async () => {
   expect(calls("crawls.list")).toHaveLength(2);
   expect(screen.getByRole("alert")).not.toHaveTextContent("refresh-failed");
 });
+
+// spec: CRAWL-127
+it("titles a recent entry in the management dialog by crawl ID when its path spelling differs from the index file", async () => {
+  const alpha = fixtureRows[0]!.crawl;
+  fixture.core.uiState = { version: 1, state: { recentCrawls: [
+    { path: "/private/fixture/Alpha.ospider", crawlId: alpha.crawlId },
+    { path: "/fixture/Beta.ospider" },
+    { path: "/elsewhere/Gamma.ospider", crawlId: "0199f000-0000-7000-8000-00000000ffff" },
+  ] } };
+  // Only the dialog's own rows supply titles here: the recent list loads after the rows, and its index listing fails,
+  // so the entries carry no label of their own.
+  let finishLoad!: (value: unknown) => void;
+  fixture.core.handlers.set("uistate.load", () => new Promise(resolve => { finishLoad = resolve; }));
+  await mount();
+  fixture.core.handlers.set("crawls.list", () => { throw new IpcError(localError("Io", "err-io")); });
+  fixture.core.handlers.delete("uistate.load");
+  finishLoad(fixture.core.uiState);
+  const nav = await screen.findByRole("navigation", { name: "Recently opened" });
+  const known = await within(nav).findByRole("button", { name: /^Alpha – Oct 1, 2026, .*, \/private\/fixture\/Alpha\.ospider$/ });
+  expect(within(nav).getByRole("button", { name: /^Beta – Oct 2, 2026, .*, \/fixture\/Beta\.ospider$/ })).toBeVisible();
+  expect(within(nav).getByRole("button", { name: "/elsewhere/Gamma.ospider" })).toBeVisible();
+  // Opening stores the crawl ID reported by the core with the entry.
+  fireEvent.click(known);
+  await waitFor(() => expect((fixture.core.uiState.state as { recentCrawls: unknown[] }).recentCrawls[0]).toEqual({ path: alpha.file, crawlId: alpha.crawlId }));
+});
