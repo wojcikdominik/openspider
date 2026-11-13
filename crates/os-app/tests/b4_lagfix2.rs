@@ -184,10 +184,10 @@ async fn the_session_loop_sends_the_table_total_with_the_status_of_the_same_poll
 }
 
 // spec: UI-018
-// A running crawl at 20 URL/s: every tick that reports the crawl counter and the table total reports a total that
-// already contains every counted URL. The engine writes counted URLs before the snapshot of a due tick.
+// A running crawl at 20 URL/s: every URL a tick counts is contained in a table total that reaches the window at most
+// one second later (the live-counter bound of UI-018). The total of the same tick may still lag behind its counter.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn in_a_running_crawl_the_table_total_of_a_tick_contains_every_counted_url() {
+async fn in_a_running_crawl_a_table_total_contains_every_counted_url_within_one_second() {
     let site = os_testsite::TestSite::start_spec(
         "synthetic:n=400,links=5,seed=7",
         os_testsite::SiteOptions::default(),
@@ -219,10 +219,12 @@ async fn in_a_running_crawl_the_table_total_of_a_tick_contains_every_counted_url
         handle = op.unwrap().result.unwrap();
     }
     let view_id = handle["viewId"].as_str().unwrap().to_string();
-    let mut checked = Vec::new();
+    // (seq, crawled, total, first sight of the tick in this test)
+    let mut checked: Vec<(u64, u64, u64, std::time::Instant)> = Vec::new();
     let end = std::time::Instant::now() + Duration::from_secs(6);
     while std::time::Instant::now() < end {
         tokio::time::sleep(Duration::from_millis(20)).await;
+        let now = std::time::Instant::now();
         for tick in ticks(&sink) {
             let (Some(crawl), Some(total)) = (
                 tick.crawl.as_ref(),
@@ -233,20 +235,33 @@ async fn in_a_running_crawl_the_table_total_of_a_tick_contains_every_counted_url
             ) else {
                 continue;
             };
-            if crawl.phase == os_app::dto::CrawlPhase::Running {
-                checked.push((tick.seq, crawl.crawled, total));
+            if crawl.phase == os_app::dto::CrawlPhase::Running
+                && !checked.iter().any(|(seq, ..)| *seq == tick.seq)
+            {
+                checked.push((tick.seq, crawl.crawled, total, now));
             }
         }
     }
+    let observed_until = std::time::Instant::now();
     call(&app, "crawl.stop", json!(null)).await;
     assert!(
         checked.len() >= 5,
         "ticks with counter and total: {checked:?}"
     );
-    let behind: Vec<_> = checked.iter().filter(|(_, c, t)| t < c).collect();
+    // A tick whose second has not fully passed inside the observation window cannot be judged.
+    let second = Duration::from_secs(1);
+    let late: Vec<_> = checked
+        .iter()
+        .filter(|(_, _, _, seen)| *seen + second <= observed_until)
+        .filter(|(_, crawled, _, seen)| {
+            !checked
+                .iter()
+                .any(|(_, _, total, at)| *at <= *seen + second && total >= crawled)
+        })
+        .collect();
     assert!(
-        behind.is_empty(),
-        "total behind the counter of its own tick: {behind:?} of {checked:?}"
+        late.is_empty(),
+        "counted URLs missing from every total of the following second: {late:?} of {checked:?}"
     );
 }
 
