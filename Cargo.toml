@@ -22,7 +22,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0-rc.1"
 edition = "2021"
 license = "Apache-2.0"
 # M2-F01: kleinste Rust-Version, die alle Abhängigkeiten zulassen (roaring 0.11 verlangt 1.90); rust-toolchain.toml nimmt den Kanal stable
