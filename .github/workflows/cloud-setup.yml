@@ -58,7 +58,8 @@ jobs:
           # shellcheck disable=SC1091
           source "$HOME/.openspider-cloud-env"
           rustc --version && cargo --version
-          node --version | grep -E '^v22\.'
+          node --version
+          test "$(node --version | sed 's/^v//; s/\..*//')" -ge 22
           test "$OPENSPIDER_SECRET_STORE" = memory
           if [ -d node_modules/@playwright/test ]; then
             test -n "${OPENSPIDER_CHROMIUM:-}" && test -e "$OPENSPIDER_CHROMIUM"
