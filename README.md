@@ -40,7 +40,7 @@ What makes it different: **AI agents are first-class users.** A built-in MCP ser
 
 ## What's new
 
-**1.0.0-beta.4** (12 November 2026): new update dialog, live counters that follow the crawl within a second, clear messages when the start URL cannot be reached, repaired comparison view.
+**1.0.0-rc.1** (14 November 2026): release candidate for 1.0 – several connections per host for faster crawls on lossy networks, a live crawl table that keeps rows, selection and scroll position, "Recently opened" without duplicates, and on Windows the crawl file is free right after "Clear".
 
 Full list: [openspider.de/en/changelog](https://openspider.de/en/changelog/) · [GitHub Releases](https://github.com/wojcikdominik/openspider/releases)
 
