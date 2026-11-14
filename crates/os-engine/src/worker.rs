@@ -1805,6 +1805,8 @@ async fn assemble<F: Fetch>(
         });
     }
     let own = item.url.as_ref();
+    // INTEG-083: „Link-Positionen speichern“ aus → Linkzeilen ohne `Link Path` und `Link Position`.
+    let store_link_paths = cfg.link_positions.store;
     let mut links: Vec<LinkRow> = Vec::new();
     let mut position = 0u32;
     let mut push_row = |links: &mut Vec<LinkRow>, r: &Ref, id: Option<UrlId>, follow: bool| {
@@ -1821,8 +1823,8 @@ async fn assemble<F: Fetch>(
             rel: e.rel.clone(),
             target_attr: e.target.clone(),
             path_type: Some(e.path_type),
-            link_path: (!e.xpath.is_empty()).then(|| e.xpath.clone()),
-            link_position: (!e.xpath.is_empty()).then(|| e.position.clone()),
+            link_path: (store_link_paths && !e.xpath.is_empty()).then(|| e.xpath.clone()),
+            link_position: (store_link_paths && !e.xpath.is_empty()).then(|| e.position.clone()),
             link_origin: origins
                 .get(&crate::render_glue::link_key(e))
                 .copied()
@@ -1882,8 +1884,8 @@ async fn assemble<F: Fetch>(
             target_attr: None,
             path_type: Some(path_type_of(&r.raw)),
             // das Meta-Element im Kopf: Position Head und Pfad `//head/meta[n]`; Location und Header ohne beides
-            link_path: r.xpath.clone(),
-            link_position: r.xpath.as_ref().map(|x| {
+            link_path: r.xpath.clone().filter(|_| store_link_paths),
+            link_position: r.xpath.as_ref().filter(|_| store_link_paths).map(|x| {
                 if x.starts_with("//head/") {
                     LinkPosition::Head
                 } else {
