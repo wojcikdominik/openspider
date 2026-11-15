@@ -1210,3 +1210,43 @@ async fn local_psi_connect_checks_the_runtime_and_remote_still_needs_a_key() {
     assert_eq!(h.mock.log.calls().len(), 0);
     h.server.stop().await;
 }
+// RC1-PSILOCAL: „Verbinden“ nutzt Quelle und Lighthouse-Pfad aus dem Dialog, auch ungespeichert.
+// spec: INTEG-132
+#[tokio::test]
+async fn local_psi_connect_uses_the_lighthouse_path_from_the_dialog() {
+    let h = Harness::new().await;
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("fehlt").join("lighthouse");
+    let failed = h
+        .op(
+            "api.connect",
+            json!({"kind":"psi","psiLocal":true,"lighthousePath":missing.to_string_lossy()}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(failed.message_key, "err-api-lighthouse-missing");
+    assert_eq!(h.mock.log.calls().len(), 0, "keine Anfrage an die PSI-API");
+    h.call("api.disconnect", json!({"kind":"psi"}))
+        .await
+        .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let cli = dir.path().join("lighthouse");
+        std::fs::write(&cli, "#!/bin/sh\necho 13.0.0\n").unwrap();
+        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let account = h
+            .op(
+                "api.connect",
+                json!({"kind":"psi","psiLocal":true,"lighthousePath":cli.to_string_lossy(),"remember":false}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(account["account"], "Lighthouse 13.0.0");
+        let rows = h.call("api.list", json!(null)).await.unwrap();
+        assert_eq!(rows[2]["state"], "connected");
+        assert_eq!(rows[2]["account"], "Lighthouse 13.0.0");
+        assert_eq!(h.mock.log.calls().len(), 0);
+    }
+    h.server.stop().await;
+}

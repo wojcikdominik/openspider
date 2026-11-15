@@ -396,7 +396,17 @@ async fn authorize_ahrefs(
 
 async fn connect_now(app: App, ctx: CallCtx, args: ApiConnectArgs) -> Result<ApiAccount, CmdError> {
     let state = app.ext::<ApiState>();
-    let cfg = cfg(&app, &ctx);
+    let mut cfg = cfg(&app, &ctx);
+    if args.kind == ApiKind::Psi {
+        // INTEG-130/132: „Verbinden“ prüft die Auswahl des Dialogs, auch wenn sie noch nicht gespeichert ist.
+        if let Some(local) = args.psi_local {
+            cfg.api.psi.local = local;
+        }
+        if let Some(path) = &args.lighthouse_path {
+            let path = path.trim();
+            cfg.api.psi.lighthouse_path = (!path.is_empty()).then(|| path.into());
+        }
+    }
     let attempt = state
         .attempt
         .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
@@ -877,6 +887,7 @@ fn data_settings(mut value: serde_json::Value) -> serde_json::Value {
             "limits",
             "account",
             "oauth_client_id",
+            "lighthouse_path",
         ] {
             object.remove(key);
         }

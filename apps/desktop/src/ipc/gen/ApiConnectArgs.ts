@@ -24,4 +24,12 @@ accountId?: string | null,
 /**
  * OAuth-Client-Geheimnis; nur Eingabe.
  */
-clientSecret?: string | null, };
+clientSecret?: string | null, 
+/**
+ * PSI: Quelle Lokal laut Dialog (auch vor dem Speichern der Einstellungen; INTEG-130).
+ */
+psiLocal?: boolean | null, 
+/**
+ * PSI Lokal: Pfad zur Lighthouse-CLI laut Dialog (INTEG-132); leer = nicht konfiguriert.
+ */
+lighthousePath?: string | null, };

@@ -113,6 +113,16 @@ pub struct ApiConnectArgs {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub client_secret: Option<String>,
+
+    /// PSI: Quelle Lokal laut Dialog (auch vor dem Speichern der Einstellungen; INTEG-130).
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub psi_local: Option<bool>,
+
+    /// PSI Lokal: Pfad zur Lighthouse-CLI laut Dialog (INTEG-132); leer = nicht konfiguriert.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub lighthouse_path: Option<String>,
 }
 
 /// Ergebnis von `api.connect`.
