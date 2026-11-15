@@ -359,6 +359,20 @@ impl CrawlConfig {
             }
         }
 
+        if self
+            .api
+            .psi
+            .lighthouse_path
+            .as_ref()
+            .is_some_and(|p| p.as_os_str().to_string_lossy().trim().is_empty())
+        {
+            rep.errors.push(ConfigIssue::new(
+                ConfigIssueKind::InvalidValue,
+                "api.psi.lighthouse_path",
+                "darf nicht leer sein",
+            ));
+        }
+
         if self.user_agent.preset.trim().is_empty() {
             rep.errors.push(ConfigIssue::new(
                 ConfigIssueKind::InvalidValue,

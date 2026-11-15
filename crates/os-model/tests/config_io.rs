@@ -987,3 +987,47 @@ proptest! {
         prop_assert!(!text.to_lowercase().contains("password"));
     }
 }
+
+// spec: INTEG-132
+#[test]
+fn psi_lighthouse_path_round_trips_and_defaults_to_empty() {
+    let l = load("config/psi-local.osconfig");
+    assert!(l.warnings.is_empty(), "{:?}", l.warnings);
+    assert!(l.validate().is_ok());
+    let psi = &l.config.api.psi;
+    assert!(psi.local && psi.enabled);
+    let expected: PathBuf = [
+        "/opt",
+        "lighthouse",
+        "node_modules",
+        "lighthouse",
+        "cli",
+        "index.js",
+    ]
+    .iter()
+    .collect();
+    assert_eq!(
+        psi.lighthouse_path
+            .as_deref()
+            .map(|p| p.components().collect::<Vec<_>>()),
+        Some(expected.components().collect())
+    );
+    let text = l.config.to_osconfig_string().unwrap();
+    assert!(text.contains("lighthouse_path"), "{text}");
+    let back = CrawlConfig::load_str(&text).unwrap();
+    assert_eq!(back.config.api.psi, *psi);
+    // Standard: kein Pfad, und ein Profil ohne Pfad schreibt das Feld nicht.
+    assert_eq!(CrawlConfig::default().api.psi.lighthouse_path, None);
+    assert!(!CrawlConfig::default()
+        .to_osconfig_string()
+        .unwrap()
+        .contains("lighthouse_path"));
+    // Ein leerer Pfad ist ungültig statt still „nicht konfiguriert“.
+    let mut empty = l.config.clone();
+    empty.api.psi.lighthouse_path = Some(PathBuf::new());
+    let report = empty.validate();
+    assert!(report
+        .errors
+        .iter()
+        .any(|e| e.path == "api.psi.lighthouse_path"));
+}

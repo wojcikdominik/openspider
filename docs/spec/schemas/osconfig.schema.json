@@ -315,6 +315,7 @@
             "base_url": null,
             "device": "mobile",
             "enabled": false,
+            "lighthouse_path": null,
             "limits": {
               "concurrency": 5,
               "quota_limit": null,
@@ -2036,6 +2037,14 @@
           "description": "Quelle beim Crawl abfragen.",
           "type": "boolean"
         },
+        "lighthouse_path": {
+          "default": null,
+          "description": "Vorhandene Lighthouse-CLI für Quelle Lokal (INTEG-132): ausführbare Datei oder Skript `cli/index.js`.\nLeer bedeutet: keine Laufzeit konfiguriert.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "limits": {
           "$ref": "#/$defs/ApiLimitsConfig",
           "default": {
@@ -3597,6 +3606,7 @@
           "base_url": null,
           "device": "mobile",
           "enabled": false,
+          "lighthouse_path": null,
           "limits": {
             "concurrency": 5,
             "quota_limit": null,

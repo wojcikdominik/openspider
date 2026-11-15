@@ -1,0 +1,8 @@
+# PageSpeed mit Quelle Lokal und vorhandener Lighthouse-CLI (INTEG-132).
+schema_version = 2
+generator = "openspider 0.1.0"
+
+[api.psi]
+enabled = true
+local = true
+lighthouse_path = "/opt/lighthouse/node_modules/lighthouse/cli/index.js"

@@ -709,6 +709,9 @@ pub struct PsiConfig {
     pub device: PsiDevice,
     /// Lighthouse lokal ausführen statt über die PSI-API.
     pub local: bool,
+    /// Vorhandene Lighthouse-CLI für Quelle Lokal (INTEG-132): ausführbare Datei oder Skript `cli/index.js`.
+    /// Leer bedeutet: keine Laufzeit konfiguriert.
+    pub lighthouse_path: Option<std::path::PathBuf>,
     /// Ausgewählte Metrikgruppen.
     pub metric_groups: Vec<String>,
     /// Konto-Kennung ohne Geheimnis (INTEG-003).
