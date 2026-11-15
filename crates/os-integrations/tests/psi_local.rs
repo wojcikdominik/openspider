@@ -436,3 +436,159 @@ async fn the_daily_limit_does_not_apply_to_the_local_source() {
     }
     assert_eq!(source.daily_used(), 0);
 }
+
+// --- RC1-PSILOCAL (Issue 21): Quelle Lokal im Crawl-Weg über `ApiRun` ---
+
+fn crawl_file(dir: &tempfile::TempDir, cfg: &CrawlConfig) -> os_store::CrawlFile {
+    use os_model::Clock;
+    let clock =
+        os_model::ManualClock::new(os_model::Timestamp::from_db("2026-11-15T12:00:00Z").unwrap());
+    let file = os_store::CrawlFile::create(
+        &dir.path().join("crawl.ospider"),
+        &os_store::CrawlInit {
+            crawl_id: "01900000-0000-7000-8000-000000000021".parse().unwrap(),
+            mode: os_model::CrawlMode::List,
+            start_url: None,
+            list_source: None,
+            project: "fixture".into(),
+            name: "fixture".into(),
+            config: cfg.clone(),
+            created_at: clock.now(),
+        },
+        os_store::StorageProfile::default(),
+    )
+    .unwrap();
+    // Zwei abfragbare HTML-Seiten (Ersatzprozess: Modus `heavy`) und eine Ressource, die PSI nie abfragt.
+    for (id, url, class) in [
+        (1, "https://site.test/1/heavy", "HTML"),
+        (2, "https://site.test/2/heavy", "HTML"),
+        (3, "https://site.test/style.css", "CSS"),
+    ] {
+        file.conn()
+            .execute(
+                "INSERT INTO urls(id,url,address,origin,is_internal,in_tables,state,discovered_via,folder_depth,\
+                 url_length,content_class,status_code) \
+                 VALUES(?1,?2,?2,'https://site.test',1,1,'discovered','list_input',1,?3,?4,200)",
+                (id, url, url.len() as i64, class),
+            )
+            .unwrap();
+    }
+    file
+}
+
+fn glue_clock() -> Arc<dyn os_model::Clock> {
+    Arc::new(os_model::ManualClock::new(
+        os_model::Timestamp::from_db("2026-11-15T12:00:00Z").unwrap(),
+    ))
+}
+
+// spec: INTEG-130
+// spec: INTEG-132
+#[tokio::test]
+async fn local_source_without_account_runs_lighthouse_through_the_crawl_glue() {
+    use os_integrations::crawl_glue::ApiRun;
+    let (_, runner) = runner(1, Duration::from_secs(60));
+    let ctx = local_ctx();
+    let dir = tempfile::tempdir().unwrap();
+    let file = crawl_file(&dir, &ctx.cfg);
+    // Kein Konto im Schlüsselbund: Quelle Lokal verlangt keinen Schlüssel.
+    let mut run = ApiRun::new(ctx, glue_clock(), dir.path().join("quota.json"))
+        .with_psi_local(runner.clone());
+    assert!(run.validate(true).unwrap().is_empty());
+    run.collect(&file).await.unwrap();
+    let rows: Vec<(i64, f64)> = file
+        .conn()
+        .prepare(
+            "SELECT url_id, v_real FROM api_values WHERE source='psi' \
+             AND metric='Performance Score' ORDER BY url_id",
+        )
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(rows, vec![(1, 42.0), (2, 42.0)]);
+    assert!(runner.mean_run().is_some(), "Läufer wurde aufgerufen");
+    let errors: i64 = file
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM api_errors WHERE source='psi'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(errors, 0);
+    // Der Weg ohne Testläufer hängt einen Läufer an, sobald die Laufzeit gefunden wird; ohne Laufzeit keinen.
+    assert!(
+        os_integrations::psi::source_for(&local_ctx().cfg, glue_clock())
+            .local_runner()
+            .is_none()
+    );
+}
+
+// spec: INTEG-132
+// spec: INTEG-143
+#[tokio::test]
+async fn local_source_without_runtime_warns_or_fails_with_the_runtime_message() {
+    use os_integrations::crawl_glue::{self, ApiRun};
+    let ctx = local_ctx();
+    // Ohne konfigurierten Pfad findet die Suche keine Laufzeit (kein Bündel, kein Konfigurationsfeld).
+    assert_eq!(
+        os_integrations::psi::local_runner_for(&ctx.cfg).err(),
+        Some(ApiError::NotConnected(RUNTIME_MISSING.into()))
+    );
+    let warnings = crawl_glue::preflight(&ctx, false).unwrap();
+    assert_eq!(
+        warnings,
+        ["psi: PageSpeed läuft nicht lokal (Fehler: Lighthouse-Laufzeit nicht gefunden)"]
+    );
+    assert!(!warnings[0].contains("Konto"), "kein Konto verlangt");
+    let err = crawl_glue::preflight(&ctx, true).unwrap_err();
+    assert!(err.to_string().contains(RUNTIME_MISSING), "{err}");
+    assert!(crawl_glue::validate_apis(&ctx).is_err());
+
+    let dir = tempfile::tempdir().unwrap();
+    let file = crawl_file(&dir, &ctx.cfg);
+    let mut run = ApiRun::new(ctx.clone(), glue_clock(), dir.path().join("quota.json"));
+    assert_eq!(run.validate(false).unwrap(), warnings);
+    run.collect(&file).await.unwrap();
+    let values: i64 = file
+        .conn()
+        .query_row("SELECT COUNT(*) FROM api_values", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(values, 0, "weggefallene Quelle fragt nichts ab");
+    let mut strict = ApiRun::new(ctx, glue_clock(), dir.path().join("quota.json"));
+    assert!(strict
+        .validate(true)
+        .unwrap_err()
+        .to_string()
+        .contains(RUNTIME_MISSING));
+}
+
+// spec: INTEG-130
+#[tokio::test]
+async fn remote_source_without_key_stays_disconnected_and_is_not_switched_to_local() {
+    use os_integrations::crawl_glue::{self, ApiRun};
+    let mut ctx = local_ctx();
+    ctx.cfg.api.psi.local = false;
+    assert_eq!(
+        crawl_glue::preflight(&ctx, false).unwrap(),
+        ["psi: Konto Standard nicht verbunden"]
+    );
+    assert!(crawl_glue::preflight(&ctx, true).is_err());
+    assert!(os_integrations::psi::source_for(&ctx.cfg, glue_clock())
+        .local_runner()
+        .is_none());
+    // Ein Testläufer ändert an Remote nichts: keine stille Umstellung auf Lokal.
+    let (_, runner) = runner(1, Duration::from_secs(60));
+    let dir = tempfile::tempdir().unwrap();
+    let file = crawl_file(&dir, &ctx.cfg);
+    let mut run = ApiRun::new(ctx, glue_clock(), dir.path().join("quota.json"))
+        .with_psi_local(runner.clone());
+    assert_eq!(
+        run.validate(false).unwrap(),
+        ["psi: Konto Standard nicht verbunden"]
+    );
+    run.collect(&file).await.unwrap();
+    assert!(runner.mean_run().is_none(), "kein lokaler Lauf");
+}

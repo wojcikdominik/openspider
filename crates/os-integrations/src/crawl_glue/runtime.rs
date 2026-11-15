@@ -52,7 +52,15 @@ fn account(cfg: &CrawlConfig, kind: ApiKind) -> Option<&str> {
     }
 }
 
+/// Quelle PSI mit Quelle Lokal: kein Konto, sondern die Lighthouse-Laufzeit entscheidet (INTEG-130/132).
+fn psi_local(cfg: &CrawlConfig, kind: ApiKind) -> bool {
+    kind == ApiKind::Psi && crate::psi::is_local(cfg)
+}
+
 pub(super) fn connected(ctx: &ApiCtx, kind: ApiKind) -> bool {
+    if psi_local(&ctx.cfg, kind) {
+        return crate::psi::local_runner_for(&ctx.cfg).is_ok();
+    }
     crate::credentials::read_account(ctx.secrets.as_ref(), kind, account(&ctx.cfg, kind)).is_ok_and(
         |c| {
             c.api_key
@@ -65,13 +73,32 @@ pub(super) fn connected(ctx: &ApiCtx, kind: ApiKind) -> bool {
 
 /// No network request: missing selected accounts fail before a crawl can be created when required.
 pub fn preflight(ctx: &ApiCtx, require: bool) -> Result<Vec<String>, ApiError> {
+    check(ctx, require, |kind| connected(ctx, kind))
+}
+
+/// Warnung bzw. Fehler einer nicht bereiten Quelle; lokal nennt sie die fehlende Laufzeit (INTEG-132).
+fn not_ready(cfg: &CrawlConfig, kind: ApiKind) -> String {
+    if psi_local(cfg, kind) {
+        return format!(
+            "{kind}: PageSpeed läuft nicht lokal ({})",
+            crate::psi::local::RUNTIME_MISSING
+        );
+    }
+    format!(
+        "{kind}: Konto {} nicht verbunden",
+        account(cfg, kind).unwrap_or("Standard")
+    )
+}
+
+fn check(
+    ctx: &ApiCtx,
+    require: bool,
+    ready: impl Fn(ApiKind) -> bool,
+) -> Result<Vec<String>, ApiError> {
     let mut warnings = Vec::new();
     for kind in enabled(&ctx.cfg) {
-        if !connected(ctx, kind) {
-            let message = format!(
-                "{kind}: Konto {} nicht verbunden",
-                account(&ctx.cfg, kind).unwrap_or("Standard")
-            );
+        if !ready(kind) {
+            let message = not_ready(&ctx.cfg, kind);
             if require {
                 return Err(ApiError::NotConnected(message));
             }
@@ -100,6 +127,8 @@ pub struct ApiRun {
     ga4: Arc<crate::ga4::Ga4Source>,
     gsc: Arc<crate::gsc::GscSource>,
     sources: Vec<Arc<dyn ApiSource>>,
+    /// Quelle PSI läuft lokal und hat einen Lighthouse-Läufer (INTEG-132).
+    psi_local_ready: bool,
 }
 impl ApiRun {
     pub fn new(ctx: ApiCtx, clock: Arc<dyn Clock>, ledger: PathBuf) -> Self {
@@ -112,6 +141,7 @@ impl ApiRun {
             clock.clone(),
             Arc::new(crate::quota::QuotaLedger::new(ledger)),
         ));
+        let mut psi_local_ready = false;
         let sources = enabled(&ctx.cfg)
             .into_iter()
             .map(|kind| -> Arc<dyn ApiSource> {
@@ -119,7 +149,10 @@ impl ApiRun {
                     ApiKind::Ga4 => ga4.clone(),
                     ApiKind::Gsc => gsc.clone(),
                     ApiKind::Psi => {
-                        Arc::new(crate::psi::PsiSource::new().with_clock(clock.clone()))
+                        // INTEG-132: bei Quelle Lokal hängt der Läufer der Crawl-Konfiguration an der Quelle.
+                        let psi = crate::psi::source_for(&ctx.cfg, clock.clone());
+                        psi_local_ready = psi.local_runner().is_some();
+                        Arc::new(psi)
                     }
                     kind => Arc::new(crate::linkmetrics::LinkMetrics::with_clock(
                         kind,
@@ -134,17 +167,49 @@ impl ApiRun {
             ga4,
             gsc,
             sources,
+            psi_local_ready,
         }
     }
 
+    /// Ersetzt den lokalen Lighthouse-Läufer der Quelle PSI (Einbettung und Tests ohne installierte Laufzeit).
+    pub fn with_psi_local(mut self, runner: Arc<crate::psi::local::LocalRunner>) -> Self {
+        if !psi_local(&self.ctx.cfg, ApiKind::Psi) {
+            return self;
+        }
+        for source in &mut self.sources {
+            if source.kind() == ApiKind::Psi {
+                *source = Arc::new(
+                    crate::psi::PsiSource::new()
+                        .with_clock(self.clock.clone())
+                        .with_local(runner.clone()),
+                );
+                self.psi_local_ready = true;
+            }
+        }
+        self
+    }
+
+    fn ready(&self, kind: ApiKind) -> bool {
+        if psi_local(&self.ctx.cfg, kind) {
+            return self.psi_local_ready;
+        }
+        connected(&self.ctx, kind)
+    }
+
     pub fn validate(&mut self, require: bool) -> Result<Vec<String>, ApiError> {
-        let warnings = preflight(&self.ctx, require)?;
+        let warnings = check(&self.ctx, require, |kind| self.ready(kind))?;
         if require && self.sources.is_empty() {
             return Err(ApiError::NotConnected(
                 "Mindestens eine Integration muss verbunden sein".into(),
             ));
         }
-        self.sources.retain(|s| connected(&self.ctx, s.kind()));
+        let ready: Vec<ApiKind> = self
+            .sources
+            .iter()
+            .map(|s| s.kind())
+            .filter(|kind| self.ready(*kind))
+            .collect();
+        self.sources.retain(|s| ready.contains(&s.kind()));
         Ok(warnings)
     }
 

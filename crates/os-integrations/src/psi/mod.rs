@@ -53,6 +53,26 @@ pub fn eligible_urls(file: &os_store::CrawlFile) -> Result<Vec<UrlRef>, ApiError
     rows.collect::<Result<Vec<_>, _>>().map_err(failed)
 }
 
+/// Ist für `cfg` die Quelle Lokal gewählt (INTEG-130)?
+pub fn is_local(cfg: &os_model::CrawlConfig) -> bool {
+    Source::of(&cfg.api.psi) == Source::Local
+}
+
+/// Lokaler Läufer laut Crawl-Konfiguration (INTEG-132); ohne Laufzeit [`local::RUNTIME_MISSING`].
+pub fn local_runner_for(cfg: &os_model::CrawlConfig) -> Result<Arc<local::LocalRunner>, ApiError> {
+    local::LocalRunner::discover(&local::LocalOptions::from_config(&cfg.api.psi)).map(Arc::new)
+}
+
+/// Quelle `psi` für Crawl und Verbindungstest: bei Quelle Lokal mit dem gefundenen Läufer (INTEG-130/132). Fehlt die
+/// Laufzeit, bleibt die Quelle ohne Läufer und meldet [`local::RUNTIME_MISSING`].
+pub fn source_for(cfg: &os_model::CrawlConfig, clock: Arc<dyn Clock>) -> PsiSource {
+    let source = PsiSource::new().with_clock(clock);
+    match is_local(cfg).then(|| local_runner_for(cfg)) {
+        Some(Ok(runner)) => source.with_local(runner),
+        _ => source,
+    }
+}
+
 /// Wartefunktion (Backoff, Pause); Tests ersetzen sie durch eine Testuhr.
 pub type Sleep = Arc<dyn Fn(Duration) -> BoxFuture<'static, ()> + Send + Sync>;
 

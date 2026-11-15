@@ -60,6 +60,12 @@ pub fn cores() -> usize {
 }
 
 impl LocalOptions {
+    /// Optionen des Crawls (INTEG-132). `api.psi` trägt bisher weder Parallelität, Timeout noch Pfade zu
+    /// Node/Lighthouse; es gelten die Standardwerte (Parallelität 1, Timeout 90 s, kein Pfad).
+    pub fn from_config(_cfg: &os_model::config::PsiConfig) -> LocalOptions {
+        LocalOptions::default()
+    }
+
     /// Prüft Parallelität und Timeout gegen die Grenzen des Dialogs.
     pub fn validate(&self, cores: usize) -> Result<(), String> {
         if !(1..=max_parallel(cores)).contains(&self.parallel) {
