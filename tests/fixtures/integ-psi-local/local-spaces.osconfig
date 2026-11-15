@@ -1,0 +1,11 @@
+# Unabhängige Testfixture INTEG-130/132: PageSpeed mit Quelle Lokal, Gerät Desktop und einem
+# Lighthouse-Pfad mit Leerzeichen (wie „Program Files“). Der Pfad muss nicht existieren: geprüft wird
+# nur das Laden und Schreiben der Konfiguration.
+schema_version = 2
+generator = "openspider 0.1.0"
+
+[api.psi]
+enabled = true
+device = "desktop"
+local = true
+lighthouse_path = "/opt/Light House/node_modules/lighthouse/cli/index.js"

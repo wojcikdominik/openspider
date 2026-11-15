@@ -1,0 +1,9 @@
+# Unabhängige Testfixture INTEG-130: Quelle Remote (Standard), aber ein zuvor eingetragener
+# Lighthouse-Pfad bleibt in der Datei stehen. Er darf die Quelle nicht auf Lokal umstellen.
+schema_version = 2
+generator = "openspider 0.1.0"
+
+[api.psi]
+enabled = true
+local = false
+lighthouse_path = "/usr/local/bin/lighthouse"
