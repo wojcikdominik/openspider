@@ -3,10 +3,14 @@
 //! verschwindet, liefert weiterhin genau einen.
 //!
 //! Der Update-Ausgang unter Windows wird nachgestellt wie im Updater-Plugin: Der von der App gesetzte Hook
-//! (`on_before_exit`, hier `os_app::crash::on_orderly_exit`) läuft auf einem Hintergrund-Thread, danach endet der
-//! Prozess mit `std::process::exit(0)` – ohne `RunEvent::Exit` und ohne Destruktoren. Der macOS-Weg (Marke entfernen,
-//! dann neu starten, danach evtl. noch `RunEvent::Exit`) wird als zweifacher Aufruf mit normalem Prozessende
-//! nachgestellt. Jeder App-Lauf ist ein eigener Kindprozess dieser Testdatei.
+//! (`on_before_exit`, hier `os_app::crash::on_update_exit`) läuft auf einem Hintergrund-Thread, danach endet der
+//! Prozess mit `std::process::exit(0)` – ohne `RunEvent::Exit` und ohne Destruktoren. Startet der Installer nicht,
+//! läuft die App weiter (`os_app::crash::resume_after_update_exit`) und kann später geordnet oder hart enden. Der
+//! macOS-Weg (`on_orderly_exit` vor dem Neustart, danach evtl. noch `RunEvent::Exit`) wird als zweifacher Aufruf mit
+//! normalem Prozessende nachgestellt. Jeder App-Lauf ist ein eigener Kindprozess dieser Testdatei.
+use os_app::crash::session::Marker;
+use os_app::pool::CrawlKey;
+use os_app::runtime::lifecycle_bus::CrawlEvent;
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader};
@@ -36,20 +40,59 @@ fn crashes(home: &Path) -> PathBuf {
     home.join("logs").join("crashes")
 }
 
-/// Hook-Signatur wie beim Updater-Plugin (`Fn() + Send + Sync + 'static`).
-fn update_hook() -> Arc<dyn Fn() + Send + Sync + 'static> {
-    Arc::new(os_app::crash::on_orderly_exit)
+type Hook = Arc<dyn Fn() + Send + Sync + 'static>;
+
+/// Hook-Signatur wie beim Updater-Plugin (`Fn() + Send + Sync + 'static`): der Hook, den `update.rs` setzt.
+fn update_hook() -> Hook {
+    Arc::new(os_app::crash::on_update_exit)
 }
 
-/// Hook auf einem anderen Thread ausführen (das Plugin installiert in einer blockierenden Hintergrundaufgabe).
-fn run_hook_on_worker(hook: &Arc<dyn Fn() + Send + Sync + 'static>) {
-    let hook = hook.clone();
+/// Funktion auf einem anderen Thread ausführen (das Plugin installiert in einer blockierenden Hintergrundaufgabe).
+fn on_worker(f: Hook) {
     std::thread::Builder::new()
         .name("update-install".into())
-        .spawn(move || hook())
+        .spawn(move || f())
         .unwrap()
         .join()
         .unwrap();
+}
+
+/// Installer startet nicht: `install()` legt die Marke wieder an (asynchrone Aufgabe, anderer Thread).
+fn resume_on_worker() {
+    on_worker(Arc::new(os_app::crash::resume_after_update_exit));
+}
+
+/// Sitzungsmarken-Dateien im Ordner (nur `session-*.json`).
+fn marker_files(home: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(crashes(home))
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| n.starts_with("session-") && n.ends_with(".json"))
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+/// Genau eine Marke, die des eigenen Prozesses, gelesen.
+fn own_marker(home: &Path) -> Marker {
+    let me = format!("session-{}.json", std::process::id());
+    assert_eq!(
+        marker_files(home).as_slice(),
+        std::slice::from_ref(&me),
+        "genau die eigene Marke"
+    );
+    serde_json::from_str(&std::fs::read_to_string(crashes(home).join(me)).unwrap()).unwrap()
+}
+
+fn no_marker(home: &Path, context: &str) {
+    assert!(
+        marker_files(home).is_empty(),
+        "{context}: Marke vorhanden {:?}",
+        marker_files(home)
+    );
 }
 
 /// Kindprozess-Einstieg; ohne gesetzte Umgebungsvariable ein leerer Test.
@@ -60,15 +103,21 @@ fn updexit_child() {
     };
     let home = PathBuf::from(std::env::var_os(HOME).unwrap());
     if mode == "hook-without-session" {
-        // Hook ohne App und ohne Sitzungsmarke: darf nicht scheitern.
+        // Update-Ausgang, Wiederaufnahme und geordnetes Ende ohne App und ohne Sitzungsmarke: darf nicht scheitern.
         let hook = update_hook();
-        run_hook_on_worker(&hook);
+        on_worker(hook.clone());
         hook();
+        resume_on_worker();
+        os_app::crash::resume_after_update_exit();
+        os_app::crash::on_orderly_exit();
+        no_marker(&home, "ohne Sitzung");
         std::process::exit(0);
     }
     os_app::crash::enable_session_tracking();
     let app = os_app::App::new(os_app::AppConfig::new(&home)).unwrap();
     let own = crashes(&home).join(format!("session-{}.json", std::process::id()));
+    let crawl = |ev: CrawlEvent| app.crawl_events().emit(&app, ev);
+    let key = || CrawlKey("updexit-crawl".into());
     match mode.as_str() {
         "run" => {
             println!("READY");
@@ -92,7 +141,7 @@ fn updexit_child() {
         // Windows-Update: Hook auf dem Installationsthread, danach hartes `exit(0)`.
         "update-exit" => {
             assert!(own.exists(), "eigene Marke vor dem Update-Ausgang");
-            run_hook_on_worker(&update_hook());
+            on_worker(update_hook());
             assert!(!own.exists(), "Hook hat die eigene Marke nicht entfernt");
             std::process::exit(0);
         }
@@ -100,18 +149,114 @@ fn updexit_child() {
         "update-exit-twice" => {
             assert!(own.exists());
             let hook = update_hook();
-            run_hook_on_worker(&hook);
+            on_worker(hook.clone());
             hook();
-            run_hook_on_worker(&hook);
+            on_worker(hook);
+            no_marker(&home, "nach mehrfachem Hook");
             std::process::exit(0);
         }
-        // macOS-Weg: Marke im Update-Pfad entfernen, danach geordnetes Exit-Ereignis mit demselben Aufruf und
-        // normalem Prozessende (Destruktoren laufen).
+        // macOS-Weg: Marke vor dem Neustart geordnet entfernen, danach geordnetes Exit-Ereignis und normales Ende.
         "update-then-exit-event" => {
             assert!(own.exists());
-            run_hook_on_worker(&update_hook());
+            on_worker(Arc::new(os_app::crash::on_orderly_exit));
             os_app::crash::on_orderly_exit();
-            drop(app);
+            // Rückkehr: normales Prozessende mit Destruktoren.
+        }
+        // Hook gelaufen, danach doch geordnetes Ende (z. B. Installation beim Beenden), dann `exit(0)`.
+        "update-exit-then-orderly" => {
+            on_worker(update_hook());
+            os_app::crash::on_orderly_exit();
+            no_marker(&home, "nach geordnetem Ende");
+            std::process::exit(0);
+        }
+        // Installer startet nicht, App läuft weiter und endet später hart.
+        "fail-resume-hard" => {
+            let before = own_marker(&home);
+            on_worker(update_hook());
+            no_marker(&home, "nach Hook");
+            resume_on_worker();
+            let after = own_marker(&home);
+            assert_eq!(after, before, "wieder angelegte Marke unverändert");
+            std::process::exit(0);
+        }
+        // Installer startet nicht, App läuft weiter und endet später geordnet.
+        "fail-resume-orderly" => {
+            on_worker(update_hook());
+            resume_on_worker();
+            own_marker(&home);
+            os_app::crash::on_orderly_exit();
+            no_marker(&home, "nach geordnetem Ende");
+            std::process::exit(0);
+        }
+        // Erster Update-Versuch scheitert, zweiter startet den Installer.
+        "fail-then-retry-exit" => {
+            on_worker(update_hook());
+            resume_on_worker();
+            own_marker(&home);
+            on_worker(update_hook());
+            no_marker(&home, "nach zweitem Hook");
+            std::process::exit(0);
+        }
+        // Crawl startet im Fenster zwischen Update-Ausgang und Weiterlaufen.
+        "window-crawl-start" => {
+            assert!(!own_marker(&home).crawl_running);
+            on_worker(update_hook());
+            crawl(CrawlEvent::Started(key()));
+            no_marker(&home, "Crawl-Start im Fenster");
+            resume_on_worker();
+            assert!(own_marker(&home).crawl_running, "aktueller Zustand");
+            std::process::exit(0);
+        }
+        // Crawl endet im Fenster.
+        "window-crawl-stop" => {
+            crawl(CrawlEvent::Started(key()));
+            assert!(own_marker(&home).crawl_running);
+            on_worker(update_hook());
+            crawl(CrawlEvent::Stopped(key()));
+            no_marker(&home, "Crawl-Ende im Fenster");
+            resume_on_worker();
+            assert!(!own_marker(&home).crawl_running, "aktueller Zustand");
+            std::process::exit(0);
+        }
+        // Panic in einem Thread im Fenster (der Prozess läuft weiter).
+        "window-panic" => {
+            on_worker(update_hook());
+            let joined = std::thread::Builder::new()
+                .name("updexit-panic".into())
+                .spawn(|| panic!("updexit test panic im Update-Fenster"))
+                .unwrap()
+                .join();
+            assert!(joined.is_err());
+            no_marker(&home, "Panic im Fenster");
+            resume_on_worker();
+            assert!(own_marker(&home).panic_report, "Panic-Stand in der Marke");
+            std::process::exit(0);
+        }
+        // Wiederaufnahme ohne Update-Ausgang (Fehler vor dem Hook, z. B. ungültige Signatur), doppelt.
+        "resume-without-update-exit-hard" => {
+            let before = own_marker(&home);
+            resume_on_worker();
+            os_app::crash::resume_after_update_exit();
+            assert_eq!(own_marker(&home), before);
+            std::process::exit(0);
+        }
+        // Update-Ausgang doppelt, Wiederaufnahme doppelt, dann hart.
+        "double-exit-double-resume-hard" => {
+            let hook = update_hook();
+            on_worker(hook.clone());
+            hook();
+            resume_on_worker();
+            resume_on_worker();
+            own_marker(&home);
+            std::process::exit(0);
+        }
+        // Wiederaufnahme nach geordnetem Ende legt nichts an.
+        "resume-after-orderly" => {
+            on_worker(update_hook());
+            os_app::crash::on_orderly_exit();
+            resume_on_worker();
+            no_marker(&home, "Wiederaufnahme nach geordnetem Ende");
+            std::process::exit(0);
         }
         // Gegenprobe: hartes `exit(0)` ohne geordnetes Ende.
         "hard-exit" => {
@@ -454,4 +599,113 @@ fn update_exit_with_full_report_folder_adds_nothing_and_hard_exit_report_survive
         .unwrap();
     assert_eq!(newest.1["kind"], "unclean_exit");
     assert!(markers(home.path()).is_empty());
+}
+
+/// Kindprozess laufen lassen, danach Folgestart: Arten der Berichte; danach keine Marke übrig.
+fn then_start(mode: &str, home: &Path) -> Vec<String> {
+    run_child(mode, home);
+    let found = kinds(&start(home));
+    assert!(markers(home).is_empty(), "{mode}: {:?}", markers(home));
+    found
+}
+
+// spec: OUT-246
+#[test]
+fn update_exit_then_orderly_end_yields_no_report() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(then_start("update-exit-then-orderly", home.path()).is_empty());
+}
+
+// spec: OUT-246
+#[test]
+fn failed_installer_start_then_hard_end_yields_exactly_one_unclean_exit() {
+    let home = tempfile::tempdir().unwrap();
+    let (pid, _) = run_child("fail-resume-hard", home.path());
+    assert_eq!(markers(home.path()), [marker_name(pid)]);
+    let overview = start(home.path());
+    assert_eq!(kinds(&overview), ["unclean_exit"], "{overview}");
+    assert_eq!(overview["pending"].as_array().unwrap().len(), 1);
+    assert!(markers(home.path()).is_empty());
+    assert_eq!(kinds(&start(home.path())), ["unclean_exit"], "kein zweiter");
+}
+
+// spec: OUT-246
+#[test]
+fn failed_installer_start_then_orderly_end_yields_no_report() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(then_start("fail-resume-orderly", home.path()).is_empty());
+    assert!(report_files(home.path()).is_empty());
+}
+
+// spec: OUT-246
+#[test]
+fn failed_first_attempt_then_successful_update_exit_yields_no_report() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(then_start("fail-then-retry-exit", home.path()).is_empty());
+}
+
+/// Einziger Bericht nach dem Folgestart.
+fn only_report(home: &Path) -> Value {
+    let files = report_files(home);
+    assert_eq!(files.len(), 1, "{files:?}");
+    files.into_iter().next().unwrap().1
+}
+
+// spec: OUT-246
+#[test]
+fn crawl_started_between_update_exit_and_resume_is_in_the_later_report() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(
+        then_start("window-crawl-start", home.path()),
+        ["unclean_exit"]
+    );
+    assert_eq!(only_report(home.path())["crawl_running"], true);
+}
+
+// spec: OUT-246
+#[test]
+fn crawl_stopped_between_update_exit_and_resume_is_in_the_later_report() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(
+        then_start("window-crawl-stop", home.path()),
+        ["unclean_exit"]
+    );
+    assert_eq!(only_report(home.path())["crawl_running"], false);
+}
+
+// spec: OUT-246
+#[test]
+fn panic_between_update_exit_and_resume_then_hard_end_yields_only_the_panic_report() {
+    // `unclean_exit` nur „ohne `panic`-Bericht“: der Lauf hat einen, also kein zweiter Bericht.
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(then_start("window-panic", home.path()), ["panic"]);
+    assert_eq!(only_report(home.path())["kind"], "panic");
+}
+
+// spec: OUT-246
+#[test]
+fn resume_without_update_exit_is_harmless_and_a_hard_end_still_reports_once() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(
+        then_start("resume-without-update-exit-hard", home.path()),
+        ["unclean_exit"]
+    );
+}
+
+// spec: OUT-246
+#[test]
+fn double_update_exit_and_double_resume_then_hard_end_reports_once() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(
+        then_start("double-exit-double-resume-hard", home.path()),
+        ["unclean_exit"]
+    );
+    assert_eq!(kinds(&start(home.path())), ["unclean_exit"]);
+}
+
+// spec: OUT-246
+#[test]
+fn resume_after_orderly_end_creates_no_marker_and_no_report() {
+    let home = tempfile::tempdir().unwrap();
+    assert!(then_start("resume-after-orderly", home.path()).is_empty());
 }
