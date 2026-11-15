@@ -135,6 +135,7 @@ err-api-disconnected = The integration is not connected.
 err-api-source-unavailable = This data source is not available yet.
 err-api-request = The request to the provider failed.
 err-api-key = Please enter an API key.
+err-api-lighthouse-missing = Lighthouse runtime not found
 err-api-client-id = Enter your own OAuth client ID under Advanced first.
 err-api-connecting = A connection attempt is already running.
 err-api-account = The selected account no longer exists.

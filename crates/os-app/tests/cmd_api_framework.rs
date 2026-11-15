@@ -1171,3 +1171,42 @@ async fn provider_day_and_crawl_cap_have_independent_usage_and_summary_minimum()
     assert_eq!(ledger.remaining("psi", "", now, 25000).unwrap(), 0);
     h.server.stop().await;
 }
+// RC1-PSILOCAL (Issue 21): „Verbinden“ mit Quelle Lokal prüft die Lighthouse-Laufzeit, nicht einen Schlüssel.
+// spec: INTEG-130
+// spec: INTEG-132
+#[tokio::test]
+async fn local_psi_connect_checks_the_runtime_and_remote_still_needs_a_key() {
+    let h = Harness::new().await;
+    let window = os_app::WindowId("main".into());
+    let set_local = |local: bool| {
+        let mut session = h.app.sessions().current(&window).unwrap();
+        let mut cfg = (*session.config).clone();
+        cfg.api.psi.local = local;
+        session.config = Arc::new(cfg);
+        h.app.sessions().set_current(window.clone(), session);
+    };
+    set_local(true);
+    let failed = h
+        .op("api.connect", json!({"kind":"psi","remember":true}))
+        .await
+        .unwrap_err();
+    assert_eq!(failed.message_key, "err-api-lighthouse-missing");
+    assert_eq!(failed.code, ErrorCode::Permission);
+    assert_eq!(h.mock.log.calls().len(), 0, "keine Anfrage an die PSI-API");
+    assert_eq!(
+        h.call("api.list", json!(null)).await.unwrap()[2]["state"],
+        "error"
+    );
+    h.call("api.disconnect", json!({"kind":"psi"}))
+        .await
+        .unwrap();
+    // Remote bleibt unverändert: ohne Schlüssel kein Verbindungsversuch, keine Umstellung auf Lokal.
+    set_local(false);
+    let failed = h
+        .op("api.connect", json!({"kind":"psi","remember":true}))
+        .await
+        .unwrap_err();
+    assert_eq!(failed.message_key, "err-api-key");
+    assert_eq!(h.mock.log.calls().len(), 0);
+    h.server.stop().await;
+}

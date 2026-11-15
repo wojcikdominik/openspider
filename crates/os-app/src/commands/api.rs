@@ -154,6 +154,10 @@ fn error(e: ApiError) -> CmdError {
             status: 401 | 403, ..
         }
         | ApiError::Unauthorized(_) => CmdError::new(ErrorCode::Permission, "err-api-reconnect"),
+        // INTEG-132: Quelle Lokal ohne Lighthouse-Laufzeit hat einen eigenen Status.
+        ApiError::NotConnected(ref m) if m == os_integrations::psi::local::RUNTIME_MISSING => {
+            CmdError::new(ErrorCode::Permission, "err-api-lighthouse-missing")
+        }
         ApiError::NotConnected(_) => CmdError::new(ErrorCode::Permission, "err-api-disconnected"),
         _ => CmdError::new(ErrorCode::Io, "err-api-request"),
     }
@@ -256,6 +260,11 @@ async fn probe(
         Ok(credential.clone())
     } else if let Some(source) = source {
         source.test_connection(&ctx, credential).await
+    } else if kind == ApiKind::Psi && os_integrations::psi::is_local(&ctx.cfg) {
+        // INTEG-132: lokal prüft „Verbinden“ die Lighthouse-Laufzeit, nicht die PSI-API.
+        os_integrations::psi::source_for(&ctx.cfg, app.config().clock.clone())
+            .test_connection(&ctx, credential)
+            .await
     } else {
         http::probe(
             model(kind),
@@ -510,6 +519,18 @@ async fn connect_now(app: App, ctx: CallCtx, args: ApiConnectArgs) -> Result<Api
                 .map_err(error)?
         } else if args.kind == ApiKind::Ahrefs {
             authorize_ahrefs(&app, &state, &cfg).await?
+        } else if args.kind == ApiKind::Psi && os_integrations::psi::is_local(&cfg) {
+            // INTEG-130/132: Quelle Lokal braucht keinen Schlüssel; ein Remote-Konto bleibt unberührt.
+            Credential {
+                account_id: "local".into(),
+                label: name(args.kind).into(),
+                api_key: None,
+                access_token: None,
+                refresh_token: None,
+                expires_at: None,
+                client_secret: None,
+                scopes: vec![],
+            }
         } else {
             let key = args
                 .api_key

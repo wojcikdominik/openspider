@@ -100,6 +100,15 @@ describe("INTEG-130 PSI-Ablehnung", () => {
   });
 });
 
+describe("INTEG-132 Lokaler Lighthouse-Lauf", () => {
+  // spec: INTEG-132
+  it("meldet die fehlende Lighthouse-Laufzeit beim Verbinden von Lokal", () => {
+    const missing = { ...err("err-api-lighthouse-missing", "API nicht verbunden"), code: "Permission" } as CmdError;
+    expect(statusText(de, "psi", { state: "error", error: missing })).toBe("Fehler: Lighthouse-Laufzeit nicht gefunden");
+    expect(statusText(en, "psi", { state: "error", error: missing })).toBe("Error: Lighthouse runtime not found");
+  });
+});
+
 describe("INTEG-007 API-Fortschritt", () => {
   const row = (kind: ApiRow["kind"], completed: number, requested: number, errors: number, connected = true): ApiRow => ({
     kind, labelKey: `api-${kind}`, connected, requested, received: completed - errors, errors, running: completed < requested, completed,
