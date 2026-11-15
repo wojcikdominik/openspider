@@ -60,10 +60,16 @@ pub fn cores() -> usize {
 }
 
 impl LocalOptions {
-    /// Optionen des Crawls (INTEG-132). `api.psi` trägt bisher weder Parallelität, Timeout noch Pfade zu
-    /// Node/Lighthouse; es gelten die Standardwerte (Parallelität 1, Timeout 90 s, kein Pfad).
-    pub fn from_config(_cfg: &os_model::config::PsiConfig) -> LocalOptions {
-        LocalOptions::default()
+    /// Optionen des Crawls (INTEG-132): Pfad zur Lighthouse-CLI aus `api.psi.lighthouse_path`. Parallelität und
+    /// Timeout trägt die Konfiguration nicht; es gelten die Standardwerte (1, 90 s). Node kommt aus `PATH`.
+    pub fn from_config(cfg: &os_model::config::PsiConfig) -> LocalOptions {
+        LocalOptions {
+            lighthouse: cfg
+                .lighthouse_path
+                .clone()
+                .filter(|p| !p.as_os_str().is_empty()),
+            ..LocalOptions::default()
+        }
     }
 
     /// Prüft Parallelität und Timeout gegen die Grenzen des Dialogs.
@@ -181,22 +187,42 @@ impl NodeLighthouse {
     }
 }
 
+impl NodeLighthouse {
+    /// Prozess ohne Shell. Eine direkt gestartete CLI (z. B. der npm-Starter `lighthouse` mit `#!/usr/bin/env node`)
+    /// findet Node über `PATH`; Desktop-Apps erben unter macOS nicht den `PATH` der Shell. Deshalb steht das
+    /// Verzeichnis der CLI vorn im `PATH` des Kindprozesses: bei npm-Installationen liegt Node daneben.
+    fn base_command(&self) -> Command {
+        let mut cmd = Command::new(&self.program);
+        if self.prefix.is_empty() {
+            if let Some(dir) = self.program.parent().filter(|d| !d.as_os_str().is_empty()) {
+                let rest = std::env::var_os("PATH").unwrap_or_default();
+                let dirs = std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&rest));
+                if let Ok(path) = std::env::join_paths(dirs) {
+                    cmd.env("PATH", path);
+                }
+            }
+        }
+        cmd.args(&self.prefix);
+        cmd
+    }
+}
+
 impl Launcher for NodeLighthouse {
     fn command(&self, job: &Job) -> Command {
-        let mut cmd = Command::new(&self.program);
-        cmd.args(&self.prefix).args(Self::args(job));
+        let mut cmd = self.base_command();
+        cmd.args(Self::args(job));
         cmd
     }
 
     fn version_command(&self) -> Command {
-        let mut cmd = Command::new(&self.program);
-        cmd.args(&self.prefix).arg("--version");
+        let mut cmd = self.base_command();
+        cmd.arg("--version");
         cmd
     }
 
     fn mobile_command(&self, job: &Job) -> Command {
-        let mut cmd = Command::new(&self.program);
-        cmd.args(&self.prefix).args(
+        let mut cmd = self.base_command();
+        cmd.args(
             Self::args(job)
                 .into_iter()
                 .filter(|a| a != "--only-categories=performance"),

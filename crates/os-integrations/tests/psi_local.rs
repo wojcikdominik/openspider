@@ -592,3 +592,141 @@ async fn remote_source_without_key_stays_disconnected_and_is_not_switched_to_loc
     run.collect(&file).await.unwrap();
     assert!(runner.mean_run().is_none(), "kein lokaler Lauf");
 }
+
+// --- RC1-PSILOCAL: Pfad `api.psi.lighthouse_path` bis zum Läufer ---
+
+/// Starter wie der npm-Starter `lighthouse`: ein ausführbares Skript ohne Endung, das hier den Ersatzprozess
+/// (`fake_lighthouse_entry`) aufruft. Nur Unix: der Starter ist ein Shell-Skript (nur im Test).
+#[cfg(unix)]
+fn fake_cli(dir: &std::path::Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let exe = std::env::current_exe().unwrap();
+    let script = format!(
+        "#!/bin/sh\n\
+         url=\"$1\"; out=\"\"\n\
+         for a in \"$@\"; do case \"$a\" in --output-path=*) out=\"${{a#--output-path=}}\";; esac; done\n\
+         if [ \"$url\" = \"--version\" ]; then mode=version; else mode=\"${{url##*/}}\"; fi\n\
+         export {MODE}=\"$mode\" {OUT}=\"$out\" {URL_VAR}=\"$url\"\n\
+         exec '{}' fake_lighthouse_entry --exact --nocapture --test-threads=1\n",
+        exe.display()
+    );
+    let cli = dir.join("lighthouse");
+    std::fs::write(&cli, script).unwrap();
+    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+    cli
+}
+
+// spec: INTEG-132
+#[cfg(unix)]
+#[tokio::test]
+async fn configured_lighthouse_path_reaches_the_runner_through_the_crawl_glue() {
+    use os_integrations::crawl_glue::{self, ApiRun};
+    let bin = tempfile::tempdir().unwrap();
+    let mut ctx = local_ctx();
+    ctx.cfg.api.psi.lighthouse_path = Some(fake_cli(bin.path()));
+    assert_eq!(
+        LocalOptions::from_config(&ctx.cfg.api.psi).lighthouse,
+        ctx.cfg.api.psi.lighthouse_path
+    );
+    assert!(crawl_glue::preflight(&ctx, true).unwrap().is_empty());
+    assert!(crawl_glue::validate_apis(&ctx).is_ok());
+    // Verbinden zeigt die Version der konfigurierten Installation.
+    let cred = os_integrations::credentials::Credential {
+        account_id: "local".into(),
+        label: String::new(),
+        api_key: None,
+        access_token: None,
+        refresh_token: None,
+        expires_at: None,
+        client_secret: None,
+        scopes: vec![],
+    };
+    let connected = os_integrations::psi::source_for(&ctx.cfg, glue_clock())
+        .test_connection(&ctx, &cred)
+        .await
+        .unwrap();
+    assert_eq!(connected.label, "Lighthouse 13.0.0");
+    let dir = tempfile::tempdir().unwrap();
+    let file = crawl_file(&dir, &ctx.cfg);
+    // Ohne Testläufer: ApiRun baut den Läufer allein aus der Konfiguration.
+    let mut run = ApiRun::new(ctx, glue_clock(), dir.path().join("quota.json"));
+    assert!(run.validate(true).unwrap().is_empty());
+    run.collect(&file).await.unwrap();
+    let rows: Vec<(i64, f64)> = file
+        .conn()
+        .prepare(
+            "SELECT url_id, v_real FROM api_values WHERE source='psi' \
+             AND metric='Performance Score' ORDER BY url_id",
+        )
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(rows, vec![(1, 42.0), (2, 42.0)]);
+}
+
+// spec: INTEG-132
+#[tokio::test]
+async fn missing_or_invalid_lighthouse_path_reports_the_runtime_message() {
+    use os_integrations::crawl_glue;
+    let dir = tempfile::tempdir().unwrap();
+    for path in [
+        dir.path().join("fehlt").join("lighthouse"),
+        dir.path().to_path_buf(),
+    ] {
+        let mut ctx = local_ctx();
+        ctx.cfg.api.psi.lighthouse_path = Some(path.clone());
+        assert_eq!(
+            os_integrations::psi::local_runner_for(&ctx.cfg).err(),
+            Some(ApiError::NotConnected(RUNTIME_MISSING.into())),
+            "{}",
+            path.display()
+        );
+        let err = crawl_glue::preflight(&ctx, true).unwrap_err();
+        assert!(err.to_string().contains(RUNTIME_MISSING), "{err}");
+        let cred = os_integrations::credentials::Credential {
+            account_id: "local".into(),
+            label: String::new(),
+            api_key: None,
+            access_token: None,
+            refresh_token: None,
+            expires_at: None,
+            client_secret: None,
+            scopes: vec![],
+        };
+        assert_eq!(
+            os_integrations::psi::source_for(&ctx.cfg, glue_clock())
+                .test_connection(&ctx, &cred)
+                .await
+                .unwrap_err(),
+            ApiError::NotConnected(RUNTIME_MISSING.into())
+        );
+    }
+}
+
+// spec: INTEG-132
+#[test]
+fn a_directly_started_cli_finds_node_in_its_own_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let node = NodeLighthouse {
+        program: dir.path().join("lighthouse"),
+        prefix: Vec::new(),
+    };
+    let cmd = node.version_command();
+    let path = cmd
+        .get_envs()
+        .find(|(k, _)| *k == "PATH")
+        .and_then(|(_, v)| v)
+        .expect("PATH des Kindprozesses");
+    assert_eq!(
+        std::env::split_paths(path).next().as_deref(),
+        Some(dir.path())
+    );
+    // Ein Skript mit Node als Programm lässt PATH unverändert.
+    let script = NodeLighthouse {
+        program: dir.path().join("node"),
+        prefix: vec![dir.path().join("cli.js").into_os_string()],
+    };
+    assert!(script.version_command().get_envs().next().is_none());
+}
