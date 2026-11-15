@@ -61,7 +61,8 @@ test("PSI local shows the Lighthouse path, connects with it and reports a missin
   await page.evaluate(() => window.integFixture.open("psi"));
   const dialog = page.getByRole("dialog", { name: "API access" });
   await expect(dialog.getByLabel("Lighthouse path")).toHaveCount(0);
-  await dialog.getByRole("radio", { name: "Local (Lighthouse on this computer)" }).click();
+  await dialog.getByText("Local (Lighthouse on this computer)", { exact: true }).click();
+  await expect(dialog.getByRole("radio", { name: "Local (Lighthouse on this computer)" })).toBeChecked();
   await expect(dialog.getByLabel("API key")).toHaveCount(0);
   await dialog.getByLabel("Lighthouse path").fill("/opt/lh/bin/lighthouse");
   await dialog.getByRole("button", { name: "Connect", exact: true }).click();
