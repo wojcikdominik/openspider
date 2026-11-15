@@ -209,3 +209,42 @@ async fn cli_selection_reaches_the_mock_and_exports_after_apis_finish() {
         .iter()
         .all(|w| !w.contains("secret-fixture-token")));
 }
+
+// RC1-PSILOCAL (Issue 21): Quelle Lokal verlangt kein Konto; fehlt die Lighthouse-Laufzeit, nennt die CLI genau das.
+// spec: INTEG-130
+// spec: INTEG-132
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn local_pagespeed_without_runtime_warns_or_fails_with_the_runtime_message() {
+    let server = site("out-basic-site").await;
+    for (flags, code) in [(vec![], 0), (vec!["--require-apis"], 2)] {
+        let env = Env::new();
+        let config = env.home.path().join("psi-local.osconfig");
+        let mut cfg = CrawlConfig::default();
+        cfg.api.psi.local = true;
+        cfg.save_file(&config).unwrap();
+        let mut args = vec![
+            "--crawl".to_string(),
+            "http://site.test/".into(),
+            "--resolve".into(),
+            resolve(&server),
+            "--config".into(),
+            config.to_str().unwrap().into(),
+            "--use-pagespeed".into(),
+        ];
+        args.extend(flags.iter().map(|s| s.to_string()));
+        let before = server.total_requests();
+        let run = env.run_async(args).await;
+        assert_eq!(run.code, code, "{}", run.dump());
+        assert!(
+            run.stderr.contains("Lighthouse-Laufzeit nicht gefunden"),
+            "{}",
+            run.dump()
+        );
+        assert!(!run.stderr.contains("Konto Standard"), "{}", run.dump());
+        if code == 2 {
+            assert_eq!(before, server.total_requests());
+        } else {
+            assert!(run.stderr.contains("PageSpeed läuft nicht lokal"));
+        }
+    }
+}
