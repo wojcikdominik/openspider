@@ -47,6 +47,17 @@ fn child_entry() {
             println!("OVERVIEW {overview}");
             os_app::crash::on_orderly_exit();
         }
+        // Ausgang wie beim Windows-Update (tauri-plugin-updater): der Hook (`on_before_exit`) läuft, danach
+        // `std::process::exit(0)` ohne `RunEvent::Exit` und ohne Destruktoren. „hard-exit“ ohne Hook als Gegenprobe.
+        "update-exit" | "hard-exit" => {
+            assert_eq!(markers(&home), 1, "eigene Sitzungsmarke vor dem Ausgang");
+            if mode == "update-exit" {
+                os_app::crash::on_orderly_exit();
+                // idempotent: macOS entfernt die Marke vor `restart()`, `RunEvent::Exit` ruft erneut
+                os_app::crash::on_orderly_exit();
+            }
+            std::process::exit(0);
+        }
         other => panic!("unbekannter Modus {other}"),
     }
 }
@@ -168,6 +179,35 @@ fn orderly_exit_produces_no_report() {
     assert!(kinds(&start(home.path())).is_empty());
     assert!(kinds(&start(home.path())).is_empty());
     assert_eq!(markers(home.path()), 0);
+}
+
+fn exit_like_update(mode: &str, home: &Path) {
+    let output = command(mode, home).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+// spec: OUT-246
+#[test]
+fn update_exit_through_the_installer_hook_produces_no_report() {
+    let home = tempfile::tempdir().unwrap();
+    exit_like_update("update-exit", home.path());
+    assert_eq!(markers(home.path()), 0);
+    assert!(kinds(&start(home.path())).is_empty());
+    assert_eq!(markers(home.path()), 0);
+}
+
+// spec: OUT-246
+#[test]
+fn process_exit_without_the_hook_still_counts_as_unclean_exit() {
+    // Gegenprobe: ohne Hook bleibt die Marke liegen, der Folgestart meldet genau einen `unclean_exit`.
+    let home = tempfile::tempdir().unwrap();
+    exit_like_update("hard-exit", home.path());
+    assert_eq!(markers(home.path()), 1);
+    assert_eq!(kinds(&start(home.path())), ["unclean_exit"]);
 }
 
 // spec: OUT-246

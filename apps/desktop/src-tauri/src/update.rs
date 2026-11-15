@@ -33,6 +33,10 @@ impl<R: Runtime> Native<R> {
             .map_err(|_| "Update-Endpunkte fehlen oder sind ungültig")?
             .pubkey(context.pubkey)
             .restart_after_install(restart)
+            // OUT-246: Unter Windows startet das Plugin den Installer und beendet den Prozess mit
+            // `std::process::exit(0)`; `RunEvent::Exit` kommt dann nie. Sitzungsmarke vorher geordnet entfernen.
+            // Auf den anderen Plattformen ruft das Plugin den Hook nicht auf.
+            .on_before_exit(os_app::crash::on_orderly_exit)
             .build()
             .and_then(|updater| {
                 updater
@@ -118,9 +122,10 @@ impl<R: Runtime> UpdateBackend for Native<R> {
             .await
             .map_err(|_| "Update-Installation fehlgeschlagen")??;
             if restart {
-                // M3-C01/Fable N5: Die Sitzungsmarke (OUT-246) entfernt nur `RunEvent::Exit` (lib.rs). Ob
-                // `restart()` dieses Ereignis vor dem Neustart auslöst, ist nicht geprüft; sonst meldet der erste
-                // Start nach einem Update fälschlich `unclean_exit`. Manuelle Prüfung im Protokoll M3-Q03.
+                // OUT-246: `restart()` liefert `RunEvent::Exit` nur, wenn es nicht auf dem Hauptthread läuft und
+                // `request_exit` gelingt; sonst startet es ohne das Ereignis neu. Marke daher hier schon entfernen
+                // (idempotent, `RunEvent::Exit` findet dann keine mehr).
+                os_app::crash::on_orderly_exit();
                 handle.restart();
             }
             Ok(())
