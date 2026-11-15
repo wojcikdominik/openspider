@@ -205,6 +205,7 @@ pub fn change_all_v2_fields(c: &mut CrawlConfig) {
             base_url: Some("http://127.0.0.1:9/psi".into()),
             device: PsiDevice::Desktop,
             local: true,
+            lighthouse_path: Some("/opt/lighthouse/cli/index.js".into()),
             metric_groups: vec!["crux".into(), "lab".into()],
             ..Default::default()
         },
