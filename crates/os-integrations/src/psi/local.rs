@@ -134,11 +134,37 @@ impl NodeLighthouse {
     /// Sucht die konfigurierte Laufzeit; ohne Pfad oder bei fehlender Datei [`RUNTIME_MISSING`].
     pub fn discover(opts: &LocalOptions) -> Result<NodeLighthouse, ApiError> {
         let missing = || ApiError::NotConnected(RUNTIME_MISSING.into());
-        let cli = opts
+        let configured = opts
             .lighthouse
             .as_ref()
             .filter(|p| p.is_file())
             .ok_or_else(missing)?;
+        // npm-Starter unter Windows (`lighthouse.cmd` …) liefen über eine Shell; stattdessen das Skript im
+        // npm-Global-Layout daneben verwenden. Der Starter selbst wird nie ausgeführt.
+        let launcher = configured
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| {
+                ["cmd", "bat", "ps1"]
+                    .iter()
+                    .any(|x| e.eq_ignore_ascii_case(x))
+            });
+        let resolved;
+        let cli = if launcher {
+            resolved = configured
+                .parent()
+                .map(|dir| {
+                    dir.join("node_modules")
+                        .join("lighthouse")
+                        .join("cli")
+                        .join("index.js")
+                })
+                .filter(|p| p.is_file())
+                .ok_or_else(missing)?;
+            &resolved
+        } else {
+            configured
+        };
         let script = cli
             .extension()
             .and_then(|e| e.to_str())

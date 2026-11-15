@@ -730,3 +730,50 @@ fn a_directly_started_cli_finds_node_in_its_own_directory() {
     };
     assert!(script.version_command().get_envs().next().is_none());
 }
+
+// spec: INTEG-132
+#[test]
+fn windows_npm_launchers_resolve_to_the_lighthouse_script_and_are_never_run() {
+    let dir = tempfile::tempdir().unwrap();
+    let node = dir.path().join("node-bin");
+    std::fs::write(&node, "").unwrap();
+    let script = dir
+        .path()
+        .join("node_modules")
+        .join("lighthouse")
+        .join("cli")
+        .join("index.js");
+    for name in [
+        "lighthouse.cmd",
+        "LIGHTHOUSE.CMD",
+        "lighthouse.bat",
+        "lighthouse.Ps1",
+    ] {
+        let launcher = dir.path().join(name);
+        std::fs::write(&launcher, "@echo off\r\n").unwrap();
+        let opts = LocalOptions {
+            lighthouse: Some(launcher.clone()),
+            node: Some(node.clone()),
+            ..LocalOptions::default()
+        };
+        // Ohne Skript daneben: Laufzeit nicht gefunden (der Starter wird nicht ausgeführt).
+        let _ = std::fs::remove_file(&script);
+        assert_eq!(
+            NodeLighthouse::discover(&opts).unwrap_err(),
+            ApiError::NotConnected(RUNTIME_MISSING.into()),
+            "{name}"
+        );
+        std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+        std::fs::write(&script, "").unwrap();
+        let found = NodeLighthouse::discover(&opts).unwrap();
+        assert_eq!(found.program, node, "{name}");
+        assert_eq!(
+            found.prefix,
+            vec![script.clone().into_os_string()],
+            "{name}"
+        );
+        let cmd = found.version_command();
+        assert_ne!(cmd.get_program(), launcher.as_os_str(), "{name}");
+        assert!(!cmd.get_args().any(|a| a == launcher.as_os_str()), "{name}");
+    }
+}
