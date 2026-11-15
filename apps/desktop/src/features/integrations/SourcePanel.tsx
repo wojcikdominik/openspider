@@ -63,6 +63,11 @@ function AccountTab({ kind, info, conn, values, onChange }: SourcePanelProps) {
   const ga4 = useCatalogList(kind === "ga4" ? catalog.ga4 : undefined, connected, googleAccount);
   const gsc = useCatalogList(kind === "gsc" ? catalog.gsc : undefined, connected, googleAccount);
   const psiLocal = kind === "psi" && values !== null && bool(values.local);
+  // INTEG-132: Pfad als Text halten, damit Leerzeichen beim Tippen (z. B. „Program Files“) erhalten bleiben.
+  const [lighthousePath, setLighthousePath] = useState(() => (values ? (str(values.lighthouse_path) ?? "") : ""));
+  useEffect(() => {
+    if (values) setLighthousePath((cur) => (cur.trim() === (str(values.lighthouse_path) ?? "") ? cur : (str(values.lighthouse_path) ?? "")));
+  }, [values]);
   const oauth = info?.auth === "oauth";
   const keyNeeded = info?.auth === "apiKey" && !psiLocal;
   const saved = accounts.find((a) => a.accountId === accountId);
@@ -86,6 +91,7 @@ function AccountTab({ kind, info, conn, values, onChange }: SourcePanelProps) {
       remember,
       accountId: withAccount,
       clientSecret: oauth && clientSecret ? clientSecret : null,
+      ...(kind === "psi" && values !== null ? { psiLocal, lighthousePath: psiLocal ? lighthousePath.trim() : null } : {}),
     });
     setKey("");
     keepFocus();
@@ -119,6 +125,18 @@ function AccountTab({ kind, info, conn, values, onChange }: SourcePanelProps) {
         />
       )}
       {kind === "psi" && <p className="os-hint">{t(psiLocal ? "integ-psi-local-hint" : "integ-psi-remote-hint")}</p>}
+      {psiLocal && (
+        <TextField
+          label={t("integ-psi-lighthouse-path")}
+          value={lighthousePath}
+          description={t("integ-psi-lighthouse-path-hint")}
+          isDisabled={busy}
+          onChange={(v) => {
+            setLighthousePath(v);
+            onChange(["lighthouse_path"], v.trim() === "" ? null : v.trim());
+          }}
+        />
+      )}
       {accounts.length > 0 && (oauth || keyNeeded) && (
         <RadioGroup
           label={t(oauth ? "integ-google-accounts" : "integ-saved-keys")}

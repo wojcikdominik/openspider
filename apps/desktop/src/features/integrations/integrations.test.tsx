@@ -267,6 +267,29 @@ describe("PageSpeed Insights", () => {
     await waitFor(() => expect(calls("api.setSettings")[0]?.args).toMatchObject({ kind: "psi", settings: { values: { local: true } } }));
   });
 
+  // spec: INTEG-132
+  it("zeigt den Lighthouse-Pfad nur bei Lokal und verbindet mit dem eingegebenen Pfad", async () => {
+    renderHost();
+    await openAt("psi");
+    expect(await screen.findByRole("radio", { name: "Remote (PageSpeed Insights API)" })).toBeChecked();
+    expect(screen.queryByLabelText("Lighthouse path")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Local (Lighthouse on this computer)" }));
+    const field = await screen.findByLabelText("Lighthouse path");
+    expect(screen.getByText(/which lighthouse/)).toBeInTheDocument();
+    fireEvent.change(field, { target: { value: "/opt/My Tools/bin/lighthouse " } });
+    expect(field).toHaveValue("/opt/My Tools/bin/lighthouse ");
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await waitFor(() => expect(calls("api.connect")).toHaveLength(1));
+    expect(calls("api.connect")[0]?.args).toMatchObject({ kind: "psi", apiKey: null, psiLocal: true, lighthousePath: "/opt/My Tools/bin/lighthouse" });
+    patch("psi", { state: "error", error: { code: "Permission", messageKey: "err-api-lighthouse-missing", args: {}, detail: "API nicht verbunden", retryable: false } });
+    finishOp(`op-${opSeq}`, "failed", { code: "Permission", messageKey: "err-api-lighthouse-missing", args: {}, detail: "API nicht verbunden", retryable: false } as CmdError);
+    await waitFor(() => expect(status("psi")).toHaveTextContent("Error: Lighthouse runtime not found"));
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    await waitFor(() =>
+      expect(calls("api.setSettings")[0]?.args).toMatchObject({ kind: "psi", settings: { values: { local: true, lighthouse_path: "/opt/My Tools/bin/lighthouse" } } }),
+    );
+  });
+
   // spec: INTEG-130
   it("zeigt bei abgelehntem Schlüssel den Grund und die Prüfliste", async () => {
     patch("psi", { state: "error", error: { code: "Permission", messageKey: "err-api-reconnect", args: {}, detail: "HTTP 403: SERVICE_DISABLED", retryable: false } });

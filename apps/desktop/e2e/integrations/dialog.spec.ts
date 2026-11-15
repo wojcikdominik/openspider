@@ -56,6 +56,22 @@ test("provider rejection shows code and message; only Disconnect leaves the erro
   await expect(page.getByTestId("integ-status-majestic")).toHaveText("Not connected");
 });
 
+// spec: INTEG-132
+test("PSI local shows the Lighthouse path, connects with it and reports a missing runtime", async ({ page }) => {
+  await page.evaluate(() => window.integFixture.open("psi"));
+  const dialog = page.getByRole("dialog", { name: "API access" });
+  await expect(dialog.getByLabel("Lighthouse path")).toHaveCount(0);
+  await dialog.getByRole("radio", { name: "Local (Lighthouse on this computer)" }).click();
+  await expect(dialog.getByLabel("API key")).toHaveCount(0);
+  await dialog.getByLabel("Lighthouse path").fill("/opt/lh/bin/lighthouse");
+  await dialog.getByRole("button", { name: "Connect", exact: true }).click();
+  const connect = await calls(page, "api.connect");
+  expect(connect).toHaveLength(1);
+  expect(connect[0]?.args).toMatchObject({ kind: "psi", psiLocal: true, lighthousePath: "/opt/lh/bin/lighthouse" });
+  await page.evaluate(() => window.integFixture.finish("psi", { error: { code: "Permission", messageKey: "err-api-lighthouse-missing", args: {}, detail: "API nicht verbunden", retryable: false } }));
+  await expect(page.getByTestId("integ-status-psi")).toHaveText("Error: Lighthouse runtime not found");
+});
+
 // spec: INTEG-090
 test("GA4 account, property and data stream are dependent and saved on OK", async ({ page }) => {
   await page.evaluate(() => window.integFixture.open("ga4"));
