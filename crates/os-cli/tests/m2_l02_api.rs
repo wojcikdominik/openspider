@@ -248,3 +248,40 @@ async fn local_pagespeed_without_runtime_warns_or_fails_with_the_runtime_message
         }
     }
 }
+
+// RC1-PSILOCAL: Mit `api.psi.lighthouse_path` besteht PSI Lokal die Vorprüfung, auch mit `--require-apis`.
+// spec: INTEG-132
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn local_pagespeed_with_configured_lighthouse_path_passes_require_apis() {
+    use std::os::unix::fs::PermissionsExt;
+    let server = site("out-basic-site").await;
+    let env = Env::new();
+    // Ersatz-CLI: meldet nur eine Version; die Läufe selbst liefern keinen Bericht (Fehler je URL, kein Abbruch).
+    let cli = env.home.path().join("lighthouse");
+    std::fs::write(&cli, "#!/bin/sh\necho 13.0.0\n").unwrap();
+    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let config = env.home.path().join("psi-local.osconfig");
+    let mut cfg = CrawlConfig::default();
+    cfg.api.psi.local = true;
+    cfg.api.psi.lighthouse_path = Some(cli);
+    cfg.save_file(&config).unwrap();
+    let run = env
+        .run_async(vec![
+            "--crawl".to_string(),
+            "http://site.test/".into(),
+            "--resolve".into(),
+            resolve(&server),
+            "--config".into(),
+            config.to_str().unwrap().into(),
+            "--use-pagespeed".into(),
+            "--require-apis".into(),
+        ])
+        .await;
+    assert_eq!(run.code, 0, "{}", run.dump());
+    assert!(
+        !run.stderr.contains("Lighthouse-Laufzeit nicht gefunden"),
+        "{}",
+        run.dump()
+    );
+}
