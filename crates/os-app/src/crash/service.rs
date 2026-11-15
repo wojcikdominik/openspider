@@ -27,6 +27,9 @@ pub const DISMISSED_FILE: &str = "dismissed.json";
 static SESSION_TRACKING: AtomicBool = AtomicBool::new(false);
 /// Ordner und Inhalt der eigenen Sitzungsmarke (für den Panic-Hook und Zustandswechsel).
 static MARKER: Mutex<Option<(PathBuf, Marker)>> = Mutex::new(None);
+/// Marke wegen des Update-Ausgangs entfernt, Inhalt noch in `MARKER` (nur unter der Sperre von `MARKER` ändern).
+/// Solange gesetzt, ändern Panic-Hook und Zustandswechsel nur den Inhalt, schreiben aber keine Datei.
+static SUSPENDED: AtomicBool = AtomicBool::new(false);
 
 /// Schaltet die Sitzungsmarke für diesen Prozess ein. Die Desktop-App ruft das vor `App::new` auf; Tests, Bridge und
 /// eingebettete Apps legen ohne diesen Aufruf keine Marke an (in Debug-Builds zusätzlich über
@@ -124,7 +127,9 @@ pub fn on_app_start(app: &App) -> Option<String> {
                 panic_report: false,
             };
             if session::write_marker(&dir, &marker).is_ok() {
-                *MARKER.lock().unwrap_or_else(|p| p.into_inner()) = Some((dir.clone(), marker));
+                let mut guard = MARKER.lock().unwrap_or_else(|p| p.into_inner());
+                SUSPENDED.store(false, Ordering::SeqCst);
+                *guard = Some((dir.clone(), marker));
                 session_id = Some(id);
             }
         }
@@ -151,9 +156,31 @@ pub fn on_app_start(app: &App) -> Option<String> {
 
 /// Geordnetes Beenden: eigene Sitzungsmarke entfernen.
 pub fn on_orderly_exit() {
-    let marker = MARKER.lock().unwrap_or_else(|p| p.into_inner()).take();
-    if let Some((dir, marker)) = marker {
+    let mut guard = MARKER.lock().unwrap_or_else(|p| p.into_inner());
+    SUSPENDED.store(false, Ordering::SeqCst);
+    if let Some((dir, marker)) = guard.take() {
         let _ = fs::remove_file(session::marker_path(&dir, marker.pid));
+    }
+}
+
+/// Update-Ausgang (Windows: Installer startet, danach `process::exit(0)` ohne `RunEvent::Exit`): Markendatei
+/// entfernen, Inhalt behalten, damit [`resume_after_update_exit`] sie wieder anlegen kann. Idempotent.
+pub fn on_update_exit() {
+    let guard = MARKER.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some((dir, marker)) = guard.as_ref() {
+        SUSPENDED.store(true, Ordering::SeqCst);
+        let _ = fs::remove_file(session::marker_path(dir, marker.pid));
+    }
+}
+
+/// Die App läuft nach [`on_update_exit`] doch weiter (Installer nicht gestartet): Markendatei aus dem aktuellen
+/// Inhalt wieder anlegen. Ohne vorherigen Update-Ausgang oder doppelt aufgerufen wirkungslos.
+pub fn resume_after_update_exit() {
+    let guard = MARKER.lock().unwrap_or_else(|p| p.into_inner());
+    if SUSPENDED.swap(false, Ordering::SeqCst) {
+        if let Some((dir, marker)) = guard.as_ref() {
+            let _ = session::write_marker(dir, marker);
+        }
     }
 }
 
@@ -164,14 +191,18 @@ fn mark_panic(_: &Report) {
             Ok(mut guard) => {
                 if let Some((dir, marker)) = guard.as_mut() {
                     marker.panic_report = true;
-                    let _ = session::write_marker(dir, marker);
+                    if !SUSPENDED.load(Ordering::SeqCst) {
+                        let _ = session::write_marker(dir, marker);
+                    }
                 }
                 return;
             }
             Err(std::sync::TryLockError::Poisoned(p)) => {
                 if let Some((dir, marker)) = p.into_inner().as_mut() {
                     marker.panic_report = true;
-                    let _ = session::write_marker(dir, marker);
+                    if !SUSPENDED.load(Ordering::SeqCst) {
+                        let _ = session::write_marker(dir, marker);
+                    }
                 }
                 return;
             }
@@ -214,7 +245,10 @@ fn on_crawl_event(app: &App, event: &CrawlEvent) {
         if marker.crawl_running != running || marker.rendering_active != rendering {
             marker.crawl_running = running;
             marker.rendering_active = rendering;
-            let _ = session::write_marker(dir, marker);
+            // Nach dem Update-Ausgang keine Datei anlegen; `resume_after_update_exit` schreibt diesen Stand.
+            if !SUSPENDED.load(Ordering::SeqCst) {
+                let _ = session::write_marker(dir, marker);
+            }
         }
     }
 }

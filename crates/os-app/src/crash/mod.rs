@@ -19,5 +19,8 @@ pub mod service;
 pub mod session;
 pub mod shared;
 
-pub use service::{enable_session_tracking, on_app_start, on_orderly_exit};
+pub use service::{
+    enable_session_tracking, on_app_start, on_orderly_exit, on_update_exit,
+    resume_after_update_exit,
+};
 pub use shared::{sanitize, Report, Sanitizer};

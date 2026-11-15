@@ -34,9 +34,9 @@ impl<R: Runtime> Native<R> {
             .pubkey(context.pubkey)
             .restart_after_install(restart)
             // OUT-246: Unter Windows startet das Plugin den Installer und beendet den Prozess mit
-            // `std::process::exit(0)`; `RunEvent::Exit` kommt dann nie. Sitzungsmarke vorher geordnet entfernen.
-            // Auf den anderen Plattformen ruft das Plugin den Hook nicht auf.
-            .on_before_exit(os_app::crash::on_orderly_exit)
+            // `std::process::exit(0)`; `RunEvent::Exit` kommt dann nie. Markendatei vorher entfernen; startet
+            // der Installer nicht, legt `install()` sie wieder an. Andere Plattformen rufen den Hook nicht.
+            .on_before_exit(os_app::crash::on_update_exit)
             .build()
             .and_then(|updater| {
                 updater
@@ -111,7 +111,7 @@ impl<R: Runtime> UpdateBackend for Native<R> {
         let handle = self.handle.clone();
         Box::pin(async move {
             let update = update?;
-            tauri::async_runtime::spawn_blocking(move || {
+            let installed = tauri::async_runtime::spawn_blocking(move || {
                 update
                     .verify(&bytes)
                     .map_err(|_| "Update-Signatur ungültig")?;
@@ -120,7 +120,13 @@ impl<R: Runtime> UpdateBackend for Native<R> {
                     .map_err(|_| "Update-Installation fehlgeschlagen")
             })
             .await
-            .map_err(|_| "Update-Installation fehlgeschlagen")??;
+            .map_err(|_| "Update-Installation fehlgeschlagen")
+            .and_then(|r| r);
+            if let Err(e) = installed {
+                // OUT-246: Die App läuft weiter (z. B. Rechtedialog abgebrochen): Marke wieder anlegen.
+                os_app::crash::resume_after_update_exit();
+                return Err(e.to_owned());
+            }
             if restart {
                 // OUT-246: `restart()` liefert `RunEvent::Exit` nur, wenn es nicht auf dem Hauptthread läuft und
                 // `request_exit` gelingt; sonst startet es ohne das Ereignis neu. Marke daher hier schon entfernen

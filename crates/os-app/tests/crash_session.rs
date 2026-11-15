@@ -52,10 +52,37 @@ fn child_entry() {
         "update-exit" | "hard-exit" => {
             assert_eq!(markers(&home), 1, "eigene Sitzungsmarke vor dem Ausgang");
             if mode == "update-exit" {
-                os_app::crash::on_orderly_exit();
-                // idempotent: macOS entfernt die Marke vor `restart()`, `RunEvent::Exit` ruft erneut
-                os_app::crash::on_orderly_exit();
+                os_app::crash::on_update_exit();
+                os_app::crash::on_update_exit();
+                assert_eq!(markers(&home), 0);
             }
+            std::process::exit(0);
+        }
+        // Installer startet nicht: Marke wieder anlegen, danach harter Ausgang.
+        "update-resume-hard-exit" => {
+            os_app::crash::on_update_exit();
+            assert_eq!(markers(&home), 0);
+            os_app::crash::resume_after_update_exit();
+            assert_own_marker(&home);
+            std::process::exit(0);
+        }
+        // Wiederanlegen ohne Update-Ausgang und doppelt: harmlos, geordnetes Beenden entfernt danach alles.
+        "resume-noop" => {
+            os_app::crash::resume_after_update_exit();
+            os_app::crash::resume_after_update_exit();
+            assert_own_marker(&home);
+            os_app::crash::on_update_exit();
+            os_app::crash::resume_after_update_exit();
+            os_app::crash::resume_after_update_exit();
+            assert_own_marker(&home);
+            os_app::crash::on_orderly_exit();
+            assert_eq!(markers(&home), 0);
+            os_app::crash::resume_after_update_exit();
+            assert_eq!(
+                markers(&home),
+                0,
+                "nach geordnetem Beenden nichts wieder anlegen"
+            );
             std::process::exit(0);
         }
         other => panic!("unbekannter Modus {other}"),
@@ -117,6 +144,14 @@ fn kinds(overview: &Value) -> Vec<String> {
         .iter()
         .map(|r| r["kind"].as_str().unwrap().to_string())
         .collect()
+}
+
+/// Genau eine lesbare Marke, und zwar die des eigenen Prozesses.
+fn assert_own_marker(home: &Path) {
+    let found = os_app::crash::session::markers(&home.join("logs/crashes"));
+    assert_eq!(found.len(), 1, "{found:?}");
+    let marker = found[0].1.as_ref().expect("lesbare Marke");
+    assert_eq!(marker.pid, std::process::id());
 }
 
 fn markers(home: &Path) -> usize {
@@ -208,6 +243,25 @@ fn process_exit_without_the_hook_still_counts_as_unclean_exit() {
     exit_like_update("hard-exit", home.path());
     assert_eq!(markers(home.path()), 1);
     assert_eq!(kinds(&start(home.path())), ["unclean_exit"]);
+}
+
+// spec: OUT-246
+#[test]
+fn resumed_marker_after_failed_installer_start_still_reports_a_later_hard_exit() {
+    let home = tempfile::tempdir().unwrap();
+    exit_like_update("update-resume-hard-exit", home.path());
+    assert_eq!(markers(home.path()), 1);
+    assert_eq!(kinds(&start(home.path())), ["unclean_exit"]);
+    assert_eq!(markers(home.path()), 0);
+}
+
+// spec: OUT-246
+#[test]
+fn resuming_without_update_exit_or_twice_is_harmless() {
+    let home = tempfile::tempdir().unwrap();
+    exit_like_update("resume-noop", home.path());
+    assert_eq!(markers(home.path()), 0);
+    assert!(kinds(&start(home.path())).is_empty());
 }
 
 // spec: OUT-246
