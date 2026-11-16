@@ -1,6 +1,8 @@
 // UI-146 Visualisierungs-Performance im Frame-Recorder (src/grid/recorder.ts): 2D-Graph und Baum mit 10 000 Knoten
 // (gen-ui-large-Teilmenge). Verbindlich sind die Werte auf Referenzhardware A (K2-12); in Cloud/CI gelten sie als Indiz
 // mit Faktor `SLACK`, außer OS_VIZ_STRICT_BUDGETS=1. Messwerte stehen als Anhang `ui-146` am Testergebnis.
+// Mit OS_VIZ_FPS_ADVISORY=1 warnt die fps-Grenze nur: Geteilte Runner ohne GPU schaffen unter WebKit 11–13 fps
+// (Spec coverage M2, linux-webkit). Verbindlich bleibt der strenge Lauf je Kandidat (docs/release/checkliste-release.md).
 import { expect, test } from "@playwright/test";
 import { FakeVizCore } from "../../src/features/viz/fixtures/fakeCore";
 import { genUiLarge } from "../../src/features/viz/fixtures/synthetic";
@@ -9,6 +11,7 @@ import { startVizBridge, type VizBridge } from "./viz-bridge";
 
 const STRICT = process.env.OS_VIZ_STRICT_BUDGETS === "1";
 const SLACK = STRICT ? 1 : 2;
+const FPS_ADVISORY = !STRICT && process.env.OS_VIZ_FPS_ADVISORY === "1";
 /** Teilmenge mit genau 10 000 Knoten (1 / 40 / 2 000 / 7 959). */
 const TEN_K = [1, 40, 2000, 7959];
 
@@ -68,7 +71,14 @@ test.describe("UI-146 Budgets", () => {
     expect(firstFrameMs).toBeLessThanOrEqual(2_000 * SLACK);
     expect(layout.reason).toBe("converged");
     expect(layout.ms!).toBeLessThanOrEqual(10_000 * SLACK);
-    expect(frames.fps).toBeGreaterThanOrEqual(30 / SLACK);
+    const minFps = 30 / SLACK;
+    if (FPS_ADVISORY && frames.fps < minFps) {
+      const text = `UI-146: ${frames.fps.toFixed(1)} fps unter ${minFps} fps (nur Warnung, OS_VIZ_FPS_ADVISORY=1)`;
+      info.annotations.push({ type: "warning", description: text });
+      console.log(`::warning title=UI-146 fps::${text}`);
+    } else {
+      expect(frames.fps).toBeGreaterThanOrEqual(minFps);
+    }
     expect(svg.circles).toBe(10_000);
     expect(svg.ms).toBeLessThanOrEqual(5_000);
     expect(svg.bytes).toBeLessThanOrEqual(20 * 1024 * 1024);

@@ -177,10 +177,13 @@ jobs:
             os: ubuntu-latest
             projects: chromium
             browsers: chromium
+          # UI-146: Der Runner schafft unter WebKit 11–13 fps (Grenze in CI 15). Die fps-Grenze warnt hier nur; die
+          # übrigen Budgets bleiben hart, verbindlich ist der strenge Lauf je Kandidat (docs/release/checkliste-release.md).
           - name: linux-webkit
             os: ubuntu-latest
             projects: webkit
             browsers: webkit
+            fps_advisory: true
     env:
       CARGO_TERM_COLOR: always
       OS_E2E_TRANSPORT: auto
@@ -234,6 +237,7 @@ jobs:
         timeout-minutes: 50
         env:
           OS_E2E_PROJECTS: ${{ matrix.projects }}
+          OS_VIZ_FPS_ADVISORY: ${{ matrix.fps_advisory && '1' || '' }}
           CI: 'true'
           PLAYWRIGHT_JUNIT_OUTPUT_FILE: ../../playwright-m2.xml
         # Mit Shard nur das Hauptprojekt (wie ui-e2e.yml): `<engine>-perf` hängt davon ab und liefe sonst in jedem
