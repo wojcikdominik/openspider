@@ -37,6 +37,9 @@ fn closed_port() -> u16 {
     let socket = tokio::net::TcpSocket::new_v4().unwrap();
     socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
     let port = socket.local_addr().unwrap().port();
+    // macOS verwirft Verbindungen an einen gebundenen Socket ohne listen() stumm (Zeitüberschreitung statt
+    // Ablehnung). Dort wird der Port wie bisher wieder freigegeben.
+    #[cfg(not(target_os = "macos"))]
     std::mem::forget(socket);
     port
 }
