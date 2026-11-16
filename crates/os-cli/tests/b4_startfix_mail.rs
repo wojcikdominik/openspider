@@ -67,12 +67,19 @@ fn assert_names_class(data: &str, address: &str) {
     assert!(text.contains(address), "{text}");
 }
 
+fn closed_port() -> u16 {
+    // Gebunden, aber ohne listen(): Verbindungen werden abgelehnt, und der Port bleibt bis zum Ende des
+    // Testprozesses reserviert. Ein nur kurz gebundener Port kann sonst an den Server eines parallel
+    // laufenden Tests gehen.
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let port = socket.local_addr().unwrap().port();
+    std::mem::forget(socket);
+    port
+}
+
 fn closed_url() -> String {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    format!(
-        "http://127.0.0.1:{}/",
-        listener.local_addr().unwrap().port()
-    )
+    format!("http://127.0.0.1:{}/", closed_port())
 }
 
 // ---------------------------------------------------------------------------------------------------

@@ -48,8 +48,14 @@ const REFUSED: [&str; 4] = [
 // Hilfen
 
 fn closed_port() -> u16 {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap().port()
+    // Gebunden, aber ohne listen(): Verbindungen werden abgelehnt, und der Port bleibt bis zum Ende des
+    // Testprozesses reserviert. Ein nur kurz gebundener Port kann sonst an den Server eines parallel
+    // laufenden Tests gehen.
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let port = socket.local_addr().unwrap().port();
+    std::mem::forget(socket);
+    port
 }
 
 fn closed_url() -> String {

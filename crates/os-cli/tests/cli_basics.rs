@@ -16,6 +16,18 @@ fn assert_golden(path: impl AsRef<Path>, actual: &str) {
 /// Kein Warten auf Wiederholungen der robots.txt für den externen Link `localhost:8900` der Fixture.
 const FAST: &str = "robots.retries=0";
 
+/// Port, auf dem niemand lauscht.
+fn closed_port() -> u16 {
+    // Gebunden, aber ohne listen(): Verbindungen werden abgelehnt, und der Port bleibt bis zum Ende des
+    // Testprozesses reserviert. Ein nur kurz gebundener Port kann sonst an den Server eines parallel
+    // laufenden Tests gehen.
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let port = socket.local_addr().unwrap().port();
+    std::mem::forget(socket);
+    port
+}
+
 fn golden(name: &str) -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/golden/out-cli")
@@ -423,11 +435,7 @@ async fn exit_code_3_when_the_crawl_cannot_be_written() {
 // spec: OUT-204, OUT-182
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unreachable_start_url_is_a_valid_result_unless_fail_on_start_error() {
-    // Port, auf dem niemand lauscht.
-    let closed = {
-        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        l.local_addr().unwrap().port()
-    };
+    let closed = closed_port();
     let url = format!("http://127.0.0.1:{closed}/");
     let fast = |extra: &[&str]| -> Vec<String> {
         let mut v: Vec<String> = ["--crawl", &url, "--set", "robots.retries=0"]
@@ -474,10 +482,7 @@ async fn an_unreachable_start_url_is_a_valid_result_unless_fail_on_start_error()
 // spec: OUT-182
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_unreachable_start_url_is_listed_as_failed_and_stays_a_valid_result() {
-    let closed = {
-        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        l.local_addr().unwrap().port()
-    };
+    let closed = closed_port();
     let env = Env::new();
     let run = env
         .run_async(vec![
