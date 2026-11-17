@@ -490,11 +490,20 @@ jobs:
 
           codesign --force --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$dmg"
 
+          # Netz- und Dienstfehler bei Apple (z. B. HTTP 403 beim Hochladen, rc.1 am 14.11.) liefern kein Urteil über
+          # das DMG. Dann bis zu drei Versuche im Abstand von 60 s; ein Urteil "Invalid" oder "Rejected" beendet sofort.
           result="$RUNNER_TEMP/notary-result.json"
-          xcrun notarytool submit "$dmg" \
-            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" \
-            --wait --output-format json > "$result" || true
-          cat "$result"
+          for versuch in 1 2 3; do
+            xcrun notarytool submit "$dmg" \
+              --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" \
+              --wait --output-format json > "$result" || true
+            cat "$result"
+            if grep -Eq '"status" *: *"(Accepted|Invalid|Rejected)"' "$result" || [[ $versuch -eq 3 ]]; then
+              break
+            fi
+            echo "Notarisierung ohne Urteil (Versuch $versuch), neuer Versuch in 60 s."
+            sleep 60
+          done
           if ! grep -Eq '"status" *: *"Accepted"' "$result"; then
             id="$(sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' "$result" | head -n 1)"
             if [[ -n "$id" ]]; then
