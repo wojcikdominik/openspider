@@ -676,13 +676,21 @@ test.describe("Fehlende Crawl-Datei beim Öffnen aus „Zuletzt geöffnet“", (
     }
     await openMain(page, context, bridge, "de");
     // Der native Dateidialog fehlt im Browser; sein Ergebnis ist hier der Pfad. Geöffnet wird mit dem Tastenkürzel.
+    // macOS: Das Kürzel ist dort ein Accelerator der nativen Menüleiste, den der Dispatcher dem Betriebssystem überlässt;
+    // im Browser gibt es diese Leiste nicht, daher dieselbe Aktion wie beim Klick auf den Menüeintrag.
     await page.evaluate(async (path) => {
       const module = "/src/features/crawls/desktop.ts";
       const { nativeCrawlDesktop } = await import(/* @vite-ignore */ module);
       nativeCrawlDesktop.chooseOpen = async () => [path];
     }, file);
     await page.locator("body").click({ position: { x: 5, y: 5 } });
-    await page.keyboard.press(`${MOD}+o`);
+    if (process.platform === "darwin") {
+      await page.evaluate(async () => {
+        const path = "/src/ui/actions.ts";
+        const { runAction } = await import(/* @vite-ignore */ path);
+        runAction("crawl.open", { source: "menu" });
+      });
+    } else await page.keyboard.press(`${MOD}+o`);
     await expect(page.getByTestId("crawl-phase")).toHaveText(/Fertig|Abgeschlossen/, { timeout: 30_000 });
     await expect.poll(async () => (await recentOf(page)).length, { message: "Eintrag in „Zuletzt geöffnet“" }).toBeGreaterThan(0);
     await page.getByRole("button", { name: "Löschen", exact: true }).click();

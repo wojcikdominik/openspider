@@ -275,6 +275,8 @@ for (const size of [{ width: 800, height: 640 }, { width: 1024, height: 640 }]) 
     // Zustand 4: vorgemerkt → „Schließen“.
     await buttons.last().click();
     await expect.poll(() => bridge.core.calls.find((c) => c.cmd === "update.install")?.args).toEqual({ when: "afterCrawl" });
+    // Der Dialog schaltet erst um, wenn die Antwort des Kerns da ist: dann bleibt genau ein Knopf.
+    await expect(buttons).toHaveCount(1);
     const queued = await measureAll(dialog, `${lang} ${size.width} vorgemerkt`);
     if (lang === "de") expect(queued).toContain(NAMES.de.close);
   });
