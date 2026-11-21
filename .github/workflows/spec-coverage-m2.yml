@@ -179,10 +179,20 @@ jobs:
             browsers: chromium
           # UI-146: Der Runner schafft unter WebKit 11–13 fps (Grenze in CI 15). Die fps-Grenze warnt hier nur; die
           # übrigen Budgets bleiben hart, verbindlich ist der strenge Lauf je Kandidat (docs/release/checkliste-release.md).
-          - name: linux-webkit
+          # linux-webkit lief ungeteilt mit 701 Tests in das Schritt-Limit von 50 min, deshalb wie macOS zwei Shards
+          # (wie ui-e2e.yml). Das Perf-Projekt, das ungeteilt als Abhängigkeit mitlief, im ersten Shard.
+          - name: linux-webkit-1
             os: ubuntu-latest
             projects: webkit
             browsers: webkit
+            shard: 1/2
+            perf: true
+            fps_advisory: true
+          - name: linux-webkit-2
+            os: ubuntu-latest
+            projects: webkit
+            browsers: webkit
+            shard: 2/2
             fps_advisory: true
     env:
       CARGO_TERM_COLOR: always
@@ -260,6 +270,7 @@ jobs:
         timeout-minutes: 10
         env:
           OS_E2E_PROJECTS: ${{ matrix.projects }}
+          OS_VIZ_FPS_ADVISORY: ${{ matrix.fps_advisory && '1' || '' }}
           CI: 'true'
           PLAYWRIGHT_JUNIT_OUTPUT_FILE: ../../playwright-m2-perf.xml
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-perf
@@ -332,13 +343,13 @@ jobs:
           git log origin/main --format='%H%x09%s' > main-merges.txt
           args+=(--merged-log main-merges.txt)
           shopt -s nullglob
-          # Fünf Matrix-Jobs (macOS-WebKit in zwei Shards) mit je playwright-m2.xml, der erste macOS-Shard zusätzlich
-          # mit den Laufzeitbudgets (playwright-m2-perf.xml).
+          # Sieben Matrix-Jobs (macOS-WebKit, Windows-Chromium und Linux-WebKit je in zwei Shards, Linux-Chromium) mit je
+          # playwright-m2.xml, der jeweils erste Shard zusätzlich mit den Laufzeitbudgets (playwright-m2-perf.xml).
           junit_files=(evidence/e2e/*/playwright-m2.xml)
           perf_files=(evidence/e2e/*/playwright-m2-perf.xml)
           # Fehlende Matrix-Belege sind sichtbar und machen nur das manuelle Gate rot.
           missing=0
-          if [[ ${#junit_files[@]} -ne 5 || ${#perf_files[@]} -ne 1 ]]; then missing=1; fi
+          if [[ ${#junit_files[@]} -ne 7 || ${#perf_files[@]} -ne 3 ]]; then missing=1; fi
           for file in "${junit_files[@]}" "${perf_files[@]}"; do args+=(--frontend-junit "$file"); done
           # B4-M2CLOSE: node:test-Verträge AGENT-041/042 aus dem evidence-Job.
           if [[ -f evidence/core/integrations-m2.xml ]]; then args+=(--frontend-junit evidence/core/integrations-m2.xml); fi
@@ -354,7 +365,7 @@ jobs:
             echo "::warning title=Spec-Abdeckung M2::os-parity coverage Exit $status (Gate: $M2_GATE), Details in coverage-m2.txt"
           fi
           if [[ "$missing" -ne 0 ]]; then
-            echo "::warning title=Spec-Abdeckung M2::Matrix-Belege unvollständig: ${#junit_files[@]} von 5 playwright-m2.xml, ${#perf_files[@]} von 1 playwright-m2-perf.xml"
+            echo "::warning title=Spec-Abdeckung M2::Matrix-Belege unvollständig: ${#junit_files[@]} von 7 playwright-m2.xml, ${#perf_files[@]} von 3 playwright-m2-perf.xml"
           fi
           if [[ "$M2_GATE" == "true" ]]; then
             if [[ "$missing" -ne 0 ]]; then exit 1; fi
