@@ -28,13 +28,22 @@ def main():
     date = datetime.date.today().isoformat()
     dest = SCALE / os.environ.get('OS_SCALE_DEST', date)
     dest.mkdir(exist_ok=True)
-    uptime = subprocess.check_output(['uptime'], text=True).strip()
-    load = float(uptime.split('load averages:')[-1].strip().split()[0].replace(',', '.'))
     max_load = float(os.environ.get('OS_SCALE_MAX_LOAD', '2'))
     min_idle = float(os.environ.get('OS_SCALE_MIN_IDLE', '0'))
     idle = None
+    # A preceding release build leaves the 1-minute load high; wait (bounded) for it to settle.
+    wait_s = float(os.environ.get('OS_SCALE_LOAD_WAIT_S', '600'))
+    poll_s = float(os.environ.get('OS_SCALE_LOAD_POLL_S', '15'))
+    deadline = time.monotonic() + wait_s
+    while True:
+        uptime = subprocess.check_output(['uptime'], text=True).strip()
+        load = float(uptime.split('load averages:')[-1].strip().split()[0].replace(',', '.'))
+        if load < max_load or time.monotonic() + poll_s > deadline:
+            break
+        print(f'load {load} >= {max_load}, waiting {poll_s:.0f} s: {uptime}', file=sys.stderr, flush=True)
+        time.sleep(poll_s)
     if load >= max_load:
-        raise RuntimeError(f'load >= {max_load}: {uptime}')
+        raise RuntimeError(f'load >= {max_load} after waiting {wait_s:.0f} s: {uptime}')
     if min_idle:
         top = subprocess.check_output(['top', '-l', '2', '-s', '1', '-n', '0'], text=True)
         idle = float(re.findall(r'([0-9.]+)% idle', top)[-1])

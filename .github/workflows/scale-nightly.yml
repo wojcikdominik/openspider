@@ -34,6 +34,7 @@ jobs:
           subprocess.run(['cargo','build','--release','--locked','-p','os-cli','-p','os-testsite'], check=True, timeout=5400)
           PY
       - name: Measure 100k and 250k
+        id: measure
         continue-on-error: true
         run: |
           python3 - <<'PY'
@@ -41,7 +42,13 @@ jobs:
           for n in (100000,250000):
               subprocess.run(['caffeinate','-i','python3','-I','docs/plan/M2-acceptance/scale/run-stage.py',str(n)], check=True, timeout=5400)
           PY
+      - name: Measurement failed
+        if: steps.measure.outcome != 'success'
+        run: |
+          echo "::error::Scale measurement failed (see step 'Measure 100k and 250k'); storage growth was not compared."
+          exit 1
       - name: Compare storage growth
+        if: steps.measure.outcome == 'success'
         run: |
           python3 - <<'PY'
           import json, os
