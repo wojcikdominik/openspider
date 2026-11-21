@@ -2,11 +2,6 @@ name: Release Windows
 on:
   workflow_dispatch:
     inputs:
-      channel:
-        description: Update-Manifest
-        type: choice
-        options: [stable, beta]
-        default: beta
       offline_webview:
         description: WebView2 Offline-Installer einbetten
         type: boolean
@@ -17,9 +12,6 @@ on:
         description: "Build-Nummer aus dem prepare-Job von release.yml (UI-127); leer bei Einzelläufen"
         type: string
         default: ""
-      channel:
-        type: string
-        default: stable
       offline_webview:
         type: boolean
         default: false
@@ -61,7 +53,6 @@ jobs:
       CARGO_BUILD_JOBS: 4
       CARGO_INCREMENTAL: 0
       OPENSPIDER_SECRET_STORE: memory
-      OPENSPIDER_UPDATE_BETA: ${{ (inputs.channel || 'beta') == 'beta' && '1' || '0' }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
@@ -188,13 +179,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           OPENSPIDER_REQUIRE_NOTICES: "1"
-          BUILD_CHANNEL: ${{ inputs.channel || 'beta' }}
           OFFLINE_WEBVIEW: ${{ inputs.offline_webview || 'false' }}
         run: |
           $config = Join-Path $env:RUNNER_TEMP 'windows-build.json'
           $sign = '${{ steps.signing.outputs.ready }}' -eq 'true'
           $updater = '${{ steps.signing.outputs.updater }}' -eq 'true'
-          ./apps/desktop/src-tauri/windows/build-config.ps1 -Output $config -Channel $env:BUILD_CHANNEL -Sign:$sign -Updater:$updater -OfflineWebView:($env:OFFLINE_WEBVIEW -eq 'true')
+          ./apps/desktop/src-tauri/windows/build-config.ps1 -Output $config -Sign:$sign -Updater:$updater -OfflineWebView:($env:OFFLINE_WEBVIEW -eq 'true')
           npm run -w apps/desktop tauri -- build --target x86_64-pc-windows-msvc --bundles nsis,msi --config $config -- --locked -j 4
           if ($LASTEXITCODE -ne 0) { throw 'Tauri-Build fehlgeschlagen' }
       - name: Authenticode prüfen

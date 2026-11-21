@@ -97,7 +97,6 @@ jobs:
     uses: ./.github/workflows/release-macos.yml
     with:
       version: ${{ needs.prepare.outputs.version }}
-      channel: ${{ needs.prepare.outputs.channel }}
       run_tests: true
       build_number: ${{ needs.prepare.outputs.build_number }}
     secrets: inherit
@@ -109,14 +108,13 @@ jobs:
       id-token: write
     uses: ./.github/workflows/release-windows.yml
     with:
-      channel: ${{ needs.prepare.outputs.channel }}
       build_number: ${{ needs.prepare.outputs.build_number }}
     secrets: inherit
 
   linux-core:
     needs: [prepare, licenses]
+    # K3-16/OUT-254: kein Build-Kanal mehr; App und CLI wählen den Kanal zur Laufzeit (updates.channel).
     env:
-      OPENSPIDER_UPDATE_BETA: ${{ needs.prepare.outputs.channel == 'beta' && '1' || '0' }}
       OPENSPIDER_BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
     runs-on: ubuntu-22.04
     timeout-minutes: 120
@@ -217,7 +215,8 @@ jobs:
           # Entwurfshinweise nur in die Actions-Zusammenfassung (und den Bericht), nie in den Release-Text.
           hint() { echo "- $1" | tee -a release-reports/entwurfshinweise.md >> "$GITHUB_STEP_SUMMARY"; }
           printf '\n**Entwurfshinweise (nicht Teil des Release-Texts):**\n\n' >> "$GITHUB_STEP_SUMMARY"
-          if [[ ! -f release-assets/latest.json ]]; then
+          # K3-16: latest-beta.json entsteht bei jedem signierten Lauf (Betas haben kein latest.json).
+          if [[ ! -f release-assets/latest-beta.json ]]; then
             hint 'unsigniert: keine vollständigen signierten Updater-Artefakte; keine Update-Manifeste.'
           fi
           hint 'Installations-Smoke: separater workflow_call; Entwurf wartet auf erfolgreiche Plattformmatrix und Bytevergleich.'
@@ -300,6 +299,25 @@ jobs:
               echo "::error::$name darf nicht veröffentlicht werden."
               exit 1
             fi
+          done
+      # OUT-254/OUT-261 (K3-16): Beta → nur latest-beta.json, nie latest.json; stabil → beide bytegleich.
+      # Ohne signierte Updater-Artefakte gibt es keine Manifeste (unsignierter Entwurf, wie bisher).
+      - name: Kanal-Manifeste prüfen (OUT-254, OUT-261)
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd release-assets
+          fail() { echo "::error title=Kanal-Manifeste::$1"; echo "$1" >&2; exit 1; }
+          if [[ "$VERSION" == *-* ]]; then
+            [[ ! -e latest.json ]] || fail "Beta-Release $VERSION enthält latest.json; Betas tragen nur latest-beta.json (OUT-261). Kein Entwurf."
+          elif [[ -e latest.json || -e latest-beta.json ]]; then
+            [[ -s latest.json && -s latest-beta.json ]] || fail "Stabiles Release $VERSION braucht latest.json und latest-beta.json (OUT-254, Clients bis 1.0.0)."
+            cmp -s latest.json latest-beta.json || fail "latest.json und latest-beta.json von $VERSION unterscheiden sich (OUT-254)."
+          fi
+          for file in latest.json latest-beta.json; do
+            [[ -e "$file" ]] || continue
+            [[ "$(jq -r .version "$file")" == "$VERSION" ]] || fail "$file nennt nicht die Version $VERSION."
           done
       - name: Ausschließlich neuen Entwurfs-Release anlegen (D12, K3-04)
         env:

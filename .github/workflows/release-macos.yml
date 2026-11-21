@@ -26,9 +26,6 @@ on:
         description: "Native Tests vor dem Build ausführen"
         type: boolean
         default: true
-      channel:
-        type: string
-        default: stable
     outputs:
       artifact_names:
         description: "JSON-Liste der Artefaktnamen; leer bei fehlenden Apple-Zugangsdaten"
@@ -58,11 +55,6 @@ on:
         description: "Native Tests vor dem Build ausführen"
         type: boolean
         default: true
-      channel:
-        description: "Update-Kanal"
-        type: choice
-        options: [stable, beta]
-        default: beta
       arch:
         description: "Architektur (all = drei DMGs)"
         type: choice
@@ -187,7 +179,6 @@ jobs:
       OPENSPIDER_DISABLE_UPDATE_CHECK: "1"
       RELEASE_VERSION: ${{ inputs.version }}
       OPENSPIDER_UPDATER_PUBKEY: ${{ vars.OPENSPIDER_UPDATER_PUBKEY }}
-      OPENSPIDER_UPDATE_BETA: ${{ inputs.channel == 'beta' && '1' || '0' }}
     defaults:
       run:
         shell: bash
@@ -310,15 +301,13 @@ jobs:
         run: |
           nice -n 10 node scripts/release/licenses/generate.mjs
 
-      - name: Version, Kanal und Updater konfigurieren
+      - name: Version und Updater konfigurieren
         if: steps.check.outputs.ready == 'true'
         id: updater
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
-          case "${INPUT_CHANNEL:-stable}" in stable|beta) ;; *) echo "Ungültiger Kanal" >&2; exit 1 ;; esac
           # R04 sets the version and lockfile before calling; never mutate dependencies here.
           node scripts/release/check-version.mjs
           node --input-type=module - <<'JSVERSION'
@@ -331,10 +320,11 @@ jobs:
           python3 - <<'PYCONFIG'
           import json, os
           enabled = bool(os.environ['TAURI_SIGNING_PRIVATE_KEY'] and os.environ['OPENSPIDER_UPDATER_PUBKEY'])
-          channel = '-beta' if os.environ['OPENSPIDER_UPDATE_BETA'] == '1' else ''
+          # OUT-254 (K3-16): beide festen Kanal-Endpunkte, stabil zuerst; der Kanal wird zur Laufzeit gewählt.
           config = {'bundle': {'createUpdaterArtifacts': enabled}, 'plugins': {'updater': {
               'pubkey': os.environ['OPENSPIDER_UPDATER_PUBKEY'],
-              'endpoints': [f'https://github.com/wojcikdominik/openspider/releases/latest/download/latest{channel}.json']}}}
+              'endpoints': ['https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json',
+                            'https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json']}}}
           with open(os.environ['RUNNER_TEMP'] + '/macos-build.json', 'w') as f:
               json.dump(config, f)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:

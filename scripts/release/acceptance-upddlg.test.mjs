@@ -104,7 +104,7 @@ test('nur der kurze Abschnitt landet in der Update-Notes-Datei (= Feld notes der
 });
 
 // spec: OUT-251
-test('der kurze Abschnitt gelangt als notes in beide Manifeste (manifest.mjs), die ausführlichen Notes nicht', t => {
+test('der kurze Abschnitt gelangt als notes ins Manifest (manifest.mjs), die ausführlichen Notes nicht', t => {
   const version = '1.0.0-beta.4';
   const dir = project(t, version, documentOf());
   assert.equal(weekly(dir, version).status, 0);
@@ -119,7 +119,9 @@ test('der kurze Abschnitt gelangt als notes in beide Manifeste (manifest.mjs), d
   }
   const made = spawnSync(process.execPath, [manifestScript, assets, version, 'example/openspider', out, '2026-11-12T08:00:00Z'], { cwd: dir, encoding: 'utf8' });
   assert.equal(made.status, 0, made.stderr);
-  for (const file of ['latest.json', 'latest-beta.json']) {
+  // spec: OUT-254 (K3-16): eine Beta trägt nur latest-beta.json, kein latest.json.
+  assert.ok(!readdirSync(assets).includes('latest.json'));
+  for (const file of ['latest-beta.json']) {
     const manifest = JSON.parse(readFileSync(join(assets, file), 'utf8'));
     assert.equal(manifest.version, version);
     assert.ok(manifest.notes.includes(EN[0]) && manifest.notes.includes(DE[0]), `${file}: kurze Notes beider Sprachen`);

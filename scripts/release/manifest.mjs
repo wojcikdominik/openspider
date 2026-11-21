@@ -10,6 +10,17 @@ const targets = [
   ['windows-x86_64-msi', /_x64_[A-Za-z-]+\.msi$/],
 ];
 
+// OUT-254/OUT-261 (K3-16): A stable release carries latest.json and latest-beta.json with identical content
+// (clients up to 1.0.0 chose their file at build time and read releases/latest/download/…). A beta release
+// carries only latest-beta.json and never latest.json, so releases/latest/download/latest.json stays stable.
+export function manifestFiles(version) {
+  return isPrerelease(version) ? ['latest-beta.json'] : ['latest.json', 'latest-beta.json'];
+}
+
+export function isPrerelease(version) {
+  return String(version).includes('-');
+}
+
 export function manifests({ directory, version, repository, notes, date, allowUnsigned = false }) {
   // Validate version independently of changelog contents.
   releaseNotes(`## ${version}\nvalidation`, version);
@@ -37,9 +48,7 @@ export function manifests({ directory, version, repository, notes, date, allowUn
     return { status: 'unsigniert', missing, files: [] };
   }
   const manifest = { version, notes, pub_date: new Date(date).toISOString(), platforms };
-  // K3-04: Betas are normal GitHub releases; both endpoints must exist.
-  // At 1.0, beta clients also transition to the stable release.
-  const files = ['latest.json', 'latest-beta.json'];
+  const files = manifestFiles(version);
   for (const name of files) writeFileSync(join(directory, name), `${JSON.stringify(manifest, null, 2)}\n`);
   return { status: 'signierte Updater-Artefakte', files, platforms: Object.keys(platforms) };
 }

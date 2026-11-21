@@ -2,16 +2,11 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Output,
-    [AllowEmptyString()][ValidateSet('', 'stable', 'beta')][string]$Channel = 'beta',
     [switch]$Sign,
     [switch]$Updater,
     [switch]$OfflineWebView
 )
 $ErrorActionPreference = 'Stop'
-if ([string]::IsNullOrEmpty($Channel)) {
-    Write-Warning 'Kein Build-Kanal angegeben; verwende beta.'
-    $Channel = 'beta'
-}
 $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
 if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.(\d+))?$') { throw 'Nicht unterstützte Release-Version' }
 $major = [int]$Matches[1]; $minor = [int]$Matches[2]; $patch = [int]$Matches[3]
@@ -31,13 +26,17 @@ if ($Sign) {
     $windows.signCommand = @{ cmd = 'pwsh'; args = @('-NoProfile', '-NonInteractive', '-File', $script, '%1') }
 }
 if ($OfflineWebView) { $windows.webviewInstallMode = @{ type = 'offlineInstaller'; silent = $true } }
-$manifest = if ($Channel -eq 'beta') { 'latest-beta.json' } else { 'latest.json' }
+# OUT-254 (K3-16): no build channel; both fixed channel endpoints, stable first. The app picks the channel at runtime.
+$endpoints = @(
+    'https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json',
+    'https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json'
+)
 $config = @{
     bundle = @{ createUpdaterArtifacts = [bool]$Updater; windows = $windows }
     plugins = @{ updater = @{
-        endpoints = @("https://github.com/wojcikdominik/openspider/releases/latest/download/$manifest")
+        endpoints = $endpoints
         pubkey = if ($Updater) { $env:OPENSPIDER_UPDATER_PUBKEY } else { '' }
     } }
 }
 $config | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Output -Encoding utf8
-Write-Output "MSI-Version: $($windows.wix.version), Manifest: $manifest"
+Write-Output "MSI-Version: $($windows.wix.version), Endpunkte: $($endpoints -join ', ')"
