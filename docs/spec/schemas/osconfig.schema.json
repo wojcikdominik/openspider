@@ -64,9 +64,88 @@
       },
       "type": "object"
     },
+    "AiConfig": {
+      "properties": {
+        "active_questions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "budget": {
+          "$ref": "#/$defs/BudgetLimits",
+          "default": {
+            "areas": {},
+            "crawl": 5000000,
+            "tasks": {},
+            "unlimited": false,
+            "warning_percent": 80
+          }
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "policy": {
+          "$ref": "#/$defs/AiPolicy",
+          "default": "unrestricted"
+        },
+        "prompts": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "questions": {
+          "default": [],
+          "description": "Definitions remain JSON documents (AI-030); validation belongs to M4-D01.",
+          "items": true,
+          "type": "array"
+        },
+        "suggestions": {
+          "$ref": "#/$defs/SuggestionConfig",
+          "default": {
+            "alt": false,
+            "h1": false,
+            "meta": false,
+            "segment_styles": {},
+            "style": {
+              "brand": "",
+              "brand_position": "none",
+              "casing": "unchanged",
+              "forbidden": [],
+              "required": [],
+              "separator": "",
+              "tone": ""
+            },
+            "title": false
+          }
+        },
+        "tasks": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TaskModelConfig"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "AiPolicy": {
+      "enum": [
+        "unrestricted",
+        "eu-only",
+        "local-only"
+      ],
+      "type": "string"
+    },
     "AnalysisConfig": {
       "description": "Crawl-Analyse (CRAWL-141): automatischer Start und je Teilschritt ein Schalter.",
       "properties": {
+        "ai_search": {
+          "default": true,
+          "type": "boolean"
+        },
         "amp": {
           "default": true,
           "description": "AMP.",
@@ -90,6 +169,10 @@
         "content": {
           "default": true,
           "description": "Inhalt.",
+          "type": "boolean"
+        },
+        "embeddings": {
+          "default": true,
           "type": "boolean"
         },
         "hreflang": {
@@ -450,6 +533,60 @@
         "secret_ref"
       ],
       "type": "object"
+    },
+    "BrandPosition": {
+      "enum": [
+        "start",
+        "end",
+        "none"
+      ],
+      "type": "string"
+    },
+    "BudgetLimits": {
+      "properties": {
+        "areas": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MicroUsd"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "crawl": {
+          "$ref": "#/$defs/MicroUsd",
+          "default": 5000000,
+          "description": "Zero disallows paid calls unless unlimited was explicitly selected."
+        },
+        "tasks": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/MicroUsd"
+            },
+            "type": "object"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "unlimited": {
+          "default": false,
+          "type": "boolean"
+        },
+        "warning_percent": {
+          "default": 80,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "Casing": {
+      "enum": [
+        "sentence",
+        "title",
+        "unchanged"
+      ],
+      "type": "string"
     },
     "ChangeDetectionConfig": {
       "description": "Change Detection (TECH-300): Elementauswahl in Filterreihenfolge und Schwelle für Inhaltsänderungen.",
@@ -919,6 +1056,99 @@
           "default": true,
           "description": "Nur indexierbare Seiten vergleichen.",
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "EmbeddingPairRule": {
+      "properties": {
+        "source_regex": {
+          "type": "string"
+        },
+        "target_regex": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_regex",
+        "target_regex"
+      ],
+      "type": "object"
+    },
+    "EmbeddingRule": {
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/EmbeddingRuleMode"
+        },
+        "regex": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "regex"
+      ],
+      "type": "object"
+    },
+    "EmbeddingRuleMode": {
+      "enum": [
+        "include",
+        "exclude"
+      ],
+      "type": "string"
+    },
+    "EmbeddingsConfig": {
+      "properties": {
+        "compare_within_rule": {
+          "default": false,
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "low_relevance_enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "low_relevance_threshold": {
+          "default": 0.4,
+          "format": "double",
+          "type": "number"
+        },
+        "only_indexable": {
+          "default": true,
+          "type": "boolean"
+        },
+        "pair_rules": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EmbeddingPairRule"
+          },
+          "type": "array"
+        },
+        "rules": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EmbeddingRule"
+          },
+          "type": "array"
+        },
+        "similarity_enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "similarity_threshold": {
+          "default": 0.95,
+          "format": "double",
+          "type": "number"
+        },
+        "source_prompt": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -1971,6 +2201,31 @@
           "type": "string"
         }
       },
+      "type": "object"
+    },
+    "MicroUsd": {
+      "description": "Integer micro-USD. No binary floating point enters accounting.",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ModelChoice": {
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "endpoint"
+      ],
       "type": "object"
     },
     "NetworkConfig": {
@@ -3223,6 +3478,141 @@
       },
       "type": "object"
     },
+    "StyleRules": {
+      "properties": {
+        "brand": {
+          "default": "",
+          "type": "string"
+        },
+        "brand_position": {
+          "$ref": "#/$defs/BrandPosition",
+          "default": "none"
+        },
+        "casing": {
+          "$ref": "#/$defs/Casing",
+          "default": "unchanged"
+        },
+        "forbidden": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "required": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "separator": {
+          "default": "",
+          "type": "string"
+        },
+        "tone": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "SuggestionConfig": {
+      "properties": {
+        "alt": {
+          "default": false,
+          "type": "boolean"
+        },
+        "h1": {
+          "default": false,
+          "type": "boolean"
+        },
+        "meta": {
+          "default": false,
+          "type": "boolean"
+        },
+        "segment_styles": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StyleRules"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "style": {
+          "$ref": "#/$defs/StyleRules",
+          "default": {
+            "brand": "",
+            "brand_position": "none",
+            "casing": "unchanged",
+            "forbidden": [],
+            "required": [],
+            "separator": "",
+            "tone": ""
+          }
+        },
+        "title": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "TaskModelConfig": {
+      "properties": {
+        "effort": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fallback": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ModelChoice"
+          },
+          "type": "array"
+        },
+        "max_input_chars": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_tokens": {
+          "default": null,
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelChoice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "temperature": {
+          "default": null,
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "TextLimits": {
       "description": "Schwellen für Zeichen und Pixel (Titel, Meta-Description; 02 §0.3).",
       "properties": {
@@ -3437,14 +3827,50 @@
       },
       "description": "Erweiterte Einstellungen."
     },
+    "ai": {
+      "$ref": "#/$defs/AiConfig",
+      "default": {
+        "active_questions": [],
+        "budget": {
+          "areas": {},
+          "crawl": 5000000,
+          "tasks": {},
+          "unlimited": false,
+          "warning_percent": 80
+        },
+        "enabled": false,
+        "policy": "unrestricted",
+        "prompts": [],
+        "questions": [],
+        "suggestions": {
+          "alt": false,
+          "h1": false,
+          "meta": false,
+          "segment_styles": {},
+          "style": {
+            "brand": "",
+            "brand_position": "none",
+            "casing": "unchanged",
+            "forbidden": [],
+            "required": [],
+            "separator": "",
+            "tone": ""
+          },
+          "title": false
+        },
+        "tasks": {}
+      }
+    },
     "analysis": {
       "$ref": "#/$defs/AnalysisConfig",
       "default": {
+        "ai_search": true,
         "amp": true,
         "analytics": true,
         "auto_at_end": true,
         "canonicals": true,
         "content": true,
+        "embeddings": true,
         "hreflang": true,
         "images": true,
         "link_metrics": true,
@@ -3738,6 +4164,21 @@
         "only_indexable": true
       },
       "description": "Duplikaterkennung."
+    },
+    "embeddings": {
+      "$ref": "#/$defs/EmbeddingsConfig",
+      "default": {
+        "compare_within_rule": false,
+        "enabled": false,
+        "low_relevance_enabled": false,
+        "low_relevance_threshold": 0.4,
+        "only_indexable": true,
+        "pair_rules": [],
+        "rules": [],
+        "similarity_enabled": false,
+        "similarity_threshold": 0.95,
+        "source_prompt": null
+      }
     },
     "export": {
       "$ref": "#/$defs/ExportConfig",

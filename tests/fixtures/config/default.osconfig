@@ -3,6 +3,52 @@ generator = "openspider 0.1.0"
 mode = "spider"
 cdns = []
 
+[ai]
+enabled = false
+questions = []
+active_questions = []
+prompts = []
+policy = "unrestricted"
+
+[ai.tasks]
+
+[ai.suggestions]
+title = false
+meta = false
+h1 = false
+alt = false
+
+[ai.suggestions.style]
+brand = ""
+separator = ""
+brand_position = "none"
+tone = ""
+forbidden = []
+required = []
+casing = "unchanged"
+
+[ai.suggestions.segment_styles]
+
+[ai.budget]
+crawl = 5000000
+unlimited = false
+warning_percent = 80
+
+[ai.budget.areas]
+
+[ai.budget.tasks]
+
+[embeddings]
+enabled = false
+similarity_enabled = false
+similarity_threshold = 0.95
+low_relevance_enabled = false
+low_relevance_threshold = 0.4
+only_indexable = true
+rules = []
+compare_within_rule = false
+pair_rules = []
+
 [scope]
 all_subdomains = false
 subfolder_only = false
@@ -316,6 +362,8 @@ auto_discover_robots = true
 urls = []
 
 [analysis]
+embeddings = true
+ai_search = true
 auto_at_end = true
 link_score = true
 canonicals = true

@@ -16,6 +16,27 @@
         "notify_to": []
       }
     },
+    "ai_app": {
+      "description": "AI machine preferences, no secrets or profile-bound tasks.",
+      "$ref": "#/$defs/AiAppSettings",
+      "default": {
+        "confirmation_threshold": 1000000,
+        "count_token_sample": false,
+        "preview_enabled": false,
+        "provider_endpoints": {
+          "ollama": {
+            "base_url": null,
+            "concurrent_requests": 1,
+            "eu_account_confirmed": false,
+            "timeout_seconds": 300,
+            "use_eu_endpoint": false
+          }
+        },
+        "redact_personal_data": true,
+        "redaction_patterns": [],
+        "system_prompt": ""
+      }
+    },
     "appearance": {
       "description": "Oberfläche (UI-120).",
       "$ref": "#/$defs/AppearanceSettings",
@@ -165,6 +186,55 @@
         }
       }
     },
+    "AiAppSettings": {
+      "description": "App-level preferences are deliberately separate from portable crawl profiles.",
+      "type": "object",
+      "properties": {
+        "confirmation_threshold": {
+          "$ref": "#/$defs/MicroUsd",
+          "default": 1000000
+        },
+        "count_token_sample": {
+          "type": "boolean",
+          "default": false
+        },
+        "preview_enabled": {
+          "description": "Schalter „KI (Vorschau)“ (Plan M4 E1, E-2 b): Standard aus; aus = kein KI-Request, kein KI-Schritt.",
+          "type": "boolean",
+          "default": false
+        },
+        "provider_endpoints": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ProviderEndpoint"
+          },
+          "default": {
+            "ollama": {
+              "base_url": null,
+              "concurrent_requests": 1,
+              "eu_account_confirmed": false,
+              "timeout_seconds": 300,
+              "use_eu_endpoint": false
+            }
+          }
+        },
+        "redact_personal_data": {
+          "type": "boolean",
+          "default": true
+        },
+        "redaction_patterns": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "system_prompt": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
     "AppearanceSettings": {
       "description": "Erscheinungsbild (UI-018, UI-120).",
       "type": "object",
@@ -286,6 +356,12 @@
         }
       }
     },
+    "MicroUsd": {
+      "description": "Integer micro-USD. No binary floating point enters accounting.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
     "NetworkSettings": {
       "description": "Netzwerk (App-weit; nicht Teil des Crawl-Profils).",
       "type": "object",
@@ -319,6 +395,40 @@
         "max_speed",
         "min_memory"
       ]
+    },
+    "ProviderEndpoint": {
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "concurrent_requests": {
+          "type": "integer",
+          "format": "uint16",
+          "default": 4,
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "eu_account_confirmed": {
+          "type": "boolean",
+          "default": false
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "format": "uint16",
+          "default": 120,
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "use_eu_endpoint": {
+          "type": "boolean",
+          "default": false
+        }
+      }
     },
     "ProxyKind": {
       "type": "string",
