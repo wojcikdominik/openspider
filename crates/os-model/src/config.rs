@@ -11,6 +11,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+mod ai;
+pub use ai::*;
 mod io;
 mod migrate;
 mod schema;
@@ -44,6 +46,8 @@ pub const CONFIG_SCHEMA_VERSION: u32 = 2;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct CrawlConfig {
+    pub ai: AiConfig,
+    pub embeddings: EmbeddingsConfig,
     /// Version des Dateiformats (OUT-221).
     pub schema_version: u32,
     /// Erzeuger, z. B. `openspider 0.1.0`.
@@ -143,6 +147,8 @@ pub struct CrawlConfig {
 impl Default for CrawlConfig {
     fn default() -> Self {
         CrawlConfig {
+            ai: AiConfig::default(),
+            embeddings: EmbeddingsConfig::default(),
             serp: SerpConfig::default(),
             ui: CrawlUiConfig::default(),
             images: ImagesConfig::default(),
@@ -1129,6 +1135,8 @@ impl Default for SitemapsConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct AnalysisConfig {
+    pub embeddings: bool,
+    pub ai_search: bool,
     /// Analyse am Crawl-Ende automatisch starten.
     pub auto_at_end: bool,
     /// Link Score.
@@ -1162,6 +1170,8 @@ pub struct AnalysisConfig {
 impl Default for AnalysisConfig {
     fn default() -> Self {
         AnalysisConfig {
+            embeddings: false,
+            ai_search: false,
             auto_at_end: true,
             link_score: true,
             canonicals: true,
@@ -1185,6 +1195,8 @@ impl AnalysisConfig {
     pub fn step_enabled(&self, step: crate::enums::AnalysisStep) -> bool {
         use crate::enums::AnalysisStep as S;
         match step {
+            S::Embeddings => self.embeddings,
+            S::AiSearch => self.ai_search,
             S::LinkScore => self.link_score,
             S::Canonicals => self.canonicals,
             S::Pagination => self.pagination,

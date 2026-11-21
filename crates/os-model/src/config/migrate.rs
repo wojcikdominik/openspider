@@ -33,7 +33,9 @@ pub struct MigrationReport {
 }
 
 /// Abschnitte, die Version 2 gegenüber Version 1 ergänzt (oberste Ebene).
-const V2_SECTIONS: [&str; 13] = [
+const V2_SECTIONS: [&str; 15] = [
+    "ai",
+    "embeddings",
     "spelling",
     "grammar",
     "custom_search",

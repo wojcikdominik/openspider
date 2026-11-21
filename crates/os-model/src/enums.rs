@@ -513,6 +513,8 @@ string_enum! {
         LinkMetrics => "link_metrics",
         Amp => "amp",
         NearDuplicates => "near_duplicates",
+        Embeddings => "embeddings",
+        AiSearch => "ai_search",
     }
 }
 

@@ -40,6 +40,8 @@ pub const RESTART_REQUIRED_KEYS: &[&str] = &["storage.crawls_dir"];
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct AppSettings {
+    /// AI machine preferences, no secrets or profile-bound tasks.
+    pub ai_app: crate::config::AiAppSettings,
     /// Version des Dateiformats.
     pub schema_version: u32,
     /// Allgemein.
@@ -69,6 +71,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         AppSettings {
+            ai_app: crate::config::AiAppSettings::default(),
             schema_version: SETTINGS_SCHEMA_VERSION,
             general: GeneralSettings::default(),
             appearance: AppearanceSettings::default(),
