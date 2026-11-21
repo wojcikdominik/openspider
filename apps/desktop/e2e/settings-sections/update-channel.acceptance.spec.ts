@@ -180,7 +180,9 @@ test("German texts at 1024×640 without truncation or overflow", async ({ page }
   const clipped = await page.evaluate(() => {
     const root = document.querySelector("[data-setting-anchor='updates.channel']")!;
     const els = [root, ...Array.from(root.querySelectorAll("*")), ...Array.from(document.querySelectorAll("p[data-update-channel-hint]"))];
-    return els.filter(el => (el as HTMLElement).scrollWidth > (el as HTMLElement).clientWidth + 1 && getComputedStyle(el).overflowX !== "visible").map(el => el.textContent);
+    // Nur sichtbarer Text zählt; das visuell verborgene Eingabefeld der Optionen hat keinen Text.
+    const visibleText = (el: Element) => el.tagName !== "INPUT" && (el.textContent ?? "").trim() !== "";
+    return els.filter(el => visibleText(el) && (el as HTMLElement).scrollWidth > (el as HTMLElement).clientWidth + 1 && getComputedStyle(el).overflowX !== "visible").map(el => el.textContent);
   });
   expect(clipped).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
