@@ -36,11 +36,37 @@ Ohne Apple-Konfiguration überspringt R01 seine Distributions-Builds grün. R02 
 
 Plattformschlüssel: `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64-nsis`, `windows-x86_64-msi`. Universal-DMG/CLI sind die einzigen macOS-Downloads; Updates wählen das native Architekturpaket. Kein erfundener Windows-ARM-Schlüssel: x64 unter Emulation gehört zu R03.
 
-K3-04 (vorläufige Nutzerentscheidung): bis 1.0 sind Betas **normale GitHub Releases**, keine Pre-Releases. Jeder vollständige Release trägt identische `latest.json` und `latest-beta.json`; stable aktualisiert ebenfalls beide Endpunkte. Betas lesen `https://github.com/wojcikdominik/openspider/releases/latest/download/latest-beta.json`. Stable-Clients lehnen Beta-Versionen ab. Beim späteren manuellen Veröffentlichen muss der freigegebene Release ausdrücklich als **Latest** gesetzt werden, sonst funktioniert `releases/latest/download/…` nicht zuverlässig. Der Entwurf setzt Latest ausdrücklich nicht. Ein Entwurf ist für den öffentlichen Updater noch nicht erreichbar.
+~~K3-04 (vorläufige Nutzerentscheidung): bis 1.0 sind Betas **normale GitHub Releases**, keine Pre-Releases. Jeder vollständige Release trägt identische `latest.json` und `latest-beta.json`; stable aktualisiert ebenfalls beide Endpunkte. Betas lesen `https://github.com/wojcikdominik/openspider/releases/latest/download/latest-beta.json`. Stable-Clients lehnen Beta-Versionen ab. Beim späteren manuellen Veröffentlichen muss der freigegebene Release ausdrücklich als **Latest** gesetzt werden, sonst funktioniert `releases/latest/download/…` nicht zuverlässig. Der Entwurf setzt Latest ausdrücklich nicht. Ein Entwurf ist für den öffentlichen Updater noch nicht erreichbar.~~ **Abgelöst durch K3-16 (Nutzerentscheidung 21.11.2026), siehe Abschnitt „Update-Kanäle“.**
 
 `SHA256SUMS` erfasst alle Dateien in `release-assets` außer sich selbst, einschließlich `.sig`, Manifesten und der versionslosen Kopien. `updater-status.txt` bleibt ausschließlich in `release-reports` (auch in der Summary), außerhalb von Release-Assets und SHA256SUMS. Die Notes und Prüfberichte sind Release-Body bzw. Actions-Artefakte und keine separaten Release-Assets.
 
 Notes: `notes.mjs <Version> release-reports/update-notes.md --body release-reports/release-notes.md --repository <owner/name>`. `update-notes.md` enthält nur das Notes-Dokument der Version und speist `latest.json`/`latest-beta.json` (Update-Dialog, OUT-251). `release-notes.md` ist der Release-Text und besteht nur aus dem Download-Kasten (Universal-DMG und NSIS-Setup dieses Releases, Hinweis zu den übrigen Dateien de/en, Links Handbuch/User guide/Feedback) und „## Neu in dieser Version“ mit denselben Notes. Feedback-Link (OUT-261): Vorabversionen `https://openspider.de/beta/`, stabile Versionen `https://github.com/<owner/name>/discussions`. Der Release-Text wird unverändert veröffentlicht; Entwurfshinweise stehen nur in der Actions-Zusammenfassung.
+
+## Update-Kanäle (K3-16, Nutzerentscheidung 21.11.2026)
+
+Spec: OUT-254 (Kanäle, P1 ab 1.0.1), OUT-261 (Veröffentlichungsregel), UI-131 (Einstellung). Plan: `docs/plan/M3.md` K3-16.
+
+**Regel:** „Latest“ ist auf GitHub immer die neueste stabile Version.
+
+| | stabiles Release `vX.Y.Z` | Beta-Release `vX.Y.Z-beta.N` / `-rc.N` |
+|---|---|---|
+| Entwurf (`release.yml`) | `--draft --prerelease=false --latest=false` (unverändert) | ebenso |
+| Veröffentlichen | als **Latest**: `gh release edit vX.Y.Z --draft=false --latest` | **nicht** Latest, **nicht** Pre-Release: `gh release edit vX.Y.Z-beta.N --draft=false --latest=false` |
+| Manifeste im Release | `latest.json` und `latest-beta.json`, identisch (Clients bis 1.0.0) | nur `latest-beta.json`, **kein** `latest.json` |
+| Beta-Manifest am Tag `update-beta` | ersetzen, wenn die Version nach SemVer neuer ist als der bisherige Inhalt | immer ersetzen |
+
+Beim Veröffentlichen über die Weboberfläche ist „Set as the latest release“ möglicherweise vorausgewählt (nicht geprüft); deshalb über `gh release edit` mit ausdrücklichem `--latest` bzw. `--latest=false` veröffentlichen. Bis das Paket Release-Tooling 1.0.1 `manifest.mjs` umgestellt hat (Betas ohne `latest.json`) und der Tag `update-beta` existiert, wird **keine Beta veröffentlicht**.
+
+**Beta-Manifest am festen Tag `update-beta`** (`https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json`):
+
+- *Anlegen, einmalig durch den Eigentümer*, nach dem Veröffentlichen von 1.0.1 und erst, wenn `homebrew.yml` den Tag `update-beta` überspringt (sonst scheitert dessen Lauf am Versionsformat): Release mit Tag `update-beta` am aktuellen `main`, als **Pre-Release** markiert (wird damit nie Latest), Titel und Text sagen, dass es nur das Beta-Manifest trägt. Einziges Asset ist `latest-beta.json` aus dem Release 1.0.1 (bytegleich zu dessen `latest-beta.json`). Kein weiteres Asset, keine Notes außer diesem Hinweis.
+- *Aktualisieren, nur nach Go des Eigentümers*: nach jeder Veröffentlichung nach der Tabelle oben `latest-beta.json` des gerade veröffentlichten Releases mit `--clobber` hochladen. Das geschieht über den Workflow „Kanal-Manifest aktualisieren“ aus dem Paket Release-Tooling 1.0.1 (Freigabe im Environment `release`); bis es ihn gibt, nur von Hand durch den Eigentümer. Ältere Inhalte werden nie hochgeladen (kein Zurücksetzen auf eine ältere Version); eine Rücknahme entscheidet der Eigentümer im Einzelfall.
+- Das Release `update-beta` ist eine bewusste Ausnahme von „bestehende Releases werden nie überschrieben“ (D12): Nur diese eine Datei in diesem einen Release wird ersetzt. Versionierte Releases bleiben unverändert.
+- *Prüfschritt nach jeder Veröffentlichung*: `releases/latest/download/latest.json` abrufen → `version` ist die neueste stabile Version; die Beta-Manifest-URL abrufen → `version` ist die neueste Version insgesamt; in beiden zeigen alle Paket-URLs auf `releases/download/v<diese Version>/…`. Außerdem `releases/latest/download/OpenSpider-macOS.dmg` → stabile Version.
+
+**Rückweg beta → stabil:** Nur über die Einstellung in der App (UI-131). Wer wechselt, bleibt auf seiner Vorabversion, bis eine neuere stabile Version erscheint; eine Anleitung zur Neuinstallation einer älteren stabilen Version gibt es nicht.
+
+**Offen:** Eine Richtlinie für Firmen-/MSI-Installationen, die den Kanal festlegt oder Beta verbietet (OUT-253), ist nicht entschieden.
 
 ## Noch fehlende Paket-Schnittstellen
 
