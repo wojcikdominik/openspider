@@ -8,6 +8,16 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+# M4 semantic algorithms (K4-09); implementations belong to E01/E02.
+hnsw.workspace = true
+linfa.workspace = true
+linfa-clustering.workspace = true
+bhtsne.workspace = true
+space.workspace = true
+rayon.workspace = true
+hdbscan.workspace = true
+ndarray.workspace = true
+rand.workspace = true
 fancy-regex.workspace = true
 
 os-model.workspace = true

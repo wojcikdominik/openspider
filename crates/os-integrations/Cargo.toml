@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+os-ai.workspace = true
 aes-gcm.workspace = true
 webbrowser.workspace = true
 

@@ -1,0 +1,28 @@
+[package]
+name = "os-ai"
+description = "OpenSpider: provider-neutral AI services"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+os-model.workspace = true
+# C13: K04 must use the shared SecretStoreMut instead of opening keyring directly.
+os-fetch.workspace = true
+os-store.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+keyring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jsonschema.workspace = true
+tokio.workspace = true
+sha2.workspace = true
+whatlang.workspace = true
+# Reproducible sampling in M4-C01.
+rand.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+proptest.workspace = true

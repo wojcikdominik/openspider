@@ -1,0 +1,18 @@
+//! Provider-neutral AI foundation; no provider is contacted by the foundation.
+pub mod adapters;
+pub mod batch;
+pub mod cache;
+pub mod catalog;
+pub mod cost;
+pub mod decisions;
+pub mod embeddings;
+pub mod keys;
+pub mod limits;
+pub mod policy;
+pub mod preview;
+pub mod provider;
+pub mod sample;
+pub mod schema;
+pub mod tasks;
+pub use os_model::ai::AiStatus;
+pub use preview::PreviewSwitch;
