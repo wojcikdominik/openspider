@@ -1,0 +1,108 @@
+name: Kanal-Manifest aktualisieren
+
+# OUT-254/OUT-261 (K3-16): Beta-Manifest am festen Hilfs-Release `update-beta` nach einer Veröffentlichung ersetzen.
+# Regel (docs/release/release-process.md, Abschnitt „Update-Kanäle“): nach einer Beta immer, nach einer stabilen
+# Version nur, wenn sie nach SemVer neuer ist als der bisherige Inhalt; nie eine ältere Version (kein Zurücksetzen).
+# Entscheidung und Eingabeprüfung: scripts/release/channel-manifest.mjs.
+#
+# Nur manueller Start nach Go des Eigentümers, nur auf main, Freigabe im Environment `release`. Das Hilfs-Release
+# `update-beta` legt der Eigentümer einmalig von Hand an (Pre-Release, einziges Asset latest-beta.json von 1.0.1);
+# dieser Workflow legt es nie an und ändert nur dessen einzige Datei. Versionierte Releases bleiben unverändert (D12).
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Gerade veröffentlichtes Release, z. B. v1.0.1 oder v1.1.0-beta.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: channel-manifest
+  cancel-in-progress: false
+
+jobs:
+  update-beta:
+    name: Beta-Manifest am Tag update-beta
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Release-Vertragstests
+        run: node --test scripts/release/channel-manifest.test.mjs
+      - name: Releases und Manifeste lesen
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?$ ]] || { echo "::error::Ungültiger Release-Tag: $RELEASE_TAG"; exit 1; }
+          work="$RUNNER_TEMP/channel"
+          mkdir -p "$work/release" "$work/current"
+          fields=tagName,isDraft,isPrerelease,assets
+          gh release view "$RELEASE_TAG" --json "$fields" > "$work/release.json" \
+            || { echo "::error::Release $RELEASE_TAG nicht gefunden."; exit 1; }
+          gh release view update-beta --json "$fields" > "$work/helper.json" \
+            || { echo "::error::Hilfs-Release update-beta fehlt; der Eigentümer legt es einmalig an (release-process.md, Update-Kanäle)."; exit 1; }
+          gh api "repos/$GH_REPO/releases/latest" --jq .tag_name > "$work/latest-tag.txt" || : > "$work/latest-tag.txt"
+          gh release download "$RELEASE_TAG" --pattern 'latest*.json' --dir "$work/release"
+          gh release download update-beta --pattern latest-beta.json --dir "$work/current"
+      - name: Entscheiden (OUT-254)
+        id: decide
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/channel"
+          stable=()
+          [[ -f "$work/release/latest.json" ]] && stable=(--stable "$work/release/latest.json")
+          node scripts/release/channel-manifest.mjs --repository "$GH_REPO" \
+            --release "$work/release.json" --helper "$work/helper.json" --latest-tag "$(cat "$work/latest-tag.txt")" \
+            --candidate "$work/release/latest-beta.json" --current "$work/current/latest-beta.json" "${stable[@]}" \
+            | tee -a "$GITHUB_OUTPUT"
+      - name: latest-beta.json am Tag update-beta ersetzen
+        if: steps.decide.outputs.action == 'replace'
+        run: |
+          set -euo pipefail
+          gh release upload update-beta "$RUNNER_TEMP/channel/release/latest-beta.json" --clobber
+      - name: Prüfschritt nach der Aktualisierung
+        env:
+          ACTION: ${{ steps.decide.outputs.action }}
+          VERSION: ${{ steps.decide.outputs.version }}
+          REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/channel"
+          mkdir -p "$work/check"
+          gh release download update-beta --pattern latest-beta.json --dir "$work/check"
+          if [[ "$ACTION" == replace ]]; then
+            cmp -s "$work/check/latest-beta.json" "$work/release/latest-beta.json" \
+              || { echo "::error::latest-beta.json am Tag update-beta ist nicht bytegleich zum Release $RELEASE_TAG."; exit 1; }
+          else
+            cmp -s "$work/check/latest-beta.json" "$work/current/latest-beta.json" \
+              || { echo "::error::latest-beta.json am Tag update-beta hat sich unerwartet geändert."; exit 1; }
+          fi
+          assets="$(gh release view update-beta --json assets --jq '[.assets[].name] | join(",")')"
+          [[ "$assets" == latest-beta.json ]] || { echo "::error::update-beta trägt mehr als latest-beta.json: $assets"; exit 1; }
+          latest="$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)"
+          [[ "$latest" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Latest ist $latest, keine stabile Version (OUT-261)."; exit 1; }
+          {
+            echo "### Kanal-Manifest ($RELEASE_TAG)"
+            echo
+            echo "- Entscheidung: **$ACTION** – $REASON"
+            echo "- Beta-Manifest am Tag update-beta nennt: $(jq -r .version "$work/check/latest-beta.json")"
+            echo "- Latest (stabil): $latest"
+            echo
+            echo 'Öffentliche URLs (CDN-Verzögerung möglich) nach release-process.md „Update-Kanäle“ zusätzlich von Hand prüfen.'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -20,6 +20,7 @@ on:
       - ".github/workflows/licenses.yml"
       - "packaging/homebrew/**"
       - ".github/workflows/homebrew.yml"
+      - ".github/workflows/channel-manifest.yml"
       - "scripts/ci/linux-core.sh"
       - ".github/workflows/linux-core.yml"
   pull_request:
