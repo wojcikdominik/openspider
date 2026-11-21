@@ -107,6 +107,7 @@ html[data-accent-warn="on"] .os-btn-primary { outline:var(--os-line) solid var(-
 .os-radio[data-selected] .os-radio-dot { border:var(--os-size-8) solid var(--os-accent); }
 .os-radio-group { display:flex; flex-direction:column; gap:var(--os-size-8); }
 .os-radio-items { display:flex; gap:var(--os-size-16); flex-wrap:wrap; }
+.os-radio[data-disabled] { color:var(--os-text-disabled); }
 
 .os-select { position:relative; }
 .os-select-button { display:flex; align-items:center; justify-content:space-between; gap:var(--os-size-8); height:var(--os-size-28); padding:0 var(--os-size-8); border:var(--os-line) solid var(--os-border-strong); border-radius:var(--os-radius); background:var(--os-bg-surface); color:var(--os-text); font:inherit; min-width:var(--os-size-140); }
