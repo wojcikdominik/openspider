@@ -96,7 +96,16 @@ async fn table_rows_are_published_only_in_polls_whose_tick_is_due() {
     );
     open(&app, f.path()).await;
     let loop_step = Duration::from_millis(150);
-    tokio::time::sleep(loop_step).await;
+    // Begrenzt abfragen statt fest warten: die Uhr erst vorstellen, wenn die Veröffentlichung beim Öffnen da ist
+    // (auf langsamen Runnern kam sie nach festen 150 ms erst nach dem Vorstellen, also nicht mehr bei null).
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while published.lock().unwrap().is_empty() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no rows published after opening"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     // Das Fenster kommt 200 ms später: Tabellen- und Tick-Uhr liefen ohne Abgleich versetzt (500/1000/… gegen
     // 700/1200/…); die Zeilen müssen dem Tick folgen.
     clock.advance(Duration::from_millis(200));
