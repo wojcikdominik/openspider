@@ -82,6 +82,13 @@ jobs:
       - name: Build native measurement entry
         if: always() && steps.browser.outcome != 'skipped'
         run: |
+          # tauri-build verlangt im Release-Profil das Sidecar (bundle.externalBin, build.rs); wie in release-macos/-windows bereitstellen.
+          cargo build --release --locked -j 6 -p os-cli --bin openspider
+          triple="$(rustc -vV | sed -n 's/^host: //p')"
+          suffix=""
+          if [[ "$RUNNER_OS" == Windows ]]; then suffix=".exe"; fi
+          mkdir -p apps/desktop/src-tauri/binaries
+          cp "target/release/openspider$suffix" "apps/desktop/src-tauri/binaries/openspider-$triple$suffix"
           node apps/desktop/e2e-b/perf/prepare.mjs
           npm exec -w apps/desktop -- tauri build --no-bundle --features e2e-webdriver --config ../../target/ui-perf-native.conf.json
       - name: Native cold start, opening, Windows soak and CDP trace
