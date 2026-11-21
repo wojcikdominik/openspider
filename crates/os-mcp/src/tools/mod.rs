@@ -28,6 +28,23 @@ pub mod url_screenshot;
 
 use crate::tool::Tool;
 
+/// KI-Werkzeuge der Klasse `cost` (AGENT-030); Stubs bis M4-C02.
+pub const AI_TOOLS: [&str; 4] = [
+    "run_decisions",
+    "suggest_metadata",
+    "redirect_mapping",
+    "internal_link_suggestions",
+];
+
+/// Die Werkzeuge, die ein Server anbietet: ohne Schalter „KI (Vorschau)“ (Plan M4 E1, E-2 b, Standard aus)
+/// ohne die KI-Werkzeuge, sonst [`all`].
+pub fn offered(preview: os_ai::PreviewSwitch) -> Vec<Box<dyn Tool>> {
+    all()
+        .into_iter()
+        .filter(|t| preview.is_on() || !AI_TOOLS.contains(&t.name()))
+        .collect()
+}
+
 /// Alle Werkzeuge (nach Freigabe gefiltert durch `permissions`), in der Reihenfolge von `tools/list`.
 pub fn all() -> Vec<Box<dyn Tool>> {
     vec![
@@ -108,7 +125,31 @@ mod tests {
 #[cfg(test)]
 mod m4_tests {
     use crate::{ToolClass, ToolContext, ToolError};
+    use os_ai::PreviewSwitch;
     use serde_json::json;
+    // spec: AGENT-030
+    // Plan M4 E1 (E-2 b): Schalter „KI (Vorschau)“ aus → die vier KI-Werkzeuge werden nicht angeboten.
+    #[test]
+    fn ai_tools_are_offered_only_with_the_preview_switch_on() {
+        let names = |preview| {
+            super::offered(preview)
+                .iter()
+                .map(|t| t.name().to_string())
+                .collect::<Vec<_>>()
+        };
+        let off = names(PreviewSwitch::OFF);
+        let on = names(PreviewSwitch::ON);
+        assert_eq!(on.len(), super::all().len());
+        assert_eq!(off.len(), on.len() - super::AI_TOOLS.len());
+        for ai in super::AI_TOOLS {
+            assert!(!off.iter().any(|n| n == ai), "{ai}");
+            assert!(on.iter().any(|n| n == ai), "{ai}");
+        }
+        assert_eq!(
+            PreviewSwitch::from_settings(&os_model::settings::AppSettings::default()),
+            PreviewSwitch::OFF
+        );
+    }
     // spec: AI-001
     // spec: AGENT-030
     #[test]
