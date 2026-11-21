@@ -1,0 +1,46 @@
+{
+  "test_only": true,
+  "source_url": "docs/spec/08-ai.md",
+  "verified_at": "2026-11-09",
+  "currency": "USD",
+  "prices": [
+    {
+      "provider": "anthropic",
+      "model": "mock-claude",
+      "endpoint": "messages",
+      "input_per_million": 1,
+      "output_per_million": 5,
+      "batch_discount": 0.5,
+      "source_url": "docs/spec/08-ai.md#konventionen-f\u00fcr-diesen-bereich",
+      "verified_at": "2026-11-09"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "endpoint": "decisions",
+      "input_per_million": 0.1,
+      "output_per_million": 0,
+      "source_url": "docs/spec/08-ai.md#konventionen-f\u00fcr-diesen-bereich",
+      "verified_at": "2026-11-09"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "endpoint": "responses",
+      "input_per_million": 0.1,
+      "output_per_million": 0.5,
+      "cache_read_per_million": 0.01,
+      "batch_discount": 0.5,
+      "long_context": {
+        "threshold_input_tokens": 272000,
+        "input_factor": 2,
+        "output_factor": 1.5
+      },
+      "regional_surcharge": {
+        "eu": 0.1
+      },
+      "source_url": "docs/spec/08-ai.md#konventionen-f\u00fcr-diesen-bereich",
+      "verified_at": "2026-11-09"
+    }
+  ]
+}
