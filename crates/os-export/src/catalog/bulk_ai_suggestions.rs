@@ -1,37 +1,7 @@
-//! STUB(M4-V01): AI export entries, replaced by M4-V01.
-use super::{stub_run, TableEntry};
+//! STUB(M4-V01): AI-Suggestions-Exporte (AI-076). Die Namen „AI Suggestions: Accepted“ und „AI Suggestions: All“
+//! ergäben dieselben Dateinamen wie die Tab-Exporte der Filter `All`/`Accepted` des Tabs „AI Suggestions“;
+//! ob sie eigene Bulk-Exporte oder die Tab-Exporte sind, ist offen (Bericht M4-F01). M4-V01 trägt sie ein.
+use super::TableEntry;
 pub fn entries() -> &'static [TableEntry] {
-    ENTRIES
+    &[]
 }
-const ENTRIES: &[TableEntry] = &[
-    TableEntry {
-        name: "AI Suggestions:Accepted",
-        aliases: &[],
-        file_stem: "AI Suggestions:Accepted",
-        header: &[
-            "Address",
-            "Element",
-            "Current Value",
-            "New Value",
-            "Length",
-            "Pixel Width",
-            "Origin",
-            "Model",
-            "Generated At",
-        ],
-        header_fn: None,
-        requires: &[],
-        owner: "M4-V01",
-        run: stub_run,
-    },
-    TableEntry {
-        name: "AI Suggestions:All",
-        aliases: &[],
-        file_stem: "AI Suggestions:All",
-        header: &["Address", "Element", "Suggestion", "Status", "Violations"],
-        header_fn: None,
-        requires: &[],
-        owner: "M4-V01",
-        run: stub_run,
-    },
-];

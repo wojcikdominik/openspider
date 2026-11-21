@@ -464,9 +464,9 @@ mod m4_tests {
     #[test]
     fn ai_export_fixture_resolves_bulk_and_report_entries() {
         assert!(bulk_ai_prompts::entries().is_empty());
+        assert!(bulk_ai_suggestions::entries().is_empty());
         let fixture = [
             (ExportKind::Bulk, "AI Decisions:All Answers"),
-            (ExportKind::Bulk, "AI Suggestions:Accepted"),
             (ExportKind::Bulk, "AI:Embeddings"),
             (ExportKind::Bulk, "AI:All Generated Images"),
             (ExportKind::Bulk, "AI:All Generated Audio"),
