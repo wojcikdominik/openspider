@@ -1,0 +1,4 @@
+# OUT-254 Abnahme (unabhängig): Profil nightly
+[updates]
+check = true
+channel = "nightly"

@@ -64,9 +64,22 @@ class Prepare(Fixture):
     def test_versions_repository_and_channel(self):
         self.assertEqual((self.info['current'], self.info['next'], self.info['repository'], self.info['channel']),
                          ('1.0.0', '1.0.1', REPO, 'stable'))
+        # K3-16 (OUT-254): zusätzlich der feste Beta-Pfad ab 1.0.1; die ersten beiden bleiben für Builds bis 1.0.0.
         self.assertEqual(self.info['endpoints'], [f'/{REPO}/releases/latest/download/latest.json',
-                                                  f'/{REPO}/releases/latest/download/latest-beta.json'])
+                                                  f'/{REPO}/releases/latest/download/latest-beta.json',
+                                                  f'/{REPO}/releases/download/update-beta/latest-beta.json'])
         self.assertTrue((self.tmp / 'mock' / 'scenarios.json').is_file())
+        for endpoint in self.info['endpoints']:
+            self.assertEqual(self.info['scenarios']['valid'][endpoint]['json']['version'], '1.0.1')
+
+    def test_beta_release_with_only_latest_beta_json(self):
+        # K3-16 (OUT-254, OUT-261): ein Beta-Trockenlauf trägt nur latest-beta.json.
+        folder = self.tmp / 'beta-only'
+        release_assets(folder, '1.1.0-beta.1')
+        (folder / 'latest.json').unlink()
+        info = mockupdate.prepare(self.tmp / 'n1', folder, self.tmp / 'mock-beta', current_version='1.1.0-beta.0')
+        self.assertEqual((info['next'], info['channel']), ('1.1.0-beta.1', 'beta'))
+        self.assertIn(f'/{REPO}/releases/download/update-beta/latest-beta.json', info['endpoints'])
 
     def test_scenarios(self):
         s = self.info['scenarios']

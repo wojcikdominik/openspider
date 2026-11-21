@@ -158,19 +158,16 @@ Fehlt privater oder öffentlicher Schlüssel, setzt das temporäre Build-Overlay
 Mit Schlüsseln muss für beide Installer eine zugehörige `.sig` entstehen.
 Die Updater-Signatur wird über das endgültige Authenticode-signierte Paket erstellt.
 
-`channel=stable` setzt den Endpunkt auf
-`https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json`,
-`channel=beta` auf `latest-beta.json` am selben Ort. R04 muss den passenden Wert
-explizit übergeben; der Workflow setzt dazu auch die vom F01-Build-Skript gelesene
-Variable `OPENSPIDER_UPDATE_BETA=1` beziehungsweise `0`. Die App hat keine Kanalwahl.
-Fehlen Ereignis-Eingaben ganz oder ist `channel` leer, verwendet der Workflow
-`beta` für Build-Overlay und App-Build; `offline_webview` fällt auf `false` zurück.
-Auch `build-config.ps1` verwendet bei ausgelassenem oder leerem Kanal `beta`
-(bei leerem Wert mit Warnung). Andere Kanalwerte werden abgelehnt.
-Ein `workflow_call` ohne Kanal übernimmt weiterhin seinen deklarierten Standard `stable`.
+Seit 1.0.1 (K3-16, OUT-254) gibt es keinen Build-Kanal mehr. `build-config.ps1` legt immer
+beide festen Endpunkte in das Build-Overlay, stabil zuerst:
+`https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json` und
+`https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json`.
+Die App wählt zur Laufzeit nach `updates.channel`. Eingabe `channel`, Parameter `-Channel`
+und `OPENSPIDER_UPDATE_BETA` entfallen; `-Channel` wird abgelehnt.
+Fehlen Ereignis-Eingaben ganz, fällt `offline_webview` auf `false` zurück.
 
 R04 kann den Workflow über `uses: ./.github/workflows/release-windows.yml`,
-`with: { channel: beta, offline_webview: false }` und `secrets: inherit` aufrufen.
+`with: { offline_webview: false }` und `secrets: inherit` aufrufen.
 Der Aufrufer gewährt `contents: read` und `id-token: write`.
 Das Actions-Artefakt **openspider-windows-x86_64** enthält die Original-NSIS-/MSI-Dateinamen,
 deren `.sig` (bei Updater-Schlüsseln) und die signierte CLI `openspider.exe`.
@@ -180,8 +177,8 @@ Es werden keine Release-Assets veröffentlicht.
 ## Nach dem Push durch den Orchestrator
 
 ```bash
-gh workflow run release-windows.yml --ref m3/r02 -f channel=beta -f offline_webview=false
-gh workflow run release-windows.yml --ref m3/r02 -f channel=beta -f offline_webview=true
+gh workflow run release-windows.yml --ref m3/r02 -f offline_webview=false
+gh workflow run release-windows.yml --ref m3/r02 -f offline_webview=true
 gh workflow run ci.yml --ref m3/r02 -f intel=true
 ```
 

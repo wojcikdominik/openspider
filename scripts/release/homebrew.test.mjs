@@ -284,6 +284,16 @@ test('Workflow: Auslöser nur veröffentlichtes Release und manueller Start, kei
   assert.equal(workflow.split('secrets.HOMEBREW_TAP_TOKEN').length - 1, 1);
 });
 
+// spec: OUT-261
+test('Workflow: das Hilfs-Release update-beta (Beta-Manifest, K3-16) löst keine Cask-Erzeugung aus', () => {
+  const generate = job('generate');
+  assert.match(generate, /^ {4}if: github\.event_name != 'release' \|\| github\.event\.release\.tag_name != 'update-beta'$/m);
+  // check und publish hängen an generate und entfallen mit ihm; kein always() auf Job-Ebene.
+  assert.match(job('check'), /^ {4}needs: generate$/m);
+  assert.doesNotMatch(job('check').split('    steps:')[0], /always\(\)/);
+  assert.match(job('publish'), /^ {4}needs: \[generate, check\]$/m);
+});
+
 test('Workflow: Tap-Schreiben nur mit publish=true, auf main, nach bestandener Prüfung, im Environment homebrew mit Pflichtprüfern', () => {
   const publish = job('publish');
   assert.match(publish, /^ {4}needs: \[generate, check\]$/m);

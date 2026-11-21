@@ -1,0 +1,18 @@
+{
+  "_comment": "OUT-254 Testmatrix Einstellung x installierte Version x Manifest. channel null = Schluessel fehlt; manifest null = Pfad ohne Manifest (404). result: current | update | rejected. desktopStores: Wert, den die Desktop-App beim Start speichert (null = nichts). Genutzt von crates/os-app/tests/update_channels.rs und crates/os-cli/tests/check_update_channels.rs.",
+  "rows": [
+    { "nr": 1, "channel": null, "installed": "1.0.1", "stable": "1.0.1", "beta": "1.1.0-beta.1", "requested": "stable", "result": "current", "version": null, "desktopStores": null },
+    { "nr": 2, "channel": "stable", "installed": "1.0.1", "stable": "1.0.2", "beta": "1.1.0-beta.1", "requested": "stable", "result": "update", "version": "1.0.2", "desktopStores": null },
+    { "nr": 3, "channel": "beta", "installed": "1.0.1", "stable": "1.0.1", "beta": "1.1.0-beta.1", "requested": "beta", "result": "update", "version": "1.1.0-beta.1", "desktopStores": null },
+    { "nr": 4, "channel": "beta", "installed": "1.0.1", "stable": "1.0.1", "beta": "1.0.1", "requested": "beta", "result": "current", "version": null, "desktopStores": null },
+    { "nr": 5, "channel": null, "installed": "1.1.0-beta.1", "stable": "1.0.1", "beta": "1.1.0-beta.2", "requested": "beta", "result": "update", "version": "1.1.0-beta.2", "desktopStores": "beta" },
+    { "nr": 6, "channel": null, "installed": "1.1.0-rc.1", "stable": "1.0.1", "beta": "1.1.0", "requested": "beta", "result": "update", "version": "1.1.0", "desktopStores": "beta" },
+    { "nr": 7, "channel": "beta", "installed": "1.1.0-beta.2", "stable": "1.1.0", "beta": "1.1.0", "requested": "beta", "result": "update", "version": "1.1.0", "desktopStores": null },
+    { "nr": 8, "channel": "beta", "installed": "1.1.0", "stable": "1.1.0", "beta": "1.2.0-beta.1", "requested": "beta", "result": "update", "version": "1.2.0-beta.1", "desktopStores": null },
+    { "nr": 9, "channel": "beta", "installed": "1.1.0-beta.2", "stable": "1.0.1", "beta": "1.1.0-beta.1", "requested": "beta", "result": "current", "version": null, "desktopStores": null },
+    { "nr": 10, "channel": "stable", "installed": "1.1.0-beta.3", "stable": "1.0.1", "beta": "1.1.0-beta.4", "requested": "stable", "result": "current", "version": null, "desktopStores": null },
+    { "nr": 11, "channel": "stable", "installed": "1.1.0-beta.3", "stable": "1.1.0", "beta": "1.1.0", "requested": "stable", "result": "update", "version": "1.1.0", "desktopStores": null },
+    { "nr": 12, "channel": "stable", "installed": "1.0.1", "stable": "1.1.0-beta.1", "beta": null, "requested": "stable", "result": "rejected", "version": null, "desktopStores": null },
+    { "nr": 13, "channel": "nightly", "installed": "1.0.1", "stable": "1.0.1", "beta": "1.1.0-beta.1", "requested": "stable", "result": "current", "version": null, "desktopStores": null }
+  ]
+}
