@@ -1,0 +1,75 @@
+# Abnahme M4-F01 (unabhängig): Profil mit allen KI- und Embedding-Abschnitten, Werte bewusst abweichend vom Standard.
+schema_version = 2
+
+[speed]
+threads = 3
+
+[analysis]
+embeddings = true
+ai_search = true
+
+[ai]
+enabled = true
+active_questions = ["page-type", "ymyl"]
+questions = [
+  { id = "page-type", version = "1.0.0", name = "Page Type", type = "choice", instructions = "Welcher Seitentyp?", choices = [{ value = "product", description = "Produktseite" }, { value = "category", description = "Kategorie" }] },
+  { id = "ymyl", version = "2.1.0", name = "YMYL", type = "predicate", instructions = "Ist das YMYL?" },
+]
+prompts = [{ id = "summary", version = "3", text = "Fasse zusammen" }]
+policy = "eu-only"
+
+[ai.tasks.decision]
+model = { provider = "openai", model = "gpt-6-luna", endpoint = "decisions" }
+fallback = [{ provider = "anthropic", model = "mock-claude", endpoint = "messages" }]
+
+[ai.tasks.suggest-title]
+model = { provider = "anthropic", model = "mock-claude", endpoint = "messages" }
+max_tokens = 400
+temperature = 0.2
+effort = "low"
+max_input_chars = 8000
+
+[ai.tasks.embedding]
+model = { provider = "ollama", model = "nomic-embed-text", endpoint = "embed" }
+
+[ai.suggestions]
+title = true
+meta = true
+h1 = false
+alt = true
+
+[ai.suggestions.style]
+brand = "Beispiel"
+separator = " | "
+brand_position = "end"
+tone = "sachlich"
+forbidden = ["billig"]
+required = ["Beispiel"]
+casing = "sentence"
+
+[ai.suggestions.segment_styles.shop]
+brand = "Shop"
+brand_position = "start"
+
+[ai.budget]
+crawl = 10000
+unlimited = false
+warning_percent = 75
+
+[ai.budget.areas]
+ai = 8000
+
+[ai.budget.tasks.ai]
+suggest-title = 500000
+
+[embeddings]
+enabled = true
+source_prompt = "embedding-prompt"
+similarity_enabled = true
+similarity_threshold = 0.9
+low_relevance_enabled = true
+low_relevance_threshold = 0.35
+only_indexable = false
+compare_within_rule = true
+rules = [{ mode = "include", regex = "/blog/" }, { mode = "exclude", regex = "/tag/" }]
+pair_rules = [{ source_regex = "/blog/", target_regex = "/shop/" }]

@@ -1,0 +1,6 @@
+# Abnahme M4-F01 (unabhängig): App-Einstellungen mit eingeschaltetem Schalter „KI (Vorschau)“.
+[general]
+language = "en"
+
+[ai_app]
+preview_enabled = true
