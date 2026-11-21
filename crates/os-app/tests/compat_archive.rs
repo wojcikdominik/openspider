@@ -170,7 +170,7 @@ async fn fixed_data_directory_keeps_settings_ui_state_and_crawl_management_after
             serde_json::json!({"kind":"id","crawlId":id}),
         )
         .await;
-        assert_eq!(summary["schemaVersion"], 5);
+        assert_eq!(summary["schemaVersion"], os_store::SCHEMA_VERSION);
         let loaded = ui.load();
         ui.save(&loaded).unwrap();
     }
