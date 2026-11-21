@@ -1,11 +1,52 @@
 [
  {
+  "id": "M4-P00",
+  "kind": "package",
+  "model": "opus",
+  "wave": "0",
+  "size": "S",
+  "runner": "local-mac",
+  "title": "Planpflege nach Release 1.0: Plan M4 Rev. 2, Spec-Nachträge 08, ARCHITECTURE, plan-check (reine Plan-/Spec-Korrektur, keine Funktion)",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [],
+  "start_condition": "Release 1.0.0 veröffentlicht (Feature-Stopp beendet); nur docs/",
+  "owns": [
+   "docs/plan/M4.md",
+   "docs/plan/M4-packages.json",
+   "docs/plan/plan-check.py (nur Erwartungsmenge M4)",
+   "docs/spec/08-ai.md (nur Nachträge Datenhaltung, Mock-Antworten, Gemini-Mock, Hinweise AI-009/AI-011, neuer Eintrag AI-025)",
+   "docs/ARCHITECTURE.md (nur Abhängigkeitsrichtung os-ai)"
+  ],
+  "prompt_notes": "Grundlage: Prüfbericht des Orchestrators vom 13.11.2026 (außerhalb des Repos), gegen main vom 21.11.2026 nachgeprüft. Keine Code-, CI- oder Website-Änderung; Nutzerentscheidungen E-1 … E-12 vom 21.11.2026 eingearbeitet (M4.md 0a); offene Punkte als Klärungen K4-12 … K4-20. Prüfung: python3 -I docs/plan/plan-check.py --milestone M4 --milestone M5 und json.tool. Kein Testagent (E12, reine Doku).",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-SP1",
+  "kind": "spike",
+  "model": "opus",
+  "wave": "0a",
+  "size": "S",
+  "runner": "local-mac",
+  "title": "Lizenz- und Bibliotheks-Spike (E-9 a, K4-09): jsonschema, docx-rs, pulldown-cmark, ANN/HNSW, k-means, t-SNE/UMAP, HDBSCAN gegen deny.toml",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-P00"
+  ],
+  "owns": [
+   "docs/plan/M4-reports/sp1.md"
+  ],
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kein Workspace-Test, keine Manifeständerung im Repo (Prüfung in einem Wegwerf-Worktree, nicht committen). Ausgangspunkt ist die Auswahl der Vorarbeit refs/srv/m4/f01 (M4.md 0b: hnsw, linfa-clustering, bhtsne, hdbscan; UMAP eigene Implementierung; jsonschema 0.20.0). Je Bibliothek: Version exakt, Lizenz direkt und transitiv (`cargo deny check licenses bans sources`), Pflegezustand, Eignung für INTEG-181/186 (Kosinus, Seed), Alternative. Ergebnis: Tabelle „nehmen / eigene Implementierung in os-analyze::semantic“ (E-9 a) als Vorgabe für M4-F01; Fable gibt frei. Ob Lizenzen aus deny.toml außerhalb der CLAUDE.md-Liste (z. B. MIT-0) zulässig sind, entscheidet der Orchestrator (K4-17), der Spike nennt nur die Fundstellen.",
+  "release": "1.1"
+ },
+ {
   "id": "M4-F01",
   "kind": "package",
-  "model": "sol",
-  "wave": "0a",
+  "model": "opus",
+  "wave": "1",
   "size": "XL",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "KI-Fundament Kern: Crate os-ai (laut ARCHITECTURE), Anbieter-Schnittstelle und Fähigkeitsmatrix, Statuswerte, KI-Konfiguration, BudgetLedger-Typen, Schema ai_*, Register-Stubs",
   "spec_ids": [
    "AI-001",
@@ -15,8 +56,8 @@
    "AI-013"
   ],
   "depends_on": [
-   "M3-F01",
-   "M2-Q04"
+   "M4-P00",
+   "M4-SP1"
   ],
   "owns": [
    "Cargo.toml",
@@ -48,17 +89,27 @@
    "crates/os-mcp/src/tools/ai_*.rs (STUB)",
    "crates/os-mcp/src/tools/mod.rs (nur Registrierung)",
    "resources/ai/** (nur Verzeichnisse und JSON-Schemas; Inhalte die Fachpakete)",
-   "crates/os-ai/tests/{provider_matrix,status_values}*.rs"
+   "crates/os-ai/tests/{provider_matrix,status_values}*.rs",
+   "crates/os-model/src/enums_m2.rs (nur KI-Varianten von ApiKind; Form nach Klärung K4-12)",
+   "crates/os-model/src/config.rs (nur Reexport des KI-Untermoduls, Profilfelder und Schalter der neuen Analyse-Schritte)",
+   "crates/os-model/src/enums.rs (nur AnalysisStep Embeddings/AiSearch)",
+   "crates/os-analyze/src/{lib.rs,analysis/runner.rs,state.rs,issues/catalog.rs} (nur Registrierung)",
+   "crates/os-export/src/reports/mod.rs (nur Registrierung)",
+   "crates/os-model/tests/config_io.rs, crates/os-analyze/tests/{catalog_split,filters_registry}.rs (nur Erwartungen um die M4-Register erweitern, nichts lockern)",
+   "tests/fixtures/config/default.osconfig (nur Neuerzeugung per UPDATE_GOLDEN=1)",
+   "core/issues/catalog.d/{ai_decisions,ai_suggestions}.toml, core/issues/texts/{de,en}.d/{ai_decisions,ai_suggestions}.toml (Gerüst)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Inhalt nach M4.md 3.1/3.2. Startbedingung: M3-F01 gemergt (Manifeste) und Fable-Gate M2 bestanden; Integration auf `m4/main` bis zum Schnitt von release/1.0 (E1). Schritte: (1) Crate `crates/os-ai` anlegen (in ARCHITECTURE.md vorgesehen) mit den Modulen aus 08 „Architektur os-ai“ als STUB(M4-xx); Trait `AiProvider`, Fähigkeiten, gemeinsamer Request/Response, Fehlerklassen vollständig (AI-001), Statuswerte vollständig (AI-020) mit Tests. (2) Manifeste: os-ai mit reqwest (rustls), keyring, serde_json, jsonschema, tokio, sha2; Kandidaten aus 08 (docx-rs, pulldown-cmark) und für Embeddings/Cluster nach K4-09 – jede Lizenz gegen deny.toml. (3) os-model: KI-Profil (Fragen, Vorschläge, Modellwahl je Aufgabe, Richtlinien, Embeddings-Schlüssel aus INTEG-180), BudgetLedger-Typen und Reservierungsschnittstelle (Implementierung M4-K05, gemeinsam mit M5), Mikro-USD-Typ. (4) Migration 0006_ai.sql mit allen Tabellen aus 08 „Datenhaltung“ plus `ai_prompt_results` und `ai_embeddings` nach K4-04 und `api_budget`; Rundreise- und Migrationstest von v5. (5) Register-Stubs: Tabs AI, AI Decisions, AI Suggestions, AI Search; Filter-Kennungen in M4-filters.toml; Issue-Kategorien „AI“/„AI Search“; Export-/Report-Einträge; CLI-Optionen (`--use-ai`, `--use-embeddings`, `--ai-tasks`, `--ai-consent`, `--ai-sample`, `--api-budget`, `--ai-budget`, `--export-query`); MCP-Werkzeuge Klasse `cost` als Stubs. (6) C4 grün; jeder Stub trägt STUB(M4-xx) mit dem Besitzer."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Inhalt nach M4.md 3.1/3.2. Startbedingung: siehe start_condition; Basis main (E1). Vorarbeit refs/srv/m4/f01 (M4.md 0b, PAKET OFFEN ohne Workspace-Gate) als Ausgangspunkt auf aktuellen main übertragen, Bericht docs/plan/M4-reports/f01.md fortschreiben; Register-Erwartungen, Profil-Defaults und Goldens gegen den heutigen Stand neu prüfen. Manifeste einschließlich crates/os-testsite/Cargo.toml, falls M4-T01 neue Abhängigkeiten braucht (T01 ändert kein Manifest). E-2 b: zusätzlich App-Einstellung „KI (Vorschau)“ (Standard aus) in os-model/settings.rs; ist sie aus, sendet os-ai keinen Request und kein KI-Schritt läuft (Test). Die Oberfläche dazu legt M4-F02 an. E-9 a: Abhängigkeiten für Embeddings/Cluster nur nach der freigegebenen Auswahl aus M4-SP1. Schritte: (1) Crate `crates/os-ai` anlegen (in ARCHITECTURE.md vorgesehen) mit den Modulen aus 08 „Architektur os-ai“ als STUB(M4-xx); Trait `AiProvider`, Fähigkeiten, gemeinsamer Request/Response, Fehlerklassen vollständig (AI-001), Statuswerte vollständig (AI-020) mit Tests. (2) Manifeste: os-ai mit reqwest (rustls), keyring, serde_json, jsonschema, tokio, sha2; Kandidaten aus 08 (docx-rs, pulldown-cmark) und für Embeddings/Cluster nach K4-09 – jede Lizenz gegen deny.toml. (3) os-model: KI-Profil (Fragen, Vorschläge, Modellwahl je Aufgabe, Richtlinien, Embeddings-Schlüssel aus INTEG-180), BudgetLedger-Typen und Reservierungsschnittstelle (Implementierung M4-K05, gemeinsam mit M5), Mikro-USD-Typ. (4) Migration 0006_ai.sql mit allen Tabellen aus 08 „Datenhaltung“ einschließlich `ai_prompt_results` und `ai_embeddings` (08 Datenhaltung, Nachtrag 21.11.2026) und `api_budget`; Rundreise- und Migrationstest von v5. (5) Register-Stubs: Tabs AI, AI Decisions, AI Suggestions, AI Search; Filter-Kennungen in M4-filters.toml; Issue-Kategorien „AI“/„AI Search“; Export-/Report-Einträge; CLI-Optionen (`--use-ai`, `--use-embeddings`, `--ai-tasks`, `--ai-consent`, `--ai-sample`, `--api-budget`, `--ai-budget`, `--export-query`); MCP-Werkzeuge Klasse `cost` als Stubs. (6) C4 grün; jeder Stub trägt STUB(M4-xx) mit dem Besitzer.",
+  "start_condition": "Release 1.0.0 veröffentlicht (Tag v1.0.0 auf rel/1.0, 20.11.2026; main enthält den Release-Stand bis auf den Versions-Commit, merge-base 212163a5) und M4-P00 gemergt (M4.md E1)",
+  "release": "1.1"
  },
  {
   "id": "M4-T01",
   "kind": "package",
-  "model": "sol",
-  "wave": "0a",
+  "model": "opus",
+  "wave": "1",
   "size": "L",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "ai-mock und KI-Fixtures: Anbieter-Endpunkte, Szenarien, Tokenzählung, Request-Log, Host-Auflösung *.mock.test, Fixture-Site ai.test, Testpreise",
   "spec_ids": [],
   "extra_spec_ids": [
@@ -66,8 +117,7 @@
    "CRAWL-123"
   ],
   "depends_on": [
-   "M3-F01",
-   "M2-Q04"
+   "M4-P00"
   ],
   "owns": [
    "crates/os-testsite/src/mocks/ai/** (neu)",
@@ -76,17 +126,20 @@
    "tests/fixtures/ai/{site,site-partial}/**",
    "tests/fixtures/ai/mock-answers.d/base.json",
    "tests/fixtures/ai/pricing-test.json",
-   "tests/fixtures/ai/README.md"
+   "tests/fixtures/ai/README.md",
+   "crates/os-fetch/tests/ai_mock_hosts.rs (neu, nur Resolver-Test CRAWL-123 [M4])"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Exakt nach 08 „Konventionen“, Abschnitt Gemeinsame Testinfrastruktur: Pfade für Anthropic, OpenAI (responses, decisions, batches, files, embeddings, models), OpenRouter (inkl. key), Ollama; alle allgemeinen und anbieterspezifischen Szenarien der Tabelle (global per POST /__mock/scenario, je URL per MOCK-SCENARIO), Tokenzählung (⌈Zeichen/4⌉ + 85 je Bild), `usage` im Anbieterformat, Request-Log mit maskiertem Authorization, Antworten aus `MOCK-ID` über ein Fragment-Verzeichnis `tests/fixtures/ai/mock-answers.d/*.json` (je Fachpaket eine eigene Datei, E5). Host-Unterscheidung über den Host-Header (`*.mock.test` auf Loopback über die Host-Überschreibung CRAWL-123 [M4], ohne Überschreibung schlägt die Auflösung fehl). Fixture-Site `tests/fixtures/ai/site/` mit genau den 25 Seiten-URLs und 6 Bildern der Tabelle in 08 (|G| = 25, |S| = 22) und Variante site-partial. Testpreisdatei nach 08. Embedding-Endpunkte mit deterministischen Vektoren (Hash des Texts) und vordefinierten Vektoren je Fixture (INTEG-180 ff.)."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Exakt nach 08 „Konventionen“, Abschnitt Gemeinsame Testinfrastruktur: Pfade für Anthropic, OpenAI (responses, decisions, batches, files, embeddings, models), OpenRouter (inkl. key), Ollama; alle allgemeinen und anbieterspezifischen Szenarien der Tabelle (global per POST /__mock/scenario, je URL per MOCK-SCENARIO), Tokenzählung (⌈Zeichen/4⌉ + 85 je Bild), `usage` im Anbieterformat, Request-Log mit maskiertem Authorization, Antworten aus `MOCK-ID` über ein Fragment-Verzeichnis `tests/fixtures/ai/mock-answers.d/*.json` (je Fachpaket eine eigene Datei, E5; gilt laut 08 Konventionen als `mock-answers.json`). Gemini-Mock gehört nicht zu T01 (M4-K03, Klärung K4-14). Vorarbeit refs/srv/m4/t01 (M4.md 0b, PAKET FERTIG auf Basis 6e08d7f2) auf aktuellen main übertragen, volles Gate auf dem Mac mini wiederholen, Bericht docs/plan/M4-reports/t01.md fortschreiben. Host-Unterscheidung über den Host-Header (`*.mock.test` auf Loopback über die Host-Überschreibung CRAWL-123 [M4], ohne Überschreibung schlägt die Auflösung fehl). Fixture-Site `tests/fixtures/ai/site/` mit genau den 25 Seiten-URLs und 6 Bildern der Tabelle in 08 (|G| = 25, |S| = 22) und Variante site-partial. Testpreisdatei nach 08. Embedding-Endpunkte mit deterministischen Vektoren (Hash des Texts) und vordefinierten Vektoren je Fixture (INTEG-180 ff.).",
+  "start_condition": "Release 1.0.0 veröffentlicht (Tag v1.0.0 auf rel/1.0, 20.11.2026; main enthält den Release-Stand bis auf den Versions-Commit, merge-base 212163a5) und M4-P00 gemergt (M4.md E1)",
+  "release": "1.1"
  },
  {
   "id": "M4-F02",
   "kind": "package",
-  "model": "sol",
-  "wave": "0b",
+  "model": "opus",
+  "wave": "2",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "KI-Vorbau Service und Oberfläche: os-app-Commands und DTOs, IPC, Feature-Gerüste, KI-Tabs, Statusleistenfeld Kosten, Einstellungsabschnitt KI",
   "spec_ids": [],
   "extra_spec_ids": [
@@ -94,9 +147,7 @@
    "UI-013"
   ],
   "depends_on": [
-   "M4-F01",
-   "M3-U02",
-   "M3-N00"
+   "M4-F01"
   ],
   "owns": [
    "crates/os-app/src/commands/ai_*.rs (STUB)",
@@ -112,15 +163,16 @@
    "apps/desktop/src/i18n/** (nur Einbindung der KI-Ressourcen)",
    "apps/desktop/e2e/ai/** (Gerüst)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Wie M2-F05b für KI. Schritte: (1) Command-Katalog für alle KI-Funktionen (Namen und DTOs nach M4.md 3.3) als Stubs mit ts-rs-Ausgabe. (2) Feature-Ordner `apps/desktop/src/features/ai/{settings,cost,consent,decisions,suggestions,search,ask,semantic,prompts,redirects,links,audit,tester}/` mit Leerzuständen (UI-016) und i18n-Gerüst de/en. (3) KI-Tabs (UI-004 [M4]: AI, AI Decisions, AI Suggestions, AI Search) registriert, nur sichtbar mit aktiver Funktion bzw. Leerzustand. (4) Statusleistenfeld Kosten als Platzhalter (Format aus UI-013 füllt M4-U01). Startbedingung: M3-U02 und M3-N00 gemergt (gemeinsame Dateien settings/frame und statusbar)."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Wie M2-F05b für KI. Schritte: (1) Command-Katalog für alle KI-Funktionen (Namen und DTOs nach M4.md 3.3) als Stubs mit ts-rs-Ausgabe. (2) Feature-Ordner `apps/desktop/src/features/ai/{settings,cost,consent,decisions,suggestions,search,ask,semantic,prompts,redirects,links,audit,tester}/` mit Leerzuständen (UI-016) und i18n-Gerüst de/en. (3) KI-Tabs (UI-004 [M4]: AI, AI Decisions, AI Suggestions, AI Search) registriert, nur sichtbar mit aktiver Funktion bzw. Leerzustand. (4) Statusleistenfeld Kosten als Platzhalter (Format aus UI-013 füllt M4-U01). Gegen den aktuellen Stand von settings/frame, statusbar und toptabs (gruppierte Tab-Leiste seit Rev. 1) bauen. E-2 b: Alle KI-Einträge (Tabs, Einstellungsabschnitt, Feld Kosten, Konfigurationsseiten) sind nur mit eingeschaltetem Schalter „KI (Vorschau)“ sichtbar; Test, dass mit Schalter aus keine KI-Oberfläche erscheint.",
+  "release": "1.1"
  },
  {
   "id": "M4-K01",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "3",
   "size": "L",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Adapter Anthropic Messages und OpenRouter: strukturierte Ausgabe, Bilder, Modellliste, Kontostand, Kontingent- und Verweigerungsfälle",
   "spec_ids": [
    "AI-002",
@@ -135,16 +187,17 @@
    "crates/os-ai/tests/adapter_{anthropic,openrouter}*.rs",
    "tests/fixtures/ai/mock-answers.d/k01.json"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Alle Kriterien von AI-002 und AI-005 gegen ai-mock, inkl. Kontingent-Szenarien der Tabelle (insufficient-quota, spend-limit-user/-workspace, 402-billing, 429-spend-cap ohne retry-after, 529; OpenRouter 402-credits/-key-limit/-weight/-in-flight, 403-guardrail, refusal, refusal-filter-only, refusal-403), Fähigkeiten der Anthropic-Modelle live aus `GET /v1/models`. Kein Backoff bei Verweigerung.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Alle Kriterien von AI-002 und AI-005 gegen ai-mock, inkl. Kontingent-Szenarien der Tabelle (insufficient-quota, spend-limit-user/-workspace, 402-billing, 429-spend-cap ohne retry-after, 529; OpenRouter 402-credits/-key-limit/-weight/-in-flight, 403-guardrail, refusal, refusal-filter-only, refusal-403), Fähigkeiten der Anthropic-Modelle live aus `GET /v1/models`. Kein Backoff bei Verweigerung.",
+  "extra_spec_ids": [],
+  "release": "1.1"
  },
  {
   "id": "M4-K02",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "3",
   "size": "L",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Adapter OpenAI Responses und OpenAI Decisions (Beta): strukturierte Ausgabe, Bilder, Bündelung ≤ 10 Fragen, Verweigerung, fehlende usage",
   "spec_ids": [
    "AI-003",
@@ -159,16 +212,17 @@
    "crates/os-ai/tests/adapter_openai*.rs",
    "tests/fixtures/ai/mock-answers.d/k02.json"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kriterien AI-003/AI-004 gegen ai-mock; Decisions-Grenzen als OS-Festlegung (≤ 10 Fragen je Request, V-A1 bis GA offen), fehlendes `usage` → Tokenfelder null, `Price Source = estimate`; `confidence` = höchste Einzelwahrscheinlichkeit. EU-Basis-URL nur über die Richtlinie aus K07 (hier nur Parameter).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kriterien AI-003/AI-004 gegen ai-mock; Decisions-Grenzen als OS-Festlegung (≤ 10 Fragen je Request, V-A1 bis GA offen), fehlendes `usage` → Tokenfelder null, `Price Source = estimate`; `confidence` = höchste Einzelwahrscheinlichkeit. EU-Basis-URL nur über die Richtlinie aus K07 (hier nur Parameter). E-3 a: Der Adapter wird gebaut; ob Decisions oder der Ersatzweg (AI-034) Standardweg ist, legt der Orchestrator nach der Live-Probe M4-Q00 fest.",
+  "extra_spec_ids": [],
+  "release": "1.1"
  },
  {
   "id": "M4-K03",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "4",
   "size": "L",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Adapter Ollama und Gemini, Embedding-Anbieter (OpenAI, OpenRouter, Ollama, Gemini) mit Stapelung und Normalisierung",
   "spec_ids": [
    "AI-006",
@@ -186,17 +240,31 @@
    "crates/os-ai/src/adapters/{ollama,gemini}/**",
    "crates/os-ai/src/embeddings/**",
    "crates/os-ai/tests/{adapter_ollama,adapter_gemini,embeddings}*.rs",
-   "tests/fixtures/ai/mock-answers.d/k03.json"
+   "tests/fixtures/ai/mock-answers.d/k03.json",
+   "crates/os-testsite/src/mocks/ai/gemini.rs (neu, Gemini-Mock nach 08 Konventionen, Klärung K4-14)",
+   "crates/os-testsite/src/mocks/ai/mod.rs (nur Registrierung des Gemini-Mocks)",
+   "crates/os-testsite/tests/ai_mock_gemini*.rs"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. AI-006 (Kosten 0, Tokens protokolliert, Erreichbarkeitsmeldung aus INTEG-160), AI-007 (P2, Überführung des Gemini-Zugangs; Mock-Pfade ergänzt T01 nicht – Gemini-Mock liegt in crates/os-ai/tests als Testserver oder als Nachtrag an T01 über E5), AI-008 Embedding-Schnittstelle für INTEG-180 ff., AI-081, AI-090. INTEG-005 [M4]: Ollama Standard 1 gleichzeitige Anfrage im Reiter „Erweitert“ (Anzeigetest liefert U01; hier Vorgabewert und Test)."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. AI-006 (Kosten 0, Tokens protokolliert, Erreichbarkeitsmeldung aus INTEG-160), AI-007 (P2, nach E-1 b erst nach 1.2: in der 1.1-Etappe nicht bauen, release_split) und Gemini-Mock in os-testsite unter `/gemini/v1beta/…`, Host `gemini.mock.test` (08 Konventionen, Nachtrag 21.11.2026; Endpunkte nach öffentlicher Anbieterdoku zum Bauzeitpunkt mit Quelle im Bericht; deckt INTEG-019 [M4] für Gemini), AI-008 Embedding-Schnittstelle für INTEG-180 ff., AI-081, AI-090. INTEG-005 [M4]: Ollama Standard 1 gleichzeitige Anfrage im Reiter „Erweitert“ (Anzeigetest liefert U01; hier Vorgabewert und Test). E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-006",
+    "AI-008"
+   ],
+   "1.2": [],
+   "nach 1.2 (P2)": [
+    "AI-007"
+   ]
+  }
  },
  {
   "id": "M4-K04",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "4",
   "size": "M",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Schlüsselverwaltung, Modellkatalog mit Preisdatei, Modellwahl je Aufgabe mit Ersatzliste",
   "spec_ids": [
    "AI-009",
@@ -208,22 +276,24 @@
   ],
   "depends_on": [
    "M4-F01",
-   "M4-T01"
+   "M4-T01",
+   "M4-Q00"
   ],
   "owns": [
    "crates/os-ai/src/{keys,catalog}/**",
    "crates/os-ai/tests/{keys,catalog,model_choice}*.rs",
-   "resources/ai/{pricing.json,provider-limits.json,task-profiles.json}"
+   "resources/ai/{pricing.json,provider-limits.json,task-defaults.json}"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Schlüssel nur über SecretStoreMut (M2 C13; Tests MemorySecretStore), Schema nach INTEG-002; Preisdatei mit `source_url` und `verified_at` je Eintrag (Werte nach K4-06 vor dem Release prüfen, Live-Abgleich in M4-Q02), Preisschlüssel (Anbieter, Modell, Endpunkt); Modellwahl je Aufgabentyp mit Ersatzliste bei fehlendem Anbieter."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Schlüssel nur über SecretStoreMut (M2 C13; Tests MemorySecretStore), Schema nach INTEG-002; Preisdatei mit `source_url` und `verified_at` je Eintrag (Werte nach K4-06 vor dem Release prüfen, Live-Abgleich in M4-Q02), Preisschlüssel (Anbieter, Modell, Endpunkt); Modellwahl je Aufgabentyp mit Ersatzliste bei fehlendem Anbieter. Dateiname der Standardmodelle `resources/ai/task-defaults.json` (AI-011). [abhängig von K4-12] Schlüsselbund-Kennung der KI-Konten (Spec `ai.<anbieter>` gegen Code `api/<kind>`) erst nach Klärung K4-12. E-4 b: Die Standardmodell-Liste schlägt der Orchestrator vor, der Nutzer bestätigt – bis dahin **Vorschlag ausstehend**: task-defaults.json nur mit Schema, Ladern und Tests gegen Testdaten bauen, keine eigenen Standardwerte erfinden. Aktualität von Standardmodellen und Preisen regelt AI-025 (Nachtrag 21.11.2026, Paket M4-K08); jeder Eintrag trägt verified_at. E-3 a: Standardweg für `decision` nach M4-Q00. E-7 a: Auf Linux/Docker nur Umgebungsvariablen `OPENSPIDER_AI_KEY_*`, keine verschlüsselte Datei.",
+  "release": "1.1"
  },
  {
   "id": "M4-K05",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "2",
   "size": "L",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Kostenkern: Kostenvoranschlag, gemeinsames Crawl-Budget über BudgetLedger mit Reservierung, Token- und Kostenprotokoll, Kostenschutz nach Anfragen/Tokens",
   "spec_ids": [
    "AI-012",
@@ -242,16 +312,28 @@
    "crates/os-ai/tests/cost_*.rs",
    "crates/os-store/tests/ai_budget*.rs"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kritischer Pfad für M5 (BudgetLedger). Kriterien AI-012/AI-013/AI-014 ohne die [M5]-Teile (Tests dafür `#[ignore = \"M5: …\"]`, löst M5-K03 auf); Reservierung vor jedem Request so, dass das Budget bei korrektem Preiskatalog nie überschritten wird, auch bei parallelen Workern; Mikro-USD als Ganzzahl; INTEG-176 (P2) mit Regel „zuerst erreichte Grenze“. Schnittstelle so, dass M5 DataForSEO als zweiten Bereich anmeldet, ohne os-ai zu kennen (Ledger in os-model, Verbrauch aus ai_requests + dfs_cost_log).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kritischer Pfad für M5 (BudgetLedger). Kriterien AI-012/AI-013/AI-014 ohne die [M5]-Teile (Tests dafür `#[ignore = \"M5: …\"]`, löst M5-K03 auf); Reservierung vor jedem Request so, dass das Budget bei korrektem Preiskatalog nie überschritten wird, auch bei parallelen Workern; Mikro-USD als Ganzzahl; INTEG-176 (P2) mit Regel „zuerst erreichte Grenze“. Schnittstelle so, dass M5 DataForSEO als zweiten Bereich anmeldet, ohne os-ai zu kennen (Ledger in os-model, Verbrauch aus ai_requests + dfs_cost_log). E-5 a: Standardwerte der Spec (Crawl-Budget 5,00 USD, Bestätigung ab 1,00 USD, Warnschwelle 80 %); EUR-Anzeige nicht in 1.1. INTEG-176 (P2) nicht in der 1.1-Etappe (release_split). E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "extra_spec_ids": [],
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-012",
+    "AI-013",
+    "AI-014"
+   ],
+   "1.2": [],
+   "nach 1.2 (P2)": [
+    "INTEG-176"
+   ]
+  }
  },
  {
   "id": "M4-K06",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "2",
   "size": "L",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Ergebnis-Cache, Batch-Modus (Anthropic, OpenAI), Wiederholungen/Rate-Limits/Timeouts, strukturierte Ausgabe mit lokaler Schema-Validierung",
   "spec_ids": [
    "AI-015",
@@ -268,16 +350,28 @@
    "crates/os-store/src/ai/{cache,batches}.rs",
    "crates/os-ai/tests/{cache,batch,limits,schema}*.rs"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Cache-Schlüssel SHA-256 über kanonisches JSON nach AI-015; Batch mit Polling über Testuhr (batch-partial, batch-expired); Token-Bucket je Modell, Backoff nach INTEG-005, Timeout nach INTEG-179 (Konfiguration), lokale Schema-Validierung jeder Antwort (schema-violation, malformed-json, missing-answer).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Cache-Schlüssel SHA-256 über kanonisches JSON nach AI-015; Batch mit Polling über Testuhr (batch-partial, batch-expired); Token-Bucket je Modell, Backoff nach INTEG-005, Timeout nach INTEG-179 (Konfiguration), lokale Schema-Validierung jeder Antwort (schema-violation, malformed-json, missing-answer). E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "extra_spec_ids": [],
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-015",
+    "AI-017",
+    "AI-021"
+   ],
+   "1.2": [
+    "AI-016"
+   ],
+   "nach 1.2 (P2)": []
+  }
  },
  {
   "id": "M4-K07",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "3",
   "size": "M",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Datenschutz: Datenflussübersicht und Einwilligung, EU-Verarbeitung und Nur-lokal-Modus, Schwärzung von E-Mail, Telefon, IBAN",
   "spec_ids": [
    "AI-018",
@@ -294,16 +388,27 @@
    "crates/os-ai/tests/policy_*.rs",
    "tests/fixtures/ai/policy/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Einwilligung je (Anbieter, Aufgabentyp, Feldmenge), ohne sie null Requests und Status `Pending (consent)`; EU-Richtlinie mit region-denied/region-no-endpoint → `Skipped (policy)`; Nur-lokal → nur Ollama; Schwärzung lokal vor dem Senden mit festen Mustern (Impressum/Kontakt der Fixture-Site). Dialog-UI macht M4-U01; hier Kern, Commands-Rumpf in `crates/os-app/src/commands/ai_consent.rs` nur über E3.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Einwilligung je (Anbieter, Aufgabentyp, Feldmenge), ohne sie null Requests und Status `Pending (consent)`; EU-Richtlinie mit region-denied/region-no-endpoint → `Skipped (policy)`; Nur-lokal → nur Ollama; Schwärzung lokal vor dem Senden mit festen Mustern (Impressum/Kontakt der Fixture-Site). Dialog-UI macht M4-U01; hier Kern, Commands-Rumpf in `crates/os-app/src/commands/ai_consent.rs` nur über E3. E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "extra_spec_ids": [],
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-018",
+    "AI-024"
+   ],
+   "1.2": [
+    "AI-019"
+   ],
+   "nach 1.2 (P2)": []
+  }
  },
  {
   "id": "M4-S01",
   "kind": "package",
-  "model": "sol",
-  "wave": 1,
+  "model": "opus",
+  "wave": "4",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "AI-Search I: AI-Crawler-Katalog, robots.txt-Auswertung je KI-Crawler, Filter und Issues, KI-Crawler-Voreinstellungen im User-Agent",
   "spec_ids": [
    "AI-120",
@@ -330,15 +435,26 @@
    "tests/fixtures/ai/search/**",
    "crates/os-analyze/tests/ai_search_*.rs"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Ohne KI-Schlüssel nutzbar (08 Abgrenzung). Katalog mit Feldern nach AI-120 und Entscheidungen aus 08 „Offene Punkte“ 4; robots.txt je (Host, Token) mit dem vorhandenen RFC-9309-Parser; Filter/Issues neutral bewertet. CRAWL-114 [M4]: Voreinstellungen = {nicht veraltete search- und user-fetch-Tokens} ∪ {GPTBot, ClaudeBot, Google-Extended} (Gleichheitstest gegen ai-crawlers.json). UI-064 [M4]: Kategorie „AI Search“ mit AI-122 (die übrigen AI-Search-Issues ergänzt M4-S02)."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Ohne KI-Schlüssel nutzbar (08 Abgrenzung). Katalog mit Feldern nach AI-120 und Entscheidungen aus 08 „Offene Punkte“ 4; robots.txt je (Host, Token) mit dem vorhandenen RFC-9309-Parser; Filter/Issues neutral bewertet. CRAWL-114 [M4]: Voreinstellungen = {nicht veraltete search- und user-fetch-Tokens} ∪ {GPTBot, ClaudeBot, Google-Extended} (Gleichheitstest gegen ai-crawlers.json). UI-064 [M4]: Kategorie „AI Search“ mit AI-122 (die übrigen AI-Search-Issues ergänzt M4-S02). E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-120",
+    "AI-121"
+   ],
+   "1.2": [
+    "AI-122"
+   ],
+   "nach 1.2 (P2)": []
+  }
  },
  {
   "id": "M4-D01",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "5",
   "size": "L",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Decision-Engine Kern: Fragenformat, Bibliothek mit Versionierung, Eingabeaufbereitung, Ausführung über Decisions API und Fallback, Routing",
   "spec_ids": [
    "AI-030",
@@ -365,16 +481,17 @@
    "tests/fixtures/ai/mock-answers.d/d01.json",
    "tests/fixtures/ai/decisions/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Fragen als JSON nach AI-030 (Grenzen 2.000 Zeichen, 2–20 Werte), parametrisierte Systemfragen (Vorlage einmal je Version in ai_questions), Geltungsbereich S/G mit `Skipped (scope)`, Eingabefelder nach AI-032 (Kürzung an Codepoint-Grenzen wie INTEG-172), Bündelung ≤ 10 Fragen, Fallback-Schema mit abstain, Routing automatisch/fest. Ergebnisse in ai_answers; Spalten/Tab macht M4-D02.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Fragen als JSON nach AI-030 (Grenzen 2.000 Zeichen, 2–20 Werte), parametrisierte Systemfragen (Vorlage einmal je Version in ai_questions), Geltungsbereich S/G mit `Skipped (scope)`, Eingabefelder nach AI-032 (Kürzung an Codepoint-Grenzen wie INTEG-172), Bündelung ≤ 10 Fragen, Fallback-Schema mit abstain, Routing automatisch/fest. Ergebnisse in ai_answers; Spalten/Tab macht M4-D02. [abhängig von K4-13] Verhalten der KI-Warteschlange bei Pause, Fortsetzen, „Gestoppt (endgültig)“ (CRAWL-128), Absturz und bei Crawls in einem fremden Writer-Prozess erst nach Klärung K4-13. E-6 a: automatische Ausführung während des Crawls wie Spec (Standard an, sobald Fragen aktiv sind). E-3 a: Routing-Standard für `decision` nach M4-Q00.",
+  "extra_spec_ids": [],
+  "release": "1.1"
  },
  {
   "id": "M4-E01",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "9",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Embeddings und semantische Analyse I: Aktivierung und Vorbedingungen, Semantically Similar, Low Relevance, Detailansicht, Filterregeln",
   "spec_ids": [
    "INTEG-180",
@@ -413,15 +530,16 @@
    "apps/desktop/src/features/detail/duplicates/** (nur Umschaltung Semantic Similarity, UI-044)",
    "apps/desktop/e2e/ai-semantic/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Führend 04 Abschnitt L; ONPAGE-159 … 164 sind Verweise. ≥-Regel für alle Schwellen, exakt bis 50 000 URLs (alle Kerne), darüber ANN-Index nach K4-09 mit ≥ 99 % Übereinstimmung auf `embed-bench-60k` (synthetisch erzeugt, nicht eingecheckt, C5; Benchmark-Ignore, Messung in M4-Q02). Kein erneuter API-Aufruf bei Crawl-Analyse oder unverändertem Text. OUT-052 [M4]: Bulk-Exporte Semantically Similar je Paar und Richtung, Low Relevance."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Führend 04 Abschnitt L; ONPAGE-159 … 164 sind Verweise. ≥-Regel für alle Schwellen, exakt bis 50 000 URLs (alle Kerne), darüber ANN-Index nach K4-09 mit ≥ 99 % Übereinstimmung auf `embed-bench-60k` (synthetisch erzeugt, nicht eingecheckt, C5; Benchmark-Ignore, Messung in M4-Q02). Kein erneuter API-Aufruf bei Crawl-Analyse oder unverändertem Text. OUT-052 [M4]: Bulk-Exporte Semantically Similar je Paar und Richtung, Low Relevance.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-V01",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "5",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Optimierungsvorschläge I: Rahmen und Tab „AI Suggestions“, Title- und Meta-Description-Vorschläge, Validierungsschleife, Prüfen/Übernehmen/Export, Stilregeln",
   "spec_ids": [
    "AI-070",
@@ -456,15 +574,29 @@
    "tests/fixtures/ai/suggest/**",
    "apps/desktop/e2e/ai-suggestions/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Pixelbreiten ausschließlich über UI-038 (vorhandene Funktion), Längengrenzen aus den Einstellungen, Dublettenprüfung zweistufig (AI-071), Sprache der Seite (whatlang), Markenzusatz und verbotene Wörter (AI-077) im Prompt und lokal geprüft; SERP-Vorschau (UI-037) zeigt den gewählten Kandidaten; Export nach OUT-001 ff."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Pixelbreiten ausschließlich über UI-038 (vorhandene Funktion), Längengrenzen aus den Einstellungen, Dublettenprüfung zweistufig (AI-071), Sprache der Seite (whatlang), Markenzusatz und verbotene Wörter (AI-077) im Prompt und lokal geprüft; SERP-Vorschau (UI-037) zeigt den gewählten Kandidaten; Export nach OUT-001 ff. E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-070",
+    "AI-071",
+    "AI-072",
+    "AI-075",
+    "AI-076"
+   ],
+   "1.2": [
+    "AI-077"
+   ],
+   "nach 1.2 (P2)": []
+  }
  },
  {
   "id": "M4-B01",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "10",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "„Frag den Crawl“: Abfrage-Schema q_, natürliche Sprache → SQL im gemeinsamen Sandkasten, Editor mit Ergebnis und Filteransicht, Fehlerkorrektur, gespeicherte Abfragen",
   "spec_ids": [
    "AI-100",
@@ -499,15 +631,16 @@
    "crates/os-ai/tests/ask_*.rs",
    "tests/fixtures/ai/mock-answers.d/b01.json"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. AI-100 nutzt die stabile Leseschnittstelle (OUT-234, `q_`-Sichten) – nur ergänzen, nicht brechen. AI-102: derselbe Sandkasten wie AGENT-014 (Hilfsprozess, Heap-Limit, Autorisierer); AGENT-014 [M4]: Testfälle und `tests/fixtures/ai/ask/malicious.sql` laufen je einmal mit beiden Konfigurationen. Editor mit CodeMirror (vorhanden), Ergebnis-Paging wie alle Tabellen, Filteransicht bei URL-Spalte."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. AI-100 nutzt die stabile Leseschnittstelle (OUT-234, `q_`-Sichten) – nur ergänzen, nicht brechen. AI-102: derselbe Sandkasten wie AGENT-014 (Hilfsprozess, Heap-Limit, Autorisierer); AGENT-014 [M4]: Testfälle und `tests/fixtures/ai/ask/malicious.sql` laufen je einmal mit beiden Konfigurationen. Editor mit CodeMirror (vorhanden), Ergebnis-Paging wie alle Tabellen, Filteransicht bei URL-Spalte.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-S02",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "6",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "AI-Search II: llms.txt prüfen und erzeugen, Zugänglichkeitstest mit KI-Crawler-User-Agents, Inhaltsanteil ohne JavaScript, Übersicht AI Search Readiness",
   "spec_ids": [
    "AI-123",
@@ -536,15 +669,29 @@
    "crates/os-analyze/tests/ai_search_{llms,access,nojs,overview}*.rs",
    "tests/fixtures/ai/search-llms/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Ohne KI-Schlüssel nutzbar außer optionaler Zusammenfassung in AI-124 (über os-ai-Trait, Test gegen ai-mock). llms.txt-Abruf je Host mit Crawl-User-Agent, robots-Modus und Rate-Limit; fehlende Datei ist kein Issue. AI-126 braucht Rendering-Modus (Chromium nach K3-01). AI-127 [M5]-Teil (Verweis auf 09) bleibt mit `#[ignore = \"M5: …\"]`. UI-064 [M4]: übrige AI-Search-Issues (AI-123/125/126); OUT-194 [M4]: Reports."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Ohne KI-Schlüssel nutzbar außer optionaler Zusammenfassung in AI-124 (über os-ai-Trait, Test gegen ai-mock). llms.txt-Abruf je Host mit Crawl-User-Agent, robots-Modus und Rate-Limit; fehlende Datei ist kein Issue. AI-126 braucht Rendering-Modus (Chromium nach K3-01). AI-127 [M5]-Teil (Verweis auf 09) bleibt mit `#[ignore = \"M5: …\"]`. UI-064 [M4]: übrige AI-Search-Issues (AI-123/125/126); OUT-194 [M4]: Reports. E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-123"
+   ],
+   "1.2": [
+    "AI-124",
+    "AI-125",
+    "AI-126"
+   ],
+   "nach 1.2 (P2)": [
+    "AI-127"
+   ]
+  }
  },
  {
   "id": "M4-P01",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "9",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "KI-Anbieterkonten (04 K): Konten, OpenAI-kompatible und eigene Endpunkte, Ratenbegrenzung je Modell, System-Prompt, Tokenverbrauch, Request-Timeout",
   "spec_ids": [
    "INTEG-160",
@@ -573,15 +720,16 @@
    "apps/desktop/src/features/integrations/** (nur Gruppe „KI“ im API-Zugriffsdialog)",
    "apps/desktop/e2e/ai-accounts/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. 04 K ist führend; Ausführung über os-ai-Adapter (AI-001), Kostenprotokoll/Budget/Cache gelten automatisch. INTEG-001 [M4]: Dialog mit den fünf KI-Einträgen unter „KI“ (elf Einträge ab M4), „Verbinden“ = Test-Request gegen ai-mock. Ollama-Erreichbarkeit nach INTEG-160."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. 04 K ist führend; Ausführung über os-ai-Adapter (AI-001), Kostenprotokoll/Budget/Cache gelten automatisch. INTEG-001 [M4]: Dialog mit den fünf KI-Einträgen unter „KI“ (elf Einträge ab M4), „Verbinden“ = Test-Request gegen ai-mock. Ollama-Erreichbarkeit nach INTEG-160.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-P02",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "9",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "KI-Prompts je URL (04 K): Prompt-Konfiguration, Inhaltseingaben, Modellkategorien, Inhaltslänge, leere Eingaben, KI-Tab „AI“ mit Ergebnisspalten",
   "spec_ids": [
    "INTEG-162",
@@ -617,15 +765,16 @@
    "tests/fixtures/ai/mock-answers.d/p02.json",
    "apps/desktop/e2e/ai-prompts/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Statuswerte nach INTEG-174 ergänzt um AI-020; Kürzung an Unicode-Grenzen mit Satzende-Präferenz (08 Ergänzung), leere Eingaben → `Skipped (empty input)` ohne Request. Modellkategorien Text/Embedding (Bild/Sprache P2 in M4-P03)."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Statuswerte nach INTEG-174 ergänzt um AI-020; Kürzung an Unicode-Grenzen mit Satzende-Präferenz (08 Ergänzung), leere Eingaben → `Skipped (empty input)` ohne Request. Modellkategorien Text/Embedding (Bild/Sprache P2 in M4-P03).",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-U01",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "5",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "KI-Einstellungen und Kosten-Oberfläche: Modellwahl je Aufgabe, Kostenvoranschlag-Dialog, Crawl-Budget, Einwilligungsdialog, EU/Nur-lokal, Statusleistenfeld Kosten",
   "spec_ids": [],
   "extra_spec_ids": [
@@ -648,15 +797,16 @@
    "crates/os-app/tests/ai_cost_*.rs",
    "apps/desktop/e2e/ai-cost/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. UI-013 [M4]: `Kosten: 3,2100 / 5,0000 USD` (de) bzw. `Cost: 3.2100 / 5.0000 USD` (en), Sprachwechsel ohne Neustart, Tooltip mit Aufteilung, `--json-progress` liefert Rohwerte; gemeinsamer Dialog „Kostenvoranschlag“ mit Abschnitt KI (Abschnitt DataForSEO ergänzt M5-U01); Einwilligungsdialog mit Datenflussangaben (AI-018), Richtlinienschalter (AI-019); INTEG-005 [M4] Anzeige Ollama-Vorgabe im Reiter „Erweitert“. axe ohne critical/serious, de/en vollständig."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. UI-013 [M4]: `Kosten: 3,2100 / 5,0000 USD` (de) bzw. `Cost: 3.2100 / 5.0000 USD` (en), Sprachwechsel ohne Neustart, Tooltip mit Aufteilung, `--json-progress` liefert Rohwerte; gemeinsamer Dialog „Kostenvoranschlag“ mit Abschnitt KI (Abschnitt DataForSEO ergänzt M5-U01); Einwilligungsdialog mit Datenflussangaben (AI-018), Richtlinienschalter (AI-019); INTEG-005 [M4] Anzeige Ollama-Vorgabe im Reiter „Erweitert“. axe ohne critical/serious, de/en vollständig.",
+  "release": "1.1"
  },
  {
   "id": "M4-M01",
   "kind": "package",
-  "model": "sol",
-  "wave": 2,
+  "model": "opus",
+  "wave": "10",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Audit-Zusammenfassung als priorisierter Maßnahmenplan mit Zahlenprüfung, Export als HTML, PDF, DOCX und Markdown",
   "spec_ids": [
    "AI-106",
@@ -686,16 +836,43 @@
    "crates/os-export/tests/ai_report_*.rs",
    "tests/fixtures/ai/mock-answers.d/m01.json"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Zahlen im Plan werden gegen die Crawl-Daten geprüft (keine erfundenen Werte); HTML eigenständig ohne externe Ressourcen, PDF über Chromium aus os-render (ohne Chromium klare Meldung, K4-10), DOCX mit echten Formatvorlagen (docx-rs), Markdown CommonMark; CI-Validierung nach 08 (OOXML, markdownlint) nur als CI-Werkzeug. OUT-194 [M4]: `--save-report \"AI:Action Plan\"` = Golden `tests/golden/ai/action-plan.md`."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Zahlen im Plan werden gegen die Crawl-Daten geprüft (keine erfundenen Werte); HTML eigenständig ohne externe Ressourcen, PDF über Chromium aus os-render (ohne Chromium klare Meldung, K4-10), DOCX mit echten Formatvorlagen (docx-rs), Markdown CommonMark; CI-Validierung nach 08 (OOXML, markdownlint) nur als CI-Werkzeug. OUT-194 [M4]: `--save-report \"AI:Action Plan\"` = Golden `tests/golden/ai/action-plan.md`.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
+ },
+ {
+  "id": "M4-K08",
+  "kind": "package",
+  "model": "opus",
+  "wave": "5k",
+  "size": "S",
+  "runner": "local-mac+ci",
+  "title": "Aktualität von Standardmodellen und Preistabelle: wöchentlicher CI-Check mit Issue, Release-Check auf Prüfdatum ≤ 120 Tage (AI-025)",
+  "spec_ids": [
+   "AI-025"
+  ],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-K04"
+  ],
+  "owns": [
+   ".github/workflows/ai-catalog-check.yml (neu)",
+   "scripts/ai/** (neu, Prüfskripte)",
+   "scripts/release/ai-data-age.mjs (neu)",
+   ".github/workflows/release.yml (nur Aufruf des Release-Checks im prepare-Job; Ausnahme zu E2, Nutzerentscheidung E-4 vom 21.11.2026)",
+   "tests/release/ai-data-age.test.mjs (neu)",
+   "tests/ai-catalog/** (neu, Tests des CI-Checks gegen ai-mock)"
+  ],
+  "release": "1.1",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). AI-025 (Nachtrag 21.11.2026 zu AI-010/AI-011, E-4): (1) wöchentlicher geplanter CI-Lauf prüft jedes Standardmodell aus resources/ai/task-defaults.json gegen die Modellliste des Anbieters und die Preise aus resources/ai/pricing.json gegen die Anbieterangaben, öffnet bei Abweichung ein Issue; API-Schlüssel nur als Repository-Secrets, die der Nutzer anlegt (Namen im Bericht nennen, nie Werte lesen oder ausgeben); ohne Secrets grün mit Hinweis (M3 D14); Tests nur gegen ai-mock. (2) Release-Check im prepare-Job von release.yml: Abbruch bei verified_at älter als 120 Tage. Kein Katalog-Nachladen in der App. Preise von Anbietern ohne maschinenlesbare Preise: nur Existenzprüfung bis Klärung K4-21. Kein Push; die geplante Ausführung wird erst nach dem Merge aktiv."
  },
  {
   "id": "M4-N01",
   "kind": "package",
-  "model": "sol",
-  "wave": "2n",
+  "model": "opus",
+  "wave": "5n",
   "size": "M",
-  "runner": "server+ci",
-  "title": "Nacharbeit Welle 1/2: Platzhalter auflösen, Schnittstellenbedarf bündeln, Manifeste der Runde, Auflagen aus Reviews",
+  "runner": "local-mac+ci",
+  "title": "Nacharbeit Wellen 1 bis 5 (1.1-Kern): Platzhalter auflösen, Schnittstellenbedarf bündeln, Manifeste der Runde, Auflagen aus Reviews",
   "spec_ids": [],
   "depends_on": [
    "M4-K01",
@@ -707,36 +884,32 @@
    "M4-K07",
    "M4-S01",
    "M4-D01",
-   "M4-E01",
-   "M4-V01",
-   "M4-B01",
-   "M4-S02",
-   "M4-P01",
-   "M4-P02",
    "M4-U01",
-   "M4-M01"
+   "M4-V01",
+   "M4-K08"
   ],
   "owns": [
    "crates/*/tests/pending_m4_*.rs",
    "apps/desktop/e2e/ai*/** (nur Platzhalter-Ignores entfernen)",
    "Cargo.toml",
    "Cargo.lock",
-   "crates/*/Cargo.toml (nur Bedarf der Welle 3)",
+   "crates/*/Cargo.toml (nur Bedarf ab Welle 6)",
    "crates/os-app/src/{registry.rs,commands/mod.rs,dto/mod.rs}",
    "apps/desktop/src/ipc/gen/**",
    "apps/desktop/src/ipc/commands.json",
    "weitere Pfade nur laut Auflagenliste docs/plan/M4-reports/n01-auflagen.md"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M2-N01: Platzhalter `wartet auf M4-xx` (nur in eigenen Dateien `pending_m4_<kurz-id>.rs` bzw. eigenen E2E-Ordnern, E4) auflösen, ohne Testinhalt zu ändern; rote Tests sind Befunde an den Planer. Schnittstellenbedarf der Pakete (Berichtsabschnitt „Schnittstellenbedarf“) gebündelt umsetzen. Startet erst, wenn alle Pakete der Wellen 1 und 2 gemergt sind.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M2-N01: Platzhalter `wartet auf M4-xx` (nur in eigenen Dateien `pending_m4_<kurz-id>.rs` bzw. eigenen E2E-Ordnern, E4) auflösen, ohne Testinhalt zu ändern; rote Tests sind Befunde an den Planer. Schnittstellenbedarf der Pakete (Berichtsabschnitt „Schnittstellenbedarf“) gebündelt umsetzen. Startet erst, wenn alle Pakete der Wellen 1 bis 5 gemergt sind.",
+  "extra_spec_ids": [],
+  "release": "1.1"
  },
  {
   "id": "M4-D02",
   "kind": "package",
-  "model": "sol",
-  "wave": 3,
+  "model": "opus",
+  "wave": "6",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Decision-Ergebnisse: Spalten, Schwellwerte und Filter, Refusals und Teilfehler, Tab „AI Decisions“, Internal-/Images-Spalten, Export",
   "spec_ids": [
    "AI-036",
@@ -761,17 +934,21 @@
    "apps/desktop/src/features/ai/decisions/**",
    "crates/os-ai/tests/decisions_results*.rs",
    "apps/desktop/e2e/ai-decisions/**",
-   "tests/fixtures/ai/mock-answers.d/d02.json"
+   "tests/fixtures/ai/mock-answers.d/d02.json",
+   "apps/desktop/src/features/detail/frame/** (nur Registrierung des KI-Abschnitts im Detailbereich)",
+   "apps/desktop/src/features/detail/ai-decisions/** (neu, Verteilung je Frage als Balken, AI-039)",
+   "apps/desktop/src/features/detail/images/** (nur Zeilen der Bildfragen in „Image Details“, AI-039)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Wahrscheinlichkeiten in der UI 2 Nachkommastellen, im Export ungerundet (≥ 4); Unsicherheitsband, low_confidence_below; Teilfehler mit site-partial (2 × 500-always, 1 × refusal) ohne Abbruch; Leerwerte nach 08 Konventionen; Spalten im Internal-Tab bzw. Images-Tab bei Bildfragen."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Wahrscheinlichkeiten in der UI 2 Nachkommastellen, im Export ungerundet (≥ 4); Unsicherheitsband, low_confidence_below; Teilfehler mit site-partial (2 × 500-always, 1 × refusal) ohne Abbruch; Leerwerte nach 08 Konventionen; Spalten im Internal-Tab bzw. Images-Tab bei Bildfragen.",
+  "release": "1.1"
  },
  {
   "id": "M4-D03",
   "kind": "package",
-  "model": "sol",
-  "wave": 3,
+  "model": "opus",
+  "wave": "6",
   "size": "M",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Mitgelieferte Fragen: Seitentyp, Suchintention, Inhaltsqualität, Soft-404, Title- und Meta-Description-Passung, Alt-Text, Seitensprache, YMYL",
   "spec_ids": [
    "AI-050",
@@ -794,16 +971,33 @@
    "tests/fixtures/ai/mock-answers.d/d03.json",
    "tests/fixtures/ai/questions/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Fragen als Datendateien (englisch formulierte instructions, eigene Formulierung), je Frage Test gegen die Fixture-Site mit den erwarteten Antworten der Tabelle (Soft-404, Platzhalter, unpassender Title/Meta, lang de mit englischem Inhalt, hreflang fr mit deutschem Inhalt, YMYL, Bilder); AI-057 mit lokaler Vorprüfung über whatlang.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Fragen als Datendateien (englisch formulierte instructions, eigene Formulierung), je Frage Test gegen die Fixture-Site mit den erwarteten Antworten der Tabelle (Soft-404, Platzhalter, unpassender Title/Meta, lang de mit englischem Inhalt, hreflang fr mit deutschem Inhalt, YMYL, Bilder); AI-057 mit lokaler Vorprüfung über whatlang. E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
+  "extra_spec_ids": [],
+  "release": "1.1 (teilweise, K4-18)",
+  "release_split": {
+   "1.1": [
+    "AI-050",
+    "AI-051",
+    "AI-053",
+    "AI-054",
+    "AI-055"
+   ],
+   "1.2": [
+    "AI-052",
+    "AI-056",
+    "AI-057",
+    "AI-058"
+   ],
+   "nach 1.2 (P2)": []
+  }
  },
  {
   "id": "M4-E02",
   "kind": "package",
-  "model": "sol",
-  "wave": 3,
+  "model": "opus",
+  "wave": "10",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Embeddings II: Semantische Suche (Seitenleiste), Content-Cluster-Diagramm mit Voreinstellungen, Dimensionsreduktion, mehrere Embedding-Sätze, Vektor-Export",
   "spec_ids": [
    "INTEG-185",
@@ -834,15 +1028,16 @@
    "tests/fixtures/integ-embed/{query,cluster,sets}/**",
    "apps/desktop/e2e/ai-cluster/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Mindestscore 0,5 (≥-Regel), Zentroid-Ansicht; Cluster: UMAP/t-SNE mit Presets aus INTEG-189, k-means/HDBSCAN, fester Seed → byte-gleiche CSV (`Address,x,y,Cluster`), Linklinien per Kontextmenü, Legende mit Ein-/Ausblenden und Alt-Klick, Neuberechnung im Hintergrund ≤ 30 s bei 10 000 Punkten (Messung M4-Q02); Bibliotheken nach K4-09. OUT-069 (P2) Vektor-Export, OUT-025 [M4] Export der Seitenleiste."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Mindestscore 0,5 (≥-Regel), Zentroid-Ansicht; Cluster: UMAP/t-SNE mit Presets aus INTEG-189, k-means/HDBSCAN, fester Seed → byte-gleiche CSV (`Address,x,y,Cluster`), Linklinien per Kontextmenü, Legende mit Ein-/Ausblenden und Alt-Klick, Neuberechnung im Hintergrund ≤ 30 s bei 10 000 Punkten (Messung M4-Q02); Bibliotheken nach K4-09. OUT-069 (P2) Vektor-Export, OUT-025 [M4] Export der Seitenleiste.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-R01",
   "kind": "package",
-  "model": "sol",
-  "wave": 3,
+  "model": "opus",
+  "wave": "11",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Redirect-Mapping für Relaunches: Quellen und Ziele, Kandidaten deterministisch und semantisch, LLM-Bestätigung, Konfidenz/Review, Export und Prüfungen, Nachprüfung",
   "spec_ids": [
    "AI-080",
@@ -868,16 +1063,17 @@
    "tests/fixtures/ai/mock-answers.d/r01.json",
    "apps/desktop/e2e/ai-redirects/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Reihenfolge exact-path → slug → title → semantisch (Embeddings aus E01) → LLM-Bestätigung über die parametrisierte Systemfrage `redirect-target` (k ≤ 10); Export .htaccess/nginx/CSV mit Prüfungen (Ketten, Schleifen, Ziel ≠ 200); AI-085 (P2) Nachprüfung im Listenmodus gegen os-testsite.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Reihenfolge exact-path → slug → title → semantisch (Embeddings aus E01) → LLM-Bestätigung über die parametrisierte Systemfrage `redirect-target` (k ≤ 10); Export .htaccess/nginx/CSV mit Prüfungen (Ketten, Schleifen, Ziel ≠ 200); AI-085 (P2) Nachprüfung im Listenmodus gegen os-testsite.",
+  "extra_spec_ids": [],
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-L01",
   "kind": "package",
-  "model": "sol",
-  "wave": 3,
+  "model": "opus",
+  "wave": "11",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Interne Linkvorschläge: Ziele und Kandidaten, Ankertext und Kontextsatz, Ausgabe mit Review und Export, Regeln und Limits",
   "spec_ids": [
    "AI-090",
@@ -900,16 +1096,17 @@
    "tests/fixtures/ai/mock-answers.d/l01.json",
    "apps/desktop/e2e/ai-links/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Zielauswahl über Link Score (TECH-145) bzw. Inlinks, Kandidaten über Embeddings; Ankertext muss wörtlich im gewählten Satz der Quelle stehen (lokale Prüfung); Review wie AI-076; AI-093 (P2) Regeln.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Zielauswahl über Link Score (TECH-145) bzw. Inlinks, Kandidaten über Embeddings; Ankertext muss wörtlich im gewählten Satz der Quelle stehen (lokale Prüfung); Review wie AI-076; AI-093 (P2) Regeln.",
+  "extra_spec_ids": [],
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-P03",
   "kind": "package",
-  "model": "sol",
-  "wave": 3,
+  "model": "opus",
+  "wave": "11",
   "size": "L",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Prompt-Bibliothek und -Tester, Benutzer-Prompts mit Import/Export, erweiterte Prompts, Segment, Modellparameter, Bild/Sprache mit Export, KI-Vorlagen der Snippet-Bibliothek",
   "spec_ids": [
    "INTEG-164",
@@ -919,7 +1116,8 @@
    "INTEG-169",
    "INTEG-170",
    "INTEG-175",
-   "OUT-065"
+   "OUT-065",
+   "INTEG-190"
   ],
   "extra_spec_ids": [
    "INTEG-069"
@@ -935,17 +1133,20 @@
    "crates/os-export/src/catalog/bulk_ai_media.rs",
    "crates/os-render/src/snippets/library/{llm-*,page-embedding-*,passage-embeddings}* (nur KI-Vorlagen)",
    "crates/os-ai/tests/prompts_{library,tester,media}*.rs",
-   "apps/desktop/e2e/ai-prompt-library/**"
+   "apps/desktop/e2e/ai-prompt-library/**",
+   "crates/os-ai/src/tasks/prompts/** (nur Ausnahme INTEG-190; Besitzer M4-P02 ist gemergt)",
+   "apps/desktop/src/features/ai/settings/accounts/** (nur Checkbox INTEG-190 im Reiter „Erweitert“; Besitzer M4-P01 ist gemergt)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. INTEG-168 Bibliothek (eigene Texte, Clean-Room), INTEG-170 Tester mit demselben Timeout; P2-Einträge INTEG-164/165/167/169/175 und OUT-065 nach K4-01 in dieser späten Welle (bei Kürzung durch den Nutzer entfallen sie mit Vermerk). INTEG-069 [M4]: nur die KI-Vorlagen `llm-*`, `page-embedding-*`, `passage-embeddings` der Snippet-Bibliothek."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. INTEG-168 Bibliothek (eigene Texte, Clean-Room), INTEG-170 Tester mit demselben Timeout; P2-Einträge INTEG-164/165/167/169/175/190 und OUT-065 sind nach E-1 b P2 und kommen erst nach 1.2 in dieser späten Welle (bei Kürzung durch den Nutzer entfallen sie mit Vermerk). INTEG-069 [M4]: nur die KI-Vorlagen `llm-*`, `page-embedding-*`, `passage-embeddings` der Snippet-Bibliothek. INTEG-190 (Nachtrag 09.11.2026): Einstellung je Anbieter (Reiter „Erweitert“, Standard aus) und je Prompt (`sendEmptyInput` ∈ {inherit, send, skip}, Vorrang vor dem Anbieter), Teil von Profil und Prompt-Export (INTEG-169); Kostenschätzung INTEG-176 ohne Leerausschluss bei „Senden“; Aufgaben aus 08 unverändert nach INTEG-173.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-C01",
   "kind": "package",
-  "model": "sol",
-  "wave": 3,
+  "model": "opus",
+  "wave": "12",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "KI in CLI und Zeitplanung: --use-ai, --ai-tasks, --api-budget, --ai-consent, --export-query, Stichprobenlauf",
   "spec_ids": [
    "AI-022",
@@ -971,15 +1172,16 @@
    "crates/os-ai/src/sample/**",
    "tests/fixtures/out-m4-cli/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. OUT-201 [M4]: `--api-budget 0.01 --ai-tasks decisions` → genau 2 KI-Requests, danach `Budget exceeded`, Crawl und Exporte vollständig; `--export-query` mit gespeicherter Abfrage ohne KI-Request, unbekannter Name → Exit 2 vor dem Crawl. INTEG-017: `--use-ai`, `--use-embeddings`. Geplante Aufgaben führen KI-Aufgaben nur mit erteilter Einwilligung aus (`--ai-consent`). Stichprobe reproduzierbar per Seed, geschichtet nach Segment, Ergebnisse im Cache."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. OUT-201 [M4]: `--api-budget 0.01 --ai-tasks decisions` → genau 2 KI-Requests, danach `Budget exceeded`, Crawl und Exporte vollständig; `--export-query` mit gespeicherter Abfrage ohne KI-Request, unbekannter Name → Exit 2 vor dem Crawl. INTEG-017: `--use-ai`, `--use-embeddings`. Geplante Aufgaben führen KI-Aufgaben nur mit erteilter Einwilligung aus (`--ai-consent`). Stichprobe reproduzierbar per Seed, geschichtet nach Segment, Ergebnisse im Cache.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-V02",
   "kind": "package",
-  "model": "sol",
-  "wave": 4,
+  "model": "opus",
+  "wave": "12",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Optimierungsvorschläge II: Alt-Text-Vorschläge mit Bild, H1-Vorschläge, Umsetzungskontrolle nach Recrawl",
   "spec_ids": [
    "AI-073",
@@ -996,16 +1198,17 @@
    "tests/fixtures/ai/mock-answers.d/v02.json",
    "apps/desktop/src/features/ai/suggestions/{alt,h1,recrawl}/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). AI-073 nutzt AI-056 (aus D03) für „unpassend“, dekorative Bilder → `alt=\"\"`-Empfehlung; AI-074 nach Problemfiltern der H1; AI-078 (P2) vergleicht übernommene Vorschläge mit dem Recrawl.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). AI-073 nutzt AI-056 (aus D03) für „unpassend“, dekorative Bilder → `alt=\"\"`-Empfehlung; AI-074 nach Problemfiltern der H1; AI-078 (P2) vergleicht übernommene Vorschläge mit dem Recrawl.",
+  "extra_spec_ids": [],
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-D04",
   "kind": "package",
-  "model": "sol",
-  "wave": 4,
+  "model": "opus",
+  "wave": "12",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Decision-Erweiterungen: automatische Segmente aus Antworten, Issues aus Antworten (Kategorie „AI“), Fragentester, Kalibrierung",
   "spec_ids": [
    "AI-040",
@@ -1030,15 +1233,16 @@
    "crates/os-ai/tests/decisions_{segments,issues,tester,calibration}*.rs",
    "apps/desktop/e2e/ai-tester/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. UI-064 [M4]: Kategorie „AI“ = Snapshot gegen AI-041 (Issues nur mit aktiver Frage und Antworten, Kennzeichen Detection = AI); Segmente nach CRAWL-134; Tester zeigt gesendete Eingabe, Request (maskiert), Antwort und abgeleitete Spalten; AI-043 (P2) Kalibrierung."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. UI-064 [M4]: Kategorie „AI“ = Snapshot gegen AI-041 (Issues nur mit aktiver Frage und Antworten, Kennzeichen Detection = AI); Segmente nach CRAWL-134; Tester zeigt gesendete Eingabe, Request (maskiert), Antwort und abgeleitete Spalten; AI-043 (P2) Kalibrierung.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-C02",
   "kind": "package",
-  "model": "sol",
-  "wave": 4,
+  "model": "opus",
+  "wave": "13",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "MCP-Hüllen für KI (Klasse cost): run_decisions, suggest_metadata, redirect_mapping, internal_link_suggestions mit Kostenvoranschlag, Bestätigung und Einwilligung",
   "spec_ids": [
    "AGENT-030"
@@ -1060,16 +1264,17 @@
    "crates/os-mcp/tests/ai_tools*.rs",
    "crates/os-mcp/src/prompts.rs (nur Vorlage AI-Search-Sichtbarkeit um KI-Werkzeuge ergänzen)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Erster Aufruf ohne `confirm` → Schätzung, Mock-Zähler 0; mit `confirm: true` → Ausführung; ohne Einwilligung nach AI-018 MCP-Fehler mit Datenflussangaben und Mock-Zähler 0, Einträge `Pending (consent)`; Erweiterung der Feldmenge abgelehnt; Budget stoppt wie in der App; Ergebnisse gleich App/CLI. DataForSEO-Hüllen kommen mit M5-C02. AGENT-040: Vorlage „AI-Search-Sichtbarkeit“ referenziert jetzt die KI-Werkzeuge."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Erster Aufruf ohne `confirm` → Schätzung, Mock-Zähler 0; mit `confirm: true` → Ausführung; ohne Einwilligung nach AI-018 MCP-Fehler mit Datenflussangaben und Mock-Zähler 0, Einträge `Pending (consent)`; Erweiterung der Feldmenge abgelehnt; Budget stoppt wie in der App; Ergebnisse gleich App/CLI. DataForSEO-Hüllen kommen mit M5-C02. AGENT-040: Vorlage „AI-Search-Sichtbarkeit“ referenziert jetzt die KI-Werkzeuge. [abhängig von K4-13] Verhalten von AGENT-030 bei laufenden, pausierten und fremd gesteuerten Crawls (`busy`) erst nach Klärung K4-13.",
+  "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
   "id": "M4-X01",
   "kind": "package",
-  "model": "sol",
-  "wave": 4,
+  "model": "opus",
+  "wave": "13",
   "size": "M",
-  "runner": "server+ci",
-  "title": "Bedingt (K4-02): Anbieter evnxt mit Anmeldung, Credits und gemeinsamem Budget",
+  "runner": "local-mac+ci",
+  "title": "Bedingt (K4-02, E-10): Anbieter evnxt mit Anmeldung, Credits und gemeinsamem Budget",
   "spec_ids": [
    "AI-200"
   ],
@@ -1086,17 +1291,18 @@
    "apps/desktop/src/features/ai/settings/evnxt/**",
    "crates/os-ai/tests/adapter_evnxt*.rs"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Startet nur nach Nutzerentscheidung K4-02 und wenn die Gateway-Schnittstelle von evnxt dokumentiert ist (sonst entfällt das Paket mit Vermerk in M4-Q03). Device-Flow, Token im Schlüsselbund, Credits und Euro im Kostenvoranschlag, ohne Anmeldung alle Funktionen unverändert nutzbar (Test ohne Netz zu evnxt).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). E-10 (21.11.2026): nicht in 1.1. Startet nur nach erneutem Go des Nutzers (K4-02) und wenn die Gateway-Schnittstelle von evnxt dokumentiert ist (sonst entfällt das Paket mit Vermerk in M4-Q03). Device-Flow, Token im Schlüsselbund, Credits und Euro im Kostenvoranschlag, ohne Anmeldung alle Funktionen unverändert nutzbar (Test ohne Netz zu evnxt).",
+  "extra_spec_ids": [],
+  "release": "nicht in 1.1 (E-10)"
  },
  {
   "id": "M4-Z01",
   "kind": "package",
-  "model": "sol",
-  "wave": 4,
+  "model": "opus",
+  "wave": "13",
   "size": "L",
-  "runner": "server+ci",
-  "title": "Bedingt (K4-03): Fokussierter Crawl nach Seitentyp – Seitentypen erkennen und nur gewählte Typen erfassen (R3)",
+  "runner": "local-mac+ci",
+  "title": "Bedingt (K4-03, E-10): Fokussierter Crawl nach Seitentyp – Seitentypen erkennen und nur gewählte Typen erfassen (R3)",
   "spec_ids": [
    "AGENT-060",
    "AGENT-061"
@@ -1113,21 +1319,28 @@
    "crates/os-engine/tests/focus_*.rs",
    "crates/os-mcp/tests/focus_*.rs"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Startet nur nach Nutzerentscheidung K4-03 (Roadmap R3 „mit M4“, aber nicht in der README-Zuordnung). Regelbasiert ohne KI-Schlüssel; AI-050 nur optional bei uneindeutigen Regeln. Engine-Änderungen nur in neuen Dateien plus additiver Einhängepunkt (E3).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). E-10 (21.11.2026): nicht in 1.1. Startet nur nach erneutem Go des Nutzers (K4-03) (Roadmap R3 „mit M4“, aber nicht in der README-Zuordnung). Regelbasiert ohne KI-Schlüssel; AI-050 nur optional bei uneindeutigen Regeln. Engine-Änderungen nur in neuen Dateien plus additiver Einhängepunkt (E3).",
+  "extra_spec_ids": [],
+  "release": "nicht in 1.1 (E-10)"
  },
  {
   "id": "M4-N02",
   "kind": "package",
-  "model": "sol",
-  "wave": "4n",
+  "model": "opus",
+  "wave": "13n",
   "size": "M",
-  "runner": "server+ci",
-  "title": "Nacharbeit Welle 3/4: Platzhalter, Schnittstellenbedarf, Auflagen aus Reviews, Manifeste",
+  "runner": "local-mac+ci",
+  "title": "Nacharbeit Wellen 6 bis 13: Platzhalter, Schnittstellenbedarf, Auflagen aus Reviews, Manifeste",
   "spec_ids": [],
   "depends_on": [
+   "M4-S02",
    "M4-D02",
    "M4-D03",
+   "M4-P01",
+   "M4-P02",
+   "M4-E01",
+   "M4-B01",
+   "M4-M01",
    "M4-E02",
    "M4-R01",
    "M4-L01",
@@ -1145,35 +1358,37 @@
    "crates/*/Cargo.toml",
    "weitere Pfade nur laut Auflagenliste docs/plan/M4-reports/n02-auflagen.md"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M4-N01 für die Wellen 3 und 4. Bedingte Pakete X01/Z01 sind nur Voraussetzung, wenn sie gestartet wurden (Orchestrator vermerkt das vor dem Start).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M4-N01 für die Wellen 6 bis 13. Bedingte Pakete X01/Z01 sind nur Voraussetzung, wenn sie gestartet wurden (Orchestrator vermerkt das vor dem Start).",
+  "extra_spec_ids": [],
+  "release": "1.2"
  },
  {
   "id": "M4-Q01",
   "kind": "measurement",
-  "model": "sol",
-  "wave": 5,
+  "model": "opus",
+  "wave": "14",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Abnahme-Messung M4: Spec-Abdeckung, Mock-Vollständigkeit je Anbieter und Szenario, Netzwerk-Wächter, E2E-A und axe der KI-Ansichten, Regression M1–M3",
   "spec_ids": [],
   "depends_on": [
    "M4-N02",
-   "M3-Q01"
+   "M4-R11"
   ],
   "owns": [
    "docs/plan/M4-acceptance/coverage/**",
    "docs/plan/M4-acceptance/e2e/**",
    "scripts/gate/m4_*.sh"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). `os-parity coverage --milestone M4` (123 IDs implemented, Teilkriterien [M4]), M1/M2/M3 unverändert; Matrix Anbieter × Szenario aus 08 Konventionen vollständig grün; Netzwerk-Wächter: kein externer Host in CI; E2E-A der KI-Ansichten auf Linux/macOS/Windows, axe 0 critical/serious, de/en vollständig; Paritäts-Regressionslauf (Teilmenge) unverändert; Kompatibilität: Crawl-Dateien von 1.0 öffnen in 1.1 (OUT-255).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). `os-parity coverage --milestone M4` (123 IDs implemented, Teilkriterien [M4]), M1/M2/M3 unverändert; Matrix Anbieter × Szenario aus 08 Konventionen vollständig grün; Netzwerk-Wächter: kein externer Host in CI; E2E-A der KI-Ansichten auf Linux/macOS/Windows, axe 0 critical/serious, de/en vollständig; Paritäts-Regressionslauf (Teilmenge) unverändert; Kompatibilität: Crawl-Dateien von 1.0 öffnen in 1.1 (OUT-255). Werkzeuge aus M3-Q01 (os-parity coverage --milestone, plan-check.py) liegen auf main (Merge 95fa0002).",
+  "extra_spec_ids": [],
+  "release": "1.2"
  },
  {
   "id": "M4-Q02",
   "kind": "measurement",
-  "model": "sol",
-  "wave": 5,
+  "model": "opus",
+  "wave": "14",
   "size": "M",
   "runner": "local-mac",
   "title": "Benchmarks und Live-Stichprobe: Embedding-Leistung (10 000/60 000), Cluster-Neuberechnung, UI mit KI-Spalten; Stichprobe mit echten Schlüsseln (V-A1, V-A3, V-A5)",
@@ -1192,13 +1407,14 @@
    "docs/plan/M4-acceptance/benchmarks/**",
    "docs/plan/M4-acceptance/live/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Mac mini (Referenzhardware, ruhige Maschine, C11): INTEG-181 (10 000 × 768 ≤ 60 s, 60k-ANN ≥ 99 %), INTEG-186 (≤ 30 s bei 10 000 Punkten), Tabellen-Budgets UI-141/142 mit aktiven KI-Spalten. Live-Stichprobe nur mit `OPENSPIDER_LIVE_API_TESTS=1` und Schlüsseln, die der Nutzer selbst im Schlüsselbund hinterlegt (Agent sieht keine Werte), kleiner Crawl (≤ 25 URLs) je Anbieter Anthropic, OpenAI (Responses, Decisions), OpenRouter, Ollama lokal; Ergebnisse zu V-A1/V-A3/V-A5 und Preisabgleich (verified_at) als Vorschlag an den Planer für 08 „Vor Umsetzung zu verifizieren“. Nicht gate-relevant für CI, aber Abnahmekriterium B6."
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Mac mini (Referenzhardware, ruhige Maschine, C11): INTEG-181 (10 000 × 768 ≤ 60 s, 60k-ANN ≥ 99 %), INTEG-186 (≤ 30 s bei 10 000 Punkten), Tabellen-Budgets UI-141/142 mit aktiven KI-Spalten. Live-Stichprobe nur mit `OPENSPIDER_LIVE_API_TESTS=1` und Schlüsseln, die der Nutzer selbst im Schlüsselbund hinterlegt (Agent sieht keine Werte), kleiner Crawl (≤ 25 URLs) je Anbieter Anthropic, OpenAI (Responses, Decisions), OpenRouter, Ollama lokal; Ergebnisse zu V-A1/V-A3/V-A5 und Preisabgleich (verified_at) als Vorschlag an den Planer für 08 „Vor Umsetzung zu verifizieren“. Nicht gate-relevant für CI, aber Abnahmekriterium B6. E-8 b: Die frühe Probe ist M4-Q00; diese Stichprobe am Ende wiederholt sie für den vollen Umfang (Budget nach Absprache mit dem Nutzer).",
+  "release": "1.2"
  },
  {
   "id": "M4-A01",
   "kind": "package",
   "model": "human",
-  "wave": "5h",
+  "wave": "14h",
   "size": "S",
   "runner": "human",
   "human": true,
@@ -1211,16 +1427,17 @@
   "owns": [
    "docs/plan/M4-acceptance/user/{build.md,durchklickplan.md,befunde.md}"
   ],
-  "prompt_notes": "Menschliche bzw. Orchestrator-Aufgabe; kein Agent setzt Code um. Veröffentlichen nur nach Go des Nutzers (M3 D12). Build aus m4/main bzw. main (nach E1), Durchklickplan ≤ 60 min: Konto verbinden, Einwilligung, Kostenvoranschlag, Decisions mit zwei Bibliotheksfragen, Title-Vorschläge übernehmen und exportieren, Frag den Crawl, AI Search, Embeddings/Cluster, Maßnahmenplan als DOCX, MCP-Aufruf mit Bestätigung. Befunde IDs A4-nn wie M2-Format; Blocker → M4-N03.",
-  "extra_spec_ids": []
+  "prompt_notes": "Menschliche bzw. Orchestrator-Aufgabe; kein Agent setzt Code um. Veröffentlichen nur nach Go des Nutzers (M3 D12). Build aus main (E1); Umfang 1.2 (nach E-1 b), 1.1-Funktionen nur als Regression, Durchklickplan ≤ 60 min: Konto verbinden, Einwilligung, Kostenvoranschlag, Decisions mit zwei Bibliotheksfragen, Title-Vorschläge übernehmen und exportieren, Frag den Crawl, AI Search, Embeddings/Cluster, Maßnahmenplan als DOCX, MCP-Aufruf mit Bestätigung. Befunde IDs A4-nn wie M2-Format; Blocker → M4-N03.",
+  "extra_spec_ids": [],
+  "release": "1.2"
  },
  {
   "id": "M4-N03",
   "kind": "package",
-  "model": "sol",
-  "wave": 6,
+  "model": "opus",
+  "wave": "15",
   "size": "M",
-  "runner": "server+ci",
+  "runner": "local-mac+ci",
   "title": "Befunde aus der Nutzer-Abnahme KI (nur bei Blockern/Hoch)",
   "spec_ids": [],
   "depends_on": [
@@ -1230,16 +1447,17 @@
    "Pfade nach Zuschnitt durch den Planer (Nachtrag vor dem Start)",
    "docs/plan/M4-reports/n03.md"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Entfällt ohne Blocker/Hoch (Vermerk in M4-Q03).",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Entfällt ohne Blocker/Hoch (Vermerk in M4-Q03).",
+  "extra_spec_ids": [],
+  "release": "1.2"
  },
  {
   "id": "M4-Q03",
   "kind": "measurement",
-  "model": "sol",
-  "wave": 7,
+  "model": "opus",
+  "wave": "16",
   "size": "M",
-  "runner": "server",
+  "runner": "local-mac",
   "title": "Abnahmebericht M4: M4-status.json, checklist.md B1–B12 mit Belegen, Gate-Vorlage",
   "spec_ids": [],
   "depends_on": [
@@ -1251,14 +1469,15 @@
    "docs/plan/M4-acceptance/checklist.md",
    "docs/plan/M4-status.json"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Belege zu B1–B12 (M4.md 8); hängt zusätzlich an M4-N03, falls gestartet; bedingte Pakete X01/Z01 mit Status (umgesetzt/entfallen) und Grund.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Belege zu B1–B12 (M4.md 6); hängt zusätzlich an M4-N03, falls gestartet; bedingte Pakete X01/Z01 mit Status (umgesetzt/entfallen) und Grund.",
+  "extra_spec_ids": [],
+  "release": "1.2"
  },
  {
   "id": "M4-G1",
   "kind": "gate",
   "model": "fable",
-  "wave": "7g",
+  "wave": "16g",
   "size": "S",
   "runner": "local-mac",
   "title": "Fable-Gate M4 (KI, Release 1.1)",
@@ -1269,30 +1488,138 @@
   "owns": [
    "docs/plan/M4-acceptance/gate.md"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E10), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Prüfung Bericht, Mock-Abdeckung, Datenschutz-Negativtests, Live-Stichprobe; needs_work → N-Paket Welle 7n.",
-  "extra_spec_ids": []
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Prüfung Bericht, Mock-Abdeckung, Datenschutz-Negativtests, Live-Stichprobe; needs_work → N-Paket Welle 16n.",
+  "extra_spec_ids": [],
+  "release": "1.2"
  },
  {
   "id": "M4-REL",
   "kind": "release",
   "model": "human",
-  "wave": 8,
+  "wave": "17",
   "size": "S",
   "runner": "human",
   "human": true,
-  "title": "Release 1.1 (KI): nach Release 1.0, Tag v1.1.0, Veröffentlichung, Update-Manifest, Website-Abschnitt KI",
+  "title": "Release 1.2 (KI, restliches P1 nach E-1 b): Veröffentlichung, Update-Manifest, Website-Abschnitt KI",
   "spec_ids": [],
   "depends_on": [
-   "M4-G1",
-   "M3-REL"
+   "M4-G1"
   ],
   "owns": [
-   "CHANGELOG.md (Eintrag 1.1.0)",
-   "docs/release/1.1.md",
+   "CHANGELOG.md (Eintrag 1.2.0)",
+   "docs/release/notes/1.2.0*.md",
    "website/site/{funktionen,en/features}/** (nur KI-Abschnitt)",
    "website/site/{handbuch,en/manual}/ki/** (neu)"
   ],
-  "prompt_notes": "Menschliche bzw. Orchestrator-Aufgabe; kein Agent setzt Code um. Veröffentlichen nur nach Go des Nutzers (M3 D12). Ablauf wie M3-REL über release.yml; frühestens nach M3-REL. Bündelung mit M5 als ein Release nach K4-08 möglich.",
-  "extra_spec_ids": []
+  "prompt_notes": "Menschliche bzw. Orchestrator-Aufgabe; kein Agent setzt Code um. Veröffentlichen nur nach Go des Nutzers (M3 D12). Ablauf nach docs/release/release-process.md und release-rhythmus.md (wöchentlicher Termin, Notes-Dokument docs/release/notes/<Version>.md inkl. Abschnitt für den Update-Dialog OUT-251). Release 1.0.0 ist erschienen (20.11.2026). E-1 b: Release mit dem restlichen P1-Umfang von M4 (1.1 ist M4-R11). Versionsnummer 1.2 vorbehaltlich K4-08 (M5 war als 1.2 geplant). Bündelung mit M5 nach K4-08 möglich.",
+  "extra_spec_ids": [],
+  "release": "1.2"
+ },
+ {
+  "id": "M4-Q00",
+  "kind": "measurement",
+  "model": "opus",
+  "wave": "3p",
+  "size": "S",
+  "runner": "local-mac",
+  "title": "Frühe Live-Probe (E-8 b, E-3 a): Anbieter-Drift seit dem Spec-Stand 13.10.2026, Decisions-Beta und gpt-6-luna, Modelllisten und Preise",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-K01",
+   "M4-K02"
+  ],
+  "owns": [
+   "docs/plan/M4-acceptance/live/probe-1/**"
+  ],
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Ausnahme von E6 nur für diese Probe: Live-Aufrufe mit `OPENSPIDER_LIVE_API_TESTS=1` und Schlüsseln, die der Nutzer selbst im Schlüsselbund hinterlegt (Agent sieht keine Werte). Gesamtbudget etwa 20 USD; Konten Anthropic, OpenAI (Responses, Decisions), OpenRouter; EU-Wege nur im Mock. Ergebnis: je Anbieter Abweichungen gegen 08 (Endpunkte, Feldnamen, Fehlerformen, Modell-IDs, Preise) und die ausdrückliche Feststellung, ob die Decisions API und `gpt-6-luna` noch wie spezifiziert existieren. Danach legt der Orchestrator nach E-3 a fest, ob Decisions (AI-003) oder der Ersatzweg über strukturierte Ausgabe (AI-034) Standardweg ist; Spec-Abweichungen gehen als Vorschlag an den Planer (08 „Vor Umsetzung zu verifizieren“). Keine Code-Änderung.",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-Q11",
+  "kind": "measurement",
+  "model": "opus",
+  "wave": "7",
+  "size": "M",
+  "runner": "local-mac+ci",
+  "title": "Abnahme-Messung Release 1.1 (KI-Kern nach E-1 b): Abdeckung der 1.1-IDs, Mock-Matrix, Schalter KI (Vorschau), E2E/axe, Regression 1.0",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-N01",
+   "M4-D02",
+   "M4-D03",
+   "M4-S02"
+  ],
+  "owns": [
+   "docs/plan/M4-acceptance/1.1/coverage/**",
+   "docs/plan/M4-acceptance/1.1/e2e/**",
+   "docs/plan/M4-acceptance/1.1/checklist.md"
+  ],
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Maßgeblich ist die 1.1-Liste aus M4.md 1.5 (42 IDs: P0 aus 08 plus AI-006, AI-008) und die release_split-Felder; `os-parity coverage --milestone M4` meldet die übrigen IDs dieser Wellen als offen – das ist für 1.1 kein Befund (K4-18). Mock-Matrix der 1.1-Anbieter, Netzwerk-Wächter, Schalter „KI (Vorschau)“ aus = keine KI-Oberfläche und keine Requests (E-2 b), E2E-A der 1.1-Ansichten auf drei Plattformen, axe 0 critical/serious, de/en; Crawl-Dateien von 1.0 öffnen (Migration 0006 mit Backup); 1.0-Funktionen unverändert.",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-A11",
+  "kind": "package",
+  "model": "human",
+  "wave": "7a",
+  "size": "S",
+  "runner": "human",
+  "human": true,
+  "title": "Nutzer-Abnahme Release 1.1: KI-Kern mit eigenem Schlüssel an einer eigenen Site",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-Q11"
+  ],
+  "owns": [
+   "docs/plan/M4-acceptance/1.1/user/{build.md,durchklickplan.md,befunde.md}"
+  ],
+  "prompt_notes": "Menschliche bzw. Orchestrator-Aufgabe; kein Agent setzt Code um. Veröffentlichen nur nach Go des Nutzers (M3 D12). Build aus main mit eingeschaltetem Schalter „KI (Vorschau)“. Durchklickplan ≤ 45 min: Konto verbinden, Einwilligung, Kostenvoranschlag und Budget, Decisions mit den P0-Bibliotheksfragen, Title-/Meta-Vorschläge übernehmen und exportieren, AI Search (robots.txt, llms.txt), Ollama lokal, Schalter aus = keine KI. Befunde A4-nn; Blocker → N-Paket nach Zuschnitt vor M4-G11.",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-G11",
+  "kind": "gate",
+  "model": "fable",
+  "wave": "7g",
+  "size": "S",
+  "runner": "local-mac",
+  "title": "Fable-Gate Release 1.1 (KI-Kern)",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-A11",
+   "M4-Q11"
+  ],
+  "owns": [
+   "docs/plan/M4-acceptance/1.1/gate.md"
+  ],
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Prüfung von Q11, A11, Datenschutz-Negativtests (K07), Budget-Lasttest (K05) und Q00; needs_work → N-Paket nach Zuschnitt.",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-R11",
+  "kind": "package",
+  "model": "human",
+  "wave": "8",
+  "size": "S",
+  "runner": "human",
+  "human": true,
+  "title": "Release 1.1 (KI-Kern): Schalter „KI (Vorschau)“ freigeben, Version, Notes, Website-Abschnitt KI",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-G11"
+  ],
+  "owns": [
+   "CHANGELOG.md (Eintrag 1.1.0)",
+   "docs/release/notes/1.1.0*.md",
+   "website/site/{funktionen,en/features}/** (nur KI-Abschnitt)",
+   "website/site/{handbuch,en/manual}/ki/** (neu)"
+  ],
+  "prompt_notes": "Menschliche bzw. Orchestrator-Aufgabe; kein Agent setzt Code um. Veröffentlichen nur nach Go des Nutzers (M3 D12). Ablauf nach docs/release/release-process.md und release-rhythmus.md (Notes-Dokument docs/release/notes/<Version>.md inkl. Abschnitt für den Update-Dialog OUT-251). Inhalt nach E-1 b (M4.md 1.5); Datenschutzabschnitt in Handbuch und Website; Linux/Docker: Schlüssel nur über Umgebungsvariablen (E-7 a). Ob der Schalter mit 1.1 entfällt oder als Einstellung bleibt, legt der Orchestrator vor dem Release fest (K4-19).",
+  "release": "1.1"
  }
 ]

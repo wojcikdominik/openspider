@@ -76,10 +76,11 @@ def erwartet(n, spec):
     if n == "M4":
         # M4-Zeile: 08 vollständig (AI-001 … AI-127); INTEG-160 … 189; ONPAGE-159 … 164; UI-072, UI-101;
         # OUT-065, OUT-069; AGENT-030. Teilkriterien [M4] anderer Einträge stehen in extra_spec_ids.
+        # Nachtrag 09.11.2026 (README, Absatz „Funktionsideen 1.x“): INTEG-190 gehört ausdrücklich zu M4 (M4-P00).
         return (ids_im_bereich(spec, "08-ai.md", "AI", 1, 127)
                 | ids_im_bereich(spec, "04-custom-integrations.md", "INTEG", 160, 189)
                 | ids_im_bereich(spec, "02-tabs-onpage.md", "ONPAGE", 159, 164)
-                | {"UI-072", "UI-101", "OUT-065", "OUT-069", "AGENT-030"})
+                | {"UI-072", "UI-101", "OUT-065", "OUT-069", "AGENT-030", "INTEG-190"})
     if n == "M5":
         # M5-Zeile: 09 vollständig (D4S-001 … D4S-076).
         return ids_im_bereich(spec, "09-dataforseo.md", "D4S", 1, 76)
