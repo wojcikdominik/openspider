@@ -433,6 +433,30 @@ pub const SPLIT_FILES: &[SplitFiles] = &[
         en: include_str!("../../../../core/issues/texts/en.d/link_metrics.toml"),
     },
     SplitFiles {
+        module: "ai",
+        catalog: include_str!("../../../../core/issues/catalog.d/ai.toml"),
+        de: include_str!("../../../../core/issues/texts/de.d/ai.toml"),
+        en: include_str!("../../../../core/issues/texts/en.d/ai.toml"),
+    },
+    SplitFiles {
+        module: "ai_decisions",
+        catalog: include_str!("../../../../core/issues/catalog.d/ai_decisions.toml"),
+        de: include_str!("../../../../core/issues/texts/de.d/ai_decisions.toml"),
+        en: include_str!("../../../../core/issues/texts/en.d/ai_decisions.toml"),
+    },
+    SplitFiles {
+        module: "ai_suggestions",
+        catalog: include_str!("../../../../core/issues/catalog.d/ai_suggestions.toml"),
+        de: include_str!("../../../../core/issues/texts/de.d/ai_suggestions.toml"),
+        en: include_str!("../../../../core/issues/texts/en.d/ai_suggestions.toml"),
+    },
+    SplitFiles {
+        module: "ai_search",
+        catalog: include_str!("../../../../core/issues/catalog.d/ai_search.toml"),
+        de: include_str!("../../../../core/issues/texts/de.d/ai_search.toml"),
+        en: include_str!("../../../../core/issues/texts/en.d/ai_search.toml"),
+    },
+    SplitFiles {
         module: "change_detection",
         catalog: include_str!("../../../../core/issues/catalog.d/change_detection.toml"),
         de: include_str!("../../../../core/issues/texts/de.d/change_detection.toml"),

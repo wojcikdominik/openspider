@@ -29,6 +29,8 @@ fn relevant_sections(step: AnalysisStep) -> &'static [&'static str] {
         AnalysisStep::Hreflang => &["hreflang"],
         AnalysisStep::Sitemaps => &["sitemaps", "spider"],
         // NearDuplicates (K2-19, M2-D02): Schwelle und Schalter stehen in `duplicates`, der Inhaltsbereich in `content`
+        AnalysisStep::Embeddings => &["embeddings"],
+        AnalysisStep::AiSearch => &[],
         AnalysisStep::Content => &["content.area", "duplicates.exact_enabled"],
         AnalysisStep::NearDuplicates => &[
             "duplicates.near_enabled",

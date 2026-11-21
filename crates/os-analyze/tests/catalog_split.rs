@@ -57,6 +57,10 @@ fn module_of(tab: &str) -> &'static str {
         "Search Console" => "search_console",
         "Validation" => "validation",
         "Link Metrics" => "link_metrics",
+        "AI" => "ai",
+        "AI Decisions" => "ai_decisions",
+        "AI Suggestions" => "ai_suggestions",
+        "AI Search" => "ai_search",
         "Change Detection" => "change_detection",
         other => panic!("Tab {other} ohne Modulzuordnung im Test"),
     }
@@ -75,7 +79,7 @@ fn there_is_one_file_per_tab_in_each_split_folder_and_the_loader_lists_them_all(
         .iter()
         .map(|t| module_of(t.id).to_string())
         .collect();
-    assert_eq!(modules.len(), 31);
+    assert_eq!(modules.len(), 35);
     let listed: BTreeSet<String> = SPLIT_FILES.iter().map(|f| f.module.to_string()).collect();
     assert_eq!(listed, modules, "SPLIT_FILES = Tabs von tabs::all()");
     for dir in ["catalog.d", "texts/de.d", "texts/en.d"] {
