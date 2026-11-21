@@ -170,7 +170,9 @@ pub fn save_report_in_with_options(
 
 /// Alle Reports von M2 als Tabellen-Einträge in Menüreihenfolge (Stub: nur Kopfzeile).
 pub fn report_tables() -> Vec<&'static TableEntry> {
-    let groups: [&'static [TableEntry]; 13] = [
+    let groups: [&'static [TableEntry]; 15] = [
+        crate::catalog::reports_ai_plan::entries(),
+        crate::catalog::reports_ai_search::entries(),
         serp_summary::entries(),
         canonical_chains::entries(),
         non_indexable_canonicals::entries(),
