@@ -42,6 +42,10 @@ on:
   schedule:
     - cron: "30 1 * * *"
 
+# Issue 19: GITHUB_TOKEN nur lesend; kein Job nutzt die API (Artefakte laufen über das Runner-Token).
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}

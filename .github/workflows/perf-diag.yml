@@ -23,6 +23,10 @@ on:
         description: "Zusätzliche Argumente für `os-loadtest run` (z. B. --threads 16)"
         default: ""
 
+# Issue 19: GITHUB_TOKEN nur lesend; kein Job nutzt die API (Artefakte laufen über das Runner-Token).
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   OS_LOADTEST_DIAG: "1"
