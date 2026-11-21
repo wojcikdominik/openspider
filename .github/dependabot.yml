@@ -1,0 +1,61 @@
+# Dependabot (Issue 19): Versions-Updates wöchentlich, Donnerstag nach dem Release (Merge-Schluss Di 18:00),
+# höchstens drei offene PRs je Ökosystem, Minor/Patch je Ökosystem in einem PR gebündelt.
+# Bewusst gepinnte Abhängigkeiten werden ignoriert; Pin nur nach eigener Entscheidung lösen und dann hier streichen.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: thursday
+      time: "12:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: deps
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Tokio bleibt auf 1.53.3 (Cargo.lock); kein Update, auch kein Patch.
+      - dependency-name: tokio
+      # crates/os-export: exakt "=0.25.10", minimale Codec-Abhängigkeit nur jpeg/png (Manifestnachtrag M2-R02).
+      - dependency-name: image
+      # rust-ini auf 0.21.1 im Lockfile, bis tauri-plugin-deep-link > 2.6.2 mit rust-ini 0.21.3 baut (K2-100).
+      - dependency-name: rust-ini
+
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - "/integrations"
+    schedule:
+      interval: weekly
+      day: thursday
+      time: "12:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: deps
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Glide exakt 6.0.4-alpha24 (ARCHITECTURE.md, M2-ui-concept F-2); Upgrade nur nach erneutem Spike S-1.
+      - dependency-name: "@glideapps/glide-data-grid"
+      # WebdriverIO exakt 7.40.0 für E2E-B (Spike S-5b); Major-Sprung nur nach eigener Prüfung.
+      - dependency-name: webdriverio
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: thursday
+      time: "12:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
