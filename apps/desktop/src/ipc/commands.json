@@ -1164,6 +1164,18 @@
     "longRunning": false
   },
   {
+    "name": "update.channel",
+    "args": "void",
+    "ret": "UpdateChannelState",
+    "longRunning": false
+  },
+  {
+    "name": "update.set_channel",
+    "args": "UpdateSetChannelArgs",
+    "ret": "UpdateChannelState",
+    "longRunning": false
+  },
+  {
     "name": "chromium.status",
     "args": "ChromiumStatusArgs",
     "ret": "ChromiumStatus",

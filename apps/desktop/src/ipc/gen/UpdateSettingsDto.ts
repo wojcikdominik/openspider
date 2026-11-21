@@ -3,4 +3,8 @@
 /**
  * App-wide settings wire format; follows AppSettings.updates field for field.
  */
-export type UpdateSettingsDto = { check: boolean, lastCheck: string | null, skippedVersion?: string | null, };
+export type UpdateSettingsDto = { check: boolean, lastCheck: string | null, skippedVersion?: string | null, 
+/**
+ * OUT-254: raw stored value (`stable`, `beta`, or an invalid value kept as is); absent = standard rule.
+ */
+channel?: string | null, };

@@ -22,12 +22,14 @@ impl<R: Runtime> Native<R> {
         manifest: &UpdateManifest,
         restart: bool,
     ) -> Result<tauri_plugin_updater::Update, String> {
-        let context = UpdateContext::default();
-        manifest.validate(context.beta)?;
+        let app = self.app.upgrade().ok_or("Anwendung beendet")?;
+        let context = channel_context(&app);
+        // OUT-252/OUT-254: the manifest policy of the effective channel applies to download and install, too.
+        manifest.validate(context.channel().allows_prerelease())?;
         self.handle
             .updater_builder()
             .endpoints(vec![context
-                .endpoint
+                .channel_endpoint()
                 .parse()
                 .map_err(|_| "Update-Endpunkt ungültig")?])
             .map_err(|_| "Update-Endpunkte fehlen oder sind ungültig")?
@@ -46,6 +48,13 @@ impl<R: Runtime> Native<R> {
             .ok_or_else(|| "Keine neuere Version".into())
     }
 }
+/// Update context with the app's current update settings, so the effective channel (OUT-254) is read at run time.
+fn channel_context(app: &App) -> UpdateContext {
+    UpdateContext {
+        settings: app.settings_snapshot().updates,
+        ..Default::default()
+    }
+}
 impl<R: Runtime> UpdateBackend for Native<R> {
     fn download(
         &self,
@@ -56,14 +65,14 @@ impl<R: Runtime> UpdateBackend for Native<R> {
         let app = self.app.clone();
         Box::pin(async move {
             let app = app.upgrade().ok_or("Anwendung beendet")?;
-            let context = UpdateContext::default();
-            manifest.validate(context.beta)?;
+            let context = channel_context(&app);
+            manifest.validate(context.channel().allows_prerelease())?;
             let builder =
                 std::sync::Mutex::new(Some(os_app::update::download::client_builder(&app).await?));
             let update = handle
                 .updater_builder()
                 .endpoints(vec![context
-                    .endpoint
+                    .channel_endpoint()
                     .parse()
                     .map_err(|_| "Update-Endpunkt ungültig")?])
                 .map_err(|_| "Update-Endpunkte fehlen oder sind ungültig")?

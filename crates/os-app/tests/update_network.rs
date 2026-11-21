@@ -150,13 +150,14 @@ async fn http_redirect_and_artifact_urls_are_rejected_beta_is_explicit() {
         assert!(policy::check(&ctx, true).await.is_err(), "{path}");
     }
     assert_eq!(site.requests().len(), 3); // no insecure redirect request
-    ctx.beta = true;
-    ctx.endpoint = format!("{}/beta.json", site.https_base_url());
+                                          // OUT-254: the beta channel is the setting `updates.channel`, its manifest URL the beta endpoint.
+    ctx.settings.channel = Some("beta".into());
+    ctx.beta_endpoint = format!("{}/beta.json", site.https_base_url());
     assert!(matches!(
         policy::check(&ctx, true).await.unwrap(),
         Outcome::Available(_)
     ));
-    ctx.endpoint = format!("{}/older.json", site.https_base_url());
+    ctx.beta_endpoint = format!("{}/older.json", site.https_base_url());
     assert!(matches!(
         policy::check(&ctx, true).await.unwrap(),
         Outcome::Current

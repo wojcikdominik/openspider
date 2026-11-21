@@ -38,6 +38,18 @@ pub fn register(r: &mut Registry) {
             "void",
             set_auto as Handler,
         ),
+        (
+            "update.channel",
+            "void",
+            "UpdateChannelState",
+            channel as Handler,
+        ),
+        (
+            "update.set_channel",
+            "UpdateSetChannelArgs",
+            "UpdateChannelState",
+            set_channel as Handler,
+        ),
     ] {
         r.register(
             CommandMeta {
@@ -110,6 +122,75 @@ fn set_auto<'a>(app: &'a App, _: CallCtx, args: Value) -> BoxFuture<'a, CmdResul
         }
         Ok(Value::Null)
     })
+}
+/// Effective channel and running version for UI-131 (stored value, otherwise the standard rule of OUT-254).
+pub fn channel_state(
+    settings: &os_model::settings::UpdateSettings,
+    current: &semver::Version,
+) -> crate::dto::update::UpdateChannelState {
+    use crate::{dto::update::UpdateChannel, update::policy};
+    crate::dto::update::UpdateChannelState {
+        channel: match policy::effective_channel(settings, current) {
+            policy::Channel::Stable => UpdateChannel::Stable,
+            policy::Channel::Beta => UpdateChannel::Beta,
+        },
+        version: policy::display_version(current),
+        prerelease: !current.pre.is_empty(),
+    }
+}
+fn channel<'a>(app: &'a App, _: CallCtx, _: Value) -> BoxFuture<'a, CmdResult> {
+    Box::pin(async move {
+        let state = channel_state(
+            &app.settings_snapshot().updates,
+            &crate::update::policy::running_version(),
+        );
+        crate::runtime::error::to_json(&state)
+    })
+}
+/// OUT-254 / UI-131: stores `updates.channel` at once, without restart and without any network request. The change
+/// applies from the next check; `updates.check` and `updates.skipped_version` stay untouched.
+fn set_channel<'a>(app: &'a App, _: CallCtx, args: Value) -> BoxFuture<'a, CmdResult> {
+    Box::pin(async move {
+        let args: crate::dto::update::UpdateSetChannelArgs =
+            crate::runtime::error::parse_args(args)?;
+        let state = set_channel_value(app, args.channel)?;
+        crate::runtime::error::to_json(&state)
+    })
+}
+/// Stores the channel chosen by the user (OUT-254) and returns the new effective state.
+pub fn set_channel_value(
+    app: &App,
+    channel: crate::dto::update::UpdateChannel,
+) -> Result<crate::dto::update::UpdateChannelState, crate::dto::CmdError> {
+    use crate::{dto::update::UpdateChannel, update::policy::Channel};
+    let value = match channel {
+        UpdateChannel::Stable => Channel::Stable,
+        UpdateChannel::Beta => Channel::Beta,
+    }
+    .as_str();
+    let change = app
+        .settings()
+        .apply_patch(&serde_json::json!({"updates":{"channel":value}}))?;
+    Ok(channel_state(
+        &change.settings.updates,
+        &crate::update::policy::running_version(),
+    ))
+}
+/// OUT-254, desktop start: a pre-release without a valid stored channel stores `beta` before the first check of this
+/// start, so the user stays on the beta channel after updating to a stable version. Never stores `stable`. An invalid
+/// stored value is logged; on a stable version it stays in the file unchanged.
+pub fn persist_startup_channel(app: &App, current: &semver::Version) {
+    let settings = app.settings_snapshot().updates;
+    crate::update::policy::warn_invalid_channel(&settings);
+    if let Some(channel) = crate::update::policy::channel_to_store_at_startup(&settings, current) {
+        if app
+            .settings()
+            .apply_patch(&serde_json::json!({"updates":{"channel":channel.as_str()}}))
+            .is_err()
+        {
+            tracing::warn!("Update-Kanal konnte beim Start nicht gespeichert werden");
+        }
+    }
 }
 pub async fn run_check(app: &App, manual: bool) -> crate::update::UpdateState {
     let context = crate::update::UpdateContext {
@@ -249,9 +330,12 @@ fn skipped_covers(context: &crate::update::UpdateContext, offered: &semver::Vers
 }
 pub fn on_startup(app: &App) {
     crate::update::install::init(app);
+    // Only the desktop app (`AppConfig::from_env`) checks on startup; test and bridge apps never write the channel.
     if !app.config().check_updates_on_startup {
         return;
     }
+    // OUT-254: synchronously, before the startup check below is spawned.
+    persist_startup_channel(app, &crate::update::policy::running_version());
     let app = app.clone();
     app.handle().spawn(async move {
         run_check(&app, false).await;
