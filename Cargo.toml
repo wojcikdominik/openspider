@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/os-ai",
     "crates/os-model",
     "crates/os-url",
     "crates/os-fetch",
@@ -32,6 +33,7 @@ authors = ["OpenSpider contributors"]
 
 [workspace.dependencies]
 # interne Crates
+os-ai = { path = "crates/os-ai" }
 os-model = { path = "crates/os-model" }
 os-url = { path = "crates/os-url" }
 os-fetch = { path = "crates/os-fetch" }
@@ -166,3 +168,19 @@ getrandom = "0.4"
 minisign-verify = "0.3"
 semver = { version = "1", features = ["serde"] }
 md4 = "0.11"
+
+# M4-F01 (E-9 a): Auswahl nach Lizenz-Spike M4-SP1, Lizenzgraph mit cargo-deny geprüft (docs/plan/M4-reports/sp1.md).
+# jsonschema bleibt auf 0.20.0: ab 0.21 kommt eine nur MIT-0-lizenzierte Abhängigkeit hinzu (K4-17).
+jsonschema = { version = "=0.20.0", default-features = false, features = ["draft201909", "draft202012"] }
+docx-rs = { version = "=0.4.22", default-features = false }
+pulldown-cmark = { version = "=0.13.6", default-features = false, features = ["html"] }
+# Embedding-Analysen in os-analyze::semantic (INTEG-181/186/189); UMAP ist eine eigene Implementierung (kein Crate).
+hnsw = { version = "=0.11.0", default-features = false }
+space = { version = "=0.17.0", default-features = false, features = ["alloc"] }
+linfa = { version = "=0.8.1", default-features = false }
+linfa-clustering = { version = "=0.8.1", default-features = false }
+bhtsne = { version = "=0.7.14", default-features = false }
+hdbscan = { version = "=0.12.0", default-features = false, features = ["serial", "parallel"] }
+ndarray = { version = "0.16", default-features = false, features = ["std"] }
+rand = "0.8"
+rayon = "1"

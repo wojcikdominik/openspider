@@ -29,6 +29,8 @@ pub type StepFn = fn(&CrawlFile, &CrawlConfig, &CancelToken) -> Result<StepState
 /// Standardzuordnung Teilschritt → Funktion. Schritte ohne eigene Umsetzung sind `NotApplicable`.
 pub fn default_registry(step: AnalysisStep) -> StepFn {
     match step {
+        AnalysisStep::Embeddings => super::steps::embeddings::run,
+        AnalysisStep::AiSearch => super::steps::ai_search::run,
         AnalysisStep::Images => super::steps::images::run,
         AnalysisStep::Canonicals => super::steps::canonicals::run,
         AnalysisStep::Sitemaps => super::steps::sitemaps::run,

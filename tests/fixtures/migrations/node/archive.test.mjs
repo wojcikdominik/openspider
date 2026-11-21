@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { archiveFixture } from '../../../../scripts/release/archive-compat-fixture.mjs';
+import { archiveFixture, currentSchemaVersion, seedCopies } from '../../../../scripts/release/archive-compat-fixture.mjs';
 
 // spec: OUT-255
 test('release archive is complete, versioned, verifiable and immutable', () => {
@@ -18,7 +18,8 @@ test('release archive is complete, versioned, verifiable and immutable', () => {
     for (const file of manifest.files) assert.equal(createHash('sha256').update(readFileSync(join(dir, file.name))).digest('hex'), file.sha256);
     const db = new DatabaseSync(join(dir, 'crawl.ospider'), { readOnly: true });
     try {
-      assert.equal(db.prepare('PRAGMA user_version').get().user_version, 5);
+      assert.equal(db.prepare('PRAGMA user_version').get().user_version, currentSchemaVersion());
+      assert.equal(manifest.schema, currentSchemaVersion());
       assert.equal(db.prepare("SELECT value FROM crawl_meta WHERE key='generator'").get().value, 'openspider 1.0.0-beta.1');
     } finally { db.close(); }
     assert.throws(() => archiveFixture({ version: '1.0.0-beta.1', out }), /already exists/);
@@ -46,4 +47,17 @@ test('R04 dry runs before beta.1 use the same versions as set-version', () => {
       assert.equal(JSON.parse(readFileSync(join(dir, 'manifest.json'))).version, version);
     }
   } finally { rmSync(out, { recursive: true, force: true }); }
+});
+
+// spec: OUT-255
+test('every archived schema seed matches its folder, including v5 as migration source', () => {
+  assert.equal(currentSchemaVersion(), 6);
+  for (const schema of [5, 6]) {
+    const copies = seedCopies(schema);
+    assert.equal(copies['crawl.ospider'], `schema-v${schema}/crawl.ospider`);
+    const db = new DatabaseSync(join(import.meta.dirname, '..', copies['crawl.ospider']), { readOnly: true });
+    try {
+      assert.equal(db.prepare('PRAGMA user_version').get().user_version, schema);
+    } finally { db.close(); }
+  }
 });

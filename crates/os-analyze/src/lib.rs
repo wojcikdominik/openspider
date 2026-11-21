@@ -10,6 +10,7 @@
 //! Graphen, Segmente, Vergleich und MinHash als Stubs der Fachpakete.
 
 pub mod aggregates;
+pub mod ai_search;
 pub mod analysis;
 pub mod compare;
 pub mod cursor;
@@ -22,6 +23,7 @@ pub mod minhash;
 pub mod names;
 pub mod search;
 pub mod segments;
+pub mod semantic;
 pub mod state;
 pub mod tabs;
 pub mod views;

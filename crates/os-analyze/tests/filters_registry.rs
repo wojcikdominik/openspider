@@ -15,7 +15,7 @@ use os_analyze::{ColumnDef, ColumnKind, FilterKind, Requirement};
 use os_model::{AnalysisStep, CrawlConfig};
 
 /// UI-004 (ohne AMP, AI und die Tabs von M4/M5): Reihenfolge der Tabs im Produkt.
-const UI_ORDER: [&str; 31] = [
+const UI_ORDER: [&str; 35] = [
     "Internal",
     "External",
     "Security",
@@ -46,6 +46,10 @@ const UI_ORDER: [&str; 31] = [
     "Search Console",
     "Validation",
     "Link Metrics",
+    "AI",
+    "AI Decisions",
+    "AI Suggestions",
+    "AI Search",
     "Change Detection",
 ];
 
@@ -68,7 +72,7 @@ fn kind_name(kind: FilterKind) -> String {
 /// `(id, kind, requires)`; `requires` in der Schreibweise der Dateien.
 fn expected_filters(tab_id: &str) -> Vec<(String, String, Vec<String>)> {
     let mut out = Vec::new();
-    for file in ["M1-filters.toml", "M2-filters.toml"] {
+    for file in ["M1-filters.toml", "M2-filters.toml", "M4-filters.toml"] {
         let reg = read(file);
         for tab in reg["tab"].as_array().unwrap() {
             if tab["id"].as_str() != Some(tab_id) {
@@ -140,7 +144,7 @@ fn tab_ids_follow_the_ui_order_and_cover_both_registry_files() {
     assert_eq!(ids, UI_ORDER, "UI-004");
 
     let mut registry_tabs: BTreeSet<String> = BTreeSet::new();
-    for file in ["M1-filters.toml", "M2-filters.toml"] {
+    for file in ["M1-filters.toml", "M2-filters.toml", "M4-filters.toml"] {
         for tab in read(file)["tab"].as_array().unwrap() {
             registry_tabs.insert(tab["id"].as_str().unwrap().to_string());
         }
@@ -312,7 +316,7 @@ fn every_tab_is_a_real_definition_or_a_marked_stub() {
     // M2-D01 implements Meta Keywords; M2-D05 Pagination, M2-D14 Custom Search, M2-I03 Search Console, M2-I04 PageSpeed, M2-I02 Analytics.
     // M2-I05 ersetzt den Link-Metrics-Stub (K2-60, INTEG-151).
     assert_eq!(
-        stubs, 0,
+        stubs, 4,
         "Stub-Tabs (Structured Data: M2-D09, Validation: M2-D10, Custom Extraction: M2-D15)"
     );
 }
@@ -341,7 +345,7 @@ fn stub_filters_are_marked_by_predicate_zero_and_never_all() {
         .iter()
         .filter(|(_, id, ..)| !id.eq_ignore_ascii_case("All"))
         .count();
-    assert_eq!(stub_filters + real_new, m2_without_all);
+    assert_eq!(stub_filters + real_new, m2_without_all + 27);
     assert!(stub_filters > 0);
 }
 

@@ -16,6 +16,7 @@ e2e-bridge = ["dep:tokio-tungstenite"]
 stub-views = []
 
 [dependencies]
+os-ai.workspace = true
 base64.workspace = true
 reqwest.workspace = true
 

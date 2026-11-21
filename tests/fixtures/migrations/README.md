@@ -1,8 +1,9 @@
 # Kompatibilitätsarchiv (OUT-255)
 
 K3-11: Ab `1.0.0-beta.1` gehört jede veröffentlichte Version hierher. Vorherige
-Schemastände sind synthetische, kleine Dateien aus dem eigenen Code. Schema bleibt
-nach K2-99 bei **v5**, keine v6. Keine Kunden- oder Referenzproduktdaten.
+Schemastände sind synthetische, kleine Dateien aus dem eigenen Code. Schema blieb
+nach K2-99 bis 1.0 bei **v5**; **v6** kommt mit M4-F01 (`0006_ai.sql`, KI-Tabellen).
+Keine Kunden- oder Referenzproduktdaten.
 
 Alle folgenden Quellen stammen aus Commit
 `f8bdb23a6d6e60bad0e80de80309013e146144bc` (Basis `m3/int-b`).
@@ -14,6 +15,8 @@ Alle folgenden Quellen stammen aus Commit
 | `schema-v3/crawl.ospider` | Migrationen 0001–0003, Konfiguration v2, Zusatzfakt `head.title_outside=1` |
 | `schema-v4/crawl.ospider` | Migrationen 0001–0004, Konfiguration v2, gleicher Zusatzfakt |
 | `schema-v5/crawl.ospider` | Migrationen 0001–0005, Konfiguration v2, gleicher Zusatzfakt in kompakter Speicherung |
+| `schema-v6/crawl.ospider` | M4-F01: Migrationen 0001–0005 aus obigem Commit plus `0006_ai.sql` aus dem ausgecheckten Stand (leere KI-Tabellen), sonst wie v5; erzeugt mit `generate.py --only-schema 6`, v1–v5 dabei unverändert |
+| `schema-v6/internal_all.csv` | Kopie von `schema-v5/internal_all.csv` (gleiche Nutzdaten, KI-Tabellen leer) |
 | `schema-v*/internal_all.csv` | Einmalig mit aktueller CLI aus obigen Dateien exportiert; Erwartung nach M2-Integration (int-e), K2-63; eingecheckte Sollwerte, Normalisierung gemäß Spec 06 Abschnitt 0 durch `os_testsite::golden::normalize` |
 | `config-v1/profile.osconfig` | Unverändert aus `tests/fixtures/config/v1/default.osconfig` |
 | `config-v2/profile.osconfig` | Unverändert aus `tests/fixtures/config/default.osconfig` |
@@ -24,7 +27,7 @@ Alle folgenden Quellen stammen aus Commit
 | `app-v1/ui-state.json` | Synthetischer v1-Stand nach `crates/os-app/src/uistate.rs`, noch ohne Revision; Tab `Internal`, leerer Dateiverlauf |
 
 Reproduktion im ausgecheckten Repository (Python 3, System-SQLite und libsodium;
-keine neuen Projektabhängigkeiten):
+keine neuen Projektabhängigkeiten; `--only-schema N` schreibt nur `schema-vN` und braucht kein libsodium):
 
 ```sh
 python3 tests/fixtures/migrations/generate.py
@@ -57,7 +60,7 @@ Versionen ins Repository.
 
 `release.yml` ruft `scripts/release/archive-compat-fixture.mjs --version <version>
 --out release-reports/compat --cli <release-cli>` auf. Das Skript verwendet die
-aktuelle synthetische v5-Probe, stempelt Erzeugerversion in Crawl und Konfiguration,
+synthetische Probe `schema-v<SCHEMA_VERSION>` (seit M4-F01 v6), stempelt Erzeugerversion in Crawl und Konfiguration,
 prüft den Export mit dem gerade gebauten Linux-Release-Binary und schreibt je Datei
 Quellpfad und SHA-256 sowie den vollständigen Release-Commit in `manifest.json`.
 Ein veraltetes Seed-Schema, eine Exportabweichung oder vorhandenes Ziel bricht ab.

@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+os-ai.workspace = true
 os-engine.workspace = true
 os-fetch.workspace = true
 axum.workspace = true

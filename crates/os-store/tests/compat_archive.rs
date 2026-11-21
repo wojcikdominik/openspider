@@ -8,8 +8,8 @@ fn archive() -> PathBuf {
 // spec: OUT-226 [M3]
 #[test]
 fn every_schema_opens_and_migrates_with_an_unchanged_backup() {
-    assert_eq!(SCHEMA_VERSION, 5, "Add a fixture when changing the schema");
-    for version in 1..=5 {
+    assert_eq!(SCHEMA_VERSION, 6, "Add a fixture when changing the schema");
+    for version in 1..=6 {
         let source = archive().join(format!("schema-v{version}/crawl.ospider"));
         let bytes = fs::read(&source).unwrap();
         assert!(bytes.len() <= 1024 * 1024);
@@ -43,7 +43,7 @@ fn every_schema_opens_and_migrates_with_an_unchanged_backup() {
                 .unwrap();
             assert_eq!(fact, 1);
         }
-        if version < 5 {
+        if version < SCHEMA_VERSION {
             let backup = os_store::open::backup_path(&path, version);
             assert_eq!(fs::read(backup).unwrap(), bytes);
         }
@@ -159,7 +159,8 @@ fn all_urls(file: &CrawlFile) -> Vec<Vec<rusqlite::types::Value>> {
 fn a_foreign_wal_with_a_smaller_page_size_yields_no_stale_memory_and_fails_the_check() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("crawl.ospider");
-    fs::copy(archive().join("schema-v5/crawl.ospider"), &path).unwrap();
+    // Aktuelles Schema (v6): eine ältere Datei würde schreibgeschützt nur mit MigrationRequired öffnen.
+    fs::copy(archive().join("schema-v6/crawl.ospider"), &path).unwrap();
     let (root, pages, page_size): (u32, u32, usize) = {
         let conn = rusqlite::Connection::open(&path).unwrap();
         let q = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();

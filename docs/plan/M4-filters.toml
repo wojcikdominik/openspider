@@ -1,0 +1,115 @@
+schema = 1
+# Static M4 identifiers; dynamic question/prompt filters are supplied by the owners.
+
+[[tab]]
+id = "AI"
+module = "ai"
+package = "M4-P02"
+[[tab.filters]]
+id = "All"
+kind = "live"
+[[tab.filters]]
+id = "Errors"
+kind = "live"
+
+[[tab]]
+id = "AI Decisions"
+module = "ai_decisions"
+package = "M4-D02"
+[[tab.filters]]
+id = "All"
+kind = "live"
+[[tab.filters]]
+id = "Refusals"
+kind = "live"
+[[tab.filters]]
+id = "Errors"
+kind = "live"
+[[tab.filters]]
+id = "Pending"
+kind = "live"
+[[tab.filters]]
+id = "Self-reported Probabilities"
+kind = "live"
+
+[[tab]]
+id = "AI Suggestions"
+module = "ai_suggestions"
+package = "M4-V01"
+[[tab.filters]]
+id = "All"
+kind = "live"
+[[tab.filters]]
+id = "Titles"
+kind = "live"
+[[tab.filters]]
+id = "Meta Descriptions"
+kind = "live"
+[[tab.filters]]
+id = "H1"
+kind = "live"
+[[tab.filters]]
+id = "Alt Text"
+kind = "live"
+[[tab.filters]]
+id = "No Valid Suggestion"
+kind = "live"
+[[tab.filters]]
+id = "Accepted"
+kind = "live"
+[[tab.filters]]
+id = "Open"
+kind = "live"
+[[tab.filters]]
+id = "Rejected"
+kind = "live"
+[[tab.filters]]
+id = "Errors"
+kind = "live"
+
+[[tab]]
+id = "AI Search"
+module = "ai_search"
+package = "M4-S01"
+[[tab.filters]]
+id = "All"
+kind = "live"
+[[tab.filters]]
+id = "Blocked For AI Search Bots"
+kind = "live"
+[[tab.filters]]
+id = "Blocked For AI User Fetchers"
+kind = "live"
+[[tab.filters]]
+id = "Blocked For AI Training Only"
+kind = "live"
+[[tab.filters]]
+id = "AI Search Blocked But Training Allowed"
+kind = "live"
+[[tab.filters]]
+id = "Missing llms.txt"
+kind = "live"
+[[tab.filters]]
+id = "Invalid llms.txt"
+kind = "live"
+[[tab.filters]]
+id = "llms.txt With Broken Links"
+kind = "live"
+[[tab.filters]]
+id = "llms.txt Links To Non-Indexable"
+kind = "live"
+[[tab.filters]]
+id = "Blocked For AI Crawlers By Server"
+kind = "live"
+[[tab.filters]]
+id = "Low Content Without JavaScript"
+kind = "live"
+[[tab.filters]]
+id = "Links Only Via JavaScript"
+kind = "live"
+[[tab.filters]]
+id = "Headings Only Via JavaScript"
+kind = "live"
+[[tab.filters]]
+id = "Structured Data Only Via JavaScript"
+kind = "live"

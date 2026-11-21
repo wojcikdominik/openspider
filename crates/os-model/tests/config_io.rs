@@ -149,7 +149,7 @@ fn newer_schema_version_loads_with_warning() {
         [
             (ConfigIssueKind::NewerSchemaVersion, "schema_version"),
             (ConfigIssueKind::UnknownField, "speed.adaptive"),
-            (ConfigIssueKind::UnknownField, "ai"),
+            (ConfigIssueKind::UnknownField, "ai.provider"),
         ]
     );
     assert!(l.warnings[0].message.contains("schema_version 3"));
@@ -691,6 +691,8 @@ fn random_config(
             urls: list!(),
         },
         analysis: AnalysisConfig {
+            embeddings: b!(),
+            ai_search: b!(),
             auto_at_end: b!(),
             link_score: b!(),
             canonicals: b!(),

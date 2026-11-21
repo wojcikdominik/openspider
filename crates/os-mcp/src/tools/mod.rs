@@ -7,6 +7,10 @@
 //! Oberfläche und Export (`os_analyze::views`, `os_analyze::issues`, `os_export::reports`): keine zweite
 //! Zählung, keine eigene Sortierung.
 
+pub mod ai_decisions;
+pub mod ai_links;
+pub mod ai_redirects;
+pub mod ai_suggestions;
 pub mod common;
 pub mod compare_crawls;
 pub mod crawl;
@@ -27,6 +31,10 @@ use crate::tool::Tool;
 /// Alle Werkzeuge (nach Freigabe gefiltert durch `permissions`), in der Reihenfolge von `tools/list`.
 pub fn all() -> Vec<Box<dyn Tool>> {
     vec![
+        Box::new(ai_decisions::AiTool),
+        Box::new(ai_suggestions::AiTool),
+        Box::new(ai_redirects::AiTool),
+        Box::new(ai_links::AiTool),
         Box::new(link_metrics::FetchLinkMetrics),
         Box::new(compare_crawls::CompareCrawls),
         Box::new(list_crawls::ListCrawls),
@@ -60,6 +68,10 @@ mod tests {
         assert_eq!(
             names,
             [
+                "run_decisions",
+                "suggest_metadata",
+                "redirect_mapping",
+                "internal_link_suggestions",
                 "fetch_link_metrics",
                 "compare_crawls",
                 "list_crawls",
@@ -89,6 +101,34 @@ mod tests {
         for t in &tools {
             assert_eq!(t.input_schema()["type"], "object", "{}", t.name());
             assert!(!t.description().is_empty());
+        }
+    }
+}
+
+#[cfg(test)]
+mod m4_tests {
+    use crate::{ToolClass, ToolContext, ToolError};
+    use serde_json::json;
+    // spec: AI-001
+    // spec: AGENT-030
+    #[test]
+    fn cost_stub_fixture_never_executes_even_with_confirmation() {
+        let ctx = ToolContext::new(std::path::PathBuf::from("unused-ai-stub-fixture"));
+        let names = [
+            "run_decisions",
+            "suggest_metadata",
+            "redirect_mapping",
+            "internal_link_suggestions",
+        ];
+        for name in names {
+            let tool = super::all().into_iter().find(|t| t.name() == name).unwrap();
+            assert_eq!(tool.class(), ToolClass::Cost);
+            for confirm in [false, true] {
+                let result = tool.call(&ctx, json!({"crawl_id":"fixture","confirm":confirm}));
+                assert!(
+                    matches!(result, Err(ToolError::InvalidArguments(message)) if message.contains("STUB(M4-C02)"))
+                );
+            }
         }
     }
 }

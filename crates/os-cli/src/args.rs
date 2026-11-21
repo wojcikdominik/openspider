@@ -40,6 +40,40 @@ pub enum Sub {
 /// Optionen des Headless-Betriebs.
 #[derive(Debug, Clone, Default, clap::Args)]
 pub struct RunArgs {
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub use_ai: bool,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub use_embeddings: bool,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub ai_tasks: Option<String>,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub ai_questions: Option<String>,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub ai_consent: bool,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub ai_sample: Option<u16>,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub api_budget: Option<String>,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub ai_budget: Option<String>,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub export_query: Option<String>,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI", value_parser = ["auto", "on", "off"])]
+    pub ai_batch: Option<String>,
+    /// STUB(M4-C01): KI-Option, Ausführung ab M4-C01.
+    #[arg(long, help_heading = "KI")]
+    pub ai_reuse_cache: Option<PathBuf>,
+
     /// Prüft manuell auf Updates (STUB M3-U01).
     #[arg(long, conflicts_with_all = ["run_task", "uninstall_cleanup", "crawl", "crawl_list", "load_crawl"])]
     pub check_update: bool,
@@ -341,7 +375,18 @@ pub fn long_option_names() -> Vec<String> {
 impl RunArgs {
     /// Die noch nicht unterstützten Optionen, die der Aufruf enthält (Namen mit `--`).
     pub fn unsupported(&self) -> Vec<&'static str> {
-        let checks: [(bool, &'static str); 3] = [
+        let checks: [(bool, &'static str); 14] = [
+            (self.use_ai, "--use-ai"),
+            (self.use_embeddings, "--use-embeddings"),
+            (self.ai_tasks.is_some(), "--ai-tasks"),
+            (self.ai_questions.is_some(), "--ai-questions"),
+            (self.ai_consent, "--ai-consent"),
+            (self.ai_sample.is_some(), "--ai-sample"),
+            (self.api_budget.is_some(), "--api-budget"),
+            (self.ai_budget.is_some(), "--ai-budget"),
+            (self.export_query.is_some(), "--export-query"),
+            (self.ai_batch.is_some(), "--ai-batch"),
+            (self.ai_reuse_cache.is_some(), "--ai-reuse-cache"),
             (self.crawl_google_sheet.is_some(), "--crawl-google-sheet"),
             (self.email_on_complete.is_some(), "--email-on-complete"),
             (
@@ -510,3 +555,6 @@ mod tests {
         }
     }
 }
+
+#[path = "ai.rs"]
+pub mod ai;

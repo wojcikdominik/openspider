@@ -107,3 +107,14 @@ export-reason-missing = { $name }: Eine Voraussetzung für diesen Export fehlt.
 export-reason-comparison = { $name }: Nur im Vergleichsmodus verfügbar (Modus → Vergleich).
 
 export-name-filter = Filter { $n }
+
+# M4-F01: KI-Export- und Report-Stubs (AI-039, AI-106/107, AI-125, AI-127, OUT-065, OUT-069)
+export-name-ai = KI
+export-name-ai-decisions = KI-Entscheidungen
+export-name-all-answers = Alle Antworten
+export-name-embeddings = Embedding-Vektoren
+export-name-all-generated-images = Alle erzeugten Bilder
+export-name-all-generated-audio = Alle erzeugten Audiodateien
+export-name-action-plan = Maßnahmenplan
+export-name-ai-crawler-accessibility = Zugänglichkeit für KI-Crawler
+export-name-ai-search-readiness = AI-Search-Übersicht

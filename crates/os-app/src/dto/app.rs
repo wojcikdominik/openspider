@@ -209,6 +209,46 @@ pub struct AppSettingsDto {
     pub updates: super::update::UpdateSettingsDto,
     /// Absturzberichte (OUT-247).
     pub crash_reports: super::crash::CrashReportSettingsDto,
+    /// KI-App-Einstellungen inkl. Schalter „KI (Vorschau)“ (Spiegel von `AiAppSettings`, M4-F01). Eine Oberfläche
+    /// dafür baut M4-F02.
+    pub ai_app: AiAppSettingsDto,
+}
+
+/// KI-App-Einstellungen (Spiegel von `os_model::config::AiAppSettings`, M4-F01).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAppSettingsDto {
+    /// Schalter „KI (Vorschau)“ (Plan M4 E1, E-2 b): Standard aus; aus = kein KI-Request, kein KI-Schritt.
+    pub preview_enabled: bool,
+    /// Bestätigungsschwelle für den Kostenvoranschlag in Mikro-USD (AI-012).
+    pub confirmation_threshold: u64,
+    /// Tokenzahl einer Stichprobe vorab zählen.
+    pub count_token_sample: bool,
+    /// Personenbezogene Daten vor dem Senden schwärzen (AI-024).
+    pub redact_personal_data: bool,
+    /// Zusätzliche Schwärzungsmuster.
+    pub redaction_patterns: Vec<String>,
+    /// Systemweiter System-Prompt.
+    pub system_prompt: String,
+    /// Anbieter-Endpunkte je Anbieterkennung.
+    pub provider_endpoints: std::collections::BTreeMap<String, ProviderEndpointDto>,
+}
+
+/// Endpunkt-Einstellungen eines KI-Anbieters (Spiegel von `os_model::config::ProviderEndpoint`, M4-F01).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields = nullable)]
+pub struct ProviderEndpointDto {
+    /// Zeitlimit je Anfrage in Sekunden.
+    pub timeout_seconds: u16,
+    /// Gleichzeitige Anfragen.
+    pub concurrent_requests: u16,
+    /// Überschriebene Basis-URL.
+    pub base_url: Option<String>,
+    /// EU-Endpunkt verwenden (AI-019).
+    pub use_eu_endpoint: bool,
+    /// EU-Konto bestätigt (AI-019).
+    pub eu_account_confirmed: bool,
 }
 
 /// Argument von `settings.set`: JSON-Merge-Patch (RFC 7396) über `AppSettingsDto` in camelCase; `null` setzt einen

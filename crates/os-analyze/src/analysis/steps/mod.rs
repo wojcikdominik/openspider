@@ -10,3 +10,12 @@ pub mod pagination;
 pub mod sitemaps;
 
 pub mod images;
+
+/// STUB(M4-E01): embedding step, implementation in semantic.
+pub mod embeddings {
+    pub use crate::semantic::run;
+}
+/// STUB(M4-S02): AI Search step, implementation in ai_search.
+pub mod ai_search {
+    pub use crate::ai_search::run;
+}

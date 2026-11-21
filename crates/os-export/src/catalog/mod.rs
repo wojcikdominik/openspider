@@ -10,6 +10,11 @@
 //! Tippfehler Vorschläge über alle Namen der Art (Levenshtein ≤ 3).
 
 pub mod bulk_a11y;
+pub mod bulk_ai_decisions;
+pub mod bulk_ai_embeddings;
+pub mod bulk_ai_media;
+pub mod bulk_ai_prompts;
+pub mod bulk_ai_suggestions;
 pub mod bulk_canonicals;
 pub mod bulk_content;
 pub mod bulk_custom_extraction;
@@ -29,6 +34,8 @@ pub mod bulk_sitemaps;
 pub mod bulk_web;
 pub mod page_content;
 pub mod reports;
+pub mod reports_ai_plan;
+pub mod reports_ai_search;
 
 use std::path::Path;
 
@@ -325,7 +332,12 @@ pub fn stub_run(_job: &TableJob<'_>, _writer: &mut dyn TableWriter) -> Result<u6
 
 /// Alle Bulk-Tabelleneinträge der M2-Gruppen in Katalogreihenfolge.
 pub fn bulk_tables() -> Vec<&'static TableEntry> {
-    let groups: [&'static [TableEntry]; 17] = [
+    let groups: [&'static [TableEntry]; 22] = [
+        bulk_ai_prompts::entries(),
+        bulk_ai_decisions::entries(),
+        bulk_ai_suggestions::entries(),
+        bulk_ai_embeddings::entries(),
+        bulk_ai_media::entries(),
         bulk_security::entries(),
         bulk_response_codes::entries(),
         bulk_canonicals::entries(),
@@ -443,4 +455,38 @@ pub fn dynamic_entries(cfg: &CrawlConfig) -> Vec<DynamicEntry> {
     entries.extend(bulk_images::dynamic_entries(cfg));
     entries.extend(bulk_custom_extraction::dynamic_entries(cfg));
     entries
+}
+
+#[cfg(test)]
+mod m4_tests {
+    use super::*;
+    // spec: AI-001
+    #[test]
+    fn ai_export_fixture_resolves_bulk_and_report_entries() {
+        assert!(bulk_ai_prompts::entries().is_empty());
+        assert!(bulk_ai_suggestions::entries().is_empty());
+        let fixture = [
+            (ExportKind::Bulk, "AI Decisions:All Answers"),
+            (ExportKind::Bulk, "AI:Embeddings"),
+            (ExportKind::Bulk, "AI:All Generated Images"),
+            (ExportKind::Bulk, "AI:All Generated Audio"),
+            (ExportKind::Report, "AI:Action Plan"),
+            (ExportKind::Report, "AI:AI Crawler Accessibility"),
+            (ExportKind::Report, "AI:AI Search Readiness"),
+        ];
+        for (kind, name) in fixture {
+            assert!(list(kind).contains(&name.to_owned()));
+            assert!(resolve(kind, &name.to_lowercase()).is_ok());
+        }
+        assert_eq!(
+            bulk_ai_embeddings::entries()[0].header,
+            [
+                "Address",
+                "Prompt",
+                "Embedding Model",
+                "Dimensions",
+                "Embedding"
+            ]
+        );
+    }
 }

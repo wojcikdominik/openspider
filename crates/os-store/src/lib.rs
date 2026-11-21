@@ -10,6 +10,7 @@
 //! Leseschnittstelle (`read_api`, `q_`-Sichten, OUT-233/234), Abfragemodule `queries/*` und die Stubs `view_cache`,
 //! `readonly_sql`, `auth_profiles`.
 
+pub mod ai;
 pub mod auth_profiles;
 pub(crate) mod checkpointer;
 pub mod collation;

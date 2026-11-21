@@ -11,6 +11,10 @@
 //! Overview) überspringen Stubs, damit sie nur Befüllbares zeigen.
 
 pub mod accessibility;
+pub mod ai;
+pub mod ai_decisions;
+pub mod ai_search;
+pub mod ai_suggestions;
 pub mod analytics;
 pub mod canonicals;
 pub mod change_detection;
@@ -88,6 +92,10 @@ pub fn all() -> Vec<TabDef> {
         search_console::tab(),
         validation::tab(),
         link_metrics::tab(),
+        ai::tab(),
+        ai_decisions::tab(),
+        ai_suggestions::tab(),
+        ai_search::tab(),
         change_detection::tab(),
     ];
     for tab in &mut tabs {
