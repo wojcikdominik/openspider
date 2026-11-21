@@ -71,7 +71,9 @@ def erwartet(n, spec):
     if n == "M3":
         # M3-Zeile: P0/P1-Einträge aus OUT-250 … 266 (P2 OUT-253, -254, -264 nicht; OUT-257 neu seit 09.11.2026);
         # Visualisierung (Nutzerentscheid 30.10.2026, K3-15): UI-102 (P1) und die vorgezogenen P2-Einträge.
-        return ids_im_bereich(spec, "06-output-ops.md", "OUT", 250, 266, {"P0", "P1"}) | {
+        # Nachtrag 21.11.2026 (README, Absatz „Update-Kanäle“): OUT-254 ist P1, gehört aber zum Fix-Release 1.0.1
+        # und zu keinem Meilenstein (K3-16).
+        return (ids_im_bereich(spec, "06-output-ops.md", "OUT", 250, 266, {"P0", "P1"}) - {"OUT-254"}) | {
             "UI-094", "UI-097", "UI-098", "UI-100", "UI-102"}
     if n == "M4":
         # M4-Zeile: 08 vollständig (AI-001 … AI-127); INTEG-160 … 189; ONPAGE-159 … 164; UI-072, UI-101;
