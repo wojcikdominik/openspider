@@ -103,7 +103,7 @@ unicode-segmentation = "1"
 icu_collator = { version = "2", features = ["compiled_data"] }
 csv = "1"
 # constant_memory: Blätter laufen zeilenweise über eine temporäre Datei (zieht tempfile); 1-Mio.-Zeilen-Export
-rust_xlsxwriter = { version = "0.99", features = ["constant_memory"] }
+rust_xlsxwriter = { version = "0.102", features = ["constant_memory"] }
 calamine = "0.38"
 base64 = "0.23"
 # STDIO-Server (P18/P27) und Client (Tests): Kindprozess- und In-Process-Transport für die Integrationstests
