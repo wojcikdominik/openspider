@@ -134,6 +134,8 @@ Config → os-engine ─┬→ os-fetch ──→ os-parse ──→ os-store (u
 
 Abhängigkeitsrichtung: `os-engine` kennt `os-analyze` nicht; `os-app` (ab M2) sitzt über allen Kern-Crates, und kein Kern-Crate (auch nicht `os-mcp`) hängt an `os-app` – Sitzungszugriff für In-App-MCP-Werkzeuge kommt über ein optionales Trait-Objekt im `os_mcp::ToolContext`, das `os-app` bereitstellt. Nach Crawl-Ende ruft die Engine nur einen Hook (`EngineDeps.on_finished`); CLI bzw. App starten darüber die Crawl-Analyse (`os_analyze::analysis::run_after_crawl`). Verbindliche Crate-Abhängigkeiten für M1: `docs/plan/M1.md` Abschnitt 3.2, ab M2: `docs/plan/M2.md` Abschnitt 3.2.
 
+**`os-ai` (ab M4, Nachtrag 21.11.2026, `docs/plan/M4.md` E10):** `os-ai` hängt an `os-model`, `os-store` und `os-fetch` (gemeinsame Geheimnisablage `SecretStoreMut` und Host-Überschreibung `HostResolver` für die Testhosts, CRAWL-123). An `os-ai` hängen nur `os-integrations`, `os-app`, `os-cli` und `os-mcp`; `os-analyze` nutzt KI-Ergebnisse nur über Traits und hat keine Manifest-Abhängigkeit auf `os-ai`; `os-engine`, `os-fetch`, `os-parse`, `os-render`, `os-store` und `os-export` hängen nicht an `os-ai`. Bibliotheken für Embedding-Analysen (ANN-Index, Clustering, Dimensionsreduktion) gehören zu `os-analyze::semantic`, DOCX/Markdown für den Maßnahmenplan zu `os-export`.
+
 ## Qualitätssicherung
 
 - `cargo test --workspace`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo deny check licenses bans sources` (Lizenzpolitik in `deny.toml`: nur permissive Lizenzen und MPL-2.0, kein GPL/LGPL/AGPL).
