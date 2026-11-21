@@ -18,6 +18,9 @@ async function open(page: Page, query: Record<string, string> = {}, lang = "en")
 const group = (page: Page, lang = "en") => page.getByRole("radiogroup", { name: lang === "de" ? "Update-Kanal" : "Update channel" });
 const stable = (page: Page, lang = "en") => group(page, lang).getByRole("radio", { name: lang === "de" ? "Stabil (empfohlen)" : "Stable (recommended)" });
 const beta = (page: Page, lang = "en") => group(page, lang).getByRole("radio", { name: "Beta" });
+// Wie ein Nutzer: Klick auf die sichtbare Beschriftung der Option (das Eingabefeld selbst ist visuell verborgen).
+const pick = (page: Page, which: "stable" | "beta", lang = "en", force = false) =>
+  group(page, lang).getByText(which === "beta" ? "Beta" : lang === "de" ? "Stabil (empfohlen)" : "Stable (recommended)", { exact: true }).click({ force });
 const hint = (page: Page) => page.locator("p[role=status][data-update-channel-hint]");
 const stored = (page: Page) => page.evaluate(() => (window.settingsFixture.settings()?.updates as { channel?: string | null } | undefined)?.channel ?? null);
 const updateCalls = (page: Page) => page.evaluate(() => window.settingsFixture.calls().filter(c => /^update\.(check|download|install)$/.test(c.cmd)).length);
@@ -45,7 +48,7 @@ test("switching to Beta stores at once without network traffic, shows the hint a
   const onRequest = (r: Request) => { if (!r.url().startsWith(origin) && !r.url().startsWith("data:")) foreign.push(r.url()); };
   page.on("request", onRequest);
   const before = await updateCalls(page);
-  await beta(page).click();
+  await pick(page, "beta");
   await expect(beta(page)).toBeChecked();
   await expect.poll(() => stored(page)).toBe("beta");
   await expect(hint(page)).toHaveText(NEXT);
@@ -67,7 +70,7 @@ test("switching to Beta stores at once without network traffic, shows the hint a
 test("back to Stable on 1.1.0-beta.3 announces the stay hint, keeps it after restart, Beta removes it", async ({ page }) => {
   await open(page, { version: "1.1.0-beta.3" });
   await expect(beta(page)).toBeChecked();
-  await stable(page).click();
+  await pick(page, "stable");
   const stay = "You will stay on 1.1.0-beta.3 until a newer stable version is released.";
   await expect(hint(page)).toHaveText(stay);
   await expect(page.getByRole("status").filter({ hasText: stay })).toHaveCount(1);
@@ -79,7 +82,7 @@ test("back to Stable on 1.1.0-beta.3 announces the stay hint, keeps it after res
   await page.getByRole("tab", { name: "Software updates", exact: true }).click();
   await expect(stable(page)).toBeChecked();
   await expect(hint(page)).toHaveText(stay);
-  await beta(page).click();
+  await pick(page, "beta");
   await expect(hint(page)).not.toContainText("You will stay on");
 });
 
@@ -96,13 +99,13 @@ test("Stable on 1.0.1 shows no stay hint", async ({ page }) => {
 // acceptance: independent
 test("environment lock greys out the group and keeps the stored value", async ({ page }) => {
   await open(page, { version: "1.0.1" });
-  await beta(page).click();
+  await pick(page, "beta");
   await expect.poll(() => stored(page)).toBe("beta");
   await open(page, { version: "1.0.1", updateEnv: "1" });
   await expect(beta(page)).toBeDisabled();
   await expect(stable(page)).toBeDisabled();
   await expect(beta(page)).toBeChecked();
-  await stable(page).click({ force: true });
+  await pick(page, "stable", "en", true);
   await page.waitForTimeout(200);
   expect(await stored(page)).toBe("beta");
 });
@@ -111,10 +114,10 @@ test("environment lock greys out the group and keeps the stored value", async ({
 // acceptance: independent
 test("automatic checks off keeps the group usable", async ({ page }) => {
   await open(page, { version: "1.0.1" });
-  await page.getByRole("switch", { name: "Automatically check for updates" }).click();
+  await page.getByText("Automatically check for updates", { exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.settingsFixture.settings()?.updates.check)).toBe(false);
   await expect(beta(page)).toBeEnabled();
-  await beta(page).click();
+  await pick(page, "beta");
   await expect.poll(() => stored(page)).toBe("beta");
 });
 
@@ -122,7 +125,7 @@ test("automatic checks off keeps the group usable", async ({ page }) => {
 // acceptance: independent
 test("save failure shows an alert and reselects the stored value", async ({ page }) => {
   await open(page, { version: "1.0.1", channelFails: "1" });
-  await beta(page).click();
+  await pick(page, "beta");
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(stable(page)).toBeChecked();
   await expect(beta(page)).not.toBeChecked();
@@ -170,9 +173,9 @@ test("German texts at 1024×640 without truncation or overflow", async ({ page }
   await open(page, { version: "1.1.0-beta.3" }, "de");
   await expect(beta(page, "de")).toBeChecked();
   await expect(page.getByText("Beta-Versionen bringen neue Funktionen früher und können Fehler enthalten. Im Beta-Kanal erhalten Sie auch jede neuere stabile Version.", { exact: true })).toBeVisible();
-  await stable(page, "de").click();
+  await pick(page, "stable", "de");
   await expect(hint(page)).toHaveText("Sie bleiben auf 1.1.0-beta.3, bis eine neuere stabile Version erscheint.");
-  await beta(page, "de").click();
+  await pick(page, "beta", "de");
   await expect(hint(page)).toHaveText("Ab der nächsten Update-Prüfung erhalten Sie auch Beta-Versionen.");
   const clipped = await page.evaluate(() => {
     const root = document.querySelector("[data-setting-anchor='updates.channel']")!;

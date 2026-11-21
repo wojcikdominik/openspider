@@ -655,7 +655,7 @@ async fn stored_stable_on_prerelease_is_kept_across_restarts() {
 // spec: OUT-222
 // acceptance: independent
 #[tokio::test]
-async fn invalid_value_stays_byte_for_byte_in_the_file_and_is_logged() {
+async fn invalid_value_stays_unchanged_in_the_file_and_is_logged() {
     let home = profile(Some("nightly"));
     let m = mock(Some("1.0.1"), Some("1.1.0-beta.1")).await;
     let log = LogCapture::default();
