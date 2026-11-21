@@ -59,3 +59,15 @@ updates:
     groups:
       actions-minor-patch:
         update-types: [minor, patch]
+
+  # Basisbild des Docker-Images (packaging/docker/Dockerfile).
+  - package-ecosystem: docker
+    directory: "/packaging/docker"
+    schedule:
+      interval: weekly
+      day: thursday
+      time: "12:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: docker
