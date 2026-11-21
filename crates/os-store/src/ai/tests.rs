@@ -3,6 +3,7 @@ use rusqlite::Connection;
 
 // spec: AI-001
 // spec: AI-013
+// spec: AI-014
 #[test]
 fn v5_fixture_migrates_preserving_data_and_roundtrips_all_ai_tables() {
     let mut db = Connection::open_in_memory().unwrap();
@@ -81,6 +82,19 @@ INSERT INTO ai_embeddings VALUES(1,'embedding','1.0.0','mock','mock',2,'hash',X'
         .is_err());
     assert!(db
         .execute("UPDATE ai_embeddings SET dimensions=3", [])
+        .is_err());
+    // AI-014: Refusal-Texte gekürzt (≤ 500 Zeichen) in eigener Spalte `Refusal Reason`.
+    assert!(db
+        .execute(
+            "UPDATE ai_requests SET refusal_reason=?1",
+            [&"x".repeat(500)]
+        )
+        .is_ok());
+    assert!(db
+        .execute(
+            "UPDATE ai_requests SET refusal_reason=?1",
+            [&"x".repeat(501)]
+        )
         .is_err());
     assert_eq!(
         db.query_row("SELECT url FROM urls WHERE id=1", [], |r| r
