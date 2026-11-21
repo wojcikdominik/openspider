@@ -1,3 +1,6 @@
+AI:AI Crawler Accessibility
+AI:AI Search Readiness
+AI:Action Plan
 Accessibility:Violations Summary
 Canonicals:Canonical Chains
 Canonicals:Non-Indexable Canonicals

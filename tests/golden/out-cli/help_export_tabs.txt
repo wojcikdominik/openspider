@@ -1,3 +1,34 @@
+AI Decisions:All
+AI Decisions:Errors
+AI Decisions:Pending
+AI Decisions:Refusals
+AI Decisions:Self-reported Probabilities
+AI Search:AI Search Blocked But Training Allowed
+AI Search:All
+AI Search:Blocked For AI Crawlers By Server
+AI Search:Blocked For AI Search Bots
+AI Search:Blocked For AI Training Only
+AI Search:Blocked For AI User Fetchers
+AI Search:Headings Only Via JavaScript
+AI Search:Invalid llms.txt
+AI Search:Links Only Via JavaScript
+AI Search:Low Content Without JavaScript
+AI Search:Missing llms.txt
+AI Search:Structured Data Only Via JavaScript
+AI Search:llms.txt Links To Non-Indexable
+AI Search:llms.txt With Broken Links
+AI Suggestions:Accepted
+AI Suggestions:All
+AI Suggestions:Alt Text
+AI Suggestions:Errors
+AI Suggestions:H1
+AI Suggestions:Meta Descriptions
+AI Suggestions:No Valid Suggestion
+AI Suggestions:Open
+AI Suggestions:Rejected
+AI Suggestions:Titles
+AI:All
+AI:Errors
 Accessibility:All
 Accessibility:accesskeys
 Accessibility:area-alt

@@ -15,7 +15,7 @@ name|Pausierter Crawl
 openspider_version|<VERSION>
 project|Projekt
 read_api_version|1
-schema_version|5
+schema_version|6
 start_url|https://site.test/
 started_at|<TS>
 state|Paused
