@@ -125,8 +125,9 @@ test("first click on a row during a running crawl: median time to the first deta
     console.log(`[livedetail-budget] ${JSON.stringify(result)}`);
     await test.info().attach("first-click-ms", { body: JSON.stringify(result), contentType: "application/json" });
     test.info().annotations.push({ type: "spec-question", description: "07-performance: Schwellen für E2E gegen den Dev-Server nicht beziffert; nur Median berichtet, Regression nur mit Basis (UI-148 +10 %)" });
-    const baseDetail = Number(process.env.OS_LD_BASELINE_URLDETAILS_MS ?? NaN);
-    const baseLinks = Number(process.env.OS_LD_BASELINE_LINKS_MS ?? NaN);
+    // Leere Repository-Variable (vars.* nicht gesetzt) gilt wie eine fehlende als „keine Basis“.
+    const baseDetail = Number(process.env.OS_LD_BASELINE_URLDETAILS_MS?.trim() || NaN);
+    const baseLinks = Number(process.env.OS_LD_BASELINE_LINKS_MS?.trim() || NaN);
     if (Number.isFinite(baseDetail)) expect(median(detail), `Median erster Klick (URL Details) ≤ Basis ${baseDetail} ms × 1,10 (UI-148)`).toBeLessThanOrEqual(baseDetail * 1.1);
     if (Number.isFinite(baseLinks)) expect(median(links), `Median erster Klick (Inlinks) ≤ Basis ${baseLinks} ms × 1,10 (UI-148)`).toBeLessThanOrEqual(baseLinks * 1.1);
   } finally {
