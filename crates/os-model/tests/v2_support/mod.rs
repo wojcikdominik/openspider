@@ -135,6 +135,7 @@ pub fn change_all_v2_fields(c: &mut CrawlConfig) {
         timeout_s: 20,
         code: "return document.title;".into(),
     }];
+    c.link_positions.store = false;
     c.link_positions.rules = vec![
         LinkPositionRule {
             position: "Breadcrumb".into(),

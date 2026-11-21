@@ -772,6 +772,7 @@ fn random_config(
             ..Default::default()
         },
         link_positions: LinkPositionsConfig {
+            store: b!(),
             rules: (0..(l.next().unwrap() % 3))
                 .map(|_| LinkPositionRule {
                     position: s!(),

@@ -282,6 +282,10 @@ pub struct LinkPositionRule {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct LinkPositionsConfig {
+    /// „Link-Positionen speichern“ (INTEG-083, Standard: an). Aus: Linkzeilen erhalten weder `Link Path` noch
+    /// `Link Position`; das spart Platz in der Crawl-Datei, eine spätere Neuzuordnung (INTEG-082) hat dann keine
+    /// gespeicherten Pfade.
+    pub store: bool,
     /// Regeln von oben nach unten; `Content` (leerer Teilstring) steht als Auffangregel zuletzt.
     pub rules: Vec<LinkPositionRule>,
 }
@@ -293,6 +297,7 @@ impl Default for LinkPositionsConfig {
             contains: contains.iter().map(|s| s.to_string()).collect(),
         };
         LinkPositionsConfig {
+            store: true,
             rules: vec![
                 rule("Navigation", &["nav", "menu"]),
                 rule("Header", &["header"]),
