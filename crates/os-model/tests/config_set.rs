@@ -318,7 +318,7 @@ fn every_settable_key_exists_in_the_configuration() {
         );
     }
     // Listen von Tabellen bzw. Zahlen und Zuordnungen lassen sich nur in der Datei bearbeiten (NotSettable)
-    const STRUCTURED: [&str; 10] = [
+    const STRUCTURED: [&str; 14] = [
         "auth.basic",
         "auth.form",
         "custom_search.filters",
@@ -329,6 +329,11 @@ fn every_settable_key_exists_in_the_configuration() {
         "http.headers",
         "segments.list",
         "compare.mapping",
+        // M4-F01: Fragen-/Promptdokumente (AI-030) und Embedding-Regeln (INTEG-180) nur in der Datei
+        "ai.questions",
+        "ai.prompts",
+        "embeddings.rules",
+        "embeddings.pair_rules",
     ];
     for key in all {
         if STRUCTURED.contains(&key.as_str())

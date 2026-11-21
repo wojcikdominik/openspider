@@ -161,16 +161,21 @@ fn names_aliases_and_file_names_are_unique_across_all_catalogs() {
 
 #[test]
 fn every_entry_names_an_existing_m2_package_as_its_owner() {
-    let path: PathBuf =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/plan/M2-packages.json");
-    let json: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let ids: BTreeSet<String> = json
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|p| p["id"].as_str().unwrap().to_string())
-        .collect();
+    // M2-Pakete und (seit M4-F01) die KI-Pakete aus M4-packages.json.
+    let mut ids: BTreeSet<String> = BTreeSet::new();
+    for file in ["M2-packages.json", "M4-packages.json"] {
+        let path: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/plan")
+            .join(file);
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        ids.extend(
+            json.as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["id"].as_str().unwrap().to_string()),
+        );
+    }
     for e in bulk_tables().iter().chain(report_tables().iter()) {
         assert!(
             ids.contains(e.owner),

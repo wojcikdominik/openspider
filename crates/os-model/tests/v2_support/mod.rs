@@ -373,4 +373,75 @@ pub fn change_all_v2_fields(c: &mut CrawlConfig) {
             moz_free_interval_s: 20,
         };
     }
+    // M4-F01: KI- und Embedding-Abschnitte (AI-011, AI-013, AI-030, AI-077, INTEG-180) und ihre Analyse-Schritte.
+    c.ai.enabled = true;
+    c.ai.questions =
+        vec![serde_json::json!({"id": "page-type", "version": "1.0.0", "type": "choice"})];
+    c.ai.active_questions = vec!["page-type".into()];
+    c.ai.prompts = vec![serde_json::json!({"id": "summary", "version": "1.0.0"})];
+    c.ai.tasks.insert(
+        "decision".into(),
+        TaskModelConfig {
+            model: Some(ModelChoice {
+                provider: "openai".into(),
+                model: "fixture".into(),
+                endpoint: "decisions".into(),
+            }),
+            fallback: vec![ModelChoice {
+                provider: "anthropic".into(),
+                model: "fixture".into(),
+                endpoint: "messages".into(),
+            }],
+            max_tokens: Some(64),
+            temperature: Some(0.5),
+            effort: Some("low".into()),
+            max_input_chars: Some(4000),
+        },
+    );
+    c.ai.policy = AiPolicy::EuOnly;
+    c.ai.suggestions.title = true;
+    c.ai.suggestions.meta = true;
+    c.ai.suggestions.h1 = true;
+    c.ai.suggestions.alt = true;
+    let style = StyleRules {
+        brand: "Fixture".into(),
+        separator: " | ".into(),
+        brand_position: BrandPosition::End,
+        tone: "sachlich".into(),
+        forbidden: vec!["billig".into()],
+        required: vec!["Fixture".into()],
+        casing: Casing::Sentence,
+    };
+    c.ai.suggestions
+        .segment_styles
+        .insert("Shop".into(), style.clone());
+    c.ai.suggestions.style = style;
+    c.ai.budget.crawl = budget::MicroUsd(1_000_000);
+    c.ai.budget.unlimited = true;
+    c.ai.budget
+        .areas
+        .insert("ai".into(), budget::MicroUsd(500_000));
+    c.ai.budget.tasks.insert(
+        "ai".into(),
+        [("suggest-title".to_string(), budget::MicroUsd(100_000))].into(),
+    );
+    c.ai.budget.warning_percent = 70;
+    c.embeddings.enabled = true;
+    c.embeddings.source_prompt = Some("embedding".into());
+    c.embeddings.similarity_enabled = true;
+    c.embeddings.similarity_threshold = 0.9;
+    c.embeddings.low_relevance_enabled = true;
+    c.embeddings.low_relevance_threshold = 0.3;
+    c.embeddings.only_indexable = false;
+    c.embeddings.rules = vec![EmbeddingRule {
+        mode: EmbeddingRuleMode::Include,
+        regex: "shop".into(),
+    }];
+    c.embeddings.compare_within_rule = true;
+    c.embeddings.pair_rules = vec![EmbeddingPairRule {
+        source_regex: "guide".into(),
+        target_regex: "shop".into(),
+    }];
+    c.analysis.embeddings = false;
+    c.analysis.ai_search = false;
 }
