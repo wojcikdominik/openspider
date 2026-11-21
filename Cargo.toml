@@ -126,7 +126,7 @@ ttf-parser = "0.25"
 
 # M2 (docs/plan/M2.md 3.1) – von den Paketen über `workspace = true` eingebunden; Lizenzen gegen deny.toml geprüft (M2-F01)
 # os-analyze (Bitmaps/Permutationen der View-Sitzungen, K-1) und os-app (Segment-/Vergleichsfilter); os-store speichert den view_cache-BLOB opak
-roaring = "0.11"
+roaring = "0.12"
 # os-app: DTOs → apps/desktop/src/ipc/gen/<Typ>.ts; große Ganzzahlen werden als `number` ausgegeben (UrlId < 2^53), siehe os-app dto::export_all
 ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
 # os-render (R01): Chromium über das DevTools-Protokoll
