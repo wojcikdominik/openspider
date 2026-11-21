@@ -1,0 +1,6 @@
+# Abnahme M4-F01 (unabhängig): App-Einstellungen im Stand 1.0 – ohne KI-Abschnitt.
+[general]
+language = "de"
+
+[appearance]
+live_interval_ms = 1000
