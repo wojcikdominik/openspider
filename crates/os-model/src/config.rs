@@ -1170,8 +1170,10 @@ pub struct AnalysisConfig {
 impl Default for AnalysisConfig {
     fn default() -> Self {
         AnalysisConfig {
-            embeddings: false,
-            ai_search: false,
+            // CRAWL-141: jeder Analyse-Schritt ist standardmäßig an. Ohne `embeddings.enabled` bzw. mit
+            // ausgeschaltetem Schalter „KI (Vorschau)“ (os_ai::PreviewSwitch::restrict) laufen sie nicht.
+            embeddings: true,
+            ai_search: true,
             auto_at_end: true,
             link_score: true,
             canonicals: true,
