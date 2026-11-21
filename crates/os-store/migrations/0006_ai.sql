@@ -38,6 +38,7 @@ CREATE TABLE ai_requests (
  price_source TEXT NOT NULL CHECK(price_source IN ('api','table','user','estimate')),
  batch_id INTEGER REFERENCES ai_batches(id), cache_hit INTEGER NOT NULL DEFAULT 0 CHECK(cache_hit IN (0,1)),
  status TEXT NOT NULL, http_status INTEGER, error_code TEXT, error_message TEXT,
+ refusal_reason TEXT CHECK(refusal_reason IS NULL OR length(refusal_reason) <= 500),
  duration_ms INTEGER NOT NULL CHECK(duration_ms >= 0), provider_request_id TEXT,
  retries INTEGER NOT NULL DEFAULT 0 CHECK(retries >= 0),
  over_reservation INTEGER NOT NULL DEFAULT 0 CHECK(over_reservation IN (0,1)),

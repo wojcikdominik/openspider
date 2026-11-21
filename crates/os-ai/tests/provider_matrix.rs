@@ -306,3 +306,42 @@ fn preview_switch_off_disables_every_ai_step_of_a_profile() {
     PreviewSwitch::ON.restrict(&mut unchanged);
     assert_eq!(unchanged, profile);
 }
+
+// spec: AI-001
+// OpenAI Decisions: „Decisions (Text und Bild)“ – ein Bild in einer Entscheidungsfrage braucht keine Vision-Fähigkeit,
+// jede andere Bildanfrage weiterhin schon.
+#[tokio::test]
+async fn decision_requests_carry_images_without_vision_but_other_image_requests_still_need_it() {
+    let model = fixture()
+        .into_iter()
+        .find(|m| m.endpoint == "decisions")
+        .unwrap();
+    let mut decisions_only = model.clone();
+    decisions_only.capabilities = Capabilities {
+        decisions: true,
+        ..Capabilities::default()
+    };
+    let stub = Stub {
+        model: decisions_only.clone(),
+        calls: AtomicUsize::new(0),
+    };
+    let image = Input::Image {
+        media_type: "image/png".into(),
+        base64: "fixture".into(),
+    };
+    let mut decision = request(decisions_only.clone());
+    decision.required.decisions = true;
+    decision.questions = vec![json!({"name":"ok","type":"predicate","instructions":"Is this OK?"})];
+    decision.input.push(image.clone());
+    assert!(matches!(
+        execute(PreviewSwitch::ON, &stub, decision).await,
+        Outcome::Completed(_)
+    ));
+    let mut plain = request(decisions_only);
+    plain.input.push(image);
+    assert_eq!(
+        execute(PreviewSwitch::ON, &stub, plain).await,
+        Outcome::Status(AiStatus::SkippedNoCapableModel)
+    );
+    assert_eq!(stub.calls.load(Ordering::SeqCst), 1);
+}

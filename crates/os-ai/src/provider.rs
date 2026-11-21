@@ -65,10 +65,12 @@ pub struct Request {
 }
 impl Request {
     /// Derive mandatory requirements from the payload too, preventing a misdeclared image request.
+    /// AI-001: the Decisions capability covers text *and* image input, so an image in a decision request needs
+    /// `decisions` (already required), not `vision`; every other image request still needs `vision`.
     pub fn requirements(&self) -> Capabilities {
+        let has_image = self.input.iter().any(|v| matches!(v, Input::Image { .. }));
         Capabilities {
-            vision: self.required.vision
-                || self.input.iter().any(|v| matches!(v, Input::Image { .. })),
+            vision: self.required.vision || (has_image && !self.required.decisions),
             structured_output: self.required.structured_output || self.response_schema.is_some(),
             ..self.required
         }
