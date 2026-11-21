@@ -51,12 +51,12 @@ Fehlt eines dieser Apple-Elemente, endet der Signierjob mit grünem Status, eine
 
 Fehlt der private oder öffentliche Schlüssel, werden Updater-Artefakte ausdrücklich übersprungen; signierte DMGs entstehen weiterhin. Ein falscher Schlüssel oder ein falsches Passwort ist dagegen ein Buildfehler. Schlüssel werden weder gedruckt noch in Artefakte geschrieben. Die temporäre Build-Konfiguration enthält nur den öffentlichen Schlüssel und den Endpunkt.
 
-`channel=stable` verwendet `https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json`, `channel=beta` verwendet dort `latest-beta.json` (K3-03/K3-04). Der Build-Job erhält `OPENSPIDER_UPDATER_PUBKEY` aus der Repository-Variable und `OPENSPIDER_UPDATE_BETA=1` für Beta bzw. `0` für Stable; beide Werte stehen auch dem Tauri-/Rust-Build zur Verfügung. Der Workflow erzeugt keine Update-Manifeste und veröffentlicht nichts. R04 ordnet die architekturspezifischen Archive den Schlüsseln `darwin-aarch64` und `darwin-x86_64` zu; das Universal-Archiv bleibt optionales Zusatzasset. Die URL- und Signaturprüfung zur Laufzeit liegt bei U01/U02.
+Seit 1.0.1 (K3-16, OUT-254) gibt es keinen Build-Kanal mehr: Die temporäre Konfiguration trägt beide festen Endpunkte, `https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json` (stabil) und `https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json` (Beta); die App wählt zur Laufzeit nach `updates.channel`. Die Eingabe `channel` und `OPENSPIDER_UPDATE_BETA` entfallen. Der Build-Job erhält `OPENSPIDER_UPDATER_PUBKEY` aus der Repository-Variable. Der Workflow erzeugt keine Update-Manifeste und veröffentlicht nichts. R04 ordnet die architekturspezifischen Archive den Schlüsseln `darwin-aarch64` und `darwin-x86_64` zu; das Universal-Archiv bleibt optionales Zusatzasset. Die URL- und Signaturprüfung zur Laufzeit liegt bei U01/U02.
 
 ## Auslösen und Schnittstelle für R04
 
-- `workflow_dispatch`: `arch=all` (Standard), `aarch64`, `x86_64` oder `universal`; `channel=beta` (Standard) oder `stable`; `version` optional; `run_tests` (Boolean, Standard `true`).
-- `workflow_call`: `version` (String, optional), `channel` (String, Standard `stable`) und `run_tests` (Boolean, Standard `true`); erzeugt immer alle drei Architekturen. Secrets ausdrücklich übergeben oder `secrets: inherit` verwenden.
+- `workflow_dispatch`: `arch=all` (Standard), `aarch64`, `x86_64` oder `universal`; `version` optional; `run_tests` (Boolean, Standard `true`).
+- `workflow_call`: `version` (String, optional) und `run_tests` (Boolean, Standard `true`); erzeugt immer alle drei Architekturen. Secrets ausdrücklich übergeben oder `secrets: inherit` verwenden.
 - `version` muss der bereits vorbereiteten Workspace-Version entsprechen. Version und Lockfile setzt der Aufrufer vor dem Build; der Workflow prüft den Gleichstand, ohne Abhängigkeiten zu verändern.
 - Ausgabe `artifact_names`: JSON-Liste der tatsächlich hochgeladenen `openspider-macos-aarch64`, `openspider-macos-x86_64`, `openspider-macos-universal`; bei fehlender Apple-Konfiguration `[]`. Der Aufrufer benötigt `contents: read` und `actions: read`.
 - Kein Tag-Auslöser: Release-Tags verarbeitet künftig ausschließlich R04 (`release.yml`).
@@ -64,9 +64,9 @@ Fehlt der private oder öffentliche Schlüssel, werden Updater-Artefakte ausdrü
 - Alle verwendeten Actions sind auf Commit-SHAs fixiert; der Kommentar nennt den aufgelösten Tag bzw. den `stable`-Branch von `dtolnay/rust-toolchain`.
 
 ```sh
-gh workflow run release-macos.yml --ref m3/r01 -f arch=all -f channel=beta
+gh workflow run release-macos.yml --ref m3/r01 -f arch=all
 # Mit vorbereiteter Version:
-gh workflow run release-macos.yml --ref m3/r01 -f arch=all -f channel=beta -f version=1.0.0-beta.1
+gh workflow run release-macos.yml --ref m3/r01 -f arch=all -f version=1.0.0-beta.1
 ```
 
 Jedes Artefakt enthält ein DMG, `verify-app.log`, `verify-dmg.log` und bei vorhandenen Updater-Schlüsseln genau ein `OpenSpider_<arch>.app.tar.gz` mit zugehörigem `.sig`. Die Architekturnamen verhindern Namenskollisionen beim Zusammenführen der Release-Assets. Die drei Archive kommen aus getrennten Tauri-Zielverzeichnissen und bleiben zusammen mit ihrer Signatur unverändert.
@@ -75,7 +75,7 @@ Jedes Artefakt enthält ein DMG, `verify-app.log`, `verify-dmg.log` und bei vorh
 
 1. Native Tests (Rust fmt/Clippy/Workspace-Tests, Frontend-Typen/Tests/statische Prüfungen mit Lizenzprüfung, Chromium/WebKit als Testwerkzeuge). Für die Tauri-Testkonfiguration wird zuerst die CLI als Sidecar gebaut. Tests lesen nur den Memory-SecretStore.
 2. Apple-Konfiguration prüfen, Checkout, Rust mit beiden Darwin-Zielen, Node 22 und `npm ci`.
-3. Workspace-Version prüfen und Kanal/öffentlichen Updater-Schlüssel über eine temporäre Tauri-Konfiguration setzen; ohne Schlüssel `createUpdaterArtifacts=false`.
+3. Workspace-Version prüfen und beide Kanal-Endpunkte samt öffentlichem Updater-Schlüssel über eine temporäre Tauri-Konfiguration setzen; ohne Schlüssel `createUpdaterArtifacts=false`.
 4. CLI `openspider` mit `cargo build -p os-cli --bin openspider --release --target … -j 4 --locked` bauen. Sidecar-Dateinamen tragen den Ziel-Triple-Suffix. Für Universal erzeugt `lipo -create` zusätzlich `openspider-universal-apple-darwin` aus beiden CLI-Binaries. Tauri baut die Universal-App selbst aus beiden Zielen.
 5. Temporären Schlüsselbund anlegen, .p12 importieren, Codesign-Zugriff erlauben. Kein zweiter Zertifikatsimport durch Tauri.
 6. Tauri baut `app,dmg`, signiert die App einschließlich Sidecar mit Hardened Runtime, notarisiert und heftet das App-Ticket. Tauri erzeugt und signiert auch die Updater-Archive, sofern aktiviert. `MACOSX_DEPLOYMENT_TARGET=13.0`; Builds bleiben `--locked`, Parallelität vier.

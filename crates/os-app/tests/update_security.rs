@@ -120,20 +120,39 @@ fn rejection_emits_a_warning_without_payload_or_key_material() {
 }
 
 // spec: OUT-252
+// spec: OUT-254
 #[test]
-fn build_beta_variable_selects_endpoint_and_manifest_policy_together() {
-    let context = os_app::update::UpdateContext::default();
-    let beta = option_env!("OPENSPIDER_UPDATE_BETA") == Some("1");
-    assert_eq!(context.beta, beta);
-    assert_eq!(
-        context.endpoint,
-        if beta {
-            "https://github.com/wojcikdominik/openspider/releases/latest/download/latest-beta.json"
-        } else {
-            "https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json"
-        }
-    );
+fn runtime_channel_selects_endpoint_and_manifest_policy_together() {
+    // OUT-254 (K3-16): the channel is the app setting `updates.channel`, no longer the build variable
+    // OPENSPIDER_UPDATE_BETA; endpoint and manifest policy follow the same effective channel.
+    use os_app::update::policy::{BETA_ENDPOINT, STABLE_ENDPOINT};
     let mut manifest: UpdateManifest = serde_json::from_str(MANIFEST).unwrap();
     manifest.version = "1.1.0-beta.1".parse().unwrap();
-    assert_eq!(manifest.validate(context.beta).is_ok(), beta);
+    for (stored, current, beta) in [
+        (None, "1.0.1", false),
+        (None, "1.1.0-beta.1", true),
+        (Some("stable"), "1.1.0-beta.3", false),
+        (Some("beta"), "1.0.1", true),
+        (Some("nightly"), "1.0.1", false),
+    ] {
+        let context = os_app::update::UpdateContext {
+            current: current.parse().unwrap(),
+            settings: os_model::settings::UpdateSettings {
+                channel: stored.map(str::to_owned),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let channel = context.channel();
+        assert_eq!(
+            context.channel_endpoint(),
+            if beta { BETA_ENDPOINT } else { STABLE_ENDPOINT },
+            "{stored:?} {current}"
+        );
+        assert_eq!(
+            manifest.validate(channel.allows_prerelease()).is_ok(),
+            beta,
+            "{stored:?} {current}"
+        );
+    }
 }

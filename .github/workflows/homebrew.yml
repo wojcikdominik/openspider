@@ -35,6 +35,9 @@ concurrency:
 jobs:
   generate:
     name: Casks erzeugen
+    # OUT-261 (K3-16): Das Hilfs-Release update-beta trägt nur das Beta-Manifest, keine Version; überspringen.
+    # Abhängige Jobs (check, publish) entfallen damit ebenfalls.
+    if: github.event_name != 'release' || github.event.release.tag_name != 'update-beta'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

@@ -145,6 +145,9 @@ const CATALOG_3_6A: &[&str] = &[
     "update.download",
     "update.install",
     "update.set_auto",
+    // OUT-254 / UI-131 (Fix-Release 1.0.1): Update-Kanal.
+    "update.channel",
+    "update.set_channel",
     // M3-K01 (K3-01): Chromium-Bereitstellung.
     "chromium.status",
     "chromium.download",

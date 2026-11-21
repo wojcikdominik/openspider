@@ -1,0 +1,4 @@
+# OUT-254 Abnahme (unabhängig): Profil stable
+[updates]
+check = true
+channel = "stable"

@@ -1,0 +1,4 @@
+# OUT-254 Abnahme (unabhängig): Profil beta
+[updates]
+check = true
+channel = "beta"

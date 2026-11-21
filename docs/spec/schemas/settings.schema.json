@@ -112,6 +112,7 @@
       "description": "Automatische Update-Prüfung (OUT-250), ausschließlich app-weit.",
       "$ref": "#/$defs/UpdateSettings",
       "default": {
+        "channel": null,
         "check": true,
         "last_check": null,
         "skipped_version": null
@@ -496,6 +497,14 @@
       "description": "Update-Einstellungen (OUT-250, OUT-222); nie Teil eines Konfigurationsprofils.",
       "type": "object",
       "properties": {
+        "channel": {
+          "description": "OUT-254: Update-Kanal `stable` oder `beta`. Ohne Standardwert in der Datei: fehlt der Schlüssel, gilt die\nStandardregel (Vorabversion → `beta`, sonst `stable`). Der Rohwert bleibt erhalten, auch wenn er ungültig ist\n(er gilt dann als nicht gesetzt, Warnung im Log); ausgewertet wird er in `os_app::update::policy`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "check": {
           "type": "boolean",
           "default": true

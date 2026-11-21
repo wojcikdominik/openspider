@@ -112,6 +112,87 @@ impl MockApi for UpdateMock {
 pub async fn https_fixture() -> std::io::Result<crate::TestSite> {
     crate::TestSite::start("update").await
 }
+
+/// Manifest path of the `stable` channel on the channel fixture (OUT-254).
+pub const STABLE_CHANNEL_PATH: &str = "/stable/latest.json";
+/// Manifest path of the `beta` channel on the channel fixture (OUT-254).
+pub const BETA_CHANNEL_PATH: &str = "/beta/latest-beta.json";
+
+/// Manifest JSON of `version` with the signed fixture artifact (HTTPS URLs), as served on the channel paths.
+pub fn channel_manifest(version: &str) -> Value {
+    manifest(
+        version,
+        "https",
+        include_str!("../../../../tests/fixtures/update/artifact.sig").trim(),
+    )
+}
+
+/// OUT-254: HTTPS mock with one manifest path per channel ([`STABLE_CHANNEL_PATH`], [`BETA_CHANNEL_PATH`]), versions
+/// set per test (`None` = path answers 404) and a request log per path. Uses TestSite's ephemeral CA.
+pub struct ChannelFixture {
+    pub site: crate::TestSite,
+}
+impl ChannelFixture {
+    pub async fn start(stable: Option<&str>, beta: Option<&str>) -> std::io::Result<Self> {
+        #[derive(serde::Serialize)]
+        struct Route {
+            path: &'static str,
+            body: String,
+            content_type: &'static str,
+        }
+        #[derive(serde::Serialize)]
+        struct Scenario {
+            route: Vec<Route>,
+        }
+        let route = [(STABLE_CHANNEL_PATH, stable), (BETA_CHANNEL_PATH, beta)]
+            .into_iter()
+            .filter_map(|(path, version)| {
+                version.map(|v| Route {
+                    path,
+                    body: channel_manifest(v).to_string(),
+                    content_type: "application/json",
+                })
+            })
+            .collect();
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "os-update-channels-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir)?;
+        let scenario = toml::to_string(&Scenario { route })
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(dir.join("scenario.toml"), scenario)?;
+        let site = crate::TestSite::start_dir(&dir, 0).await;
+        // Routes live in memory; without the directory every other path answers 404.
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(Self { site: site? })
+    }
+    /// HTTPS manifest URL of the `stable` channel.
+    pub fn stable_url(&self) -> String {
+        format!("{}{STABLE_CHANNEL_PATH}", self.site.https_base_url())
+    }
+    /// HTTPS manifest URL of the `beta` channel.
+    pub fn beta_url(&self) -> String {
+        format!("{}{BETA_CHANNEL_PATH}", self.site.https_base_url())
+    }
+    /// Requests on the `stable` path (query ignored).
+    pub fn stable_requests(&self) -> usize {
+        self.requests_on(STABLE_CHANNEL_PATH)
+    }
+    /// Requests on the `beta` path (query ignored).
+    pub fn beta_requests(&self) -> usize {
+        self.requests_on(BETA_CHANNEL_PATH)
+    }
+    fn requests_on(&self, path: &str) -> usize {
+        self.site
+            .requests()
+            .iter()
+            .filter(|r| r.path() == path)
+            .count()
+    }
+}
 /// Loopback-only CONNECT proxy: forwards TLS unchanged, records CONNECT request headers.
 pub struct FixtureProxy {
     pub addr: std::net::SocketAddr,
@@ -190,6 +271,58 @@ mod tests {
         let mut data = Vec::new();
         stream.read_to_end(&mut data).await.unwrap();
         String::from_utf8(data).unwrap()
+    }
+
+    // spec: OUT-254
+    #[tokio::test]
+    async fn channel_fixture_serves_one_manifest_per_channel_and_logs_each_path() {
+        let fixture = ChannelFixture::start(Some("1.0.2"), Some("1.1.0-beta.1"))
+            .await
+            .unwrap();
+        assert!(fixture.stable_url().ends_with("/stable/latest.json"));
+        assert!(fixture.beta_url().ends_with("/beta/latest-beta.json"));
+        assert!(fixture.stable_url().starts_with("https://"));
+        for (path, version) in [
+            (STABLE_CHANNEL_PATH, "1.0.2"),
+            (BETA_CHANNEL_PATH, "1.1.0-beta.1"),
+        ] {
+            let mut stream = tokio::net::TcpStream::connect(fixture.site.addr())
+                .await
+                .unwrap();
+            stream
+                .write_all(
+                    format!("GET {path}?version=1.0.1 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let mut data = Vec::new();
+            stream.read_to_end(&mut data).await.unwrap();
+            let raw = String::from_utf8(data).unwrap();
+            assert!(raw.starts_with("HTTP/1.1 200"), "{raw}");
+            let body: Value = serde_json::from_str(raw.split_once("\r\n\r\n").unwrap().1).unwrap();
+            assert_eq!(body["version"], version);
+        }
+        assert_eq!((fixture.stable_requests(), fixture.beta_requests()), (1, 1));
+        // A channel without a manifest answers 404 and still counts its request.
+        let only_stable = ChannelFixture::start(Some("1.0.1"), None).await.unwrap();
+        let mut stream = tokio::net::TcpStream::connect(only_stable.site.addr())
+            .await
+            .unwrap();
+        stream
+            .write_all(
+                format!("GET {BETA_CHANNEL_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                    .as_bytes(),
+            )
+            .await
+            .unwrap();
+        let mut data = Vec::new();
+        stream.read_to_end(&mut data).await.unwrap();
+        assert!(String::from_utf8(data).unwrap().starts_with("HTTP/1.1 404"));
+        assert_eq!(
+            (only_stable.stable_requests(), only_stable.beta_requests()),
+            (0, 1)
+        );
     }
 
     // spec: OUT-250 [M3]

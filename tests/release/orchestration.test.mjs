@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { manifests } from '../../scripts/release/manifest.mjs';
+import { manifests, manifestFiles } from '../../scripts/release/manifest.mjs';
 import { checksums } from '../../scripts/release/checksums.mjs';
 import { releaseNotes, releaseBody, checkNotes, versionNotes, withChangelogSection, feedbackLink, notesPath, changelogSection, updateNotes, updateNotesWarnings, splitNotesDocument, compareVersions, FIRST_SHORT_NOTES } from '../../scripts/release/notes.mjs';
 import { downloads, isPublished } from '../../scripts/release/assets.mjs';
@@ -40,15 +40,38 @@ test('Manifest liefert pro Architektur und Windows-Installer genau das passende 
     assert.equal(entry.signature, signature);
     assert.equal(entry.url, `https://github.com/example/openspider/releases/download/v1.0.0-beta.0/${fixtures[i]}`);
   });
-  assert.equal(readFileSync(join(options.directory, 'latest.json'), 'utf8'), readFileSync(join(options.directory, 'latest-beta.json'), 'utf8'));
+  // spec: OUT-254, OUT-261 (K3-16): Beta-Release ohne latest.json.
+  assert.ok(!readdirSync(options.directory).includes('latest.json'));
 });
 
-test('Stabiler Release aktualisiert auch den Beta-Endpunkt', t => {
+// spec: OUT-254
+// spec: OUT-261
+test('Stabiler Release trägt latest.json und latest-beta.json bytegleich (Übergang für Clients bis 1.0.0)', t => {
   const options = fixture(t);
-  manifests({ ...options, version: '1.0.0' });
+  const result = manifests({ ...options, version: '1.0.1' });
+  assert.deepEqual(result.files, ['latest.json', 'latest-beta.json']);
   for (const file of ['latest.json', 'latest-beta.json']) {
-    assert.equal(JSON.parse(readFileSync(join(options.directory, file))).version, '1.0.0');
+    const manifest = JSON.parse(readFileSync(join(options.directory, file)));
+    assert.equal(manifest.version, '1.0.1');
+    for (const entry of Object.values(manifest.platforms)) assert.match(entry.url, /\/releases\/download\/v1\.0\.1\//);
   }
+  assert.deepEqual(readFileSync(join(options.directory, 'latest.json')), readFileSync(join(options.directory, 'latest-beta.json')));
+});
+
+// spec: OUT-254
+// spec: OUT-261
+test('Beta- und RC-Release tragen nur latest-beta.json, auch nach einem vorherigen stabilen Lauf im selben Ordner', t => {
+  const options = fixture(t);
+  manifests({ ...options, version: '1.0.1' });
+  for (const version of ['1.1.0-beta.1', '1.1.0-rc.1']) {
+    const result = manifests({ ...options, version });
+    assert.deepEqual(result.files, ['latest-beta.json']);
+    const names = readdirSync(options.directory).filter(n => n.startsWith('latest'));
+    assert.deepEqual(names, ['latest-beta.json'], version);
+    assert.equal(JSON.parse(readFileSync(join(options.directory, 'latest-beta.json'))).version, version);
+  }
+  assert.deepEqual(manifestFiles('1.0.0'), ['latest.json', 'latest-beta.json']);
+  assert.deepEqual(manifestFiles('1.0.0-beta.4'), ['latest-beta.json']);
 });
 
 test('Ohne Secrets grün und unsigniert, ohne leere oder veraltete Manifeste', t => {
@@ -165,10 +188,12 @@ test('Trockenlauf v1.0.0-beta.0: Skript-CLIs erzeugen beide Manifeste, Notes und
   assert.ok(!readdirSync(options.directory).includes('updater-status.txt'));
   run('checksums', options.directory);
   assert.equal(JSON.parse(readFileSync(join(options.directory, 'latest-beta.json'))).notes, expected);
-  assert.equal(JSON.parse(readFileSync(join(options.directory, 'latest.json'))).version, '1.0.0-beta.0');
+  assert.equal(JSON.parse(readFileSync(join(options.directory, 'latest-beta.json'))).version, '1.0.0-beta.0');
+  // spec: OUT-261 (K3-16): Beta ohne latest.json → 4 Pakete, 4 Signaturen, 1 Manifest.
+  assert.ok(!readdirSync(options.directory).includes('latest.json'));
   const verification = spawnSync('sha256sum', ['-c', 'SHA256SUMS'], { cwd: options.directory, encoding: 'utf8' });
   assert.equal(verification.status, 0, verification.stderr);
-  assert.equal(verification.stdout.trim().split('\n').length, 10);
+  assert.equal(verification.stdout.trim().split('\n').length, 9);
 });
 
 // spec: OUT-273 [M3]
@@ -245,14 +270,63 @@ test('linux-core baut ohne Debuginfo und bricht vor dem Testlauf bei knappem Spe
   }
 });
 
-test('Orchestrierung übergibt Beta-Kanal an R01/R02 mit einheitlicher Build-Variable', () => {
+// spec: OUT-254 (K3-16): kein Build-Kanal mehr; beide Kanal-Endpunkte fest in jedem Build.
+test('Orchestrierung übergibt keinen Build-Kanal; macOS und Windows legen beide festen Kanal-Endpunkte in die App', () => {
+  const stable = 'https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json';
+  const beta = 'https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json';
   const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
   for (const platform of ['macos', 'windows']) {
     const job = workflow.split(`  ${platform}:\n`)[1].split(/\n  [a-z][a-z-]*:/)[0];
-    assert.match(job, /channel: \$\{\{ needs.prepare.outputs.channel \}\}/);
-    const child = readFileSync(join(root, `.github/workflows/release-${platform}.yml`), 'utf8');
-    assert.match(child, /OPENSPIDER_UPDATE_BETA: \$\{\{ (?:inputs.channel|\(inputs.channel \|\| 'beta'\)) == 'beta' && '1' \|\| '0' \}\}/);
+    assert.doesNotMatch(job, /channel:/);
   }
+  for (const file of ['release.yml', 'release-macos.yml', 'release-windows.yml']) {
+    const text = readFileSync(join(root, '.github/workflows', file), 'utf8');
+    assert.doesNotMatch(text, /OPENSPIDER_UPDATE_BETA|inputs\.channel|BUILD_CHANNEL|-Channel/, file);
+  }
+  const macos = readFileSync(join(root, '.github/workflows/release-macos.yml'), 'utf8');
+  assert.ok(macos.indexOf(`'${stable}'`) > 0 && macos.indexOf(`'${stable}'`) < macos.indexOf(`'${beta}'`), 'macOS: stabil, dann beta');
+  const windows = readFileSync(join(root, 'apps/desktop/src-tauri/windows/build-config.ps1'), 'utf8');
+  assert.ok(windows.indexOf(`'${stable}'`) > 0 && windows.indexOf(`'${stable}'`) < windows.indexOf(`'${beta}'`), 'Windows: stabil, dann beta');
+  assert.doesNotMatch(windows, /\$Channel|latest\$|releases\/latest\/download\/latest-beta/);
+});
+
+// spec: OUT-254
+// spec: OUT-261
+test('Entwurf nur mit kanalgerechten Manifesten: Beta ohne latest.json, stabil mit beiden bytegleich', t => {
+  const script = step('Kanal-Manifeste prüfen (OUT-254, OUT-261)');
+  const directory = mkdtempSync(join(tmpdir(), 'openspider-channel-check-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const assets = join(directory, 'release-assets');
+  const check = (version, files) => {
+    rmSync(assets, { recursive: true, force: true });
+    mkdirSync(assets);
+    for (const [name, value] of Object.entries(files)) writeFileSync(join(assets, name), value);
+    return spawnSync('bash', ['-c', script], { cwd: directory, encoding: 'utf8', env: { ...process.env, VERSION: version } });
+  };
+  const body = version => `${JSON.stringify({ version, platforms: {} }, null, 2)}\n`;
+  const ok = [
+    ['1.1.0-beta.1', { 'latest-beta.json': body('1.1.0-beta.1') }],
+    ['1.0.1', { 'latest.json': body('1.0.1'), 'latest-beta.json': body('1.0.1') }],
+    ['1.0.1', {}], // unsigniert: keine Manifeste
+    ['1.1.0-beta.1', {}],
+  ];
+  for (const [version, files] of ok) assert.equal(check(version, files).status, 0, `${version} ${Object.keys(files)}`);
+  const bad = [
+    ['1.1.0-beta.1', { 'latest.json': body('1.1.0-beta.1'), 'latest-beta.json': body('1.1.0-beta.1') }, /enthält latest\.json/],
+    ['1.0.1', { 'latest.json': body('1.0.1') }, /braucht latest\.json und latest-beta\.json/],
+    ['1.0.1', { 'latest-beta.json': body('1.0.1') }, /braucht latest\.json und latest-beta\.json/],
+    ['1.0.1', { 'latest.json': body('1.0.1'), 'latest-beta.json': body('1.0.1').replace('\n}', ',"x":1\n}') }, /unterscheiden sich/],
+    ['1.0.1', { 'latest.json': body('1.0.0'), 'latest-beta.json': body('1.0.0') }, /nennt nicht die Version 1\.0\.1/],
+    ['1.1.0-beta.2', { 'latest-beta.json': body('1.1.0-beta.1') }, /nennt nicht die Version/],
+  ];
+  for (const [version, files, message] of bad) {
+    const result = check(version, files);
+    assert.notEqual(result.status, 0, `${version} ${Object.keys(files)}`);
+    assert.match(result.stdout + result.stderr, message);
+  }
+  // Der Schritt steht im Entwurfs-Job vor dem Anlegen des Entwurfs.
+  const draft = releaseWorkflow().split('\n  draft:\n')[1];
+  assert.ok(draft.indexOf('Kanal-Manifeste prüfen') < draft.indexOf('gh release create'));
 });
 
 
@@ -436,7 +510,9 @@ test('Release-Text beginnt mit dem Download-Kasten; Update-Manifeste enthalten n
   assert.equal(result.status, 0, result.stderr);
   const changelog = releaseNotes(readFileSync(join(root, 'CHANGELOG.md'), 'utf8'), version);
   assert.equal(readFileSync(join(directory, 'release-reports/update-notes.md'), 'utf8'), changelog);
-  for (const file of ['latest.json', 'latest-beta.json']) {
+  // spec: OUT-261 (K3-16): der Beta-Lauf erzeugt nur latest-beta.json.
+  assert.deepEqual(readdirSync(join(directory, 'release-assets')).filter(n => n.startsWith('latest')), manifestFiles(version));
+  for (const file of manifestFiles(version)) {
     const manifestNotes = JSON.parse(readFileSync(join(directory, 'release-assets', file))).notes;
     assert.equal(manifestNotes, changelog);
     assert.doesNotMatch(manifestNotes, /## Download|Datei \/ File|Neu in dieser Version|Entwurfshinweise|Installations-Smoke/);
@@ -449,6 +525,8 @@ test('Release-Text beginnt mit dem Download-Kasten; Update-Manifeste enthalten n
   const summary = readFileSync(join(directory, 'summary'), 'utf8');
   assert.match(summary, /\*\*Entwurfshinweise \(nicht Teil des Release-Texts\):\*\*/);
   assert.match(summary, /^- Installations-Smoke:/m);
+  // spec: OUT-261 (K3-16): ein signierter Beta-Lauf hat kein latest.json und gilt trotzdem nicht als unsigniert.
+  assert.doesNotMatch(summary, /unsigniert/);
   assert.match(readFileSync(join(directory, 'release-reports/entwurfshinweise.md'), 'utf8'), /^- Installations-Smoke:/m);
   // Without complete signed updater artifacts the "unsigniert" hint also lands in the summary only.
   rmSync(join(directory, 'release-assets', `${fixtures[0]}.sig`));

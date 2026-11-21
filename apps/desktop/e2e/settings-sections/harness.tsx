@@ -24,6 +24,25 @@ if (core) {
   core.handlers.set("settings.importCertificates", () => ["/fixture/certificate.pem"]);
   core.handlers.set("settings.setProxyPassword", () => null);
   core.handlers.set("api.list", () => []);
+  // UI-131 / OUT-254: injected running version (`?version=`), environment lock (`?updateEnv=1`) and a failing save
+  // (`?channelFails=1`). The channel is stored through `settings.set`, so it survives a reload like settings.toml.
+  const query = new URLSearchParams(location.search);
+  const version = query.get("version") ?? "1.0.1";
+  const channelState = () => {
+    const raw = core.settings.updates.channel;
+    const prerelease = /^[^+]*-/.test(version);
+    return { channel: raw === "stable" || raw === "beta" ? raw : prerelease ? "beta" : "stable", version: version.split("+")[0], prerelease };
+  };
+  core.handlers.set("update.status", () => query.get("updateEnv") === "1" ? { disabled: "environment" } : "idle");
+  core.handlers.set("update.channel", () => channelState());
+  core.handlers.set("update.set_channel", async (args, ctx) => {
+    if (query.get("channelFails") === "1") throw new Error("settings.toml not writable");
+    await ctx.core.transport(ctx.window).invoke("settings.set", { patch: { updates: { channel: (args as { channel: string }).channel } } });
+    return channelState();
+  });
+  core.handlers.set("update.set_auto", async (args, ctx) => {
+    await ctx.core.transport(ctx.window).invoke("settings.set", { patch: { updates: { check: (args as { check: boolean }).check } } });
+  });
 }
 const api = {
   invoke: (command: string, args?: unknown) => client.invoke(command, args),

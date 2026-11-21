@@ -127,16 +127,17 @@ export interface RadioOption {
   label: string;
 }
 
-export function RadioGroup({ label, value, onChange, options, orientation = "vertical", anchor }: {
+export function RadioGroup({ label, value, onChange, options, orientation = "vertical", anchor, isDisabled }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly RadioOption[];
   orientation?: "horizontal" | "vertical";
   anchor?: string;
+  isDisabled?: boolean;
 }) {
   return (
-    <RacRadioGroup className="os-radio-group" value={value} onChange={onChange} orientation={orientation} data-setting-anchor={anchor}>
+    <RacRadioGroup className="os-radio-group" value={value} onChange={onChange} orientation={orientation} isDisabled={isDisabled} data-setting-anchor={anchor}>
       <Label className="os-label">{label}</Label>
       <div className="os-radio-items">
         {options.map((o) => (

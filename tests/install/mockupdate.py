@@ -111,7 +111,12 @@ def make_certs(out, openssl=None, days=7):
 
 # --- Szenarien ----------------------------------------------------------------------------------
 def read_manifest(assets):
-    """Kanal-Manifest eines ``release-assets``-Ordners; beide Dateien müssen gleich sein (K3-04)."""
+    """Kanal-Manifest eines ``release-assets``-Ordners; vorhandene Dateien müssen gleich sein.
+
+    K3-16 (OUT-254/OUT-261): ein stabiles Release trägt ``latest.json`` und ``latest-beta.json`` bytegleich,
+    eine Beta nur ``latest-beta.json``. Ältere Trockenläufe (K3-04, bis 1.0.0) tragen beide Dateien auch bei Betas;
+    die Kanalregel prüft der Release-Lauf (Schritt „Kanal-Manifeste prüfen“), nicht dieser Mock.
+    """
     assets = Path(assets)
     found = {n: json.loads((assets / n).read_text(encoding='utf-8'))
              for n in ('latest.json', 'latest-beta.json') if (assets / n).is_file()}
@@ -132,7 +137,7 @@ def prepare(current, nxt, out, current_version=None):
     out.mkdir(parents=True, exist_ok=True)
     manifest = read_manifest(nxt)
     if manifest is None:
-        raise ValueError('N+1 enthält kein latest.json: Trockenlauf ohne signierte Updater-Artefakte')
+        raise ValueError('N+1 enthält kein Kanal-Manifest: Trockenlauf ohne signierte Updater-Artefakte')
     version_next = manifest['version']
     version_current = current_version or detect_version(current)
     if semver_key(version_next) <= semver_key(version_current):
@@ -163,7 +168,10 @@ def prepare(current, nxt, out, current_version=None):
             raise ValueError(f'Signatur im Manifest weicht von {filename}.sig ab')
         artifacts[key] = dict(url=entry['url'], path=str(path.resolve()), size=path.stat().st_size,
                               request_path=url.path, flip=path.stat().st_size // 2)
+    # Builds bis 1.0.0 lesen releases/latest/download/…; ab 1.0.1 liest der Beta-Kanal das feste Hilfs-Release
+    # update-beta (OUT-254). Reihenfolge: stabil, Beta (bis 1.0.0), Beta (ab 1.0.1).
     endpoints = [f'/{repo}/releases/latest/download/{n}' for n in ('latest.json', 'latest-beta.json')]
+    endpoints.append(f'/{repo}/releases/download/update-beta/latest-beta.json')
 
     def with_manifest(value, flip=False):
         routes = {p: dict(status=200, json=value) for p in endpoints}

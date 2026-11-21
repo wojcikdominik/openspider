@@ -472,6 +472,10 @@ pub struct UpdateSettings {
     pub last_check: Option<String>,
     /// OUT-251: version skipped in the update dialog; automatic checks do not report it again.
     pub skipped_version: Option<String>,
+    /// OUT-254: Update-Kanal `stable` oder `beta`. Ohne Standardwert in der Datei: fehlt der Schlüssel, gilt die
+    /// Standardregel (Vorabversion → `beta`, sonst `stable`). Der Rohwert bleibt erhalten, auch wenn er ungültig ist
+    /// (er gilt dann als nicht gesetzt, Warnung im Log); ausgewertet wird er in `os_app::update::policy`.
+    pub channel: Option<String>,
 }
 impl Default for UpdateSettings {
     fn default() -> Self {
@@ -479,6 +483,10 @@ impl Default for UpdateSettings {
             check: true,
             last_check: None,
             skipped_version: None,
+            channel: None,
         }
     }
 }
+
+/// Gültige Werte von `updates.channel` (OUT-254).
+pub const UPDATE_CHANNELS: [&str; 2] = ["stable", "beta"];

@@ -103,16 +103,17 @@ fn main() {
     )
     .expect("tauri.conf.json invalid");
     let key = std::env::var("OPENSPIDER_UPDATER_PUBKEY").ok();
-    let beta = std::env::var("OPENSPIDER_UPDATE_BETA").ok();
     let repo = std::env::var("OPENSPIDER_UPDATE_REPO").ok();
-    let missing_key = build_update::configure(
-        &mut config,
-        &base,
-        key.as_deref(),
-        beta.as_deref(),
-        repo.as_deref(),
-    )
-    .unwrap_or_else(|message| panic!("{message}"));
+    // OUT-254 (K3-16): the channel is chosen at runtime; the former build switch only warns.
+    if let Some(warning) = build_update::retired_beta_warning(
+        std::env::var(build_update::RETIRED_BETA_VARIABLE)
+            .ok()
+            .as_deref(),
+    ) {
+        println!("cargo:warning={warning}");
+    }
+    let missing_key = build_update::configure(&mut config, &base, key.as_deref(), repo.as_deref())
+        .unwrap_or_else(|message| panic!("{message}"));
     if build_update::warn_missing_key(std::env::var("PROFILE").as_deref().ok(), missing_key) {
         println!("cargo:warning=Release build has no updater public key; automatic updates remain disabled");
     }

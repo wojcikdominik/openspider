@@ -6,10 +6,98 @@ use std::{
     time::Duration,
 };
 pub const USER_AGENT: &str = "OpenSpider-Updater";
+/// OUT-254: Manifest des stabilen Kanals – das als „Latest“ markierte Release ist immer die neueste stabile Version.
 pub const STABLE_ENDPOINT: &str =
     "https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json";
+/// OUT-254: Manifest des Beta-Kanals – einziges Asset des Hilfs-Releases mit dem festen Tag `update-beta`; nennt die
+/// neueste Version insgesamt (Beta oder stabil).
 pub const BETA_ENDPOINT: &str =
-    "https://github.com/wojcikdominik/openspider/releases/latest/download/latest-beta.json";
+    "https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json";
+
+/// Update-Kanal (OUT-254). Eine App-Einstellung (`updates.channel`), keine Eigenschaft des Builds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Channel {
+    Stable,
+    Beta,
+}
+impl Channel {
+    /// Wert in `settings.toml`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Beta => "beta",
+        }
+    }
+    /// Nur `stable` und `beta` (genau so geschrieben) sind gültig.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "stable" => Some(Self::Stable),
+            "beta" => Some(Self::Beta),
+            _ => None,
+        }
+    }
+    /// Fest eingebaute Manifest-URL des Kanals (nicht konfigurierbar).
+    pub const fn manifest_url(self) -> &'static str {
+        match self {
+            Self::Stable => STABLE_ENDPOINT,
+            Self::Beta => BETA_ENDPOINT,
+        }
+    }
+    /// Im Kanal `stable` wird ein Manifest mit Vorabversion abgelehnt (OUT-252); im Kanal `beta` sind beide zulässig.
+    pub const fn allows_prerelease(self) -> bool {
+        matches!(self, Self::Beta)
+    }
+}
+/// Gespeicherter Kanal: `Ok(None)` = Schlüssel fehlt, `Err(raw)` = ungültiger Wert (gilt als nicht gesetzt).
+pub fn stored_channel(settings: &UpdateSettings) -> Result<Option<Channel>, &str> {
+    match settings.channel.as_deref() {
+        None => Ok(None),
+        Some(raw) => Channel::parse(raw).map(Some).ok_or(raw),
+    }
+}
+/// Standardregel (OUT-254): Vorabversion (SemVer mit Pre-Release-Teil) → `beta`, sonst `stable`.
+pub fn default_channel(current: &semver::Version) -> Channel {
+    if current.pre.is_empty() {
+        Channel::Stable
+    } else {
+        Channel::Beta
+    }
+}
+/// Wirksamer Kanal: ein gültiger gespeicherter Wert geht der Standardregel immer vor.
+pub fn effective_channel(settings: &UpdateSettings, current: &semver::Version) -> Channel {
+    stored_channel(settings)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| default_channel(current))
+}
+/// Schreibt eine Warnung ins Log, wenn `updates.channel` einen ungültigen Wert hat; der Wert bleibt in der Datei.
+pub fn warn_invalid_channel(settings: &UpdateSettings) {
+    if let Err(raw) = stored_channel(settings) {
+        tracing::warn!(
+            value = raw,
+            "updates.channel ist ungültig (erlaubt: stable, beta) und wird wie ein fehlender Wert behandelt"
+        );
+    }
+}
+/// Desktop-Start (OUT-254): Läuft eine Vorabversion ohne gültigen gespeicherten Wert, ist `beta` zu speichern, bevor
+/// die erste Update-Prüfung läuft. Sonst wird nichts gespeichert (`stable` nur auf ausdrücklichen Wunsch).
+pub fn channel_to_store_at_startup(
+    settings: &UpdateSettings,
+    current: &semver::Version,
+) -> Option<Channel> {
+    (!current.pre.is_empty() && !matches!(stored_channel(settings), Ok(Some(_))))
+        .then_some(Channel::Beta)
+}
+/// Laufende Version ohne Build-Metadaten (Anzeige in UI-131).
+pub fn display_version(current: &semver::Version) -> String {
+    let mut version = current.clone();
+    version.build = semver::BuildMetadata::EMPTY;
+    version.to_string()
+}
+/// Laufende Version dieses Builds.
+pub fn running_version() -> semver::Version {
+    semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("package SemVer")
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Disabled {
     Settings,
@@ -106,8 +194,10 @@ pub enum Outcome {
     Available(UpdateManifest),
 }
 pub struct UpdateContext {
+    /// Manifest-URL des Kanals `stable` (OUT-254); Tests ersetzen sie durch den Mock-Server.
     pub endpoint: String,
-    pub beta: bool,
+    /// Manifest-URL des Kanals `beta` (OUT-254); Tests ersetzen sie durch den Mock-Server.
+    pub beta_endpoint: String,
     pub current: semver::Version,
     pub os: String,
     pub arch: String,
@@ -123,12 +213,12 @@ pub struct UpdateContext {
 }
 impl Default for UpdateContext {
     fn default() -> Self {
-        let beta = option_env!("OPENSPIDER_UPDATE_BETA") == Some("1");
+        // OUT-254: kein Build-Schalter wählt den Kanal; er ergibt sich zur Laufzeit aus `settings.channel`.
         let os = current_os();
         Self {
-            endpoint: if beta { BETA_ENDPOINT } else { STABLE_ENDPOINT }.into(),
-            beta,
-            current: semver::Version::parse(env!("CARGO_PKG_VERSION")).expect("package SemVer"),
+            endpoint: STABLE_ENDPOINT.into(),
+            beta_endpoint: BETA_ENDPOINT.into(),
+            current: running_version(),
             installer: Installer::detect(&os, registered_bundle_type()),
             os,
             arch: std::env::consts::ARCH.into(),
@@ -146,6 +236,17 @@ impl Default for UpdateContext {
     }
 }
 impl UpdateContext {
+    /// Wirksamer Kanal dieser Prüfung (gespeicherter Wert, sonst Standardregel).
+    pub fn channel(&self) -> Channel {
+        effective_channel(&self.settings, &self.current)
+    }
+    /// Manifest-URL des wirksamen Kanals; der Kanal ergibt sich allein aus der URL (kein Kanal-Parameter).
+    pub fn channel_endpoint(&self) -> &str {
+        match self.channel() {
+            Channel::Stable => &self.endpoint,
+            Channel::Beta => &self.beta_endpoint,
+        }
+    }
     pub fn disabled(&self) -> Option<Disabled> {
         if self.disabled_by_environment {
             Some(Disabled::Environment)
@@ -196,7 +297,7 @@ pub fn reserve(ctx: &UpdateContext, manual: bool) -> Result<Option<Outcome>, Str
     if let Some(reason) = ctx.disabled() {
         return Ok(Some(Outcome::Disabled(reason)));
     }
-    let endpoint = https_url(&ctx.endpoint)?;
+    let endpoint = https_url(ctx.channel_endpoint())?;
     if endpoint.query().is_some() {
         return Err("Update-Endpunkt darf keine Query enthalten".into());
     }
@@ -224,7 +325,9 @@ pub async fn check(ctx: &UpdateContext, manual: bool) -> Result<Outcome, String>
 }
 /// Call only after reserve; the app persists the reservation before fetching.
 pub async fn fetch(ctx: &UpdateContext) -> Result<Outcome, String> {
-    let mut endpoint = https_url(&ctx.endpoint)?;
+    warn_invalid_channel(&ctx.settings);
+    let channel = ctx.channel();
+    let mut endpoint = https_url(ctx.channel_endpoint())?;
     endpoint.query_pairs_mut().extend_pairs([
         ("version", ctx.current.to_string().as_str()),
         ("os", &ctx.os),
@@ -268,7 +371,8 @@ pub async fn fetch(ctx: &UpdateContext) -> Result<Outcome, String> {
         }
         let manifest: UpdateManifest =
             serde_json::from_slice(&bytes).map_err(|_| "Update-Manifest ungültig")?;
-        manifest.validate(ctx.beta)?;
+        // OUT-252: im Kanal `stable` gilt ein Manifest mit Vorabversion als ungültig (kein Download).
+        manifest.validate(channel.allows_prerelease())?;
         if !manifest.is_newer_than(&ctx.current) {
             return Ok(Outcome::Current);
         }
