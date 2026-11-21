@@ -75,7 +75,11 @@ fn execute(args: McpArgs) -> Result<(), McpError> {
         return print_config_command(name, &args);
     }
     let paths = app_paths();
-    let server = build_server(&args, &paths, tools::all())?;
+    // Plan M4 E1 (E-2 b): KI-Werkzeuge nur mit eingeschaltetem Schalter „KI (Vorschau)“ der App-Einstellungen.
+    let preview = os_model::settings::AppSettings::load(&paths.settings)
+        .map(|s| os_ai::PreviewSwitch::from_settings(&s))
+        .unwrap_or(os_ai::PreviewSwitch::OFF);
+    let server = build_server(&args, &paths, tools::offered(preview))?;
     transport::init_logging();
     log_start(&server, &args, &paths);
     run_blocking(

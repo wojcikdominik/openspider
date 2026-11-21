@@ -64,7 +64,13 @@ pub fn server(app: &App, settings: McpSettings) -> Result<McpServer, CmdError> {
     });
     ctx.settings = settings;
     ctx.session = Some(std::sync::Arc::new(session::Access(app.downgrade())));
-    Ok(McpServer::new(os_mcp::tools::all(), permissions, ctx))
+    // Plan M4 E1 (E-2 b): KI-Werkzeuge nur mit eingeschaltetem Schalter „KI (Vorschau)“.
+    let preview = os_ai::PreviewSwitch::from_settings(&app.settings_snapshot());
+    Ok(McpServer::new(
+        os_mcp::tools::offered(preview),
+        permissions,
+        ctx,
+    ))
 }
 pub fn token(app: &App, state: &mut State) -> Result<TokenStore, CmdError> {
     if let Some(token) = &state.token {
