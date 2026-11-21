@@ -20,7 +20,7 @@ Zuständige Crates (siehe `docs/ARCHITECTURE.md`): `os-export` (Formate, Bulk-Ex
 | [9 Looker-Studio-Export](#9-looker-studio-export-custom-crawl-overview) | OUT-210 – OUT-214 | Zeitreihen-Zeile je Crawl, Metrikkatalog, Segmente |
 | [10 Konfigurationsdateien & Crawl-Dateien](#10-konfigurationsdateien--crawl-dateien) | OUT-220 – OUT-234 | Profile, Standardkonfiguration, Auth-Profile, Einstellungen, Crawl-Verwaltung, Aufbewahrung, Manifest und Leseschnittstelle der Crawl-Datei |
 | [11 Logging & Diagnose](#11-logging--diagnose) | OUT-240 – OUT-247 | Logdateien, Level, Rotation, Log-Paket, Nutzungsstatistik, Absturzberichte |
-| [12 Update-Mechanismus](#12-update-mechanismus) | OUT-250 – OUT-255 | Prüfen, Herunterladen, Signatur, Abschalten |
+| [12 Update-Mechanismus](#12-update-mechanismus) | OUT-250 – OUT-257 | Prüfen, Herunterladen, Signatur, Abschalten, Kanäle stabil/beta (OUT-254, Nachtrag 21.11.2026), Neuigkeiten |
 | [13 Plattformanforderungen](#13-plattformanforderungen) | OUT-260 – OUT-274 | macOS arm64/x64, Windows x64, Installer, Signatur, Pfade, Ressourcen, Zertifikate, Linux-Serverbetrieb (Kern und CLI), Docker-Image |
 | [14 Benachrichtigungen & Automatisierungs-Schnittstellen](#14-benachrichtigungen--automatisierungs-schnittstellen) | OUT-280 – OUT-285 | E-Mail-Konten, Abschlussmail, Anhänge, Desktop-Benachrichtigung, MCP-Server |
 | [15 Nachtrag 09.11.2026](#15-nachtrag-09112026-funktionen-für-1x-nach-10) | OUT-286 – OUT-289 | 1.x: fremde Läufe pausieren, CLI-Verwaltung, Profile als JSON, Markdown |
@@ -2129,8 +2129,10 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 - **Priorität:** P1
 - **Beschreibung:** Rechner-/benutzerbezogene Einstellungen liegen nicht in der Crawl-Konfiguration, sondern unter „Einstellungen“ (macOS: App-Menü → Einstellungen; Windows: Datei → Einstellungen): Sprache, Theme, Speicherort der Crawls, Speicher-/Ressourcenlimits, Proxy, vertrauenswürdige Zertifikate, Benachrichtigungen/E-Mail-Konten, Aufbewahrung, Updates, Export-Standards, verbundene Konten. Datei: `settings.toml`.
   - **Exportordner (OS-Festlegung, führend):** Schlüssel `export.directory`, Standard `<Dokumente>/OpenSpider/Exports`. `<Dokumente>` ist der Dokumente-Ordner des Benutzers laut Betriebssystem (macOS: `~/Documents`; Windows: bekannter Ordner „Dokumente“ (`FOLDERID_Documents`), auch wenn er umgeleitet ist, z. B. nach OneDrive). Er ist das Standardziel aller Exporte ohne ausdrückliche Pfadangabe außerhalb des UI-Exportdialogs, u. a. der MCP-Exporte (AGENT-021, dort zusätzlich die Liste erlaubter Verzeichnisse); der UI-Exportdialog schlägt beim ersten Export ebenfalls diesen Ordner vor.
+  - **Update-Kanal (Nachtrag 21.11.2026, OS-Festlegung, Nutzerentscheidung 21.11.2026, führend OUT-254):** Schlüssel `updates.channel` ∈ {`stable`, `beta`} im Abschnitt `[updates]` neben `check`, `last_check` und `skipped_version`. Es gibt keinen geschriebenen Standardwert: Fehlt der Schlüssel, gilt die Standardregel aus OUT-254 (`beta` bei laufender Vorabversion, sonst `stable`); automatisch gespeichert wird nur `beta` beim Start einer Vorabversion. Der Schlüssel gehört zu den App-Einstellungen, nicht zum Crawl-Profil, und erscheint nicht im Konfigurations-Diff (OUT-224).
 - **Akzeptanzkriterien:**
   - [ ] Eine `.osconfig` enthält keine Werte aus `settings.toml`; Austausch einer Konfiguration zwischen Rechnern ändert keine lokalen Einstellungen.
+  - [ ] (Nachtrag 21.11.2026, OUT-254) Nach einem Kanalwechsel steht `updates.channel` in `settings.toml` und in keiner `.osconfig`; der Konfigurations-Diff (OUT-224) zeigt dafür keine Zeile. Eine `settings.toml` ohne den Schlüssel (Stand 1.0.0) wird ohne Migration gelesen.
   - [ ] Ohne Eintrag `export.directory` ist der wirksame Exportordner `<Dokumente>/OpenSpider/Exports`; er wird beim ersten Export angelegt (fehlende Elternordner eingeschlossen). Ein in den Einstellungen geänderter Ordner gilt ohne Neustart für den nächsten Export, auch für AGENT-021.
   - [ ] Ist der Ordner nicht beschreibbar, scheitert der Export mit einer Meldung, die den Pfad nennt; es wird nicht stillschweigend in einen anderen Ordner geschrieben.
   - [ ] Änderungen an Einstellungen, die einen Neustart erfordern, werden als solche gekennzeichnet.
@@ -2430,8 +2432,8 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 
 ### OUT-250 Update-Prüfung
 - **Priorität:** P1
-- **Beschreibung:** Die Desktop-App prüft beim Start (höchstens einmal je 24 h) und manuell über Hilfe → „Nach Updates suchen“ ein signiertes Update-Manifest (z. B. auf GitHub Releases). Führend für Update-Prüfung; CRAWL-142 verweist hierher.
-- **Eingaben/Konfiguration:** Einstellungen → Updates: „Automatisch nach Updates suchen“ (Standard an); Schlüssel `updates.check = false` in `settings.toml`; Umgebungsvariable `OPENSPIDER_DISABLE_UPDATE_CHECK=1` (für verwaltete Umgebungen) **(OS-Festlegung)**.
+- **Beschreibung:** Die Desktop-App prüft beim Start (höchstens einmal je 24 h) und manuell über Hilfe → „Nach Updates suchen“ ein signiertes Update-Manifest (z. B. auf GitHub Releases). Führend für Update-Prüfung; CRAWL-142 verweist hierher. **Nachtrag 21.11.2026 (OS-Festlegung, Nutzerentscheidung 21.11.2026):** Geprüft wird das Manifest des wirksamen Update-Kanals; Endpunkt je Kanal, Standardregel und Wechsel sind führend in OUT-254.
+- **Eingaben/Konfiguration:** Einstellungen → Updates: „Automatisch nach Updates suchen“ (Standard an); Schlüssel `updates.check = false` in `settings.toml`; Umgebungsvariable `OPENSPIDER_DISABLE_UPDATE_CHECK=1` (für verwaltete Umgebungen) **(OS-Festlegung)**. Nachtrag 21.11.2026: „Update-Kanal“ (`updates.channel` ∈ {`stable`, `beta`}, OUT-254, UI-131); er bestimmt die Manifest-URL, sonst nichts an der Anfrage.
 - **Akzeptanzkriterien:**
   - [ ] Die Anfrage überträgt nur Version, Betriebssystem und Architektur (keine Nutzerkennung).
   - [ ] Offline/Timeout (5 s) → keine Fehlermeldung beim Start, nur Log-Eintrag.
@@ -2439,7 +2441,8 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - [ ] Das CLI prüft nie automatisch; `openspider --check-update` gibt verfügbare Version aus (Exit-Code 0 = aktuell, 10 = Update verfügbar). Ein geplanter Lauf erzeugt keinen Request an den Update-Server (Netzwerkmitschnitt) (übernommen aus CRAWL-142).
   - [ ] Eine Update-Prüfung oder ein Update-Download während eines laufenden Crawls verursacht keinen Neustart, keine Pause und keine Änderung der Crawl-Rate um mehr als 5 % (Messung während simuliertem Download) (übernommen aus CRAWL-142).
   - [ ] Die Update-Einstellung gehört zu den App-Einstellungen (`settings.toml`, OUT-222), nicht zum Crawl-Profil, und erscheint nicht im Konfigurations-Diff (OUT-224).
-- **Testfixture:** Mock-Update-Server im `os-testsite`.
+  - [ ] (Nachtrag 21.11.2026, OUT-254) Endpunkt nach Kanal: Kanal `stable` fragt ausschließlich die stabile Manifest-URL an, Kanal `beta` ausschließlich die Beta-Manifest-URL (Request-Log des Mock-Servers je Pfad, App und CLI). Die Anfrage überträgt in beiden Kanälen weiterhin nur Version, Betriebssystem und Architektur; es gibt keinen Kanal-Parameter und keine Nutzerkennung, der Kanal ergibt sich allein aus der URL.
+- **Testfixture:** Mock-Update-Server im `os-testsite` (Nachtrag 21.11.2026: je Kanal ein Manifest-Pfad, siehe OUT-254).
 
 ### OUT-251 Herunterladen und Installieren
 - **Priorität:** P1
@@ -2463,8 +2466,9 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 - **Akzeptanzkriterien:**
   - [ ] Manipuliertes Paket (1 Byte geändert) → Installation verweigert, Warnung, Log-Eintrag.
   - [ ] Manifest über HTTP (statt HTTPS) wird abgelehnt.
-  - [ ] Downgrade über den Updater ist nicht möglich (Versionsvergleich nach SemVer).
-- **Testfixture:** Mock-Update-Server mit gültigem und manipuliertem Paket.
+  - [ ] Downgrade über den Updater ist nicht möglich (Versionsvergleich nach SemVer). Nachtrag 21.11.2026: Das gilt in beiden Kanälen und nach jedem Kanalwechsel (OUT-254).
+  - [ ] (Nachtrag 21.11.2026, OUT-254) Im Kanal `stable` wird ein Manifest abgelehnt, dessen Version eine Vorabversion ist (z. B. `1.1.0-beta.1`), auch wenn die installierte Version selbst eine Vorabversion ist; die Ablehnung wird behandelt wie ein ungültiges Manifest (beim Start nur Log-Eintrag, bei manueller Prüfung Meldung, kein Download). Im Kanal `beta` sind Vorab- und stabile Versionen zulässig.
+- **Testfixture:** Mock-Update-Server mit gültigem und manipuliertem Paket; Nachtrag 21.11.2026: stabiler Manifest-Pfad mit Vorabversion.
 
 ### OUT-253 Updates in verwalteten Umgebungen
 - **Priorität:** P2
@@ -2482,11 +2486,48 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
 - **Testfixture:** Unit-Tests des Richtlinien-Resolvers mit gemocktem Registry-/Defaults-Backend; manueller Test in Windows-VM und mit macOS-Konfigurationsprofil.
 
 ### OUT-254 Update-Kanäle
-- **Priorität:** P2
-- **Beschreibung:** Kanäle `stable` (Standard) und `beta`; Wechsel in den Einstellungen.
-- **Akzeptanzkriterien:**
-  - [ ] Wechsel von beta zu stable bietet erst bei einer neueren stable-Version ein Update an (kein Downgrade).
-- **Testfixture:** Mock-Update-Server.
+- **Priorität:** P1 (Nachtrag 21.11.2026; vorher P2)
+- **Meilenstein:** Fix-Release **1.0.1**, vor der ersten Beta von 1.1 – ausdrückliche Ausnahme vom Feature-Stopp bis 1.0.x (Nutzerentscheidung 21.11.2026, Plan `docs/plan/M3.md` K3-16). Keine Paritätsbehauptung.
+- **Beschreibung:** **OS-Festlegung (Nutzerentscheidung 21.11.2026, K3-16; ersetzt K3-04):** Zwei Update-Kanäle `stable` und `beta`. Der Kanal ist eine **App-Einstellung** (`updates.channel` in `settings.toml`, OUT-222), keine Eigenschaft des Builds: Beta- und stabile Versionen sind dieselbe Art Build und unterscheiden sich nur in der Version. Darstellung und Texte in den Einstellungen: UI-131.
+  - **Standardregel:** Ohne gültigen gespeicherten Wert ist der wirksame Kanal `beta`, wenn die laufende Version eine Vorabversion ist (SemVer mit Pre-Release-Teil, z. B. `1.1.0-beta.1`, `1.1.0-rc.1`), sonst `stable`. Startet die Desktop-App eine Vorabversion ohne gültigen Wert, speichert sie `updates.channel = "beta"`, bevor die erste Update-Prüfung dieses Starts läuft; so bleibt der Nutzer auch nach dem Update auf eine stabile Version im Beta-Kanal. `stable` wird nur gespeichert, wenn der Nutzer es wählt. Ein gültiger gespeicherter Wert geht der Regel immer vor, auch wenn er nicht zur laufenden Version passt (z. B. `stable` auf `1.1.0-beta.3`). Ein ungültiger Wert (alles außer `stable` und `beta`) gilt als nicht gesetzt; die App schreibt eine Warnung ins Log und behandelt ihn sonst wie einen fehlenden Wert.
+  - **Feste Manifest-URLs je Kanal** (in App und CLI eingebaut, nicht konfigurierbar; Tests ersetzen nur die Basis durch den Mock-Server):
+    - `stable`: `https://github.com/wojcikdominik/openspider/releases/latest/download/latest.json` – Manifest des als „Latest“ markierten Releases; „Latest“ ist immer die neueste stabile Version (OUT-261).
+    - `beta`: `https://github.com/wojcikdominik/openspider/releases/download/update-beta/latest-beta.json` – einziges Asset des Hilfs-Releases mit dem festen Tag `update-beta`, das als Pre-Release markiert ist und nie „Latest“ wird (Pflege: `docs/release/release-process.md`, Abschnitt „Update-Kanäle“).
+  - **Inhalt der Manifeste:** Das stabile Manifest nennt die neueste stabile Version und nie eine Vorabversion. Das **Beta-Manifest nennt die neueste Version insgesamt** (Maximum nach SemVer über alle veröffentlichten Beta- und stabilen Versionen). Nach einer stabilen Version wird es nur ersetzt, wenn diese neuer ist als sein bisheriger Inhalt; nach einer Beta immer. Die Paket-URLs beider Manifeste zeigen auf die versionierten Dateien (`releases/download/v<Version>/…`).
+  - **Wechsel `stable` → `beta`:** wird sofort gespeichert und wirkt ab der nächsten Prüfung (automatisch nach OUT-250, bei manueller Prüfung sofort); sie liest das Beta-Manifest. Das Umschalten selbst löst keine Netzwerkanfrage aus.
+  - **Wechsel `beta` → `stable`:** kein Downgrade. Läuft eine Vorabversion, bleibt sie installiert, bis eine stabile Version erscheint, die nach SemVer neuer ist; erst dann wird ein Update angeboten. Die Oberfläche weist darauf hin (UI-131). Eine Anleitung oder Funktion zur Neuinstallation einer älteren stabilen Version gibt es nicht.
+  - **Übersprungene Version (OUT-251):** Ein Kanalwechsel ändert weder `updates.skipped_version` noch `updates.check`.
+  - **CLI:** `openspider --check-update` (OUT-250) liest `updates.channel` aus derselben `settings.toml`, wendet dieselbe Standardregel an und fragt dieselbe URL an; die CLI schreibt dabei nie in `settings.toml`. Gilt auch für das Linux-Archiv und das Docker-Image (OUT-273, OUT-274).
+  - **Übergang von Builds bis 1.0.0:** Diese Builds haben den Kanal beim Bauen festgelegt und lesen `releases/latest/download/latest.json` bzw. `releases/latest/download/latest-beta.json`. Damit sie Updates bekommen, trägt jedes stabile Release beide Dateien mit identischem Inhalt; ein Beta-Release trägt nur `latest-beta.json` (OUT-261). Solche Clients wählen den Kanal erst nach dem Update auf eine Version mit dieser Einstellung (ab 1.0.1). Ein Client mit einem Beta-Build bis 1.0.0 (z. B. `1.0.0-rc.1`) erhält so über `releases/latest/download/latest-beta.json` die neueste stabile Version; danach gilt für ihn die Standardregel (stabile Version, kein gespeicherter Wert → `stable`).
+  - **Verwaltete Umgebungen:** `DisableUpdateCheck` und `OPENSPIDER_DISABLE_UPDATE_CHECK` (OUT-253, OUT-250) schalten die Prüfung in beiden Kanälen ab. Eine Richtlinie, die den Kanal festlegt oder `beta` verbietet, ist **nicht festgelegt** (offen, Anhang B).
+- **Eingaben/Konfiguration:** Einstellungen → Updates → „Update-Kanal“ (UI-131); Schlüssel `updates.channel` ∈ {`stable`, `beta`} in `settings.toml` (OUT-222), ohne geschriebenen Standardwert.
+- **Ausgabe:** Update-Prüfung gegen die Manifest-URL des wirksamen Kanals; Ergebnis und Meldungen wie OUT-250/OUT-251.
+- **Akzeptanzkriterien** (gegen den Mock-Update-Server im `os-testsite` mit je einem Manifest-Pfad für `stable` und `beta`, Versionen je Test einstellbar, Request-Log je Pfad; „angefragt“ = einziger Pfad mit Request, der andere zählt 0):
+  - [ ] **Testmatrix Einstellung × installierte Version × Manifest** – Desktop-Kern (manuelle Prüfung) und CLI (`--check-update`, Exit 0 = aktuell, 10 = Update, Fehler nach OUT-203) liefern je Zeile dasselbe Ergebnis; „–“ = Schlüssel fehlt:
+
+    | Nr. | `updates.channel` | installiert | stabiles Manifest | Beta-Manifest | angefragt | Ergebnis |
+    |---|---|---|---|---|---|---|
+    | 1 | – | 1.0.1 | 1.0.1 | 1.1.0-beta.1 | stable | aktuell; kein Schlüssel geschrieben |
+    | 2 | `stable` | 1.0.1 | 1.0.2 | 1.1.0-beta.1 | stable | Update 1.0.2 |
+    | 3 | `beta` | 1.0.1 | 1.0.1 | 1.1.0-beta.1 | beta | Update 1.1.0-beta.1 |
+    | 4 | `beta` | 1.0.1 | 1.0.1 | 1.0.1 | beta | aktuell |
+    | 5 | – | 1.1.0-beta.1 | 1.0.1 | 1.1.0-beta.2 | beta | Desktop: `beta` gespeichert, bevor der Request ausgeht; CLI: nichts gespeichert; Update 1.1.0-beta.2 |
+    | 6 | – | 1.1.0-rc.1 | 1.0.1 | 1.1.0 | beta | Desktop: `beta` gespeichert; Update 1.1.0 |
+    | 7 | `beta` | 1.1.0-beta.2 | 1.1.0 | 1.1.0 | beta | Update 1.1.0 (stabile Version über das Beta-Manifest) |
+    | 8 | `beta` | 1.1.0 | 1.1.0 | 1.2.0-beta.1 | beta | Update 1.2.0-beta.1 (bleibt nach stabiler Version im Beta-Kanal) |
+    | 9 | `beta` | 1.1.0-beta.2 | 1.0.1 | 1.1.0-beta.1 | beta | aktuell (kein Downgrade) |
+    | 10 | `stable` | 1.1.0-beta.3 | 1.0.1 | 1.1.0-beta.4 | stable | aktuell, kein Download (kein Downgrade); Hinweis nach UI-131 |
+    | 11 | `stable` | 1.1.0-beta.3 | 1.1.0 | 1.1.0 | stable | Update 1.1.0 |
+    | 12 | `stable` | 1.0.1 | 1.1.0-beta.1 (fehlerhaft) | – | stable | abgelehnt nach OUT-252, kein Download |
+    | 13 | `nightly` (ungültig) | 1.0.1 | 1.0.1 | 1.1.0-beta.1 | stable | wie Zeile 1, Warnung im Log, Wert bleibt unverändert in der Datei |
+  - [ ] Persistenz: Profil ohne Schlüssel, Start von 1.1.0-beta.1 → `settings.toml` enthält `channel = "beta"` im Abschnitt `[updates]`; danach Start desselben Profils mit 1.1.0 (stabil) → Wert bleibt `beta`, die Prüfung fragt den Beta-Pfad an.
+  - [ ] Profil ohne Schlüssel, Start und Prüfung mit 1.0.1 → `settings.toml` enthält danach keinen Schlüssel `channel`.
+  - [ ] Ein gespeichertes `stable` auf 1.1.0-beta.3 bleibt über Neustarts erhalten und wird von der Standardregel nicht überschrieben.
+  - [ ] Wechsel `stable` → `beta` über die Einstellung: beim Umschalten 0 Requests an beide Pfade; die anschließende manuelle Prüfung erzeugt genau einen Request, und zwar an den Beta-Pfad.
+  - [ ] Kanalwechsel lässt `updates.skipped_version` und `updates.check` unverändert.
+  - [ ] Ein CLI-Aufruf `--check-update` lässt `settings.toml` bytegleich (Prüfsumme vor und nach dem Aufruf, Zeilen 1–13).
+  - [ ] Die in App und CLI eingebauten URLs entsprechen exakt den beiden URLs oben (Unit-Test gegen die Konstanten); kein Build-Schalter ändert den Kanal.
+- **Testfixture:** Mock-Update-Server im `os-testsite` mit den Pfaden `/stable/latest.json` und `/beta/latest-beta.json` (Versionen je Test setzbar, gültig signierte Pakete aus `tests/fixtures/update`), Request-Log je Pfad; Profilverzeichnisse ohne Schlüssel, mit `stable`, mit `beta`, mit ungültigem Wert; laufende Version im Test injiziert (kein eigener Build je Zeile).
 
 ### OUT-255 Datenkompatibilität über Versionen
 - **Priorität:** P0
@@ -2534,9 +2575,11 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - [ ] Vollständige Testsuite in CI auf `macos-13` (x64). **OS-Festlegung (Nutzer 03.11.2026):** Intel-Macs sind kaum noch verbreitet; im Release-Lauf läuft die Intel-Testsuite weiter, ein Fehlschlag ist aber nur eine Warnung und hält den Entwurf nicht auf. Bau, Signatur, Notarisierung und Start-Smoke des x86_64- und des Universal-DMG bleiben blockierend.
   - [ ] Das Update-Manifest liefert je Architektur das passende Paket.
   - [ ] [P1] Das Universal-DMG enthält App und CLI mit beiden Architekturen (`lipo -archs` meldet `x86_64 arm64`) und startet auf beiden nativ.
-  - [ ] **OS-Festlegung (Nutzerentscheidung 04.11.2026):** Ein Release enthält für macOS genau `OpenSpider_<v>_universal.dmg`, `openspider_<v>_darwin-universal.tar.gz` und die Updater-Pakete `OpenSpider_aarch64.app.tar.gz`/`OpenSpider_x86_64.app.tar.gz` samt `.sig`; `OpenSpider_<v>_aarch64.dmg`, `OpenSpider_<v>_x64.dmg`, `openspider_<v>_darwin-{aarch64,x86_64}.tar.gz` und `OpenSpider_universal.app.tar.gz(.sig)` fehlen. Zusätzlich liegt eine versionslose, bytegleiche Kopie `OpenSpider-macOS.dmg` des Universal-DMG bei, sodass `https://github.com/<repo>/releases/latest/download/OpenSpider-macOS.dmg` immer das neueste Release lädt; beide stehen in `SHA256SUMS`. Fehlt die Kopie oder weicht sie ab, entsteht kein Release-Entwurf.
+  - [ ] **OS-Festlegung (Nutzerentscheidung 04.11.2026):** Ein Release enthält für macOS genau `OpenSpider_<v>_universal.dmg`, `openspider_<v>_darwin-universal.tar.gz` und die Updater-Pakete `OpenSpider_aarch64.app.tar.gz`/`OpenSpider_x86_64.app.tar.gz` samt `.sig`; `OpenSpider_<v>_aarch64.dmg`, `OpenSpider_<v>_x64.dmg`, `openspider_<v>_darwin-{aarch64,x86_64}.tar.gz` und `OpenSpider_universal.app.tar.gz(.sig)` fehlen. Zusätzlich liegt eine versionslose, bytegleiche Kopie `OpenSpider-macOS.dmg` des Universal-DMG bei, sodass `https://github.com/<repo>/releases/latest/download/OpenSpider-macOS.dmg` immer das neueste Release lädt; beide stehen in `SHA256SUMS`. Fehlt die Kopie oder weicht sie ab, entsteht kein Release-Entwurf. **Nachtrag 21.11.2026:** „Das neueste Release“ heißt hier das als „Latest“ markierte, also die neueste **stabile** Version (Veröffentlichungsregel unten).
   - [ ] **OS-Festlegung (Nutzerentscheidung 04.11.2026):** Der Text des GitHub-Releases beginnt mit einem Download-Kasten: Tabelle „System | Datei“ mit macOS 13+ (Apple Silicon und Intel) → Universal-DMG und Windows 10/11 (x64, auch Windows on ARM) → NSIS-Setup, jeweils als Link auf die versionierte Datei dieses Releases; danach ein Satz (de, darunter kursiv en), wofür die übrigen Dateien sind (automatische Updates, CLI, Firmen-Installationen per MSI, Prüfsummen), Links auf Benutzerhandbuch (de/en) und Feedback, dann „## Neu in dieser Version“ mit den Notes der Version (OUT-251). **(B3-REL, `docs/plan/beta3.md` §5:)** Der Feedback-Link zeigt bei Vorabversionen (Version mit `-`, z. B. `-beta.3`, `-rc.1`) auf `https://openspider.de/beta/`, bei stabilen Versionen auf die GitHub Discussions des Repositorys. Der Release-Text enthält nichts weiter; Entwurfshinweise (unsigniert, Installations-Smoke, offene Parität) stehen nur in der Zusammenfassung des Actions-Laufs, ein Release-Text mit solchen Hinweisen wird nicht als Entwurf angelegt.
-- **Testfixture:** CI-Matrix.
+  - [ ] **Veröffentlichungsregel (Nachtrag 21.11.2026, OS-Festlegung, Nutzerentscheidung 21.11.2026, Plan K3-16, Update-Kanäle OUT-254):** Auf GitHub ist das als „Latest“ markierte Release immer die neueste **stabile** Version. Stabile Releases werden als Latest veröffentlicht; Beta-Releases (Version mit `-`) mit `--latest=false` und weiterhin nicht als Pre-Release (Homebrew-Prüfung, `docs/release/checkliste-release.md`). Ein stabiles Release enthält `latest.json` und `latest-beta.json` mit identischem Inhalt (für Clients bis 1.0.0); ein Beta-Release enthält `latest-beta.json`, aber **kein** `latest.json` (Prüfung im Release-Lauf: Beta mit `latest.json` → kein Entwurf). Nach jeder Veröffentlichung liefern `releases/latest/download/latest.json` und die versionslosen Links (`OpenSpider-macOS.dmg`, `OpenSpider-Windows-Setup.exe`) die neueste stabile Version und das Beta-Manifest am festen Tag `update-beta` die neueste Version insgesamt (Prüfschritt nach `docs/release/release-process.md`, Abschnitt „Update-Kanäle“). Das Hilfs-Release `update-beta` (Pre-Release) löst keine Paketveröffentlichung aus; Release-Workflows, die auf veröffentlichte Releases reagieren, überspringen es.
+  - [ ] **Download-Links (Nachtrag 21.11.2026):** Versionslose Links (`releases/latest/download/…`) führen immer zur stabilen Version. Solange eine Beta neuer ist als die neueste stabile Version, verlinkt die Beta-Seite (`https://openspider.de/beta/`, en `/en/beta/`) die versionierten Dateien dieser Beta (`releases/download/v<Version>/…`), nicht die versionslosen Links.
+- **Testfixture:** CI-Matrix; Nachtrag 21.11.2026: Release-Vertragstest des Manifest-Generators (Beta → nur `latest-beta.json`, stabil → beide identisch) und Prüfschritt nach der Veröffentlichung.
 
 ### OUT-262 Windows x64
 - **Priorität:** P0
@@ -2807,6 +2850,10 @@ Ein eigenes Konsolen-Binary `openspider` (Crate `os-cli`) bietet alle Funktionen
   - Stubs OUT-144, OUT-231, OUT-271 auf das strikte Format normiert.
 - Nachtrag Abgleich Cloud-Variante, Etappe E0 (16.10.2026, Planer; `docs/plan/autonomo-abgleich.md` 5.2/5.4): neu OUT-233 (Manifest der Crawl-Datei), OUT-234 (stabile Leseschnittstelle, `q_`-Sichten, führend für die Grundsichten von AI-100) und OUT-273 (Linux-Serverbetrieb von Kern und CLI, P1). OUT-264 behält aarch64, Pakete und Desktop (P2). Befund-Zuordnungstabelle, gemeinsame Datendateien (Bot-Katalog, Lastprofile) und ein Secret-Store für Server sind noch nicht spezifiziert.
 - Nachtrag B3-DOCKER (05.11.2026, Nutzerentscheidung 04.11.2026, `docs/plan/beta3.md` 4b): neu OUT-274 (Docker-Image für den Serverbetrieb, P1) im Abschnitt 13. Ein Konfigurationsschlüssel für die Chromium-Sandbox (`LaunchOpts.no_sandbox` in `os-render`) ist nicht spezifiziert; das Image setzt `--no-sandbox` über seinen Chromium-Starter.
+- Nachtrag Update-Kanäle (21.11.2026, Nutzerentscheidung 21.11.2026, Plan `docs/plan/M3.md` K3-16, ersetzt K3-04): OUT-254 von P2 auf P1, Meilenstein Fix-Release 1.0.1 (Ausnahme vom Feature-Stopp); Kanal als App-Einstellung `updates.channel` mit Standardregel, feste Manifest-URLs je Kanal (Beta-Manifest am festen Release-Tag `update-beta`, neueste Version insgesamt), Wechsel ohne Downgrade, CLI folgt der Einstellung, Testmatrix gegen den Mock-Server. Ergänzt: OUT-222 (Schlüssel), OUT-250 (Eingabe, Endpunkt nach Kanal), OUT-252 (Vorabversion im stabilen Kanal), OUT-261 (Veröffentlichungsregel „Latest = stabil“, Download-Links). Darstellung: UI-131 (05). Offen:
+  - Eine Richtlinie für verwaltete Umgebungen bzw. Firmen-/MSI-Installationen, die den Kanal festlegt oder `beta` verbietet (Erweiterung von OUT-253), ist nicht entschieden; OUT-253 bleibt unverändert.
+  - Das Manifest selbst ist weiterhin nicht signiert (geprüft werden die Pakete, OUT-252); wer den Manifest-Host kontrolliert, kann höchstens ein älteres, korrekt signiertes Paket anbieten, das am Downgrade-Schutz scheitert. Das gilt für beide Kanal-URLs gleich. Die Formulierung „signiertes Update-Manifest“ in OUT-250 ist insoweit ungenau.
+  - Ob die Build-Variable `OPENSPIDER_UPDATE_BETA` ab 1.0.1 entfällt oder wirkungslos bleibt, legt das umsetzende Paket fest; sie darf den Kanal nicht mehr bestimmen (OUT-254).
 
 ---
 
