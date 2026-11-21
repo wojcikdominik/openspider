@@ -21,7 +21,7 @@ fn archive() -> PathBuf {
 // spec: OUT-226 [M3]
 #[tokio::test]
 async fn app_opens_every_archived_schema_without_touching_originals() {
-    let mut stands: Vec<_> = (1..=5)
+    let mut stands: Vec<_> = (1..=6)
         .map(|version| archive().join(format!("schema-v{version}")))
         .collect();
     let releases = archive().join("releases");
@@ -36,7 +36,7 @@ async fn app_opens_every_archived_schema_without_touching_originals() {
         let path = dir.path().join("archived.ospider");
         fs::write(&path, &bytes).unwrap();
         let summary = open(&app, &path).await;
-        assert_eq!(summary.schema_version, 5);
+        assert_eq!(summary.schema_version, os_store::SCHEMA_VERSION);
         assert_eq!(summary.phase, os_app::dto::CrawlPhase::Completed);
         // CLI ensures pending analysis before exports; reach the same state through the app command.
         let analysis = operation(&app, "analysis.start", serde_json::json!({"steps":null})).await;
@@ -202,7 +202,7 @@ async fn reopening_legacy_crawl_preserves_previous_migrations_and_occupied_names
     fs::write(&occupied, b"existing file must survive").unwrap();
     let app = app(dir.path());
     let reopened = open(&app, &source).await;
-    assert_eq!(reopened.schema_version, 5);
+    assert_eq!(reopened.schema_version, os_store::SCHEMA_VERSION);
     // Opening canonicalizes (macOS /private/var, Windows \\?\ and 8.3 names): compare the same file.
     assert_eq!(
         fs::canonicalize(PathBuf::from(reopened.file)).unwrap(),

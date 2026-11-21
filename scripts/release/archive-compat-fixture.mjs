@@ -8,6 +8,26 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const archive = join(root, 'tests/fixtures/migrations');
 
+/** Schemaversion des Programmstands (`SCHEMA_VERSION` in os-store). */
+export function currentSchemaVersion() {
+  const code = readFileSync(join(root, 'crates/os-store/src/schema.rs'), 'utf8');
+  return Number(code.match(/pub const SCHEMA_VERSION: u32 = (\d+)/)[1]);
+}
+
+/** Quelldateien des Archivs für eine Schemaversion; der Crawl kommt aus dem Seed `schema-v<N>`. */
+export function seedCopies(schema) {
+  return {
+    'crawl.ospider': `schema-v${schema}/crawl.ospider`,
+    'internal_all.csv': `schema-v${schema}/internal_all.csv`,
+    'profile.osconfig': 'config-v2/profile.osconfig',
+    'basic.ospreset': 'app-v1/basic.ospreset',
+    'nightly.ostask': 'app-v1/nightly.ostask',
+    'profile.osauth': 'app-v1/profile.osauth',
+    'settings.toml': 'app-v1/settings.toml',
+    'ui-state.json': 'app-v1/ui-state.json',
+  };
+}
+
 // spec: OUT-255
 export function archiveFixture({ version, out = join(archive, 'releases'), commit, cli } = {}) {
   if (!/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-beta\.(?:0|[1-9]\d*)|-rc\.[1-9]\d*)?$/.test(version ?? '')) {
@@ -21,16 +41,11 @@ export function archiveFixture({ version, out = join(archive, 'releases'), commi
   const staging = `${destination}.tmp`;
   mkdirSync(staging); // exclusive, including concurrent invocations
   try {
-    const copies = {
-      'crawl.ospider': 'schema-v5/crawl.ospider',
-      'internal_all.csv': 'schema-v5/internal_all.csv',
-      'profile.osconfig': 'config-v2/profile.osconfig',
-      'basic.ospreset': 'app-v1/basic.ospreset',
-      'nightly.ostask': 'app-v1/nightly.ostask',
-      'profile.osauth': 'app-v1/profile.osauth',
-      'settings.toml': 'app-v1/settings.toml',
-      'ui-state.json': 'app-v1/ui-state.json',
-    };
+    const schemaVersion = currentSchemaVersion();
+    const copies = seedCopies(schemaVersion);
+    if (!existsSync(join(archive, copies['crawl.ospider']))) {
+      throw new Error('Seed schema is stale; add the new schema fixture first');
+    }
     for (const [name, source] of Object.entries(copies)) copyFileSync(join(archive, source), join(staging, name));
     const stamp = text => text.replace(/^generator = .*$/m, `generator = "openspider ${version}"`);
     const configPath = join(staging, 'profile.osconfig');
@@ -42,8 +57,7 @@ export function archiveFixture({ version, out = join(archive, 'releases'), commi
     const db = new DatabaseSync(join(staging, 'crawl.ospider'));
     try {
       const schema = db.prepare('PRAGMA user_version').get().user_version;
-      const code = readFileSync(join(root, 'crates/os-store/src/schema.rs'), 'utf8');
-      if (schema !== Number(code.match(/pub const SCHEMA_VERSION: u32 = (\d+)/)[1])) {
+      if (schema !== schemaVersion) {
         throw new Error('Seed schema is stale; add the new schema fixture first');
       }
       db.prepare("UPDATE crawl_meta SET value=? WHERE key='generator'").run(`openspider ${version}`);
@@ -66,7 +80,7 @@ export function archiveFixture({ version, out = join(archive, 'releases'), commi
     }
     const files = Object.keys(copies).map(name => ({ name, source: copies[name],
       sha256: createHash('sha256').update(readFileSync(join(staging, name))).digest('hex') }));
-    writeFileSync(join(staging, 'manifest.json'), JSON.stringify({ version, commit, schema: 5, files }, null, 2) + '\n');
+    writeFileSync(join(staging, 'manifest.json'), JSON.stringify({ version, commit, schema: schemaVersion, files }, null, 2) + '\n');
     writeFileSync(join(staging, 'README.md'), `# OpenSpider ${version}\n\nQuelle: ${commit}. Synthetische Testdaten aus tests/fixtures/migrations; Herkunft und SHA-256 je Datei in manifest.json. Crawl und Konfiguration mit Release-Version gestempelt. Auth-Schlüssel ausschließlich Testwert (11 × 32 Bytes).\n\nNach Veröffentlichung diesen Ordner unverändert nach tests/fixtures/migrations/releases/${version}/ übernehmen; cargo test --locked -p os-cli --test compat_archive prüft ihn automatisch.\n`);
     renameSync(staging, destination);
     return destination;
