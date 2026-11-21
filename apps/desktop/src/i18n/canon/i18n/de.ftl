@@ -34,6 +34,11 @@ tab-sitemaps = Sitemaps
 tab-structured-data = Strukturierte Daten
 tab-url = URL
 tab-validation = Validierung
+# M4-F01: KI-Tabs (Register-Stubs, 08-ai)
+tab-ai = KI
+tab-ai-decisions = KI-Entscheidungen
+tab-ai-suggestions = KI-Vorschläge
+tab-ai-search = KI-Suche
 
 ## Filter der Top-Tabs
 filter-all = Alle
@@ -281,6 +286,32 @@ filter-validation-warnings = Validierungswarnungen
 filter-viewport-not-set = Viewport nicht gesetzt
 filter-xml-sitemap-with-over-50k-urls = XML-Sitemap mit über 50k URLs
 filter-xml-sitemap-with-over-50mb = XML-Sitemap über 50MB
+# M4-F01: Filter der KI-Tabs (docs/plan/M4-filters.toml)
+filter-errors = Fehler
+filter-refusals = Verweigerungen
+filter-pending = Ausstehend
+filter-self-reported-probabilities = Selbst gemeldete Wahrscheinlichkeiten
+filter-titles = Seitentitel
+filter-meta-descriptions = Meta-Beschreibungen
+filter-h1 = H1
+filter-alt-text = Alt-Text
+filter-no-valid-suggestion = Kein gültiger Vorschlag
+filter-accepted = Übernommen
+filter-open = Offen
+filter-rejected = Abgelehnt
+filter-blocked-for-ai-search-bots = Für KI-Such-Bots gesperrt
+filter-blocked-for-ai-user-fetchers = Für KI-Nutzerabrufe gesperrt
+filter-blocked-for-ai-training-only = Nur für KI-Training gesperrt
+filter-ai-search-blocked-but-training-allowed = KI-Suche gesperrt, Training erlaubt
+filter-missing-llms-txt = llms.txt fehlt
+filter-invalid-llms-txt = Ungültige llms.txt
+filter-llms-txt-with-broken-links = llms.txt mit defekten Links
+filter-llms-txt-links-to-non-indexable = llms.txt verlinkt nicht indexierbare Seiten
+filter-blocked-for-ai-crawlers-by-server = Vom Server für KI-Crawler gesperrt
+filter-low-content-without-javascript = Wenig Inhalt ohne JavaScript
+filter-links-only-via-javascript = Links nur per JavaScript
+filter-headings-only-via-javascript = Überschriften nur per JavaScript
+filter-structured-data-only-via-javascript = Strukturierte Daten nur per JavaScript
 
 ## Spaltenköpfe der Tabellen
 column-3rd-parties = Drittanbieter
