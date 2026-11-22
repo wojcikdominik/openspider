@@ -240,6 +240,7 @@ fn catalog_command<'a>(
         let s = catalog::session(app, &ctx)?;
         // OUT-154: „Crawl Changes“ hängt an der Vergleichssitzung des Fensters, nicht am geöffneten Crawl.
         let crawl_changes = super::compare::crawl_changes_unavailable(app, &ctx.window);
+        let preview = super::ai_preview::switch(app);
         app.read_pool()
             .run_snapshot(s.key, move |file, _| {
                 // All report prerequisites belong to this one SQLite snapshot. Which
@@ -266,7 +267,11 @@ fn catalog_command<'a>(
                         }
                     }
                     let mut out: BTreeMap<String, Vec<ExportItem>> = BTreeMap::new();
-                    for name in core::list_with(kind, &s.config) {
+                    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Exporte und -Reports.
+                    for name in core::list_with(kind, &s.config)
+                        .into_iter()
+                        .filter(|name| super::ai_preview::shows_name(preview, name))
+                    {
                         let availability = if kind == ExportKind::Report
                             && super::compare::is_crawl_changes(&name)
                         {

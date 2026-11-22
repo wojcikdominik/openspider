@@ -149,6 +149,9 @@ pub async fn start_with_fetcher<F: os_fetch::Fetch>(
     let service = app.ext::<SessionService>();
     let _guard = service.mutation.lock().await;
     replace_allowed(app, &ctx).await?;
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ läuft der Crawl ohne KI-Schritte (Laufkopie).
+    let mut cfg = cfg;
+    crate::commands::ai_preview::restrict(app, &mut cfg);
     let dir = crate::runtime::info::effective_crawls_dir(&app.settings_snapshot(), app.config());
     let id = app.config().ids.new_crawl_id(app.config().clock.now());
     let file = os_store::registry::path_for(&dir, &id);
@@ -412,8 +415,13 @@ pub async fn resume(app: &App, ctx: CallCtx) -> Result<(), CmdError> {
     };
     let path = s.path.clone();
     let deps = deps(app);
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Schritte in der Fortsetzung.
+    let run = crate::commands::ai_preview::restricted_override(
+        crate::commands::ai_preview::switch(app),
+        &cfg,
+    );
     let h = tokio::task::spawn_blocking(move || {
-        runtime.block_on(os_engine::resume_crawl(fetch, path, None, deps))
+        runtime.block_on(os_engine::resume_crawl(fetch, path, run, deps))
     })
     .await
     .map_err(|e| internal("resume crawl", e.to_string()))?

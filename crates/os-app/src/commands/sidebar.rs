@@ -51,10 +51,15 @@ fn overview<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFutur
         let shared = counts::shared_facts(app, &s, &ctx.cancel).await?;
         let age_ms = shared.age_ms();
         let facts = shared.facts;
+        let preview = super::ai_preview::switch(app);
         app.read_pool()
             .run_snapshot(s.key, move |file, _| {
                 let summary = summary_rows(facts.summary.clone());
-                let registry = os_analyze::tabs::configured_for_file(&s.config, file);
+                // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Tabs in der Übersicht.
+                let registry = super::ai_preview::visible_tabs(
+                    preview,
+                    os_analyze::tabs::configured_for_file(&s.config, file),
+                );
                 let mut rows = catalog::count_rows(&registry, &s.config, &facts.counts);
                 rows.retain(|r| r.tab != "Change Detection");
                 rows.extend(change_rows);
