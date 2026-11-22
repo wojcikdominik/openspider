@@ -88,6 +88,49 @@ mod tests {
     }
 
     // spec: UI-004 [M4]
+    // Plan M4 E1 (E-2 b): `catalog.tabs` über den Command-Weg – Standard-Einstellungen (leerer Datenordner) ohne KI-Tabs,
+    // nach `settings.set` mit `aiApp.previewEnabled` mit allen vier, danach wieder ohne.
+    #[tokio::test]
+    async fn catalog_tabs_follow_the_switch_in_the_app_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = App::new(crate::AppConfig::new(dir.path())).unwrap();
+        let tabs = || async {
+            let v = app
+                .dispatch(
+                    crate::CallCtx::for_window("main"),
+                    "catalog.tabs",
+                    serde_json::Value::Null,
+                )
+                .await
+                .unwrap();
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|t| t["id"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        let set = |on: bool| {
+            app.dispatch(
+                crate::CallCtx::for_window("main"),
+                "settings.set",
+                serde_json::json!({ "patch": { "aiApp": { "previewEnabled": on } } }),
+            )
+        };
+        let ai = |ids: &[String]| ids.iter().filter(|id| is_ai_tab(id)).count();
+        let off = tabs().await;
+        assert_eq!(ai(&off), 0, "{off:?}");
+        assert!(off.contains(&"Internal".to_string()));
+        assert_eq!(switch(&app), PreviewSwitch::OFF);
+        set(true).await.unwrap();
+        assert_eq!(switch(&app), PreviewSwitch::ON);
+        let on = tabs().await;
+        assert_eq!(ai(&on), 4, "{on:?}");
+        assert_eq!(on.len(), off.len() + 4);
+        set(false).await.unwrap();
+        assert_eq!(ai(&tabs().await), 0);
+    }
+
+    // spec: UI-004 [M4]
     #[test]
     fn ai_names_are_recognized_by_their_tab_prefix_only() {
         for name in [

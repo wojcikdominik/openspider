@@ -171,7 +171,6 @@ pub async fn start_with_fetcher<F: os_fetch::Fetch>(
         os_engine::CrawlSource::List { label, .. } => label.clone(),
         os_engine::CrawlSource::Serp { label, .. } => label.clone(),
     };
-    let mut cfg = cfg;
     cfg.custom_js.output_dir = Some(dir);
     let request = os_engine::CrawlRequest {
         config: cfg,

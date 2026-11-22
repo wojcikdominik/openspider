@@ -435,7 +435,14 @@ fn diff<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, CmdResult>
                     .await?
             }
         };
-        let a = to_json(&*current(app, &ctx.window).await?)?;
+        // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ läuft ein Crawl auf der eingeschränkten Laufkopie;
+        // beide Seiten gleich einschränken, damit der Vergleich keine KI-Schlüssel als Abweichung meldet.
+        let preview = super::ai_preview::switch(app);
+        let mut current = (*current(app, &ctx.window).await?).clone();
+        let mut base = base;
+        preview.restrict(&mut current);
+        preview.restrict(&mut base);
+        let a = to_json(&current)?;
         let b = to_json(&base)?;
         let mut rows = Vec::new();
         diff_rows(&a, &b, "", &mut rows);

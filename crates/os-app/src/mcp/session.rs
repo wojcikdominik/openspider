@@ -131,7 +131,6 @@ impl Access {
                 os_engine::CrawlSource::List { items, label }
             }
         };
-        let mut config = config;
         config.custom_js.output_dir = Some(dir);
         let request = os_engine::CrawlRequest {
             config,

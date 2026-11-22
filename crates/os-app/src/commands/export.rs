@@ -1272,10 +1272,17 @@ mod label_metadata_tests {
         .unwrap();
         let items: Vec<_> = catalog.bulk.iter().flat_map(|g| &g.items).collect();
         let mut names: Vec<_> = items.iter().map(|item| item.name.clone()).collect();
-        let mut canonical = core::list_with(ExportKind::Bulk, &cfg);
+        // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ (Standard) fehlen genau die KI-Exporte.
+        let mut canonical: Vec<_> = core::list_with(ExportKind::Bulk, &cfg)
+            .into_iter()
+            .filter(|n| crate::commands::ai_preview::shows_name(os_ai::PreviewSwitch::OFF, n))
+            .collect();
         names.sort();
         canonical.sort();
         assert_eq!(names, canonical);
+        assert!(!names
+            .iter()
+            .any(|n| crate::commands::ai_preview::is_ai_name(n)));
         let metadata = |name: &str| -> Vec<serde_json::Value> {
             items
                 .iter()
