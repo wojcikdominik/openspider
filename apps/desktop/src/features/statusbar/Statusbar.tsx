@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { currentLanguage, i18n, useFormat, useT } from "../../i18n";
 import { useSession, type SessionState } from "../../state/session";
 import { McpMenu } from "./McpMenu";
+import { AiCostField } from "../ai/cost/CostField";
 import { ProgressBar } from "../../ui/primitives/Feedback";
 import { useHeader } from "../header/model";
 import { useComparison } from "../compare/model";
@@ -103,6 +104,8 @@ export function Statusbar() {
     <McpMenu>
       {mcp?.kind === "connected" ? t(mcp.clients === 1 ? "status-mcp-client" : "status-mcp-clients", { count: mcp.clients }) : mcp?.kind === "ready" ? t("status-mcp-ready", { port: mcp.port }) : t("status-mcp-off")}
     </McpMenu>
+    {/* UI-013 [M4] (M4-F02): field „Kosten“ as a placeholder, only with the switch „KI (Vorschau)“. */}
+    <AiCostField />
     <details><summary>{t("status-details")}</summary><div className="os-status-details">
       <span>{t("status-elapsed", { value: f.duration(c?.elapsedS ?? 0) })}</span>
       <span>{t("status-response", { value: c?.avgResponseTime == null ? unknown : f.decimal(c.avgResponseTime, 3) })}</span>
