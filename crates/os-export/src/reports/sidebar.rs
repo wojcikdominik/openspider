@@ -317,7 +317,9 @@ pub fn export_site_structure(
     let mut workbook = crate::xlsx::deterministic_workbook();
     let mut count = 0;
     for (name, table) in [("Directories", dirs), ("Crawl Depth", depths)] {
-        let sheet = workbook.add_worksheet_with_constant_memory();
+        let sheet = workbook
+            .add_worksheet_with_constant_memory()
+            .map_err(|e| ExportError::Write(e.to_string()))?;
         sheet
             .set_name(name)
             .map_err(|e| ExportError::Write(e.to_string()))?;
