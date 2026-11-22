@@ -403,8 +403,10 @@ mod tests {
     // spec: OUT-181
     #[test]
     fn the_registry_lists_every_filter_of_the_tab_registry() {
+        // Ohne Schalter „KI (Vorschau)“ (Standard, Plan M4 E1) ohne die Filter der KI-Tabs (M4-F02).
         let expected: usize = os_analyze::tabs::configured(&os_model::CrawlConfig::default())
             .iter()
+            .filter(|t| shows_name(os_ai::PreviewSwitch::OFF, t.id))
             .map(|t| t.filters.len())
             .sum();
         assert_eq!(names(Kind::Tab).len(), expected);
@@ -496,8 +498,10 @@ mod preview_tests {
             let rest: Vec<_> = on.iter().filter(|n| !ai(n)).cloned().collect();
             assert_eq!(off, rest, "{kind:?}: nur die KI-Einträge fehlen");
         }
-        // Gleichnamige Nicht-KI-Tabs bleiben (Präfix ist der ganze Tab-Name).
-        assert!(names_with(Kind::Tab, PreviewSwitch::OFF).contains(&"AMP:All".to_string()));
+        // Nicht-KI-Tabs mit gleichem Anfangsbuchstaben bleiben (Präfix ist der ganze Tab-Name).
+        assert!(
+            names_with(Kind::Tab, PreviewSwitch::OFF).contains(&"Accessibility:All".to_string())
+        );
     }
 
     // spec: UI-004 [M4]

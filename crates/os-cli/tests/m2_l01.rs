@@ -278,7 +278,9 @@ fn catalogs_are_sorted_complete_and_unknown_names_link_their_listing() {
     let metrics: Vec<String> = serde_json::from_str(&run.stdout).unwrap();
     let cfg = os_model::CrawlConfig::default();
     for metric in os_export::timeseries::catalog(&os_analyze::tabs::configured(&cfg)) {
-        assert!(metrics.contains(&metric.name));
+        // Ohne Schalter „KI (Vorschau)“ (Standard, Plan M4 E1, M4-F02) genau ohne die Kennzahlen der KI-Tabs.
+        let shown = os_cli::registry::shows_name(os_ai::PreviewSwitch::OFF, &metric.name);
+        assert_eq!(metrics.contains(&metric.name), shown, "{}", metric.name);
     }
 }
 
