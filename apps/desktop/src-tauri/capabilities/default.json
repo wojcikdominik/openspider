@@ -54,6 +54,7 @@
     "update:default",
     "chromium:default",
     "crash:default",
+    "ai:default",
     "updater:default",
     "process:allow-restart"
   ]
