@@ -218,7 +218,10 @@ async fn stopped_mcp_catalog_contains_all_tools_without_starting_server() {
         let before = call(&app, "mcp.status", json!({})).await;
         assert_eq!(before["kind"], "off");
         let tools = call(&app, "mcp.tools", json!({})).await;
-        assert!(tools.as_array().unwrap().len() == os_mcp::tools::all().len());
+        assert!(
+            tools.as_array().unwrap().len()
+                == os_mcp::tools::offered(os_ai::PreviewSwitch::OFF).len()
+        );
         assert!(tools
             .as_array()
             .unwrap()
@@ -306,7 +309,10 @@ async fn tool_catalogue_does_not_wait_for_server_lifecycle_lock() {
         .await
         .expect("local catalogue must not wait for a server transition")
         .unwrap();
-        assert_eq!(tools.as_array().unwrap().len(), os_mcp::tools::all().len());
+        assert_eq!(
+            tools.as_array().unwrap().len(),
+            os_mcp::tools::offered(os_ai::PreviewSwitch::OFF).len()
+        );
     })
     .await
     .expect("N04 fixture exceeded its internal deadline");
