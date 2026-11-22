@@ -68,7 +68,9 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   await expect(toggle).not.toBeChecked();
 
   // Einschalten in den Einstellungen: wirkt ohne Neustart in beiden Fenstern.
-  await toggle.click();
+  // React Aria: das Eingabeelement ist visuell versteckt; geklickt wird die sichtbare Beschriftung (wie update.spec.ts).
+  const label = settings.getByText("AI (preview)", { exact: true });
+  await label.click();
   await expect(toggle).toBeChecked();
   await expect(nav.getByRole("tab", { name: "AI", exact: true })).toBeVisible();
   await nav.getByRole("tab", { name: "AI", exact: true }).click();
@@ -88,7 +90,8 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   await expect(page.locator("#data-panel .u10-counter").first()).toHaveText(/^Showing: 0 of /);
 
   // Wieder aus: die KI-Oberfläche verschwindet erneut.
-  await settings.getByRole("switch", { name: "AI (preview)" }).click();
+  await label.click();
+  await expect(toggle).not.toBeChecked();
   await expect(nav.getByRole("tab", { name: "AI", exact: true })).toHaveCount(0);
   await expect.poll(async () => (await catalogIds(page)).filter(isAi)).toEqual([]);
   await expect(page.getByTestId("ai-cost")).toHaveCount(0);
