@@ -3,10 +3,8 @@
 //! Alle Listen kommen aus dem Register [`crate::registry`]; die Ausgabe steht auf stdout, eine Zeile je
 //! Name, mit `--json` als JSON.
 
-use clap::CommandFactory;
 use serde_json::{json, Value};
 
-use crate::args::Cli;
 use crate::exit::CliError;
 use crate::registry::{self, Kind};
 
@@ -21,7 +19,8 @@ pub const TOPICS: [&str; 5] = [
 
 /// Gesamthilfe (gruppiert nach Quelle, Konfiguration, Vergleich, APIs, Exporte, OS-Erweiterungen).
 pub fn general() -> String {
-    let mut cmd = Cli::command();
+    // Plan M4 E1 (E-2 b, M4-F02): KI-Optionen nur mit Schalter „KI (Vorschau)“.
+    let mut cmd = crate::args::command_for(registry::preview());
     let mut text = cmd.render_long_help().to_string();
     if !text.ends_with('\n') {
         text.push('\n');
@@ -60,6 +59,7 @@ pub fn topic(name: &str, as_json: bool) -> Result<String, CliError> {
             ))
             .into_iter()
             .map(|m| m.name)
+            .filter(|n| registry::shows_name(registry::preview(), n))
             .collect();
             names.sort();
             names

@@ -762,6 +762,14 @@ fn build_impl(
         }
     }
 
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ der App-Einstellungen läuft der Crawl (auch als
+    // geplante Aufgabe) ohne KI-Schritte; eingeschränkt wird die Laufkopie, nicht das gespeicherte Profil.
+    let preview = names::preview_in(&paths);
+    preview.restrict(&mut config);
+    if let Some(resume) = resume_config.as_mut() {
+        preview.restrict(resume);
+    }
+
     let project = args
         .project_name
         .clone()

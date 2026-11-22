@@ -479,17 +479,19 @@ async fn crawl_phase(
             let stored = file.config().map_err(store_err)?;
             drop(file);
             let cfg = plan.resume_config.clone().unwrap_or(stored);
+            // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Schritte in der Fortsetzung;
+            // ändert der Schalter nichts, liest die Engine die gespeicherte Konfiguration wie bisher.
+            let run = plan.resume_config.clone().or_else(|| {
+                let mut run = cfg.clone();
+                crate::registry::preview_in(&plan.paths).restrict(&mut run);
+                (run != cfg).then_some(run)
+            });
             let fetcher = plan.auth.fetcher(&cfg, clock.clone())?;
             warn_disk(path, rep);
             rep.phase("crawl");
-            let handle = resume_crawl(
-                fetcher,
-                path.clone(),
-                plan.resume_config.clone(),
-                deps_with_apis(plan, None, hook),
-            )
-            .await
-            .map_err(|e| engine_error(e, true))?;
+            let handle = resume_crawl(fetcher, path.clone(), run, deps_with_apis(plan, None, hook))
+                .await
+                .map_err(|e| engine_error(e, true))?;
             (handle, path.clone(), meta.crawl_id)
         }
         Source::Spider { .. } | Source::List { .. } => {

@@ -92,9 +92,11 @@ fn help_topics_list_every_name_one_per_line_and_match_the_golden() {
     assert_eq!(tabs.code, 0, "{}", tabs.dump());
     assert_golden(golden("help_export_tabs.txt"), &tabs.stdout);
 
-    // Vollständigkeit: genau ein Eintrag je Filter der Filterregistry (Anzahl der UI-Filter).
+    // Vollständigkeit: genau ein Eintrag je Filter der Filterregistry (Anzahl der UI-Filter). Ohne Schalter
+    // „KI (Vorschau)“ (Standard, Plan M4 E1) zeigt die UI die KI-Tabs nicht, also auch nicht deren Filter.
     let filters: usize = os_analyze::tabs::configured(&os_model::CrawlConfig::default())
         .iter()
+        .filter(|t| os_cli::registry::shows_name(os_ai::PreviewSwitch::OFF, t.id))
         .map(|t| t.filters.len())
         .sum();
     assert_eq!(tabs.stdout.lines().count(), filters);

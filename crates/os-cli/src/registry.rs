@@ -108,16 +108,58 @@ fn union(mut first: Vec<String>, more: Vec<String>) -> Vec<String> {
     first
 }
 
-/// Alle gültigen Namen der Kategorie in Menüreihenfolge. Schwellen in Tab-Namen stehen als `X`.
+/// Alle gültigen Namen der Kategorie in Menüreihenfolge. Schwellen in Tab-Namen stehen als `X`. Ohne Schalter
+/// „KI (Vorschau)“ der App-Einstellungen fehlen die KI-Einträge ([`names_with`], [`preview`]).
 pub fn names(kind: Kind) -> Vec<String> {
+    names_with(kind, preview())
+}
+
+/// Wie [`names`] mit ausdrücklichem Schalter „KI (Vorschau)“ (Plan M4 E1, E-2 b; M4-F02): bei ausgeschaltetem
+/// Schalter ohne die Exporte, Reports und Tab-Filter der KI-Tabs.
+pub fn names_with(kind: Kind, preview: os_ai::PreviewSwitch) -> Vec<String> {
     let mut names = match kind {
         Kind::Tab => catalog::list(ExportKind::Tab),
         Kind::Bulk => union(catalog::list(ExportKind::Bulk), bulk_issues::names()),
         Kind::Report => union(catalog::list(ExportKind::Report), reports::names()),
     };
+    names.retain(|n| shows_name(preview, n));
     names.sort();
     names.dedup();
     names
+}
+
+/// Kennungen der KI-Tabs (UI-004 [M4]) aus dem Tab-Register.
+pub fn ai_tab_ids() -> [&'static str; 4] {
+    use os_analyze::tabs::{ai, ai_decisions, ai_search, ai_suggestions};
+    [
+        ai::tab().id,
+        ai_decisions::tab().id,
+        ai_suggestions::tab().id,
+        ai_search::tab().id,
+    ]
+}
+
+/// Ob ein Name (`<Tab>:<Name>` oder ein Tab) bei diesem Schalter erscheint: alle KI-Exporte, -Reports und
+/// -Kennzahlen tragen den Namen ihres KI-Tabs als ersten Teil.
+pub fn shows_name(preview: os_ai::PreviewSwitch, name: &str) -> bool {
+    if preview.is_on() {
+        return true;
+    }
+    let group = name.split_once(':').map_or(name, |(group, _)| group);
+    !ai_tab_ids().contains(&group)
+}
+
+/// Schalter „KI (Vorschau)“ aus den App-Einstellungen (`settings.toml` im Datenordner); bei fehlender oder
+/// unlesbarer Datei aus.
+pub fn preview() -> os_ai::PreviewSwitch {
+    preview_in(&os_store::paths::app_paths())
+}
+
+/// Wie [`preview`] für einen bekannten Datenordner.
+pub fn preview_in(paths: &os_store::paths::AppPaths) -> os_ai::PreviewSwitch {
+    os_model::settings::AppSettings::load(&paths.settings)
+        .map(|s| os_ai::PreviewSwitch::from_settings(&s))
+        .unwrap_or(os_ai::PreviewSwitch::OFF)
 }
 
 /// Vergleichsform: Kleinschreibung, zusammengefasste Leerräume und Legacy-Filteralias.
@@ -424,5 +466,50 @@ mod w1_contracts {
             );
         });
         assert!(super::resolve(super::Kind::Tab, "Internal:Fixture Filter").is_err());
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use os_ai::PreviewSwitch;
+
+    // spec: UI-004 [M4]
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ nennen `--help <thema>`, `--list-exports` und
+    // `--list-reports` keine KI-Einträge; mit Schalter alle.
+    #[test]
+    fn ai_names_are_listed_only_with_the_preview_switch_on() {
+        let ai = |n: &String| {
+            ["AI:", "AI Decisions:", "AI Suggestions:", "AI Search:"]
+                .iter()
+                .any(|p| n.starts_with(p))
+        };
+        for kind in [Kind::Tab, Kind::Bulk, Kind::Report] {
+            let off = names_with(kind, PreviewSwitch::OFF);
+            let on = names_with(kind, PreviewSwitch::ON);
+            assert!(
+                !off.iter().any(ai),
+                "{kind:?}: {:?}",
+                off.iter().find(|n| ai(n))
+            );
+            assert!(on.iter().any(ai), "{kind:?}");
+            let rest: Vec<_> = on.iter().filter(|n| !ai(n)).cloned().collect();
+            assert_eq!(off, rest, "{kind:?}: nur die KI-Einträge fehlen");
+        }
+        // Gleichnamige Nicht-KI-Tabs bleiben (Präfix ist der ganze Tab-Name).
+        assert!(names_with(Kind::Tab, PreviewSwitch::OFF).contains(&"AMP:All".to_string()));
+    }
+
+    // spec: UI-004 [M4]
+    // Fixture: leerer Datenordner (ohne `settings.toml`) → Schalter aus; `settings.toml` mit `preview_enabled` → an.
+    #[test]
+    fn the_switch_is_read_from_the_app_settings_and_defaults_to_off() {
+        let home = tempfile::tempdir().unwrap();
+        let paths = os_store::paths::app_paths_with_home(Some(home.path().as_os_str()));
+        assert_eq!(preview_in(&paths), PreviewSwitch::OFF);
+        let mut settings = os_model::settings::AppSettings::default();
+        settings.ai_app.preview_enabled = true;
+        settings.save(&paths.settings).unwrap();
+        assert_eq!(preview_in(&paths), PreviewSwitch::ON);
     }
 }

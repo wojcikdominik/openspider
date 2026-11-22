@@ -361,6 +361,26 @@ pub struct RunArgs {
 }
 
 /// Namen aller langen Optionen (für Vorschläge bei Tippfehlern).
+/// Überschrift der KI-Optionen in der Gesamthilfe.
+pub const AI_HELP_HEADING: &str = "KI";
+
+/// Die Befehlsbeschreibung für die Gesamthilfe: ohne Schalter „KI (Vorschau)“ (Plan M4 E1, E-2 b; M4-F02) sind die
+/// KI-Optionen ausgeblendet. Sie bleiben registriert und werden weiter gelesen (bis M4-C01 als „noch nicht
+/// unterstützt“ abgewiesen).
+pub fn command_for(preview: os_ai::PreviewSwitch) -> clap::Command {
+    let cmd = Cli::command();
+    if preview.is_on() {
+        return cmd;
+    }
+    let ai: Vec<String> = cmd
+        .get_arguments()
+        .filter(|a| a.get_help_heading() == Some(AI_HELP_HEADING))
+        .map(|a| a.get_id().to_string())
+        .collect();
+    ai.into_iter()
+        .fold(cmd, |cmd, id| cmd.mut_arg(id, |a| a.hide(true)))
+}
+
 pub fn long_option_names() -> Vec<String> {
     let mut names: Vec<String> = Cli::command()
         .get_arguments()
@@ -553,6 +573,45 @@ mod tests {
         ] {
             assert!(names.contains(&flag.to_string()), "{flag} fehlt");
         }
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+
+    // spec: AI-022
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ nennt die Gesamthilfe keine KI-Option; registriert
+    // und lesbar bleiben sie (AI-022), mit Schalter erscheinen sie unter „KI“.
+    #[test]
+    fn ai_options_are_hidden_in_the_help_only_while_the_switch_is_off() {
+        let ai = [
+            "--use-ai",
+            "--use-embeddings",
+            "--ai-tasks",
+            "--ai-questions",
+            "--ai-consent",
+            "--ai-sample",
+            "--api-budget",
+            "--ai-budget",
+            "--export-query",
+            "--ai-batch",
+            "--ai-reuse-cache",
+        ];
+        let off = command_for(os_ai::PreviewSwitch::OFF)
+            .render_long_help()
+            .to_string();
+        let on = command_for(os_ai::PreviewSwitch::ON)
+            .render_long_help()
+            .to_string();
+        for flag in ai {
+            assert!(!off.contains(flag), "{flag} sichtbar:\n{off}");
+            assert!(on.contains(flag), "{flag} fehlt:\n{on}");
+            assert!(long_option_names().contains(&flag.to_string()), "{flag}");
+        }
+        assert!(!off.contains("KI:"));
+        assert!(on.contains("KI:"));
+        assert!(off.contains("--crawl"));
     }
 }
 
