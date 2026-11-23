@@ -2,7 +2,7 @@
 
 Zweig `ai/f02-tests` ab `f4fe100f` (Bau-Zweig M4-F02 + main); Lauf 2 auf dem integrierten Stand `4262f276` (Bauer-Nachträge + main mit den Klarstellungen vom 23.11.2026) plus eigene Testcommits. Erwartungen nur aus `docs/spec/05-ui.md` (UI-004 [M4], UI-013 [M4], UI-016), `docs/spec/10-agent-interface.md` AGENT-030 (Schalter „KI (Vorschau)“), `docs/spec/schemas/settings.schema.json` (`ai_app.preview_enabled`, Standard aus), `docs/plan/M4.md` (Abschnitt 2 E1/E-2 b, 3.3, Nachweis-Tabelle „Schalter“), `docs/plan/M4-packages.json` (M4-F02 `prompt_notes`) und `docs/spec/06-output-ops.md` OUT-203 (OS-Festlegung Schalter „KI (Vorschau)“ vom 23.11.2026, in Lauf 1 als Wortlaut des Orchestrators, seit `4262f276` in der Spec) und den Nachträgen 23.11.2026 in `docs/plan/M4.md` 3.3 (Command-Namen mit einem Punkt, Umschalten ohne Neuladen, KI-Seite im Menü „Konfiguration ▾“). Bericht, Commit-Texte, Diffs und Tests des Bauers (`apps/desktop/e2e/ai/`) wurden nicht gelesen. Produktcode nur für Aufrufwege (Selektoren, Command-Namen, CLI-Optionen, Test-Harness). Jeder Test trägt `// spec: <ID>` und `// acceptance: independent`.
 
-Ausgeführt auf dem Mac mini (Baum `/Volumes/osbuild/openspider/wt/rel-1.0`, rsync aus dem Worktree, jeder schwere Befehl unter `lockf heavy.lock`, Playwright mit `--workers=1`, `OS_E2E_TRANSPORT=bridge`, Chromium und WebKit). Logs: Lauf 1 unter `/Volumes/osbuild/openspider/wt/rel-1.0/f02-tests-log/run1/` (erster Durchgang) und `f02-tests-log/*.log` (zweiter Durchgang von Lauf 1); Lauf 2 unter `f02-tests-log/run2/` (`APP.log`, `MCP.log`, `CLI.log`, `BRIDGE.log`, `PW.log`, `FMT.log`, `CLIPPY.log`, `TC.log`, `steps.txt`).
+Ausgeführt auf dem Mac mini (Baum `/Volumes/osbuild/openspider/wt/rel-1.0`, rsync aus dem Worktree, jeder schwere Befehl unter `lockf heavy.lock`, Playwright mit `--workers=1`, `OS_E2E_TRANSPORT=bridge`, Chromium und WebKit). Logs: Lauf 1 unter `/Volumes/osbuild/openspider/wt/rel-1.0/f02-tests-log/run1/` (erster Durchgang) und `f02-tests-log/*.log` (zweiter Durchgang von Lauf 1); Lauf 2 unter `f02-tests-log/run2/`, Lauf 3 (Stand `e52898b4` + eigene Testcommits, Nachträge 7 und 8 in M4.md 3.3) unter `f02-tests-log/run3/` (`APP.log`, `MCP.log`, `CLI.log`, `BRIDGE.log`, `PW.log`, `FMT.log`, `CLIPPY.log`, `TC.log`, `steps.txt`).
 
 ## 1. Ergebnis
 
@@ -37,9 +37,28 @@ Ausgeführt auf dem Mac mini (Baum `/Volumes/osbuild/openspider/wt/rel-1.0`, rsy
 
 **Lauf 1:** 28 Testfälle, 21 grün, 7 rot. **Lauf 2:** 31 Testfälle (21 Rust: os-app 7, os-mcp 4, os-cli 10; 10 Playwright = 5 Tests × Chromium/WebKit), **alle grün**. Ebenfalls in Lauf 2 grün: `cargo fmt --all --check` (FMT.log), `cargo clippy --locked -p os-app -p os-mcp -p os-cli --tests -- -D warnings` (CLIPPY.log), `npm run -w apps/desktop typecheck` (TC.log), Bridge-Bau (BRIDGE.log). Playwright mit `OS_E2E_TRANSPORT=bridge`, `--workers=1`.
 
+## 1a. Lauf 3 (Nachträge 7 und 8, `f02-tests-log/run3/`)
+
+Geändert vor Lauf 3 (Spec-Entscheidung, kein Lockern): Feld „Kosten“ nur mit Schalter an **und** aktiven KI-Aufgaben (Nachtrag 7). KI-Aufgaben werden von außen über die Bridge gesetzt (`config.get`, `config.ai.enabled = true`, `config.ai.suggestions.title = true`, `config.set`, ohne geöffneten Crawl auf den Entwurf des Fensters). Neu geprüft sind außerdem die Namen nach Nachtrag 8.
+
+| Kriterium | Test | Lauf 3 |
+|---|---|---|
+| alle Rust-Abnahmetests (os-app 7, os-mcp 4, os-cli 10) | wie oben | grün (APP.log, MCP.log, CLI.log) |
+| Nachtrag 7: Schalter aus, auch mit aktiven KI-Aufgaben → kein Feld „Kosten“ | „switch off (default): no AI tabs, no cost field, …“ | grün (Chromium, WebKit) |
+| Schalter aus: Einstellungen ohne Abschnitt „KI“/„AI“, Schalter „KI (Vorschau)“ aus | „switch off (default): settings have no AI section, …“ | grün (beide) |
+| Nachtrag 7: Schalter an ohne KI-Aufgaben → kein Feld; mit aktiven KI-Aufgaben → „Cost:“ (en) / „Kosten:“ (de). Nachtrag 8: Abschnitt heißt „KI“ (de) und „AI“ (en). Alle übrigen Prüfungen wie in Lauf 2 | „switch on: four AI tabs with an empty state, …; off again removes them“ | grün in allen genannten Teilen (beide Engines) |
+| Nachtrag 8: die vier KI-Tab-Namen bleiben auf Deutsch englisch | ebenda (weiche Prüfung) | **rot** (beide Engines, Befund 5) |
+| Nachtrag 5/7: ohne KI-Aufgaben kein Feld; nach dem Aktivieren erscheint es ohne Neuladen; Ausschalten entfernt KI-Tabs und Feld sofort | „toggling the switch in the settings window updates the open main window without reload“ | grün (beide) |
+| Nachtrag 5/6: Abschnitt und KI-Konfigurationsseiten kommen und gehen ohne Neuladen | „toggling the switch adds and removes the AI settings section and configuration pages without reload“ | grün (beide) |
+
+**Lauf 3:** 31 Testfälle, 29 grün und 2 rot (derselbe Test auf Chromium und WebKit, nur das Teilkriterium „KI-Tab-Namen auf Deutsch englisch“). `cargo fmt --all --check`, clippy (`-D warnings`, os-app/os-mcp/os-cli `--tests`), Typecheck und Bridge-Bau sind grün.
+
+**Befund 5 – KI-Tab-Namen werden auf Deutsch übersetzt (Nachtrag 8).** Einordnung: **Spec-Unklarheit, Entscheidung nötig.** Nachtrag 8 verlangt englische KI-Tab-Namen „wie die übrigen Tab-Namen“; im Produkt sind aber auch die übrigen Tab-Namen auf Deutsch übersetzt („Intern“, „Antwortcodes“, „Eigene Suche“ …). Die Begründung trägt also nicht. Entweder sollen die KI-Tabs ausnahmsweise englisch bleiben (dann Produktfehler), oder sie werden wie alle Tabs übersetzt (dann Nachtrag 8 anpassen). Der Test bleibt spec-treu rot. Wörtlich (Chromium, gleich in WebKit):
+`Error: AI auf Deutsch: Intern,Extern,Sicherheit,Antwortcodes,URL,Seitentitel,Meta-Beschreibung,Meta-Keywords,H1,H2,Inhalt,Bilder,Strukturierte Daten,Canonicals,Paginierung,Direktiven,Hreflang,JavaScript,Sitemaps,Mobil,Barrierefreiheit,Validierung,Links,Link-Metriken,PageSpeed,Analytics,Search Console,Eigene Suche,Eigene Extraktion,Eigenes JavaScript,KI,KI-Entscheidungen,KI-Vorschläge,KI-Suche` – `Expected: true Received: false`; ebenso für `AI Decisions`, `AI Suggestions`, `AI Search`.
+
 ## 2. Befunde
 
-Lauf 2: keine roten Tests. Die Befunde aus Lauf 1 und ihre Erledigung:
+Lauf 2: keine roten Tests. Lauf 3: Befund 5 (oben, offen). Die Befunde aus Lauf 1 und ihre Erledigung:
 
 1. **OUT-203: ausdrücklich genannter KI-Name wurde bei Schalter aus angenommen** – Produktfehler; Bauer-Nachtrag, in Lauf 2 grün. Lauf 1 wörtlich (gekürzt): `--export-tabs "AI:All": exit 0 (erwartet 2), Meldung „unknown … 'AI:All'“: false, Requests: 23` … `openspider: Fertig: 22 URLs gecrawlt, 1 Exportdateien, 0 Warnungen (Exit-Code 0)`; ebenso `AI Decisions:All`, `--bulk-export "AI Decisions:All Answers"`, `--save-report "AI:AI Crawler Accessibility"`.
 2. **`--export-custom-summary` allgemein nicht unterstützt** – Spec-Unklarheit; durch die Klarstellung in OUT-203 entschieden (immer Exit 2; bei aus + KI-Kennzahl Meldung für unbekannten Namen, sonst „noch nicht unterstützt“). Beide Tests danach angepasst (Spec-Entscheidung, kein Lockern), in Lauf 2 grün. Lauf 1 wörtlich: `Fehler: --export-custom-summary wird in dieser Version noch nicht unterstützt` (Exit 2, auch bei Schalter aus).
@@ -48,12 +67,12 @@ Lauf 2: keine roten Tests. Die Befunde aus Lauf 1 und ihre Erledigung:
 
 ## 3. Spec-Unklarheiten und Lücken
 
-Entschieden (23.11.2026): Command-Namen mit genau einem Punkt (Nachtrag 1); Gruppe der KI-Tabs vorerst „Benutzerdefiniert“ (Nachtrag 2; die Tests suchen weiterhin gruppenunabhängig); Umschalten ohne Neuladen (Nachtrag 5); KI-Seite auch im Menü „Konfiguration ▾“ (Nachtrag 6); `--export-custom-summary` (OUT-203).
+Entschieden (23.11.2026): Feld „Kosten“ nur mit Schalter an und aktiven KI-Aufgaben (Nachtrag 7); Namen nach Nachtrag 8 (siehe aber Befund 5); Command-Namen mit genau einem Punkt (Nachtrag 1); Gruppe der KI-Tabs vorerst „Benutzerdefiniert“ (Nachtrag 2; die Tests suchen weiterhin gruppenunabhängig); Umschalten ohne Neuladen (Nachtrag 5); KI-Seite auch im Menü „Konfiguration ▾“ (Nachtrag 6); `--export-custom-summary` (OUT-203).
 
 Weiter offen:
-- **UI-013 vs. Platzhalter:** UI-013 zeigt `Kosten` „nur wenn für den Crawl KI-Aufgaben … aktiv sind“; F02 verlangt einen mit dem Schalter sichtbaren Platzhalter. Ob der Platzhalter bei Schalter an ohne KI-Aufgaben erscheinen darf, ist offen; geprüft sind nur Feldname („Kosten:“/„Cost:“) mit Schalter an und das Fehlen mit Schalter aus. Das Zahlenformat (M4-U01) ist nicht geprüft.
+- **Zahlenformat des Felds „Kosten“** (M4-U01): nicht geprüft; geprüft ist nur der Feldname.
 - **Leerzustand der KI-Tabs ohne Crawl:** Code nicht festgelegt; geprüft ist genau ein UI-016-Code mit Rang ≤ 8 (nicht `NO_MATCH`, `NOT_APPLICABLE`, `NO_SELECTION`).
-- **Namen von Abschnitt/Seite auf Englisch** und Übersetzung der KI-Tab-Namen: nicht festgelegt; geprüft „KI“ (de) bzw. Anzahl und die Tab-Namen auf Englisch.
+- **Name der KI-Konfigurationsseite** („KI“/„AI“, Nachtrag 8): nur indirekt geprüft (eine zusätzliche Seite in Dialog und Menü), nicht über den Namen.
 - **`--api-budget`** (gemeinsames Budget KI + DataForSEO) bei Schalter aus in `--help`: offen, nicht geprüft.
 - **KI-Optionen bei Schalter aus ausdrücklich gesetzt** (`--use-ai`, `--ai-tasks …`): Verhalten nicht festgelegt (OUT-203 regelt nur Namen), nicht geprüft.
 - **Mock-Zähler 0 (AGENT-030):** nicht direkt gemessen; geprüft ist das Scheitern schon an der Werkzeugauswahl (identische Antwort wie für einen unbekannten Namen) und im UI-Test, dass bei Schalter aus kein `ai.*`-Command über die Bridge geht.
