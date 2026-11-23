@@ -283,3 +283,112 @@ fn openspider_mcp_rejects_ai_tools_like_unknown_ones_when_off() {
         );
     }
 }
+
+// --- OUT-203: ausdrücklich genannte KI-Namen (OS-Festlegung Schalter „KI (Vorschau)“, Nutzerentscheidung 23.11.2026,
+// Wortlaut vom Orchestrator übermittelt; in diesem Zweig noch nicht in docs/spec) ---
+
+/// Themen von `--help <thema>` und die zugehörige Option.
+const TOPICS: [(&str, &str); 4] = [
+    ("export-tabs", "--export-tabs"),
+    ("bulk-export", "--bulk-export"),
+    ("save-report", "--save-report"),
+    ("export-custom-summary", "--export-custom-summary"),
+];
+
+/// Je Thema ein KI-Name aus der Liste bei eingeschaltetem Schalter; dazu `AI:All` (Beispiel der Festlegung).
+fn ai_names_per_option() -> Vec<(&'static str, String)> {
+    let env = env_with(true);
+    let mut out = vec![("--export-tabs", "AI:All".to_string())];
+    for (topic, flag) in TOPICS {
+        let run = env.run(&["--help", topic]);
+        assert_eq!(run.code, 0, "{}", run.dump());
+        if let Some(name) = ai_lines(&run.stdout).into_iter().find(|n| n != "AI:All") {
+            out.push((flag, name));
+        }
+    }
+    out
+}
+
+/// Nennt der Text (ohne die zitierte Eingabe) einen KI-Namen – als Listenzeile oder als zitierten Vorschlag?
+fn names_ai_besides(text: &str, input: &str) -> Vec<String> {
+    let stripped = text.replace(input, "<INPUT>");
+    let mut hits: Vec<String> = ai_lines(&stripped);
+    for tab in AI_TABS {
+        for quoted in [format!("'{tab}:"), format!("'{tab}'")] {
+            if stripped.contains(&quoted) {
+                hits.push(quoted);
+            }
+        }
+    }
+    hits
+}
+
+fn crawl_args(site: &os_testsite::TestSite, env: &Env, flag: &str, name: &str) -> Vec<String> {
+    vec![
+        "--crawl".into(),
+        "http://site.test/".into(),
+        "--resolve".into(),
+        common::resolve(site),
+        "--output-folder".into(),
+        env.out().to_string_lossy().into_owned(),
+        flag.into(),
+        name.into(),
+    ]
+}
+
+// spec: OUT-203
+// acceptance: independent
+// Schalter aus: ein ausdrücklich genannter KI-Name (Tab-Export, Bulk-Export, Report, Kennzahl) → Exit-Code 2 vor dem
+// Crawl (0 Requests an die Testsite) mit der Meldung für einen unbekannten Namen; weder Vorschlag noch Liste nennen
+// einen KI-Namen.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn switch_off_explicit_ai_names_are_unknown_and_rejected_before_the_crawl() {
+    let names = ai_names_per_option();
+    let site = common::site("out-basic-site").await;
+    let mut failures = Vec::new();
+    for (flag, name) in &names {
+        let env = env_with(false);
+        site.reset_request_log();
+        let run = env.run_async(crawl_args(&site, &env, flag, name)).await;
+        let requests = site.requests().len();
+        let unknown_line = run
+            .stderr
+            .lines()
+            .any(|l| l.contains("unknown ") && l.contains(&format!("'{name}'")));
+        let leaked = names_ai_besides(&run.stderr, &format!("'{name}'"));
+        if run.code != 2 || !unknown_line || requests != 0 || !leaked.is_empty() {
+            failures.push(format!(
+                "{flag} {name:?}: exit {} (erwartet 2), Meldung „unknown … '{name}'“: {unknown_line}, \
+                 Requests: {requests}, KI-Namen in Vorschlag/Liste: {leaked:?}\n{}",
+                run.code,
+                run.dump()
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+// spec: OUT-203
+// acceptance: independent
+// Schalter an: dieselben Namen sind gültig – keine Meldung für einen unbekannten Namen, kein Exit-Code 2.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn switch_on_explicit_ai_names_are_valid() {
+    let names = ai_names_per_option();
+    let site = common::site("out-basic-site").await;
+    let mut failures = Vec::new();
+    for (flag, name) in &names {
+        let env = env_with(true);
+        let run = env.run_async(crawl_args(&site, &env, flag, name)).await;
+        let unknown_line = run
+            .stderr
+            .lines()
+            .any(|l| l.contains("unknown ") && l.contains(&format!("'{name}'")));
+        if run.code == 2 || unknown_line {
+            failures.push(format!(
+                "{flag} {name:?} bei Schalter an abgelehnt\n{}",
+                run.dump()
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
