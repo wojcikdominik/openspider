@@ -27,8 +27,13 @@ test("real bridge: crawl, recrawl a changed page, then remove the URL and update
     }, `http://127.0.0.1:${address.port}/`);
     // The Windows runner needs a little over 5 s for crawl, analysis and view rebuild (Runde 11).
     await expect(page.getByText("Showing: 1 of 1", { exact: true })).toBeVisible({ timeout: 20_000 });
+    // The automatic analysis after the crawl rebuilds the view and drops a selection made before it has finished.
+    await expect(page.getByTestId("analysis-feedback")).toHaveText("Analysis completed", { timeout: 20_000 });
     const canvas = page.locator(".os-data-grid");
+    const row = canvas.locator('[role=row][aria-rowindex="2"]');
+    await expect(row).toHaveAttribute("aria-busy", "false");
     await canvas.click({ position: { x: 225, y: 43 } });
+    await expect(row).toHaveAttribute("aria-selected", "true");
     title = "Changed title";
     await page.keyboard.press("Shift+F10");
     await page.getByRole("menuitem", { name: "Recrawl", exact: true }).click();
