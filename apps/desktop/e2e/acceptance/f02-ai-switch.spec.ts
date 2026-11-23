@@ -264,14 +264,13 @@ test("toggling the switch adds and removes the AI settings section and configura
   expect(sectionsOff).not.toContain("KI");
 
   await setSwitch(settings, true);
-  await expect.configure({ soft: true }).poll(() => settingsTabs(settings), { timeout: 15_000 }).toContain("KI");
-  expect.soft((await settingsTabs(settings)).length, "genau ein zusätzlicher Abschnitt").toBe(sectionsOff.length + 1);
+  // Nur über die Anzahl: ein Neuaufbau nach der Einstellungsänderung kann die zuvor im Fenster gesetzte Sprache zurücksetzen.
+  await expect.configure({ soft: true }).poll(async () => (await settingsTabs(settings)).length, { timeout: 15_000, message: "genau ein zusätzlicher Abschnitt" }).toBe(sectionsOff.length + 1);
   await expect.configure({ soft: true }).poll(async () => (await configDialogPages(page)).length, { timeout: 15_000 }).toBeGreaterThan(dialogOff.length);
   await expect.configure({ soft: true }).poll(async () => (await configEntries(page)).length, { timeout: 15_000 }).toBeGreaterThan(menuOff.length);
 
   await setSwitch(settings, false);
-  await expect.configure({ soft: true }).poll(() => settingsTabs(settings), { timeout: 15_000 }).not.toContain("KI");
-  expect.soft((await settingsTabs(settings)).length).toBe(sectionsOff.length);
+  await expect.configure({ soft: true }).poll(async () => (await settingsTabs(settings)).length, { timeout: 15_000, message: "Abschnitt „KI“ wieder entfernt" }).toBe(sectionsOff.length);
   await expect.configure({ soft: true }).poll(() => configDialogPages(page), { timeout: 15_000 }).toEqual(dialogOff);
   await expect.configure({ soft: true }).poll(() => configEntries(page), { timeout: 15_000 }).toEqual(menuOff);
 });
