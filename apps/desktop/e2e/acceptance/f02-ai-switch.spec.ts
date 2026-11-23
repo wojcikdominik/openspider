@@ -2,7 +2,7 @@
 // acceptance: independent
 //
 // Quellen: docs/spec/05-ui.md UI-004 ([M4] Tabs AI, AI Decisions, AI Suggestions, AI Search), UI-013 (Statusleistenfeld
-// `Kosten`, Feldname „Kosten:“ / „Cost:“), UI-016 (Leerzustände, Codes und Vorrang), docs/spec/schemas/settings.schema.json
+// `Kosten`, Feldname „Kosten:“ / „Cost:“; sichtbar nur mit Schalter an und aktiven KI-Aufgaben, M4.md 3.3 Nachtrag 7), UI-016 (Leerzustände, Codes und Vorrang), docs/spec/schemas/settings.schema.json
 // (`ai_app.preview_enabled`, Standard aus), docs/plan/M4.md E1 (E-2 b) und 3.3 (Tabs, Feld Kosten, Einstellungsabschnitt
 // „KI“ und Konfigurationsseiten nur mit eingeschaltetem Schalter). Läuft gegen den echten Kern (os-app-bridge,
 // OS_E2E_TRANSPORT=bridge); jeder Test hat ein eigenes, leeres Home (freshState).
@@ -26,6 +26,28 @@ async function language(page: Page, lang: "de" | "en") {
     const path = "/src/i18n/index.ts";
     await (await import(/* @vite-ignore */ path)).setLanguage(l);
   }, lang);
+}
+
+/**
+ * Setzt für den Crawl des Fensters KI-Aufgaben aktiv (Aufrufweg laut Orchestrator: `config.get` lesen, `config.ai.enabled`
+ * und `config.ai.suggestions.title` setzen, per `config.set` zurückschreiben). Ohne geöffneten Crawl wirkt das auf den
+ * Konfigurationsentwurf des Fensters.
+ */
+async function activateAiTasks(page: Page) {
+  await page.evaluate(async () => {
+    const path = "/src/ipc/config.ts";
+    const { config } = await import(/* @vite-ignore */ path);
+    const dto = await config.get();
+    const ai = (dto.config.ai ??= {}) as Record<string, unknown>;
+    ai.enabled = true;
+    ai.suggestions = { ...((ai.suggestions as Record<string, unknown> | undefined) ?? {}), title: true };
+    await config.set(dto);
+  });
+}
+/** UI-013 / M4.md 3.3 Nachtrag (7): Feld „Kosten“ nur mit Schalter an UND aktiven KI-Aufgaben. Kurz warten, dann zählen. */
+async function expectNoCostField(page: Page, what: string) {
+  await page.waitForTimeout(2_000);
+  await expect.soft(page.getByText(COST), what).toHaveCount(0);
 }
 
 /** Zeichnet die über die Bridge gesendeten Commands auf (Websocket-Frames). */
@@ -123,6 +145,9 @@ test("switch off (default): no AI tabs, no cost field, no AI configuration pages
   await expect(page.getByText(COST)).toHaveCount(0);
   await language(page, "de");
   await expect(page.getByText(COST)).toHaveCount(0);
+  // Nachtrag (7): auch mit aktiven KI-Aufgaben kein Feld, solange der Schalter aus ist.
+  await activateAiTasks(page);
+  await expectNoCostField(page, "Schalter aus, KI-Aufgaben aktiv");
   expect(aiCommandsIn(frames), "KI-Commands bei Schalter aus").toEqual([]);
 });
 
@@ -168,6 +193,9 @@ test("switch on: four AI tabs with an empty state, AI settings section, AI confi
   const sectionsOn = await settingsTabs(settings);
   expect.soft(sectionsOn, "Einstellungsabschnitt „KI“").toContain("KI");
   expect.soft(sectionsOn.length, "genau ein zusätzlicher Abschnitt").toBe(sectionsOff.length + 1);
+  await language(settings, "en");
+  expect.soft(await settingsTabs(settings), "Settings section „AI“ (Nachtrag 8)").toContain("AI");
+  await language(settings, "de");
   if (sectionsOn.includes("KI")) {
     await settings.getByRole("tab", { name: "KI", exact: true }).click();
     await expect.soft(settings.getByRole("tabpanel")).toBeVisible();
@@ -204,8 +232,16 @@ test("switch on: four AI tabs with an empty state, AI settings section, AI confi
   for (const entry of menuOff) expect.soft(menuOn, entry).toContain(entry);
   expect.soft(menuOn.length, `Konfiguration ▾ an: ${menuOn}`).toBeGreaterThan(menuOff.length);
 
-  // UI-013: Feld „Kosten“ – Feldname je Sprache.
-  await expect.soft(page.getByText(/^Cost:/)).toHaveCount(1);
+  // Nachtrag (8): die KI-Tab-Namen bleiben auf Deutsch englisch.
+  await language(page, "de");
+  const tabsDe = await topTabs(page);
+  for (const tab of AI_TABS) expect.soft(tabsDe.has(tab), `${tab} auf Deutsch: ${[...tabsDe.keys()]}`).toBe(true);
+  await language(page, "en");
+
+  // UI-013 / Nachtrag (7): Schalter an ohne aktive KI-Aufgaben → kein Feld; mit aktiven KI-Aufgaben → Feld, Feldname je Sprache.
+  await expectNoCostField(page, "Schalter an, keine KI-Aufgaben");
+  await activateAiTasks(page);
+  await expect.soft(page.getByText(/^Cost:/)).toHaveCount(1, { timeout: 10_000 });
   await language(page, "de");
   await expect.soft(page.getByText(/^Kosten:/)).toHaveCount(1);
   await language(page, "en");
@@ -240,7 +276,10 @@ test("toggling the switch in the settings window updates the open main window wi
 
   await setSwitch(settings, true);
   await expect.poll(async () => { const tabs = await topTabs(page); return AI_TABS.filter((t) => tabs.has(t)).length; }, { timeout: 15_000 }).toBe(4);
-  await expect(page.getByText(COST)).toHaveCount(1);
+  // Nachtrag (7): ohne aktive KI-Aufgaben kein Feld; nach dem Aktivieren erscheint es ohne Neuladen.
+  await expectNoCostField(page, "Schalter an, keine KI-Aufgaben");
+  await activateAiTasks(page);
+  await expect(page.getByText(COST)).toHaveCount(1, { timeout: 10_000 });
 
   await setSwitch(settings, false);
   await expect.configure({ soft: true }).poll(async () => { const tabs = await topTabs(page); return AI_TABS.filter((t) => tabs.has(t)).length; }, { timeout: 15_000 }).toBe(0);
