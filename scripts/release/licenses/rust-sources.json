@@ -11,6 +11,18 @@
       "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
     }
   ],
+  "barnes-hut-tree@0.1.3": [
+    {
+      "url": "https://raw.githubusercontent.com/frjnn/bhtsne/19352eae29b0fc62ae4dc9c8f8b76a36e330bf2a/LICENSE",
+      "sha256": "1c56ccaa5105241188827a267a8ef404f6ca6b3180a437b15727221d3c6c52f2"
+    }
+  ],
+  "bhtsne@0.7.14": [
+    {
+      "url": "https://raw.githubusercontent.com/frjnn/bhtsne/19352eae29b0fc62ae4dc9c8f8b76a36e330bf2a/LICENSE",
+      "sha256": "1c56ccaa5105241188827a267a8ef404f6ca6b3180a437b15727221d3c6c52f2"
+    }
+  ],
   "block2@0.6.2": [
     {
       "url": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md",
@@ -27,6 +39,32 @@
     {
       "url": "https://raw.githubusercontent.com/madsmtm/objc2/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md",
       "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54"
+    }
+  ],
+  "jsonschema@0.20.0": [
+    {
+      "url": "https://raw.githubusercontent.com/Stranger6667/jsonschema-rs/81b9da31a29ca960753fe9f4e68486c7351bc420/LICENSE",
+      "sha256": "0f614c290631feb320f6c0d54c72fc0f85b17ca6d6dc0b5a3383ea7de3e9dc69"
+    }
+  ],
+  "linfa-clustering@0.8.1": [
+    {
+      "url": "https://raw.githubusercontent.com/rust-ml/linfa/4484a55c8eb3105fcab5f6d5ed0c4cc0d2c2bbb0/LICENSE-APACHE2",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/rust-ml/linfa/4484a55c8eb3105fcab5f6d5ed0c4cc0d2c2bbb0/LICENSE-MIT",
+      "sha256": "65187b4941f66988eb7af85ee98625351b7cbc38f41830534281829f54991e9c"
+    }
+  ],
+  "linfa-nn@0.8.1": [
+    {
+      "url": "https://raw.githubusercontent.com/rust-ml/linfa/4484a55c8eb3105fcab5f6d5ed0c4cc0d2c2bbb0/LICENSE-APACHE2",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/rust-ml/linfa/4484a55c8eb3105fcab5f6d5ed0c4cc0d2c2bbb0/LICENSE-MIT",
+      "sha256": "65187b4941f66988eb7af85ee98625351b7cbc38f41830534281829f54991e9c"
     }
   ],
   "mac-notification-sys@0.6.15": [
@@ -145,6 +183,18 @@
     {
       "url": "https://raw.githubusercontent.com/Aleph-Alpha/ts-rs/7182ad8289596097235406b715fa04506443b4ad/LICENSE",
       "sha256": "db7f7f8e7236a2d0b41b855b2501b7b913caebbcda6ce498637a304ad1706ce1"
+    }
+  ],
+  "uuid-simd@0.8.0": [
+    {
+      "url": "https://raw.githubusercontent.com/Nugine/simd/d74c030d9dc4f3cae02146d1f497ff62726ef09a/LICENSE",
+      "sha256": "71674605ec4c087fe9eb534e3e4f9e26eb2e4aabcd76a29fd156c6a844d44b3d"
+    }
+  ],
+  "vsimd@0.8.0": [
+    {
+      "url": "https://raw.githubusercontent.com/Nugine/simd/d74c030d9dc4f3cae02146d1f497ff62726ef09a/LICENSE",
+      "sha256": "71674605ec4c087fe9eb534e3e4f9e26eb2e4aabcd76a29fd156c6a844d44b3d"
     }
   ],
   "webview2-com@0.39.1": [
