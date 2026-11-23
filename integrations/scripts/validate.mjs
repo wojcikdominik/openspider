@@ -16,9 +16,12 @@ export function checkSchema(name, value) {
 
 // Fail closed on an unfamiliar registration shape. Changes to tools::all() require
 // updating this small source reader, never silently accepting a stale tool catalog.
-export function registry(repo = resolve(root, '..')) {
+// spec: AGENT-030
+/** Tools a server offers by default: `tools::all()` without `AI_TOOLS`, which need the switch "KI (Vorschau)" (`tools::offered`). With `preview` all tools. */
+export function registry(repo = resolve(root, '..'), { preview = false } = {}) {
   const dir = join(repo, 'crates/os-mcp/src/tools');
-  const body = read(join(dir, 'mod.rs')).split('pub fn all()')[1]?.split('#[cfg(test)]')[0];
+  const mod = read(join(dir, 'mod.rs'));
+  const body = mod.split('pub fn all()')[1]?.split('#[cfg(test)]')[0];
   assert(body, 'tools::all() missing');
   const entries = [...body.matchAll(/Box::new\((\w+)::(\w+)(?:\("([^"]+)"\))?\)/g)];
   assert.equal(entries.length, [...body.matchAll(/Box::new/g)].length, 'Unrecognized registration');
@@ -32,6 +35,15 @@ export function registry(repo = resolve(root, '..')) {
     assert(name && ['read', 'crawl', 'write', 'cost'].includes(className), `Unknown registration ${module}`);
     assert(!(name in tools), `Duplicate tool ${name}`);
     tools[name] = className;
+  }
+  if (preview) return tools;
+  const ai = mod.match(/pub const AI_TOOLS: \[&str; (\d+)\] = \[([\s\S]*?)\];/);
+  assert(ai, 'tools::AI_TOOLS missing');
+  const aiNames = [...ai[2].matchAll(/"([^"]+)"/g)].map(([, name]) => name);
+  assert.equal(aiNames.length, Number(ai[1]), 'Unrecognized AI_TOOLS entry');
+  for (const name of aiNames) {
+    assert(name in tools, `AI tool ${name} is not registered in tools::all()`);
+    delete tools[name];
   }
   return tools;
 }
@@ -85,7 +97,7 @@ export function validate(base = root) {
     }
   };
   const rows = [...read(join(skillDir, 'references/tools.md')).matchAll(/^\| `(\w+)` \| `(\w+)` \|/gm)];
-  assert.deepEqual(Object.fromEntries(rows.map(([, name, cls]) => [name, cls])), tools, 'Tool catalog differs from tools::all()');
+  assert.deepEqual(Object.fromEntries(rows.map(([, name, cls]) => [name, cls])), tools, 'Tool catalog differs from the tools offered by default (tools::offered, switch off)');
   for (const file of files(skillDir).filter((path) => path.endsWith('.md'))) {
     if (relative(skillDir, file).split(sep)[0] !== 'evals') checkToolReferences(file);
     for (const [, block] of read(file).matchAll(/```json\n([\s\S]*?)\n```/g)) {

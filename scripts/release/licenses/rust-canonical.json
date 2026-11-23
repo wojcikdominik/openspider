@@ -11,6 +11,10 @@
     "license": "MIT OR Apache-2.0",
     "reason": "Same genawaiter repository omits license texts; published Cargo manifest declares MIT OR Apache-2.0."
   },
+  "linfa-linalg@0.2.1": {
+    "license": "MIT/Apache-2.0",
+    "reason": "Neither the published archive nor its upstream repository (rust-ml/linfa-linalg, commit 6f9992623cd47540934ead87cb129a1ff5604d26) contains a license file; the README declares dual licensing under Apache-2.0 or MIT. Use canonical terms with authors from the published Cargo manifest."
+  },
   "next-gen-proc_macros@0.1.1": {
     "license": "Zlib OR MIT OR Apache-2.0",
     "reason": "Archive omits license files; repository URL in Cargo manifest is no longer available. Canonical terms selected from the declared license with published authors."
