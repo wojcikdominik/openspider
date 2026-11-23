@@ -287,9 +287,8 @@ fn openspider_mcp_rejects_ai_tools_like_unknown_ones_when_off() {
 // --- OUT-203: ausdrücklich genannte KI-Namen (OS-Festlegung Schalter „KI (Vorschau)“, Nutzerentscheidung 23.11.2026,
 // Wortlaut vom Orchestrator übermittelt; in diesem Zweig noch nicht in docs/spec) ---
 
-/// Themen von `--help <thema>` und die zugehörige Option. `--export-custom-summary` hat eigene Tests: die Option ist
-/// in diesem Stand allgemein noch nicht unterstützt (Exit-Code 2 für jeden Namen), das soll die übrigen Fälle nicht
-/// verdecken.
+/// Themen von `--help <thema>` und die zugehörige Option. `--export-custom-summary` hat eigene Tests: Klarstellung in
+/// OUT-203 (23.11.2026) – solange die Option insgesamt nicht unterstützt wird (OUT-200), endet sie immer mit Exit-Code 2.
 const TOPICS: [(&str, &str); 3] = [
     ("export-tabs", "--export-tabs"),
     ("bulk-export", "--bulk-export"),
@@ -411,8 +410,8 @@ async fn check_on(names: Vec<(&'static str, String)>) {
 
 // spec: OUT-203
 // acceptance: independent
-// Wie oben für `--export-custom-summary` (Kennzahlen): Schalter aus → KI-Kennzahl unbekannt, Exit-Code 2 mit der
-// Meldung für einen unbekannten Namen.
+// Wie oben für `--export-custom-summary` (Kennzahlen; Klarstellung OUT-203 vom 23.11.2026): Schalter aus → KI-Kennzahl
+// unbekannt, Exit-Code 2 mit der Meldung für einen unbekannten Namen (nicht „noch nicht unterstützt“), 0 Requests.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn switch_off_explicit_ai_summary_metric_is_unknown() {
     check_off(ai_names_for(&SUMMARY)).await;
@@ -420,8 +419,39 @@ async fn switch_off_explicit_ai_summary_metric_is_unknown() {
 
 // spec: OUT-203
 // acceptance: independent
-// Schalter an: eine gelistete KI-Kennzahl ist für `--export-custom-summary` gültig.
+// Klarstellung OUT-203 (23.11.2026): solange `--export-custom-summary` nicht unterstützt wird (OUT-200), endet die
+// Option bei eingeschaltetem Schalter auch mit KI-Kennzahl mit Exit-Code 2 und der Meldung, dass die Option noch nicht
+// unterstützt wird – nicht mit der Meldung für einen unbekannten Namen; vor dem Crawl (0 Requests).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn switch_on_explicit_ai_summary_metric_is_valid() {
-    check_on(ai_names_for(&SUMMARY)).await;
+async fn switch_on_ai_summary_metric_ends_with_not_supported() {
+    let names = ai_names_for(&SUMMARY);
+    assert!(
+        !names.is_empty(),
+        "keine KI-Kennzahl bei Schalter an gelistet"
+    );
+    let site = common::site("out-basic-site").await;
+    let mut failures = Vec::new();
+    for (flag, name) in &names {
+        let env = env_with(true);
+        site.reset_request_log();
+        let run = env.run_async(crawl_args(&site, &env, flag, name)).await;
+        let requests = site.requests().len();
+        let unknown_line = run
+            .stderr
+            .lines()
+            .any(|l| l.contains("unknown ") && l.contains(&format!("'{name}'")));
+        let not_supported = run.stderr.lines().any(|l| {
+            l.contains("--export-custom-summary")
+                && (l.contains("nicht unterstützt") || l.to_lowercase().contains("not supported"))
+        });
+        if run.code != 2 || unknown_line || !not_supported || requests != 0 {
+            failures.push(format!(
+                "{flag} {name:?}: exit {} (erwartet 2), Meldung „nicht unterstützt“: {not_supported}, \
+                 Meldung „unknown“: {unknown_line}, Requests: {requests}\n{}",
+                run.code,
+                run.dump()
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }

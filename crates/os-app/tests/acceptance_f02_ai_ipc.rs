@@ -5,9 +5,8 @@
 //! (E-2 b: Schalter, Standard aus) und `docs/spec/schemas/settings.schema.json` (`ai_app.preview_enabled`, Standard
 //! `false`). Bericht, Commit-Texte und Tests des Bauers wurden nicht gelesen.
 //!
-//! Schreibweise der Namen: 3.3 nennt `ai.cost.estimate`, der bestehende Command-Vertrag (M2) verlangt genau einen Punkt
-//! (`<domäne>.<command>`). Beide Formen gelten hier als Abbildung desselben Bereichs (`ai.cost.estimate` oder
-//! `ai.costEstimate`); die Unklarheit steht im Bericht `docs/plan/M4-reports/f02-tests.md`.
+//! Schreibweise der Namen (Entscheidung des Orchestrators vom 23.11.2026 zur Unklarheit aus dem Bericht): genau ein
+//! Punkt, `ai.<bereich><Aktion>` – die Bereiche aus 3.3 (`ai.cost.estimate` …) erscheinen als `ai.costEstimate` usw.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -69,16 +68,14 @@ fn in_area(name: &str, area: &str) -> bool {
     let Some(tail) = rest.strip_prefix(area) else {
         return false;
     };
-    tail.starts_with('.') || tail.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+    tail.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && !tail.contains('.')
 }
 
-/// Hat der Bereich die Aktion `action` (`ai.cost.estimate` oder `ai.costEstimate`)?
+/// Hat der Bereich die Aktion `action` (`ai.costEstimate` für `ai.cost.estimate` aus 3.3)?
 fn has_action(names: &[String], area: &str, action: &str) -> bool {
     let mut camel = action.to_string();
     camel[..1].make_ascii_uppercase();
-    names
-        .iter()
-        .any(|n| n == &format!("ai.{area}.{action}") || n == &format!("ai.{area}{camel}"))
+    names.iter().any(|n| n == &format!("ai.{area}{camel}"))
 }
 
 fn preview_of(settings: &Value) -> Value {
@@ -124,6 +121,25 @@ async fn named_actions_cost_estimate_budget_log_and_tester_run_exist() {
             "ai.{area}.{action} fehlt; vorhanden: {names:?}"
         );
     }
+}
+
+// spec: UI-004 [M4]
+// acceptance: independent
+// Entscheidung 23.11.2026: jeder KI-Command hat genau einen Punkt (`ai.<bereich><Aktion>`).
+#[tokio::test]
+async fn every_ai_command_name_has_exactly_one_dot() {
+    let home = tempfile::tempdir().unwrap();
+    let app = app(home.path());
+    let names = ai_commands(&app);
+    assert!(!names.is_empty());
+    let wrong: Vec<&String> = names
+        .iter()
+        .filter(|n| n.matches('.').count() != 1)
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "Namen mit mehr als einem Punkt: {wrong:?}"
+    );
 }
 
 // spec: UI-004 [M4]
