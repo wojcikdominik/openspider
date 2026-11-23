@@ -302,6 +302,7 @@ fn output_mode(args: &RunArgs, rep: &Reporter) -> OutputMode {
 fn resolve_exports(
     args: &RunArgs,
     cfg: &os_model::CrawlConfig,
+    preview: os_ai::PreviewSwitch,
     lenient: Option<&Reporter>,
 ) -> Result<Vec<Resolved>, CliError> {
     let mut exports: Vec<Resolved> = Vec::new();
@@ -313,7 +314,7 @@ fn resolve_exports(
     ] {
         for list in lists {
             for name in names::split_list(list) {
-                match names::resolve_with(kind, &name, cfg) {
+                match names::resolve_in(kind, &name, cfg, preview) {
                     Ok(resolved) => {
                         if !exports.iter().any(|e| e.key() == resolved.key()) {
                             exports.push(resolved);
@@ -423,6 +424,19 @@ fn build_impl(
 ) -> Result<Plan, CliError> {
     if args.use_google_analytics.is_some() {
         return Err(CliError::usage("--use-google-analytics (Universal Analytics) wird nicht mehr unterstützt; --use-google-analytics-4 verwenden"));
+    }
+    // OUT-203, OUT-200 (Plan M4 E-2 b, M4-F02): Kennzahlen von `--export-custom-summary` vor dem Crawl prüfen; ohne
+    // Schalter „KI (Vorschau)“ gelten KI-Kennzahlen als unbekannt.
+    let preview = names::preview_in(&paths);
+    if let Some(list) = &args.export_custom_summary {
+        let problems: Vec<String> = names::split_list(list)
+            .iter()
+            .filter_map(|metric| names::resolve_metric(metric, preview).err())
+            .map(|unknown| names::unknown_metric_message(&unknown))
+            .collect();
+        if !problems.is_empty() {
+            return Err(CliError::usage(problems.join("\n")));
+        }
     }
     let unsupported = args.unsupported();
     if !unsupported.is_empty() {
@@ -659,6 +673,7 @@ fn build_impl(
     let exports = resolve_exports(
         &effective,
         &config,
+        preview,
         args.export_preset
             .is_some()
             .then_some(rep)
@@ -676,7 +691,7 @@ fn build_impl(
         .collect::<Result<Vec<_>, _>>()?;
     // Explicit CLI names always fail before a crawl, including when a preset is used.
     if !task_mode {
-        resolve_exports(args, &config, None)?;
+        resolve_exports(args, &config, preview, None)?;
     }
     if batch.is_some_and(|b| b.single_workbook) && xls {
         return Err(CliError::usage(
@@ -760,6 +775,13 @@ fn build_impl(
                 .and_then(|p| p.file_name())
                 .map(|s| s.to_string_lossy().into_owned());
         }
+    }
+
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ der App-Einstellungen läuft der Crawl (auch als
+    // geplante Aufgabe) ohne KI-Schritte; eingeschränkt wird die Laufkopie, nicht das gespeicherte Profil.
+    preview.restrict(&mut config);
+    if let Some(resume) = resume_config.as_mut() {
+        preview.restrict(resume);
     }
 
     let project = args
@@ -1054,5 +1076,109 @@ mod tests {
         )
         .unwrap_err();
         assert!(resume.message.contains("--resume"));
+    }
+
+    // spec: OUT-203
+    // OS-Festlegung Schalter „KI (Vorschau)“ (Plan M4 E-2 b, Nutzerentscheidung 23.11.2026; M4-F02). Fixture:
+    // Datenordner ohne `settings.toml` (Schalter aus) bzw. mit `ai_app.preview_enabled = true` (an). Aus: jeder
+    // ausdrücklich genannte KI-Name ist ein Aufruffehler (Exit-Code 2) mit der Meldung für einen unbekannten Namen, ohne
+    // KI-Namen in Vorschlag oder Liste; an: derselbe Name wird angenommen.
+    #[test]
+    fn ai_names_are_unknown_only_while_the_preview_switch_is_off() {
+        use os_ai::PreviewSwitch;
+        let ai = |n: &String| {
+            names::shows_name(PreviewSwitch::ON, n) && !names::shows_name(PreviewSwitch::OFF, n)
+        };
+        let first = |list: Vec<String>| {
+            list.into_iter()
+                .find(|n| ai(n))
+                .expect("KI-Name im Register")
+        };
+        let cases = [
+            (
+                "--export-tabs",
+                first(names::names_with(Kind::Tab, PreviewSwitch::ON)),
+                "unknown export",
+            ),
+            (
+                "--bulk-export",
+                first(names::names_with(Kind::Bulk, PreviewSwitch::ON)),
+                "unknown export",
+            ),
+            (
+                "--save-report",
+                first(names::names_with(Kind::Report, PreviewSwitch::ON)),
+                "unknown report",
+            ),
+            (
+                "--export-custom-summary",
+                first(names::metric_names_with(PreviewSwitch::ON)),
+                "unknown metric",
+            ),
+        ];
+        let off = tempfile::tempdir().unwrap();
+        let on = tempfile::tempdir().unwrap();
+        let mut settings = os_model::settings::AppSettings::default();
+        settings.ai_app.preview_enabled = true;
+        settings.save(&paths(on.path()).settings).unwrap();
+        assert_eq!(names::preview_in(&paths(off.path())), PreviewSwitch::OFF);
+        assert_eq!(names::preview_in(&paths(on.path())), PreviewSwitch::ON);
+
+        for (flag, name, message) in cases {
+            let out_dir = tempfile::tempdir().unwrap();
+            let out = out_dir.path().join("out").to_string_lossy().into_owned();
+            let call = [
+                "--crawl",
+                "http://site.test/",
+                "--output-folder",
+                &out,
+                flag,
+                &name,
+            ];
+            let err = build(&args(&call), paths(off.path()), &rep()).unwrap_err();
+            assert_eq!(err.exit.code(), 2, "{flag} {name}");
+            assert!(
+                err.message.starts_with(&format!("{message} '{name}'")),
+                "{flag}: {}",
+                err.message
+            );
+            let rest = err.message.replace(&format!("'{name}'"), "''");
+            for tab in names::ai_tab_ids() {
+                assert!(
+                    !rest.contains(&format!("{tab}:")),
+                    "{flag}: {}",
+                    err.message
+                );
+                assert!(
+                    !rest.lines().any(|l| l.trim() == tab),
+                    "{flag}: {}",
+                    err.message
+                );
+            }
+
+            let accepted = build(&args(&call), paths(on.path()), &rep());
+            if flag == "--export-custom-summary" {
+                // Die Option selbst ist in dieser Version noch nicht unterstützt (OUT-200, P2); die Kennzahl gilt als
+                // bekannt, also keine Meldung für einen unbekannten Namen.
+                let err = accepted.unwrap_err();
+                assert!(!err.message.contains("unknown metric"), "{}", err.message);
+                assert!(
+                    err.message.contains("noch nicht unterstützt"),
+                    "{}",
+                    err.message
+                );
+            } else {
+                let plan = accepted.unwrap_or_else(|e| panic!("{flag} {name}: {}", e.message));
+                assert_eq!(plan.exports.len(), 1, "{flag} {name}");
+            }
+        }
+
+        // Eine Nicht-KI-Kennzahl ist mit und ohne Schalter bekannt (Groß-/Kleinschreibung egal).
+        let known = names::metric_names_with(PreviewSwitch::OFF);
+        assert!(!known.is_empty());
+        assert_eq!(
+            names::resolve_metric(&known[0].to_uppercase(), PreviewSwitch::OFF),
+            Ok(known[0].clone())
+        );
     }
 }

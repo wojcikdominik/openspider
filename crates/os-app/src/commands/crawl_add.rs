@@ -93,8 +93,13 @@ fn perform<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture
                     owner_kind: "app",
                     renderer: None,
                 };
+                // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Schritte.
+                let run = super::ai_preview::restricted_override(
+                    super::ai_preview::switch(app),
+                    &session.config,
+                );
                 let handle =
-                    os_engine::resume_crawl(Arc::new(fetcher), session.path.clone(), None, deps)
+                    os_engine::resume_crawl(Arc::new(fetcher), session.path.clone(), run, deps)
                         .await
                         .map_err(engine_error)?;
                 let progress = handle.watch();

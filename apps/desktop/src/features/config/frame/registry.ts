@@ -1,4 +1,6 @@
 import type { ConfigDraft } from "./draft";
+import { aiPreviewNow } from "../../ai/preview";
+import { aiConfigPages } from "../../ai/settings";
 import { GROUP_ORDER, KNOWN_PAGES, pageTitleKey, type ConfigPage } from "./types";
 
 type PageModule = { page?: ConfigPage; pages?: ConfigPage[] };
@@ -16,10 +18,15 @@ export interface ResolvedPage extends Omit<ConfigPage, "Component" | "fields" | 
  * Weitere Pakete (M2-U13B) legen `features/config/pages/<id>/index.tsx` an und exportieren `page` bzw. `pages`; der Rahmen
  * bleibt unverändert.
  */
-export function resolvePages(found: readonly ConfigPage[] = Object.values(modules).flatMap((m) => [...(m.pages ?? []), ...(m.page ? [m.page] : [])])): ResolvedPage[] {
+export function resolvePages(
+  found: readonly ConfigPage[] = Object.values(modules).flatMap((m) => [...(m.pages ?? []), ...(m.page ? [m.page] : [])]),
+  aiPreview: boolean = aiPreviewNow(),
+): ResolvedPage[] {
   const byId = new Map<string, ResolvedPage>();
   for (const k of KNOWN_PAGES) byId.set(k.id, { id: k.id, group: k.group, order: k.order, titleKey: pageTitleKey(k.id), anchors: [], fields: [], Component: null });
   for (const p of found) byId.set(p.id, p);
+  // M4-F02 (Plan M4 E1, E-2 b): KI-Konfigurationsseiten nur mit eingeschaltetem Schalter „KI (Vorschau)“.
+  if (aiPreview) for (const p of aiConfigPages) byId.set(p.id, p);
   return [...byId.values()].sort((a, b) => a.order - b.order);
 }
 

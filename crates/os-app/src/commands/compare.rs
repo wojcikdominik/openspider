@@ -611,7 +611,12 @@ pub async fn change_tabs(app: &App, ctx: &CallCtx) -> Result<Vec<TabInfo>, CmdEr
         .current(&ctx.window)
         .map(|s| s.config)
         .unwrap_or_default();
-    let mut result: Vec<TabInfo> = os_analyze::tabs::configured(&cfg)
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Tabs.
+    let tabs = super::ai_preview::visible_tabs(
+        super::ai_preview::switch(app),
+        os_analyze::tabs::configured(&cfg),
+    );
+    let mut result: Vec<TabInfo> = tabs
         .iter()
         .filter(|t| t.id != "Change Detection")
         .enumerate()
@@ -1153,10 +1158,15 @@ pub async fn change_overview(
         Ok(r) => r,
         Err(e) => return Some(Err(e)),
     };
+    let preview = super::ai_preview::switch(app);
     Some(
         with_active(app, &ctx.window, move |active| {
             let side = active.comparison.current();
-            let tabs = os_analyze::tabs::configured_for_file(&side.config, &side.file);
+            // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Tabs und -Filter.
+            let tabs = super::ai_preview::visible_tabs(
+                preview,
+                os_analyze::tabs::configured_for_file(&side.config, &side.file),
+            );
             let counts = os_analyze::views::filter_counts_in(&tabs, &side.file, &side.config)
                 .map_err(super::catalog::view_error)?;
             let mut rows = super::catalog::count_rows(&tabs, &side.config, &counts);

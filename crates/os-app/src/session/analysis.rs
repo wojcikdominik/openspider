@@ -202,12 +202,14 @@ async fn execute(
     super::control::ensure_idle(app, s).await?;
     // This operation holds the lifecycle guard: queuing behind catalog readers
     // would also prevent the final crawl status from reaching the window.
-    let cfg = app
+    let mut cfg = app
         .read_pool()
         .run_cached(s.key.clone(), "session-meta", cancel.clone(), |f, _| {
             f.config()
         })
         .await?;
+    // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ laufen die KI-Schritte der Analyse nicht.
+    crate::commands::ai_preview::restrict(app, &mut cfg);
     let a = app.clone();
     let key = s.key.clone();
     let clock = app.config().clock.clone();

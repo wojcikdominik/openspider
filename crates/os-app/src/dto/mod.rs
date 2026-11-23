@@ -11,6 +11,8 @@ use std::path::Path;
 
 use ts_rs::TS;
 
+/// KI-Command-Katalog (M4-F02, Registrierung).
+pub mod ai;
 pub mod api;
 pub mod app;
 pub mod auth;
@@ -37,6 +39,7 @@ pub mod view;
 pub mod viz;
 pub use update::*;
 
+pub use ai::*;
 pub use api::*;
 pub use app::*;
 pub use auth::*;
@@ -141,6 +144,8 @@ fn export_all_with(cfg: &ts_rs::Config) -> Result<(), ts_rs::ExportError> {
         AppSettingsDto,
         AiAppSettingsDto,
         ProviderEndpointDto,
+        AiRunArgs,
+        AiCostSnapshot,
         SettingsPatch,
         UiStateJson,
         DebugInfo,
@@ -546,6 +551,8 @@ pub const TYPE_NAMES: &[&str] = &[
     "AppSettingsDto",
     "AiAppSettingsDto",
     "ProviderEndpointDto",
+    "AiRunArgs",
+    "AiCostSnapshot",
     "SettingsPatch",
     "UiStateJson",
     "DebugInfo",

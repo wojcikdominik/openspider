@@ -232,6 +232,31 @@ const CATALOG_3_6A: &[&str] = &[
     "detail.a11yNode",
 ];
 
+/// KI-Command-Katalog (Plan M4 3.3, M4-F02): die Bereiche als `ai.<bereich><Aktion>` (ein Punkt, siehe
+/// `domains_are_the_documented_ones`).
+const CATALOG_M4: &[&str] = &[
+    "ai.accountsList",
+    "ai.accountsTest",
+    "ai.settingsGet",
+    "ai.settingsSet",
+    "ai.costEstimate",
+    "ai.costBudget",
+    "ai.costLog",
+    "ai.consentStatus",
+    "ai.consentGrant",
+    "ai.decisionsRun",
+    "ai.questionsList",
+    "ai.testerRun",
+    "ai.suggestRun",
+    "ai.redirectsRun",
+    "ai.linksRun",
+    "ai.askRun",
+    "ai.auditRun",
+    "ai.promptsList",
+    "ai.semanticRun",
+    "ai.searchRun",
+];
+
 /// `long_running` laut den Tabellen (liefert sofort einen `OpHandle`).
 const LONG_RUNNING: &[&str] = &[
     "detail.spellingIgnore",
@@ -271,6 +296,17 @@ const LONG_RUNNING: &[&str] = &[
     "export.issues",
     "export.sidebar",
     "viz.exportCsv",
+    // Plan M4 3.3 (M4-F02): KI-Läufe
+    "ai.accountsTest",
+    "ai.decisionsRun",
+    "ai.testerRun",
+    "ai.suggestRun",
+    "ai.redirectsRun",
+    "ai.linksRun",
+    "ai.askRun",
+    "ai.auditRun",
+    "ai.semanticRun",
+    "ai.searchRun",
 ];
 
 fn names() -> Vec<&'static str> {
@@ -285,7 +321,12 @@ fn names() -> Vec<&'static str> {
 #[test]
 fn registry_contains_exactly_the_documented_commands() {
     let have: BTreeSet<&str> = names().into_iter().collect();
-    let want: BTreeSet<&str> = CATALOG_4_4.iter().chain(CATALOG_3_6A).copied().collect();
+    let want: BTreeSet<&str> = CATALOG_4_4
+        .iter()
+        .chain(CATALOG_3_6A)
+        .chain(CATALOG_M4)
+        .copied()
+        .collect();
     let missing: Vec<_> = want.difference(&have).collect();
     let extra: Vec<_> = have.difference(&want).collect();
     assert!(missing.is_empty(), "fehlen im Register: {missing:?}");
@@ -306,7 +347,8 @@ fn domains_are_the_documented_ones() {
         "viz", "mcp", "api", "tasks", "segment", "auth", "profile", "mail", "update",
         // M3-K01 (K3-01)
         "chromium", // M3-C01 (OUT-246/OUT-247)
-        "crash",
+        "crash",    // Plan M4 3.3 (M4-F02)
+        "ai",
     ]
     .into_iter()
     .collect();

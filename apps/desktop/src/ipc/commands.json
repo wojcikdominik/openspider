@@ -1234,5 +1234,125 @@
     "args": "CrashFrontendArgs",
     "ret": "boolean",
     "longRunning": false
+  },
+  {
+    "name": "ai.accountsList",
+    "args": "void",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.accountsTest",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.settingsGet",
+    "args": "void",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.settingsSet",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.costEstimate",
+    "args": "AiRunArgs",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.costBudget",
+    "args": "void",
+    "ret": "AiCostSnapshot",
+    "longRunning": false
+  },
+  {
+    "name": "ai.costLog",
+    "args": "void",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.consentStatus",
+    "args": "void",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.consentGrant",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.decisionsRun",
+    "args": "AiRunArgs",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.questionsList",
+    "args": "void",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.testerRun",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.suggestRun",
+    "args": "AiRunArgs",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.redirectsRun",
+    "args": "AiRunArgs",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.linksRun",
+    "args": "AiRunArgs",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.askRun",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.auditRun",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.promptsList",
+    "args": "void",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.semanticRun",
+    "args": "AiRunArgs",
+    "ret": "JsonValue",
+    "longRunning": true
+  },
+  {
+    "name": "ai.searchRun",
+    "args": "AiRunArgs",
+    "ret": "JsonValue",
+    "longRunning": true
   }
 ]

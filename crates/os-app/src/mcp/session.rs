@@ -81,6 +81,10 @@ impl Access {
         resume: Option<SessionInfo>,
         fetcher: Arc<ProtectedFetcher>,
     ) -> Result<(os_engine::CrawlHandle, std::path::PathBuf), SessionError> {
+        // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Schritte (Laufkopie).
+        let preview = crate::commands::ai_preview::switch(app);
+        let mut config = config;
+        preview.restrict(&mut config);
         let mut deps = control::deps(app);
         if config.rendering.mode != os_model::RenderingMode::Text {
             deps.renderer = Some(
@@ -93,10 +97,11 @@ impl Access {
         if let Some(s) = resume {
             control::ensure_idle(app, &s).await.map_err(cmd_err)?;
             session::merge::cancel(app, &s.key).await;
+            let run = crate::commands::ai_preview::restricted_override(preview, &s.config);
             let file = s.path;
             let path = file.clone();
             let h = tokio::task::spawn_blocking(move || {
-                runtime.block_on(heap(|| os_engine::resume_crawl(fetcher, path, None, deps)))
+                runtime.block_on(heap(|| os_engine::resume_crawl(fetcher, path, run, deps)))
             })
             .await
             .map_err(err)?
@@ -126,7 +131,6 @@ impl Access {
                 os_engine::CrawlSource::List { items, label }
             }
         };
-        let mut config = config;
         config.custom_js.output_dir = Some(dir);
         let request = os_engine::CrawlRequest {
             config,

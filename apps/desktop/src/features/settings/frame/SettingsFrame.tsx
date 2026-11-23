@@ -3,7 +3,8 @@ import { useT } from "../../../i18n";
 import { EmptyState } from "../../../ui/primitives/EmptyState";
 import { Tabs } from "../../../ui/primitives/Tabs";
 import { RegionBoundary } from "../../../app/ErrorBoundary";
-import { resolveSections, sectionOfAnchor, type ResolvedSection } from "./registry";
+import { resolveSections, sectionExtras, sectionOfAnchor, type ResolvedSection } from "./registry";
+import { useAiPreview } from "../../ai/preview";
 import "./settings.css";
 
 /** Setzt den Fokus auf das Steuerelement mit `data-setting-anchor` (UI-016: Aktionsschaltfläche öffnet die Einstellung). */
@@ -35,10 +36,15 @@ export interface SettingsFrameProps {
 /** Rahmen des Einstellungsfensters: Seitennavigation links, Abschnitt rechts; Änderungen wirken sofort. */
 export function SettingsFrame({ anchor, sections }: SettingsFrameProps) {
   const t = useT();
-  const all = useMemo(() => sections ?? resolveSections(), [sections]);
+  // M4-F02: the section „KI“ follows the switch „KI (Vorschau)“ without reopening the window.
+  const aiPreview = useAiPreview();
+  const all = useMemo(() => sections ?? resolveSections(undefined, aiPreview), [sections, aiPreview]);
   const first = all[0]?.id ?? "general";
   const wanted = anchor ? sectionOfAnchor(anchor) : first;
   const [selected, setSelected] = useState(all.some((s) => s.id === wanted) ? wanted : first);
+  useEffect(() => {
+    if (!all.some((s) => s.id === selected)) setSelected(first);
+  }, [all, selected, first]);
 
   useEffect(() => {
     if (anchor && all.some((s) => s.id === sectionOfAnchor(anchor))) setSelected(sectionOfAnchor(anchor));
@@ -67,6 +73,7 @@ export function SettingsFrame({ anchor, sections }: SettingsFrameProps) {
                 <section className="os-settings-section" aria-label={t(s.titleKey)} data-settings-section={s.id}>
                   <h2 className="os-settings-heading">{t(s.titleKey)}</h2>
                   <s.Component />
+                  {sectionExtras(s.id).map((Extra, i) => <Extra key={i} />)}
                 </section>
               ) : (
                 <Placeholder section={s} title={t(s.titleKey)} />

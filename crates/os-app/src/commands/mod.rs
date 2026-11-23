@@ -4,6 +4,10 @@
 //! Die Dateien sind von M2-F01 als Stubs angelegt (`STUB(M2-xx)`): der Besitzer ersetzt die Datei und behält Namen,
 //! Argument-/Rückgabetypen und `long_running` bei.
 
+/// KI-Command-Katalog (M4-F02, Plan M4 3.3).
+pub mod ai_catalog;
+/// Schalter „KI (Vorschau)“ in der Service-Schicht (M4-F02).
+pub mod ai_preview;
 pub mod analysis;
 pub mod api;
 pub mod app;
@@ -83,6 +87,8 @@ pub fn register_all(r: &mut Registry) {
     render_provision::register(r);
     // M3-C01 (K2-61 additiv): Absturzberichte.
     crate::crash::commands::register(r);
+    // M4-F02 (Plan M4 3.3): KI-Command-Katalog (Stubs, Besitzer je Command).
+    ai_catalog::register(r);
 }
 
 pub mod app_quit;

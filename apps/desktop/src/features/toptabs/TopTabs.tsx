@@ -11,6 +11,7 @@ import { useAction } from "../../ui/actions";
 import { registerMenuContributions } from "../../ui/menu/registry";
 import { TabBar, type TabBarConfig } from "../../ui/primitives/TabBar";
 import { tabLabel } from "../../i18n/canon";
+import { useAiTabsSync } from "../ai/tabs";
 
 import "../shell/tabbar.css";
 import "./toptabs.css";
@@ -34,6 +35,8 @@ export function DataTabs() {
   const crawlId = useSession(s => s.crawl?.crawlId);
   const comparison = useComparison(c => c.session ? `${c.session.current.crawlId}:${c.session.previous.crawlId}:${c.revision}` : null);
   useEffect(() => { void useTabs.getState().load(); }, [crawlId, comparison]);
+  // UI-004 [M4] (M4-F02): the AI tabs come and go with the switch „KI (Vorschau)“.
+  useAiTabsSync();
   useEffect(() => eventBus.on("focusUrl", event => {
     if (useSession.getState().crawl?.crawlId !== event.crawlId) return;
     useTabs.getState().focus(event.isInternal ? "Internal" : "External", event.urlId);

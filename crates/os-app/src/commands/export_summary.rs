@@ -74,9 +74,12 @@ fn metrics<'a>(app: &'a App, ctx: CallCtx, _args: Value) -> BoxFuture<'a, CmdRes
                 &os_model::CrawlConfig::default(),
             ))
         };
+        // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine Kennzahlen der KI-Tabs.
+        let preview = super::ai_preview::switch(app);
         serde_json::to_value(
             catalog
                 .into_iter()
+                .filter(|m| super::ai_preview::shows_name(preview, &m.name))
                 .map(|m| CustomSummaryMetric {
                     id: m.name.clone(),
                     label_key: m.name,
