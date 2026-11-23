@@ -11,7 +11,7 @@ Open-source website crawler and technical SEO auditor – built for AI agents an
   <img src="https://img.shields.io/badge/platforms-macOS%20(Apple%20Silicon%20%26%20Intel)%20%7C%20Windows-lightgrey.svg" alt="Platforms">
   <img src="https://img.shields.io/badge/core-Rust-orange.svg" alt="Rust">
   <img src="https://img.shields.io/badge/MCP-native-8A2BE2.svg" alt="MCP native">
-  <a href="https://github.com/wojcikdominik/openspider/releases/latest"><img src="https://img.shields.io/badge/status-beta-orange.svg" alt="Status: beta"></a>
+  <a href="https://github.com/wojcikdominik/openspider/releases/latest"><img src="https://img.shields.io/badge/status-stable-brightgreen.svg" alt="Status: stable"></a>
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@ Open-source website crawler and technical SEO auditor – built for AI agents an
 </p>
 
 <p align="center">
-  <b>Public beta:</b>
+  <b>Latest release:</b>
   <a href="https://github.com/wojcikdominik/openspider/releases/latest/download/OpenSpider-macOS.dmg"><b>⬇ Download for macOS</b></a> (13+, Apple Silicon &amp; Intel) ·
   <a href="https://github.com/wojcikdominik/openspider/releases/latest/download/OpenSpider-Windows-Setup.exe"><b>⬇ Download for Windows</b></a> (10/11, x64)<br>
   <a href="https://github.com/wojcikdominik/openspider/releases/latest">All files and release notes</a>
@@ -40,7 +40,7 @@ What makes it different: **AI agents are first-class users.** A built-in MCP ser
 
 ## What's new
 
-**1.0.0-rc.1** (14 November 2026): release candidate for 1.0 – several connections per host for faster crawls on lossy networks, a live crawl table that keeps rows, selection and scroll position, "Recently opened" without duplicates, and on Windows the crawl file is free right after "Clear".
+**1.0.0** (20 November 2026): the first stable release – PageSpeed with the source "Local" works without an API key and has a field for the Lighthouse path, and on Windows OpenSpider no longer reports a crash that did not happen after an update.
 
 Full list: [openspider.de/en/changelog](https://openspider.de/en/changelog/) · [GitHub Releases](https://github.com/wojcikdominik/openspider/releases)
 
@@ -114,7 +114,7 @@ Memory for an open view over 5 million rows stays around 60 MB. The table never 
 
 ## Installation
 
-The public beta is live. Download one file; the links always point to the latest release:
+OpenSpider 1.0 is released. Download one file; the links always point to the latest release:
 
 | System | Download |
 |---|---|
@@ -124,26 +124,26 @@ The public beta is live. Download one file; the links always point to the latest
 The [latest release](https://github.com/wojcikdominik/openspider/releases/latest) lists the same installers
 under their versioned names (`OpenSpider_<version>_universal.dmg`, `OpenSpider_<version>_x64-setup.exe`)
 plus the files for automatic updates, the CLI, managed installs (MSI) and checksums (`SHA256SUMS`,
-which also covers the two versionless copies). See also the [beta page](https://openspider.de/en/beta/).
+which also covers the two versionless copies).
 Linux x86_64 with glibc supports the core and CLI only; Linux desktop,
 .deb/.rpm and arm64 releases remain unsupported.
 Check a download against `SHA256SUMS` before opening it (commands on the [download page](https://openspider.de/en/download/#sha256)).
 The macOS app is signed and notarized; on first launch Gatekeeper asks once, and Windows SmartScreen may warn while the
 signing certificate is new (see the user guide for what to check).
-Version 1.0 has not been released yet; beta users receive it as a normal update.
+Version 1.0.0 was released on 20 November 2026; installations of the public beta received it as a normal update.
 
-**Packages.** The Homebrew tap `wojcikdominik/homebrew-openspider` provides the cask `openspider@beta` for macOS.
+**Packages.** The Homebrew tap `wojcikdominik/homebrew-openspider` provides the cask `openspider` for macOS.
 Homebrew loads casks from third-party taps only after you trust the tap explicitly:
 
 ```sh
 brew tap wojcikdominik/openspider
 brew trust wojcikdominik/openspider
-brew install --cask wojcikdominik/openspider/openspider@beta
+brew install --cask wojcikdominik/openspider/openspider
 ```
 
 The cask installs the same signed DMG as the download. The app updates itself afterwards, so an upgrade through
-Homebrew needs `brew upgrade --cask --greedy wojcikdominik/openspider/openspider@beta`.
-winget is planned from 1.0 on; until then use the Windows installers above.
+Homebrew needs `brew upgrade --cask --greedy wojcikdominik/openspider/openspider`.
+winget is planned; until then use the Windows installers above.
 
 **JavaScript rendering.** Chromium is not part of the installer. On request the app downloads a verified Chromium
 (Configuration → Spider → Rendering, about 200 MB, SHA-256 check); an installed Chrome works as well.
@@ -173,14 +173,14 @@ The [German user guide](https://openspider.de/handbuch/) and
 installation, Gatekeeper/SmartScreen, Chromium, CLI/MCP, scheduling, updates and uninstalling.
 Automatic update checks send only version, OS and architecture to GitHub Releases
 (which sees the connection IP), without telemetry or crawl data. Disable them in
-Settings → Updates or with `OPENSPIDER_DISABLE_UPDATE_CHECK=1`. From beta.4 the app shows what is new once after an update.
+Settings → Updates or with `OPENSPIDER_DISABLE_UPDATE_CHECK=1`. After an update the app shows once what is new.
 
 ## Documentation
 
 - [Benutzerhandbuch (Deutsch)](https://openspider.de/handbuch/)
 - [User guide (English)](https://openspider.de/en/manual/)
 - [Download and checksums](https://openspider.de/en/download/) ([Deutsch](https://openspider.de/download/)) and the [FAQ](https://openspider.de/en/faq/) ([Deutsch](https://openspider.de/faq/))
-- [Open beta](https://openspider.de/en/beta/) ([Deutsch](https://openspider.de/beta/)) — everyone can join; send feedback through the form on that page or open a [GitHub issue](https://github.com/wojcikdominik/openspider/issues/new/choose).
+- [Feedback form](https://openspider.de/en/beta/) ([Deutsch](https://openspider.de/beta/)) — or open a [GitHub issue](https://github.com/wojcikdominik/openspider/issues/new/choose).
 
 ### Build the CLI from source
 
@@ -225,7 +225,7 @@ Then just ask your agent, for example:
 
 > *“List my OpenSpider crawls, show the overview of the latest one and explain the five most important issues with example URLs.”*
 
-Read tools: `list_crawls`, `crawl_overview`, `list_issues`, `query_urls`, `url_details`. With the crawl permission an agent can also use `start_crawl` and `crawl_status`; from beta.4 on, `pause_crawl`, `resume_crawl` and `stop_crawl` are added. A Claude Code plugin with slash commands (`/openspider-audit`, `/openspider-compare`, `/openspider-issues`) and a skill follow in the next milestone.
+Read tools: `list_crawls`, `crawl_overview`, `list_issues`, `query_urls`, `url_details`. With the crawl permission an agent can also use `start_crawl`, `crawl_status`, `pause_crawl`, `resume_crawl` and `stop_crawl`. A Claude Code plugin with slash commands (`/openspider-audit`, `/openspider-compare`, `/openspider-issues`) and a skill follow in the next milestone.
 
 ## Your crawl is a database
 
@@ -261,9 +261,9 @@ A Cargo workspace of focused crates (`os-fetch`, `os-parse`, `os-render`, `os-st
 |---|---|---|
 | **M1** | Crawl core, storage, CLI, MCP (read-only), core analyses | ✅ done |
 | **M2** | Desktop app, all analysis tabs, reports, JavaScript rendering, Google APIs | ✅ done |
-| **M3** | Signed installers, auto-update, public beta → **1.0** | 🚧 in progress – public beta since November 2026 |
-| **M4** | AI features: page classification, optimization suggestions, “ask your crawl”, AI search visibility (Claude, OpenAI, OpenRouter, Ollama) | after 1.0 |
-| **M5** | External SEO data (keywords, backlinks, SERP, LLM mentions) | after 1.0 |
+| **M3** | Signed installers, auto-update, public beta → **1.0** | ✅ done – 1.0.0 released on 20 November 2026 |
+| **M4** | AI features: page classification, optimization suggestions, “ask your crawl”, AI search visibility (Claude, OpenAI, OpenRouter, Ollama) | 🚧 in progress |
+| **M5** | External SEO data (keywords, backlinks, SERP, LLM mentions) | planned |
 
 OpenSpider stays fully usable without any account. AI and external data features will work with your own API keys or local models. More: [roadmap after 1.0](docs/plan/ROADMAP-nach-1.0.md).
 
