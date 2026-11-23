@@ -89,7 +89,9 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   await expect(aiTab).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#data-panel .u10-counter").first()).toHaveText(/^Showing: 0 of /);
 
-  // Wieder aus: die KI-Oberfläche verschwindet erneut.
+  // Wieder aus: die KI-Oberfläche verschwindet erneut. Der Schalter liegt auf „General“; oben wurde der Abschnitt „AI“ gewählt,
+  // und das Einstellungsfenster zeigt nur den gewählten Abschnitt – also zurück nach „General“.
+  await nav.getByRole("tab", { name: "General", exact: true }).click();
   await label.click();
   await expect(toggle).not.toBeChecked();
   await expect(nav.getByRole("tab", { name: "AI", exact: true })).toHaveCount(0);
