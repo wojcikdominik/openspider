@@ -53,17 +53,7 @@ pub fn topic(name: &str, as_json: bool) -> Result<String, CliError> {
         "export-tabs" => registry::names(Kind::Tab),
         "bulk-export" => registry::names(Kind::Bulk),
         "save-report" => registry::names(Kind::Report),
-        "export-custom-summary" => {
-            let mut names: Vec<_> = os_export::timeseries::catalog(&os_analyze::tabs::configured(
-                &os_model::CrawlConfig::default(),
-            ))
-            .into_iter()
-            .map(|m| m.name)
-            .filter(|n| registry::shows_name(registry::preview(), n))
-            .collect();
-            names.sort();
-            names
-        }
+        "export-custom-summary" => registry::metric_names_with(registry::preview()),
         "set" => os_model::settable_keys().to_vec(),
         other => {
             return Err(CliError::usage(format!(

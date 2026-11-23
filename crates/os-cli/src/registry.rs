@@ -94,6 +94,8 @@ pub struct Unknown {
     pub input: String,
     /// Ähnliche gültige Namen (Levenshtein ≤ 3), nächste zuerst.
     pub suggestions: Vec<String>,
+    /// Schalter „KI (Vorschau)“ der Auflösung: bestimmt die Liste in der Meldung (OUT-203, M4-F02).
+    pub preview: os_ai::PreviewSwitch,
 }
 
 const MAX_DISTANCE: usize = 3;
@@ -178,9 +180,9 @@ fn normalize(name: &str) -> String {
         .to_lowercase()
 }
 
-fn suggestions(kind: Kind, input: &str) -> Vec<String> {
+fn suggestions(input: &str, valid: Vec<String>) -> Vec<String> {
     let wanted = normalize(input);
-    let mut scored: Vec<(usize, String)> = names(kind)
+    let mut scored: Vec<(usize, String)> = valid
         .into_iter()
         .filter_map(|n| {
             let d = bulk_links::levenshtein(&wanted, &normalize(&n));
@@ -200,45 +202,131 @@ pub fn resolve(kind: Kind, input: &str) -> Result<Resolved, Unknown> {
     resolve_with(kind, input, &os_model::CrawlConfig::default())
 }
 
-/// Auflösung nach Laden der Konfiguration.
+/// Auflösung nach Laden der Konfiguration (Schalter „KI (Vorschau)“ aus den App-Einstellungen, [`preview`]).
 pub fn resolve_with(
     kind: Kind,
     input: &str,
     cfg: &os_model::CrawlConfig,
 ) -> Result<Resolved, Unknown> {
+    resolve_in(kind, input, cfg, preview())
+}
+
+/// Wie [`resolve_with`] mit ausdrücklichem Schalter „KI (Vorschau)“ (OUT-203, Plan M4 E-2 b; M4-F02): bei
+/// ausgeschaltetem Schalter gelten die KI-Tabs und alle Namen `<KI-Tab>:<Name>` als unbekannt, und weder Vorschlag noch
+/// Liste nennen einen KI-Namen.
+pub fn resolve_in(
+    kind: Kind,
+    input: &str,
+    cfg: &os_model::CrawlConfig,
+    preview: os_ai::PreviewSwitch,
+) -> Result<Resolved, Unknown> {
     let unknown = || Unknown {
         input: input.to_string(),
-        suggestions: suggestions(kind, input),
+        suggestions: suggestions(input, names_with(kind, preview)),
+        preview,
     };
+    match resolve_any(kind, input, cfg) {
+        Some(resolved) if resolved_shows(&resolved, preview) => Ok(resolved),
+        _ => Err(unknown()),
+    }
+}
+
+/// Ob ein aufgelöster Name bei diesem Schalter gültig ist (kein KI-Tab bei Schalter aus).
+fn resolved_shows(resolved: &Resolved, preview: os_ai::PreviewSwitch) -> bool {
+    match resolved {
+        Resolved::Tab { tab, .. } | Resolved::CompareTab { tab, .. } => shows_name(preview, tab),
+        Resolved::Bulk(name) | Resolved::Report(name) => shows_name(preview, name),
+        Resolved::Issues => true,
+    }
+}
+
+/// Auflösung gegen die vollständigen Kataloge (ohne Schalter).
+fn resolve_any(kind: Kind, input: &str, cfg: &os_model::CrawlConfig) -> Option<Resolved> {
     match kind {
         Kind::Tab => match catalog::resolve_with(ExportKind::Tab, &normalize(input), cfg) {
-            Ok(catalog::ExportRef::Tab { tab, filter }) => Ok(Resolved::Tab { tab, filter }),
+            Ok(catalog::ExportRef::Tab { tab, filter }) => Some(Resolved::Tab { tab, filter }),
             _ => {
                 // OUT-151 (Nutzerentscheidung 04.11.2026): letzter Namensteil als Vergleichs-Unterfilter, nur wenn der
                 // ganze Name kein Tab-Export ist.
-                let (rest, last) = input.rsplit_once(':').ok_or_else(unknown)?;
-                let class = os_analyze::compare::CompareClass::parse(last).ok_or_else(unknown)?;
+                let (rest, last) = input.rsplit_once(':')?;
+                let class = os_analyze::compare::CompareClass::parse(last)?;
                 match catalog::resolve_with(ExportKind::Tab, &normalize(rest), cfg) {
                     Ok(catalog::ExportRef::Tab { tab, filter }) => {
-                        Ok(Resolved::CompareTab { tab, filter, class })
+                        Some(Resolved::CompareTab { tab, filter, class })
                     }
-                    _ => Err(unknown()),
+                    _ => None,
                 }
             }
         },
         Kind::Bulk => {
             if bulk_issues::resolve(input).is_ok() {
-                return Ok(Resolved::Issues);
+                return Some(Resolved::Issues);
             }
             match catalog::resolve_with(ExportKind::Bulk, input, cfg) {
-                Ok(catalog::ExportRef::Bulk(name)) => Ok(Resolved::Bulk(name)),
-                _ => Err(unknown()),
+                Ok(catalog::ExportRef::Bulk(name)) => Some(Resolved::Bulk(name)),
+                _ => None,
             }
         }
         Kind::Report => match catalog::resolve_with(ExportKind::Report, input, cfg) {
-            Ok(catalog::ExportRef::Report(name)) => Ok(Resolved::Report(name)),
-            _ => Err(unknown()),
+            Ok(catalog::ExportRef::Report(name)) => Some(Resolved::Report(name)),
+            _ => None,
         },
+    }
+}
+
+/// Alle Kennzahlen für `--export-custom-summary` (wie `--help export-custom-summary`), sortiert; ohne Schalter
+/// „KI (Vorschau)“ ohne die Kennzahlen der KI-Tabs.
+pub fn metric_names_with(preview: os_ai::PreviewSwitch) -> Vec<String> {
+    let mut names: Vec<String> = os_export::timeseries::catalog(&os_analyze::tabs::configured(
+        &os_model::CrawlConfig::default(),
+    ))
+    .into_iter()
+    .map(|m| m.name)
+    .filter(|n| shows_name(preview, n))
+    .collect();
+    names.sort();
+    names
+}
+
+/// Löst eine Kennzahl für `--export-custom-summary` auf (OUT-200, OUT-203): kanonischer Name oder unbekannt; bei
+/// ausgeschaltetem Schalter „KI (Vorschau)“ sind die KI-Kennzahlen unbekannt.
+pub fn resolve_metric(input: &str, preview: os_ai::PreviewSwitch) -> Result<String, Unknown> {
+    let valid = metric_names_with(preview);
+    let wanted = normalize(input);
+    match valid.iter().find(|n| normalize(n) == wanted) {
+        Some(name) => Ok(name.clone()),
+        None => Err(Unknown {
+            input: input.to_string(),
+            suggestions: suggestions(input, valid),
+            preview,
+        }),
+    }
+}
+
+/// Meldung zu einer unbekannten Kennzahl: mit Vorschlag, sonst mit der vollständigen Liste wie
+/// `--help export-custom-summary` (OUT-203 [P1]).
+pub fn unknown_metric_message(unknown: &Unknown) -> String {
+    let hint = "openspider --help export-custom-summary";
+    match unknown.suggestions.as_slice() {
+        [] => {
+            let mut msg = format!(
+                "unknown metric '{}' – no similar name; {hint} lists valid names:",
+                unknown.input
+            );
+            for name in metric_names_with(unknown.preview) {
+                msg.push('\n');
+                msg.push_str(&name);
+            }
+            msg
+        }
+        many => {
+            let list: Vec<String> = many.iter().map(|s| format!("'{s}'")).collect();
+            format!(
+                "unknown metric '{}' – did you mean {}? ({hint})",
+                unknown.input,
+                list.join(" or ")
+            )
+        }
     }
 }
 
@@ -253,7 +341,7 @@ pub fn unknown_message(kind: Kind, unknown: &Unknown) -> String {
                 "unknown {noun} '{}' – no similar name; openspider --list-{} lists valid names:",
                 unknown.input, if kind == Kind::Report { "reports" } else { "exports" }
             );
-            for name in names(kind) {
+            for name in names_with(kind, unknown.preview) {
                 msg.push('\n');
                 msg.push_str(&name);
             }
