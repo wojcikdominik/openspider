@@ -35,7 +35,7 @@ Abschlusslauf (zweiter Lauf, Stand dieses Berichts): `f02-tests-log/{APP,MCP,CLI
 | UI-004 [M4], UI-016, UI-013 [M4], 3.3: Schalter an → vier KI-Tabs (übrige unverändert), je Leerzustand mit erlaubtem UI-016-Code, Abschnitt „KI“, KI-Seite im Konfigurationsdialog **und** im Einstieg „Konfiguration ▾“, Feld „Cost:“/„Kosten:“; Ausschalten entfernt alles wieder (nach Neuladen) | … → „switch on: four AI tabs with an empty state, …; off again removes them“ | **rot** (beide Engines) – nur das Teilkriterium „Konfiguration ▾“ (Befund 3); alle übrigen weichen Prüfungen dieses Tests grün |
 | E-2 b: Umschalten im Einstellungsfenster wirkt im offenen Hauptfenster ohne Neuladen | … → „toggling the switch in the settings window updates the open main window without reload“ | **rot** (beide Engines) – Einschalten wirkt sofort, Ausschalten entfernt die KI-Tabs nicht (Befund 4) |
 
-Summe: 30 Testfälle (22 Rust, 8 Playwright = 4 Tests × 2 Engines); 22 grün, 8 rot (3 Rust, 4 Playwright, davon je 2 gleiche Ursache je Engine). Zusätzlich auf dem Mini: `cargo fmt --all --check` grün (FMT.log), `cargo clippy --locked -p os-app -p os-mcp -p os-cli --tests -- -D warnings` grün (CLIPPY.log, erster Lauf 437 s), `npm run -w apps/desktop typecheck` grün (TC.log).
+Summe: 28 Testfälle (20 Rust: os-app 6, os-mcp 4, os-cli 10; 8 Playwright = 4 Tests × 2 Engines); 21 grün, 7 rot (3 Rust, 4 Playwright = 2 Ursachen × 2 Engines). Zusätzlich auf dem Mini: `cargo fmt --all --check` grün (FMT.log), `cargo clippy --locked -p os-app -p os-mcp -p os-cli --tests -- -D warnings` grün (CLIPPY.log, erster Lauf 437 s), `npm run -w apps/desktop typecheck` grün (TC.log).
 
 ## 2. Befunde
 
