@@ -4,7 +4,7 @@
 
 - Frühe Beta für SEO-Agenturen in Vorbereitung. Plattform-Smoke, Archiv-Kompatibilität und noch offene M2-Parität bleiben vor der Freigabe zu prüfen.
 
-## [1.0.1] - 2026-11-26
+## [1.0.1] - 2026-11-25
 
 OpenSpider 1.0.1 adds the choice between a stable and a beta update channel and updates third-party libraries. Crawling, analysis and exports work as in 1.0.0.
 
