@@ -113,18 +113,20 @@ describe("mit Schalter sichtbar", () => {
   });
 
   // spec: UI-013 [M4]
+  // Plan M4 3.3, Nachtrag 7: das Feld erscheint nur mit aktiven KI-Aufgaben für den Crawl (hier: Vorschlagstyp Title).
   it("Statusleistenfeld Kosten als Platzhalter in der UI-Sprache", async () => {
+    core.handlers.set("config.get", () => ({ config: { ai: { enabled: true, active_questions: [], suggestions: { title: true } } } }));
     await act(async () => {
       await setLanguage("de");
     });
     const { unmount } = render(<AiCostField />);
-    expect(screen.getByTestId("ai-cost")).toHaveTextContent("Kosten: – / – USD");
+    expect(await screen.findByTestId("ai-cost")).toHaveTextContent("Kosten: – / – USD");
     unmount();
     await act(async () => {
       await setLanguage("en");
     });
     render(<AiCostField />);
-    expect(screen.getByTestId("ai-cost")).toHaveTextContent("Cost: – / – USD");
+    expect(await screen.findByTestId("ai-cost")).toHaveTextContent("Cost: – / – USD");
   });
 
   // spec: UI-016

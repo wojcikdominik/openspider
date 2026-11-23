@@ -42,6 +42,17 @@ async function customGroupLabels(page: Page): Promise<string[]> {
   return bar.getByRole("tab").allInnerTexts();
 }
 
+/**
+ * Setzt bzw. entfernt aktive KI-Aufgaben in der Konfiguration des geöffneten Crawls (`config.get`/`config.set` über die Bridge;
+ * Festlegung M4-F02: `ai.enabled` und mindestens ein Vorschlagstyp oder eine aktive Frage).
+ */
+async function setAiTasks(alpha: Alpha, on: boolean) {
+  const dto = await alpha.invoke<{ config: Record<string, Record<string, unknown>> }>("config.get");
+  const ai = dto.config.ai ?? {};
+  const suggestions = (ai.suggestions ?? {}) as Record<string, unknown>;
+  await alpha.invoke("config.set", { ...dto, config: { ...dto.config, ai: { ...ai, enabled: on, suggestions: { ...suggestions, title: on } } } });
+}
+
 /** Einträge des Menüs „Konfiguration ▾“ der Navigationsleiste (Plan M4 3.3 (6)). */
 async function configMenu(page: Page): Promise<string[]> {
   await page.locator('.u34-nav [data-group="config"] .u34-nav-button').click();
@@ -56,6 +67,8 @@ async function configMenu(page: Page): Promise<string[]> {
 // spec: UI-004 [M4]
 // spec: UI-013 [M4]
 test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet die Gerüste", async ({ alpha }) => {
+  // Mehr Zeit für die Prüfung des Felds „Kosten“ (Nachlese-Abstand 3 s, Plan M4 3.3 Nachtrag 7).
+  test.setTimeout(60_000);
   const { page } = alpha;
   await alpha.open();
   await alpha.startFromHeader();
@@ -93,13 +106,19 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   const on = await listedNames(alpha);
   for (const tab of AI_TABS) expect(on).toContain(tab);
   expect(on.some((n) => n.startsWith("AI:"))).toBe(true);
-  await expect(page.getByTestId("ai-cost")).toHaveText("Cost: – / – USD");
   const labelsOn = await customGroupLabels(page);
   for (const label of AI_TABS) expect(labelsOn).toContain(label);
   // Plan M4 3.3 (6): die KI-Seite steht mit Schalter auch im Menü „Konfiguration ▾“, alle bisherigen Einträge bleiben.
   const menuOn = await configMenu(page);
   expect(menuOn).toContain("AI");
   expect(menuOn.filter((e) => e !== "AI")).toEqual(menuOff);
+  // UI-013 [M4], Plan M4 3.3 Nachtrag 7: mit Schalter an, aber ohne aktive KI-Aufgaben für den Crawl kein Feld „Kosten“.
+  await page.waitForTimeout(3500); // länger als ein Nachlese-Abstand des Felds (3 s)
+  await expect(page.getByTestId("ai-cost")).toHaveCount(0);
+  await expect(page.getByText(/^Cost:/)).toHaveCount(0);
+  // Aktive KI-Aufgaben für den geöffneten Crawl: das Feld erscheint ohne Neuladen (Platzhalter bis M4-U01).
+  await setAiTasks(alpha, true);
+  await expect(page.getByTestId("ai-cost")).toHaveText("Cost: – / – USD", { timeout: 10_000 });
   // Ein KI-Tab ist erreichbar und leer (Stub ohne Zeilen bis zum Fachpaket; Leerzustand bzw. Zähler 0, UI-016/UI-014).
   const aiTab = page.getByRole("tablist", { name: /^(Data tabs|Daten-Tabs)$/ }).getByRole("tab", { name: "AI", exact: true });
   await aiTab.click();
