@@ -42,6 +42,17 @@ async function customGroupLabels(page: Page): Promise<string[]> {
   return bar.getByRole("tab").allInnerTexts();
 }
 
+/** Einträge des Menüs „Konfiguration ▾“ der Navigationsleiste (Plan M4 3.3 (6)). */
+async function configMenu(page: Page): Promise<string[]> {
+  await page.locator('.u34-nav [data-group="config"] .u34-nav-button').click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const entries = (await menu.getByRole("menuitem").allInnerTexts()).map((s) => s.trim());
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  return entries;
+}
+
 // spec: UI-004 [M4]
 // spec: UI-013 [M4]
 test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet die Gerüste", async ({ alpha }) => {
@@ -59,6 +70,8 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   for (const label of AI_TABS) expect(labelsOff).not.toContain(label);
   await expect(page.getByTestId("ai-cost")).toHaveCount(0);
   await expect(page.getByText(/^Cost:/)).toHaveCount(0);
+  const menuOff = await configMenu(page);
+  expect(menuOff).not.toContain("AI");
 
   const settings = await alpha.openSettings();
   const nav = settings.getByRole("tablist", { name: "Settings sections" });
@@ -83,6 +96,10 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   await expect(page.getByTestId("ai-cost")).toHaveText("Cost: – / – USD");
   const labelsOn = await customGroupLabels(page);
   for (const label of AI_TABS) expect(labelsOn).toContain(label);
+  // Plan M4 3.3 (6): die KI-Seite steht mit Schalter auch im Menü „Konfiguration ▾“, alle bisherigen Einträge bleiben.
+  const menuOn = await configMenu(page);
+  expect(menuOn).toContain("AI");
+  expect(menuOn.filter((e) => e !== "AI")).toEqual(menuOff);
   // Ein KI-Tab ist erreichbar und leer (Stub ohne Zeilen bis zum Fachpaket; Leerzustand bzw. Zähler 0, UI-016/UI-014).
   const aiTab = page.getByRole("tablist", { name: /^(Data tabs|Daten-Tabs)$/ }).getByRole("tab", { name: "AI", exact: true });
   await aiTab.click();
@@ -98,4 +115,11 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   await expect.poll(async () => (await catalogIds(page)).filter(isAi)).toEqual([]);
   await expect(page.getByTestId("ai-cost")).toHaveCount(0);
   expect((await listedNames(alpha)).filter(isAi)).toEqual([]);
+  // Plan M4 3.3 (5): ohne Neuladen verschwinden die KI-Tabs auch aus der Tab-Leiste des Hauptfensters – während in der
+  // Navigation geklickt wird und obwohl zuvor ein KI-Tab gewählt war (Rückfall auf einen vorhandenen Tab).
+  await expect
+    .poll(async () => (await customGroupLabels(page)).filter((l) => AI_TABS.includes(l)), { timeout: 15_000 })
+    .toEqual([]);
+  await expect(page.getByRole("tablist", { name: /^(Data tabs|Daten-Tabs)$/ }).getByRole("tab", { selected: true })).toHaveCount(1);
+  expect(await configMenu(page)).toEqual(menuOff);
 });
