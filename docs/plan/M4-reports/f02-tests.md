@@ -47,18 +47,18 @@ Geändert vor Lauf 3 (Spec-Entscheidung, kein Lockern): Feld „Kosten“ nur mi
 | Nachtrag 7: Schalter aus, auch mit aktiven KI-Aufgaben → kein Feld „Kosten“ | „switch off (default): no AI tabs, no cost field, …“ | grün (Chromium, WebKit) |
 | Schalter aus: Einstellungen ohne Abschnitt „KI“/„AI“, Schalter „KI (Vorschau)“ aus | „switch off (default): settings have no AI section, …“ | grün (beide) |
 | Nachtrag 7: Schalter an ohne KI-Aufgaben → kein Feld; mit aktiven KI-Aufgaben → „Cost:“ (en) / „Kosten:“ (de). Nachtrag 8: Abschnitt heißt „KI“ (de) und „AI“ (en). Alle übrigen Prüfungen wie in Lauf 2 | „switch on: four AI tabs with an empty state, …; off again removes them“ | grün in allen genannten Teilen (beide Engines) |
-| Nachtrag 8: die vier KI-Tab-Namen bleiben auf Deutsch englisch | ebenda (weiche Prüfung) | **rot** (beide Engines, Befund 5) |
+| Nachtrag 8 (Fassung vor der Berichtigung): die vier KI-Tab-Namen bleiben auf Deutsch englisch | ebenda (weiche Prüfung) | **rot** (beide Engines, Befund 5; seit der Berichtigung geprüft: deutsche Namen, Ergebnis in Lauf 4) |
 | Nachtrag 5/7: ohne KI-Aufgaben kein Feld; nach dem Aktivieren erscheint es ohne Neuladen; Ausschalten entfernt KI-Tabs und Feld sofort | „toggling the switch in the settings window updates the open main window without reload“ | grün (beide) |
 | Nachtrag 5/6: Abschnitt und KI-Konfigurationsseiten kommen und gehen ohne Neuladen | „toggling the switch adds and removes the AI settings section and configuration pages without reload“ | grün (beide) |
 
 **Lauf 3:** 31 Testfälle, 29 grün und 2 rot (derselbe Test auf Chromium und WebKit, nur das Teilkriterium „KI-Tab-Namen auf Deutsch englisch“). `cargo fmt --all --check`, clippy (`-D warnings`, os-app/os-mcp/os-cli `--tests`), Typecheck und Bridge-Bau sind grün.
 
-**Befund 5 – KI-Tab-Namen werden auf Deutsch übersetzt (Nachtrag 8).** Einordnung: **Spec-Unklarheit, Entscheidung nötig.** Nachtrag 8 verlangt englische KI-Tab-Namen „wie die übrigen Tab-Namen“; im Produkt sind aber auch die übrigen Tab-Namen auf Deutsch übersetzt („Intern“, „Antwortcodes“, „Eigene Suche“ …). Die Begründung trägt also nicht. Entweder sollen die KI-Tabs ausnahmsweise englisch bleiben (dann Produktfehler), oder sie werden wie alle Tabs übersetzt (dann Nachtrag 8 anpassen). Der Test bleibt spec-treu rot. Wörtlich (Chromium, gleich in WebKit):
+**Befund 5 – KI-Tab-Namen werden auf Deutsch übersetzt (Nachtrag 8).** Einordnung: **Spec-Unklarheit, entschieden, Nachtrag 8 berichtigt** (23.11.2026): Die KI-Tabs werden wie alle Tabs übersetzt (Deutsch „KI“, „KI-Entscheidungen“, „KI-Vorschläge“, „KI-Suche“; Englisch „AI“, „AI Decisions“, „AI Suggestions“, „AI Search“; Kennungen bleiben englisch). Die Prüfung im Test ist danach angepasst (deutsche Namen vorhanden, englische auf Deutsch nicht); das Ergebnis kommt mit Lauf 4 (Gate-Lauf des Orchestrators). Ursprüngliche Einordnung in Lauf 3: Nachtrag 8 verlangt englische KI-Tab-Namen „wie die übrigen Tab-Namen“; im Produkt sind aber auch die übrigen Tab-Namen auf Deutsch übersetzt („Intern“, „Antwortcodes“, „Eigene Suche“ …). Die Begründung trägt also nicht. Entweder sollen die KI-Tabs ausnahmsweise englisch bleiben (dann Produktfehler), oder sie werden wie alle Tabs übersetzt (dann Nachtrag 8 anpassen). Der Test bleibt spec-treu rot. Wörtlich (Chromium, gleich in WebKit):
 `Error: AI auf Deutsch: Intern,Extern,Sicherheit,Antwortcodes,URL,Seitentitel,Meta-Beschreibung,Meta-Keywords,H1,H2,Inhalt,Bilder,Strukturierte Daten,Canonicals,Paginierung,Direktiven,Hreflang,JavaScript,Sitemaps,Mobil,Barrierefreiheit,Validierung,Links,Link-Metriken,PageSpeed,Analytics,Search Console,Eigene Suche,Eigene Extraktion,Eigenes JavaScript,KI,KI-Entscheidungen,KI-Vorschläge,KI-Suche` – `Expected: true Received: false`; ebenso für `AI Decisions`, `AI Suggestions`, `AI Search`.
 
 ## 2. Befunde
 
-Lauf 2: keine roten Tests. Lauf 3: Befund 5 (oben, offen). Die Befunde aus Lauf 1 und ihre Erledigung:
+Lauf 2: keine roten Tests. Lauf 3: Befund 5 (oben; entschieden, Nachtrag 8 berichtigt, Test angepasst, Ergebnis mit Lauf 4). Die Befunde aus Lauf 1 und ihre Erledigung:
 
 1. **OUT-203: ausdrücklich genannter KI-Name wurde bei Schalter aus angenommen** – Produktfehler; Bauer-Nachtrag, in Lauf 2 grün. Lauf 1 wörtlich (gekürzt): `--export-tabs "AI:All": exit 0 (erwartet 2), Meldung „unknown … 'AI:All'“: false, Requests: 23` … `openspider: Fertig: 22 URLs gecrawlt, 1 Exportdateien, 0 Warnungen (Exit-Code 0)`; ebenso `AI Decisions:All`, `--bulk-export "AI Decisions:All Answers"`, `--save-report "AI:AI Crawler Accessibility"`.
 2. **`--export-custom-summary` allgemein nicht unterstützt** – Spec-Unklarheit; durch die Klarstellung in OUT-203 entschieden (immer Exit 2; bei aus + KI-Kennzahl Meldung für unbekannten Namen, sonst „noch nicht unterstützt“). Beide Tests danach angepasst (Spec-Entscheidung, kein Lockern), in Lauf 2 grün. Lauf 1 wörtlich: `Fehler: --export-custom-summary wird in dieser Version noch nicht unterstützt` (Exit 2, auch bei Schalter aus).
@@ -67,7 +67,7 @@ Lauf 2: keine roten Tests. Lauf 3: Befund 5 (oben, offen). Die Befunde aus Lauf 
 
 ## 3. Spec-Unklarheiten und Lücken
 
-Entschieden (23.11.2026): Feld „Kosten“ nur mit Schalter an und aktiven KI-Aufgaben (Nachtrag 7); Namen nach Nachtrag 8 (siehe aber Befund 5); Command-Namen mit genau einem Punkt (Nachtrag 1); Gruppe der KI-Tabs vorerst „Benutzerdefiniert“ (Nachtrag 2; die Tests suchen weiterhin gruppenunabhängig); Umschalten ohne Neuladen (Nachtrag 5); KI-Seite auch im Menü „Konfiguration ▾“ (Nachtrag 6); `--export-custom-summary` (OUT-203).
+Entschieden (23.11.2026): Feld „Kosten“ nur mit Schalter an und aktiven KI-Aufgaben (Nachtrag 7); Namen nach Nachtrag 8 in der berichtigten Fassung (Befund 5); Command-Namen mit genau einem Punkt (Nachtrag 1); Gruppe der KI-Tabs vorerst „Benutzerdefiniert“ (Nachtrag 2; die Tests suchen weiterhin gruppenunabhängig); Umschalten ohne Neuladen (Nachtrag 5); KI-Seite auch im Menü „Konfiguration ▾“ (Nachtrag 6); `--export-custom-summary` (OUT-203).
 
 Weiter offen:
 - **Zahlenformat des Felds „Kosten“** (M4-U01): nicht geprüft; geprüft ist nur der Feldname.

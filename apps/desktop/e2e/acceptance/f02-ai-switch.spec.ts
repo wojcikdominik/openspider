@@ -12,6 +12,8 @@ import { expect, test, type AppFixture } from "../fixtures/app";
 test.use({ freshState: true });
 
 const AI_TABS = ["AI", "AI Decisions", "AI Suggestions", "AI Search"] as const;
+// M4.md 3.3 Nachtrag (8, berichtigt): deutsche Anzeigenamen der KI-Tabs.
+const AI_TABS_DE = ["KI", "KI-Entscheidungen", "KI-Vorschläge", "KI-Suche"] as const;
 // UI-016: abschließende Codes. Ohne Crawl gilt NO_DATA_YET (Rang 8); NO_MATCH (9) und NOT_APPLICABLE (10) haben einen
 // größeren Rang und dürfen dann nicht erscheinen, NO_SELECTION betrifft nur Detail-Tabs.
 const ALLOWED_WITHOUT_CRAWL = new Set([
@@ -232,10 +234,12 @@ test("switch on: four AI tabs with an empty state, AI settings section, AI confi
   for (const entry of menuOff) expect.soft(menuOn, entry).toContain(entry);
   expect.soft(menuOn.length, `Konfiguration ▾ an: ${menuOn}`).toBeGreaterThan(menuOff.length);
 
-  // Nachtrag (8): die KI-Tab-Namen bleiben auf Deutsch englisch.
+  // Nachtrag (8, berichtigt 23.11.2026): die KI-Tabs werden übersetzt – Deutsch „KI“, „KI-Entscheidungen“, „KI-Vorschläge“,
+  // „KI-Suche“; Englisch die vier englischen Namen (oben geprüft).
   await language(page, "de");
   const tabsDe = await topTabs(page);
-  for (const tab of AI_TABS) expect.soft(tabsDe.has(tab), `${tab} auf Deutsch: ${[...tabsDe.keys()]}`).toBe(true);
+  for (const tab of AI_TABS_DE) expect.soft(tabsDe.has(tab), `${tab} auf Deutsch: ${[...tabsDe.keys()]}`).toBe(true);
+  for (const tab of AI_TABS) expect.soft(tabsDe.has(tab), `${tab} auf Deutsch nicht englisch`).toBe(false);
   await language(page, "en");
 
   // UI-013 / Nachtrag (7): Schalter an ohne aktive KI-Aufgaben → kein Feld; mit aktiven KI-Aufgaben → Feld, Feldname je Sprache.
