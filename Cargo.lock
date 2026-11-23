@@ -871,7 +871,7 @@ dependencies = [
  "log",
  "quick-xml 0.42.0",
  "serde",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -5067,7 +5067,7 @@ dependencies = [
  "tracing-subscriber",
  "ts-rs",
  "uuid",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -5105,7 +5105,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "windows-sys 0.61.2",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -5349,7 +5349,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -6487,7 +6487,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f4be8452f0aa8f1f8129282e5e1bbf848e9931a9988572bc92e95ef4ab7e163"
 dependencies = [
  "tempfile",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -7830,7 +7830,7 @@ dependencies = [
  "tokio",
  "url",
  "windows-sys 0.61.2",
- "zip 9.0.5",
+ "zip",
 ]
 
 [[package]]
@@ -10262,20 +10262,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
-]
-
-[[package]]
-name = "zip"
-version = "8.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
-dependencies = [
- "crc32fast",
- "flate2",
- "indexmap 2.14.2",
- "memchr",
- "typed-path",
- "zopfli",
 ]
 
 [[package]]
