@@ -298,7 +298,10 @@ impl XlsxWriter {
     }
 
     fn add_sheet(&mut self, name: String) -> Result<(), ExportError> {
-        let ws = self.workbook.add_worksheet_with_constant_memory();
+        let ws = self
+            .workbook
+            .add_worksheet_with_constant_memory()
+            .map_err(|e| xlsx_err(&self.path, e))?;
         ws.set_name(&name).map_err(|e| xlsx_err(&self.path, e))?;
         self.sheet_names.push(name);
         self.sheet_rows.push(0);

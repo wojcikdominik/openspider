@@ -9,7 +9,6 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-docx-rs.workspace = true
 pulldown-cmark.workspace = true
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 fancy-regex.workspace = true
