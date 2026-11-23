@@ -246,3 +246,32 @@ test("toggling the switch in the settings window updates the open main window wi
   await expect.configure({ soft: true }).poll(async () => { const tabs = await topTabs(page); return AI_TABS.filter((t) => tabs.has(t)).length; }, { timeout: 15_000 }).toBe(0);
   await expect.soft(page.getByText(COST)).toHaveCount(0);
 });
+
+// spec: UI-004 [M4]
+// acceptance: independent
+// M4.md 3.3, Nachtrag 23.11.2026 (5)/(6): Das Umschalten wirkt in offenen Fenstern sofort – Einstellungsabschnitt „KI“ und
+// KI-Konfigurationsseiten (Dialog und Menü „Konfiguration ▾“) kommen ohne Neuladen dazu und verschwinden wieder.
+test("toggling the switch adds and removes the AI settings section and configuration pages without reload", async ({ page, context, app }) => {
+  test.setTimeout(180_000);
+  expect(app.mode).toBe("bridge");
+  await openMain(page, app);
+  const menuOff = await configEntries(page);
+  const dialogOff = await configDialogPages(page);
+  const settings = await context.newPage();
+  await openSettings(settings, app);
+  await language(settings, "de");
+  const sectionsOff = await settingsTabs(settings);
+  expect(sectionsOff).not.toContain("KI");
+
+  await setSwitch(settings, true);
+  await expect.configure({ soft: true }).poll(() => settingsTabs(settings), { timeout: 15_000 }).toContain("KI");
+  expect.soft((await settingsTabs(settings)).length, "genau ein zusätzlicher Abschnitt").toBe(sectionsOff.length + 1);
+  await expect.configure({ soft: true }).poll(async () => (await configDialogPages(page)).length, { timeout: 15_000 }).toBeGreaterThan(dialogOff.length);
+  await expect.configure({ soft: true }).poll(async () => (await configEntries(page)).length, { timeout: 15_000 }).toBeGreaterThan(menuOff.length);
+
+  await setSwitch(settings, false);
+  await expect.configure({ soft: true }).poll(() => settingsTabs(settings), { timeout: 15_000 }).not.toContain("KI");
+  expect.soft((await settingsTabs(settings)).length).toBe(sectionsOff.length);
+  await expect.configure({ soft: true }).poll(() => configDialogPages(page), { timeout: 15_000 }).toEqual(dialogOff);
+  await expect.configure({ soft: true }).poll(() => configEntries(page), { timeout: 15_000 }).toEqual(menuOff);
+});
