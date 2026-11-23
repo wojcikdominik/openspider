@@ -349,3 +349,15 @@ fn fixture_crawl_normalize_dedup_groups() {
     distinct.dedup();
     assert_eq!(distinct.len(), 9);
 }
+
+// spec: CRAWL-003
+// Regression zu RUSTSEC-2026-0592: `Url::origin()` stieg bis url 2.5.8 bei verschachtelten
+// `blob:`-URLs je Präfix eine Ebene tiefer; eine solche URL aus fremdem HTML brachte den Prozess
+// per Stapelüberlauf zum Absturz. Ab 2.5.9 ergibt ein innerer `blob:`-Wert einen opaken Ursprung.
+#[test]
+fn deeply_nested_blob_url_normalizes_without_stack_overflow() {
+    let nested = format!("{}https://site.test/", "blob:".repeat(100_000));
+    let n = link(&nested);
+    assert_eq!(n.origin, "null");
+    assert_eq!(n.encoded, nested);
+}
