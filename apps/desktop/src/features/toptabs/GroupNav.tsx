@@ -4,7 +4,9 @@ import { Button as RacButton } from "react-aria-components";
 import { useT } from "../../i18n";
 import { tabLabel } from "../../i18n/canon";
 import { openConfig } from "../config/frame/store";
-import { KNOWN_PAGES, groupTitleKey, pageTitleKey } from "../config/frame/types";
+import { KNOWN_PAGES, groupTitleKey, pageTitleKey, type KnownPage } from "../config/frame/types";
+import { aiPreviewNow, useAiPreview } from "../ai/preview";
+import { aiConfigPages } from "../ai/settings";
 import { TAB_GROUPS, groupOf, groupTabs, useTabs, type TabGroupId } from "../../state/tabs";
 import { Menu, type MenuEntry } from "../../ui/primitives/Menu";
 import { cx } from "../../ui/primitives/cx";
@@ -13,10 +15,16 @@ const ICONS: Record<TabGroupId | "overview" | "config", ComponentType<{ size?: n
   overview: House, urls: Link2, content: FileText, technical: Settings2, links: Network, performance: BarChart3, custom: Puzzle, changes: GitCompareArrows, config: SlidersHorizontal,
 };
 
-/** Configuration pages for „Konfiguration ▾“, in the order of the configuration dialog; grouped pages carry their group name. */
-export function configEntries(t: ReturnType<typeof useT>): MenuEntry[] {
+/**
+ * Configuration pages for „Konfiguration ▾“, in the order of the configuration dialog; grouped pages carry their group name.
+ * M4-F02 (Plan M4 3.3 (6)): with the switch „KI (Vorschau)“ on, the AI configuration pages appear here as in the dialog.
+ */
+export function configEntries(t: ReturnType<typeof useT>, aiPreview: boolean = aiPreviewNow()): MenuEntry[] {
   let previous: string | undefined;
-  return KNOWN_PAGES.map((page) => {
+  const pages: readonly KnownPage[] = aiPreview
+    ? [...KNOWN_PAGES, ...aiConfigPages.map(({ id, group, order }) => ({ id, group, order }))].sort((a, b) => a.order - b.order)
+    : KNOWN_PAGES;
+  return pages.map((page) => {
     const group = page.group ?? page.id;
     const entry: MenuEntry = { id: `config-${page.id}`, label: page.group ? `${t(groupTitleKey(page.group))}: ${t(pageTitleKey(page.id))}` : t(pageTitleKey(page.id)),
       separatorBefore: previous !== undefined && previous !== group, onAction: () => openConfig({ anchor: page.id }) };
@@ -32,6 +40,7 @@ export function configEntries(t: ReturnType<typeof useT>): MenuEntry[] {
 export function GroupNav() {
   const t = useT();
   const s = useTabs();
+  const aiPreview = useAiPreview();
   const current = s.view === "overview" ? "overview" : groupOf(s.active);
   const item = (id: TabGroupId | "overview", children: string) => {
     const Icon = ICONS[id];
@@ -54,7 +63,7 @@ export function GroupNav() {
     {TAB_GROUPS.filter(g => g.id !== "changes" || groupTabs(s.order, g.id).length > 0)
       .map(g => item(g.id, g.id === "changes" ? tabLabel(t, "Change Detection") : t(`u34-nav-${g.id}`)))}
     <div className="u34-nav-item" data-group="config">
-      <Menu label={t("u34-nav-config")} entries={configEntries(t)}
+      <Menu label={t("u34-nav-config")} entries={configEntries(t, aiPreview)}
         trigger={<RacButton className="u34-nav-button"><ConfigIcon size={16} aria-hidden />{t("u34-nav-config")}<ChevronDown size={14} aria-hidden /></RacButton>} />
     </div>
   </div>;
