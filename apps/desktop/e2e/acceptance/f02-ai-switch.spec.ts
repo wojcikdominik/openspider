@@ -73,6 +73,18 @@ async function configEntries(page: Page): Promise<string[]> {
   return entries;
 }
 
+/** Seiten in der Navigation des Konfigurationsdialogs (geöffnet über den ersten Eintrag von „Konfiguration ▾“). */
+async function configDialogPages(page: Page): Promise<string[]> {
+  await page.locator('.u34-nav [data-group="config"] .u34-nav-button').click();
+  await page.getByRole("menu").getByRole("menuitem").first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  const pages = (await dialog.locator(".os-config-nav .os-config-item").allInnerTexts()).map((s) => s.trim());
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  return pages;
+}
+
 async function settingsTabs(page: Page): Promise<string[]> {
   return (await page.getByRole("tab").allInnerTexts()).map((s) => s.trim());
 }
@@ -106,6 +118,8 @@ test("switch off (default): no AI tabs, no cost field, no AI configuration pages
   }
   const config = await configEntries(page);
   expect(config.filter((e) => /(^|: )(AI|KI)$/.test(e)), `Konfiguration ▾: ${config}`).toEqual([]);
+  const dialog = await configDialogPages(page);
+  expect(dialog.filter((e) => /^(AI|KI)$/.test(e)), `Konfigurationsdialog: ${dialog}`).toEqual([]);
   await expect(page.getByText(COST)).toHaveCount(0);
   await language(page, "de");
   await expect(page.getByText(COST)).toHaveCount(0);
@@ -135,10 +149,12 @@ test("switch off (default): settings have no AI section, the switch „KI (Vorsc
 // spec: UI-016
 // acceptance: independent
 test("switch on: four AI tabs with an empty state, AI settings section, AI configuration page, cost field; off again removes them", async ({ page, context, app }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   expect(app.mode).toBe("bridge");
+  // Die Teilkriterien sind unabhängig: weiche Prüfungen (expect.soft), damit ein roter Teil die übrigen nicht verdeckt.
   await openMain(page, app);
-  const configOff = await configEntries(page);
+  const menuOff = await configEntries(page);
+  const dialogOff = await configDialogPages(page);
   const tabsOff = await topTabs(page);
 
   const settings = await context.newPage();
@@ -149,41 +165,49 @@ test("switch on: four AI tabs with an empty state, AI settings section, AI confi
   await settings.reload();
   await expect(settings.getByRole("tab").first()).toBeVisible({ timeout: 20_000 });
   await language(settings, "de");
-  expect(await settingsTabs(settings), "Einstellungsabschnitt „KI“").toContain("KI");
-  await settings.getByRole("tab", { name: "KI", exact: true }).click();
-  await expect(settings.getByRole("tabpanel")).toBeVisible();
-  expect((await settingsTabs(settings)).length, "genau ein zusätzlicher Abschnitt").toBe(sectionsOff.length + 1);
+  const sectionsOn = await settingsTabs(settings);
+  expect.soft(sectionsOn, "Einstellungsabschnitt „KI“").toContain("KI");
+  expect.soft(sectionsOn.length, "genau ein zusätzlicher Abschnitt").toBe(sectionsOff.length + 1);
+  if (sectionsOn.includes("KI")) {
+    await settings.getByRole("tab", { name: "KI", exact: true }).click();
+    await expect.soft(settings.getByRole("tabpanel")).toBeVisible();
+  }
 
   await page.reload();
   await expect(page.locator(".u10-top-tabs [role=tab]").first()).toBeVisible({ timeout: 20_000 });
   await language(page, "en");
   const tabsOn = await topTabs(page);
-  for (const tab of AI_TABS) expect(tabsOn.has(tab), `${tab} fehlt bei Schalter an: ${[...tabsOn.keys()]}`).toBe(true);
+  for (const tab of AI_TABS) expect.soft(tabsOn.has(tab), `${tab} fehlt bei Schalter an: ${[...tabsOn.keys()]}`).toBe(true);
   // Alle übrigen Tabs bleiben erhalten.
-  for (const tab of tabsOff.keys()) expect(tabsOn.has(tab), tab).toBe(true);
-  expect(tabsOn.size).toBe(tabsOff.size + AI_TABS.length);
+  for (const tab of tabsOff.keys()) expect.soft(tabsOn.has(tab), tab).toBe(true);
+  expect.soft(tabsOn.size).toBe(tabsOff.size + AI_TABS.length);
 
   // UI-016: jeder KI-Tab zeigt ohne Crawl einen Leerzustand mit genau einem Code aus der Liste.
   for (const tab of AI_TABS) {
+    if (!tabsOn.has(tab)) continue;
     await page.locator(`.u34-nav [data-group="${tabsOn.get(tab)}"] .u34-nav-button`).click();
     await page.locator(".u10-top-tabs").getByRole("tab", { name: tab, exact: true }).click();
     await expect(page.locator(".u10-top-tabs").getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true");
     const empty = page.locator(".u10-grid-host [data-empty-state]");
-    await expect(empty, `${tab}: Leerzustand`).toHaveCount(1, { timeout: 15_000 });
-    await expect(empty).toBeVisible();
+    await expect.soft(empty, `${tab}: Leerzustand`).toHaveCount(1, { timeout: 15_000 });
+    if ((await empty.count()) !== 1) continue;
+    await expect.soft(empty).toBeVisible();
     const code = (await empty.getAttribute("data-empty-state")) ?? "";
-    expect(ALLOWED_WITHOUT_CRAWL.has(code.replace(/\(.*\)$/, "")), `${tab}: Code ${code}`).toBe(true);
+    expect.soft(ALLOWED_WITHOUT_CRAWL.has(code.replace(/\(.*\)$/, "")), `${tab}: Code ${code}`).toBe(true);
   }
 
-  // Konfigurationsseiten: mit Schalter kommen Einträge dazu, alle bisherigen bleiben.
-  const configOn = await configEntries(page);
-  for (const entry of configOff) expect(configOn, entry).toContain(entry);
-  expect(configOn.length, `Konfiguration ▾ an: ${configOn}`).toBeGreaterThan(configOff.length);
+  // Konfigurationsseiten: im Dialog und im Einstieg „Konfiguration ▾“ kommen Einträge dazu, alle bisherigen bleiben.
+  const dialogOn = await configDialogPages(page);
+  for (const entry of dialogOff) expect.soft(dialogOn, entry).toContain(entry);
+  expect.soft(dialogOn.length, `Konfigurationsdialog an: ${dialogOn}`).toBeGreaterThan(dialogOff.length);
+  const menuOn = await configEntries(page);
+  for (const entry of menuOff) expect.soft(menuOn, entry).toContain(entry);
+  expect.soft(menuOn.length, `Konfiguration ▾ an: ${menuOn}`).toBeGreaterThan(menuOff.length);
 
   // UI-013: Feld „Kosten“ – Feldname je Sprache.
-  await expect(page.getByText(/^Cost:/)).toHaveCount(1);
+  await expect.soft(page.getByText(/^Cost:/)).toHaveCount(1);
   await language(page, "de");
-  await expect(page.getByText(/^Kosten:/)).toHaveCount(1);
+  await expect.soft(page.getByText(/^Kosten:/)).toHaveCount(1);
   await language(page, "en");
 
   // Ausschalten entfernt die KI-Oberfläche wieder.
@@ -191,16 +215,17 @@ test("switch on: four AI tabs with an empty state, AI settings section, AI confi
   await settings.reload();
   await expect(settings.getByRole("tab").first()).toBeVisible({ timeout: 20_000 });
   await language(settings, "de");
-  expect(await settingsTabs(settings)).not.toContain("KI");
-  expect((await settingsTabs(settings)).length).toBe(sectionsOff.length);
+  expect.soft(await settingsTabs(settings)).not.toContain("KI");
+  expect.soft((await settingsTabs(settings)).length).toBe(sectionsOff.length);
   await page.reload();
   await expect(page.locator(".u10-top-tabs [role=tab]").first()).toBeVisible({ timeout: 20_000 });
   await language(page, "en");
   const tabsAgain = await topTabs(page);
-  for (const tab of AI_TABS) expect(tabsAgain.has(tab), `${tab} nach dem Ausschalten`).toBe(false);
-  expect([...tabsAgain.keys()].sort()).toEqual([...tabsOff.keys()].sort());
-  expect(await configEntries(page)).toEqual(configOff);
-  await expect(page.getByText(COST)).toHaveCount(0);
+  for (const tab of AI_TABS) expect.soft(tabsAgain.has(tab), `${tab} nach dem Ausschalten`).toBe(false);
+  expect.soft([...tabsAgain.keys()].sort()).toEqual([...tabsOff.keys()].sort());
+  expect.soft(await configDialogPages(page)).toEqual(dialogOff);
+  expect.soft(await configEntries(page)).toEqual(menuOff);
+  await expect.soft(page.getByText(COST)).toHaveCount(0);
 });
 
 // spec: UI-004 [M4]
@@ -218,6 +243,6 @@ test("toggling the switch in the settings window updates the open main window wi
   await expect(page.getByText(COST)).toHaveCount(1);
 
   await setSwitch(settings, false);
-  await expect.poll(async () => { const tabs = await topTabs(page); return AI_TABS.filter((t) => tabs.has(t)).length; }, { timeout: 15_000 }).toBe(0);
-  await expect(page.getByText(COST)).toHaveCount(0);
+  await expect.configure({ soft: true }).poll(async () => { const tabs = await topTabs(page); return AI_TABS.filter((t) => tabs.has(t)).length; }, { timeout: 15_000 }).toBe(0);
+  await expect.soft(page.getByText(COST)).toHaveCount(0);
 });

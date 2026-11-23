@@ -287,19 +287,27 @@ fn openspider_mcp_rejects_ai_tools_like_unknown_ones_when_off() {
 // --- OUT-203: ausdrücklich genannte KI-Namen (OS-Festlegung Schalter „KI (Vorschau)“, Nutzerentscheidung 23.11.2026,
 // Wortlaut vom Orchestrator übermittelt; in diesem Zweig noch nicht in docs/spec) ---
 
-/// Themen von `--help <thema>` und die zugehörige Option.
-const TOPICS: [(&str, &str); 4] = [
+/// Themen von `--help <thema>` und die zugehörige Option. `--export-custom-summary` hat eigene Tests: die Option ist
+/// in diesem Stand allgemein noch nicht unterstützt (Exit-Code 2 für jeden Namen), das soll die übrigen Fälle nicht
+/// verdecken.
+const TOPICS: [(&str, &str); 3] = [
     ("export-tabs", "--export-tabs"),
     ("bulk-export", "--bulk-export"),
     ("save-report", "--save-report"),
-    ("export-custom-summary", "--export-custom-summary"),
 ];
+const SUMMARY: [(&str, &str); 1] = [("export-custom-summary", "--export-custom-summary")];
 
 /// Je Thema ein KI-Name aus der Liste bei eingeschaltetem Schalter; dazu `AI:All` (Beispiel der Festlegung).
 fn ai_names_per_option() -> Vec<(&'static str, String)> {
-    let env = env_with(true);
     let mut out = vec![("--export-tabs", "AI:All".to_string())];
-    for (topic, flag) in TOPICS {
+    out.extend(ai_names_for(&TOPICS));
+    out
+}
+
+fn ai_names_for(topics: &[(&str, &'static str)]) -> Vec<(&'static str, String)> {
+    let env = env_with(true);
+    let mut out = Vec::new();
+    for &(topic, flag) in topics {
         let run = env.run(&["--help", topic]);
         assert_eq!(run.code, 0, "{}", run.dump());
         if let Some(name) = ai_lines(&run.stdout).into_iter().find(|n| n != "AI:All") {
@@ -343,7 +351,11 @@ fn crawl_args(site: &os_testsite::TestSite, env: &Env, flag: &str, name: &str) -
 // einen KI-Namen.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn switch_off_explicit_ai_names_are_unknown_and_rejected_before_the_crawl() {
-    let names = ai_names_per_option();
+    check_off(ai_names_per_option()).await;
+}
+
+async fn check_off(names: Vec<(&'static str, String)>) {
+    assert!(!names.is_empty(), "keine KI-Namen bei Schalter an gelistet");
     let site = common::site("out-basic-site").await;
     let mut failures = Vec::new();
     for (flag, name) in &names {
@@ -373,7 +385,11 @@ async fn switch_off_explicit_ai_names_are_unknown_and_rejected_before_the_crawl(
 // Schalter an: dieselben Namen sind gültig – keine Meldung für einen unbekannten Namen, kein Exit-Code 2.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn switch_on_explicit_ai_names_are_valid() {
-    let names = ai_names_per_option();
+    check_on(ai_names_per_option()).await;
+}
+
+async fn check_on(names: Vec<(&'static str, String)>) {
+    assert!(!names.is_empty(), "keine KI-Namen bei Schalter an gelistet");
     let site = common::site("out-basic-site").await;
     let mut failures = Vec::new();
     for (flag, name) in &names {
@@ -391,4 +407,21 @@ async fn switch_on_explicit_ai_names_are_valid() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+// spec: OUT-203
+// acceptance: independent
+// Wie oben für `--export-custom-summary` (Kennzahlen): Schalter aus → KI-Kennzahl unbekannt, Exit-Code 2 mit der
+// Meldung für einen unbekannten Namen.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn switch_off_explicit_ai_summary_metric_is_unknown() {
+    check_off(ai_names_for(&SUMMARY)).await;
+}
+
+// spec: OUT-203
+// acceptance: independent
+// Schalter an: eine gelistete KI-Kennzahl ist für `--export-custom-summary` gültig.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn switch_on_explicit_ai_summary_metric_is_valid() {
+    check_on(ai_names_for(&SUMMARY)).await;
 }
