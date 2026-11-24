@@ -1,0 +1,78 @@
+{
+  "models_status": "pending-confirmation",
+  "source_url": "docs/spec/08-ai.md#ai-011-modellwahl-je-aufgabe",
+  "verified_at": "2026-11-24",
+  "note": "reasoning und answer_tokens nach der Tabelle in AI-011 (Nachtrag 24.11.2026, Q00). Standardmodelle und Ersatzlisten: Vorschlag ausstehend bzw. zur Bestätigung durch den Nutzer (E-4 b, Plan K4-20); bis dahin model null und fallback leer.",
+  "tasks": {
+    "decision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": null,
+      "fallback": []
+    },
+    "decision-vision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": null,
+      "fallback": []
+    },
+    "redirect-confirm": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": null,
+      "fallback": []
+    },
+    "suggest-title": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "suggest-meta": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "suggest-h1": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "suggest-alt": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "link-anchor": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "ask-sql": {
+      "reasoning": "medium",
+      "answer_tokens": 1024,
+      "model": null,
+      "fallback": []
+    },
+    "audit-summary": {
+      "reasoning": "medium",
+      "answer_tokens": 8192,
+      "model": null,
+      "fallback": []
+    },
+    "llms-summary": {
+      "reasoning": "low",
+      "answer_tokens": 2048,
+      "model": null,
+      "fallback": []
+    },
+    "embedding": {
+      "model": null,
+      "fallback": []
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "note": "Schätzungsanteile für AI-012 (Nachtrag 24.11.2026, Q00); die Schätzung baut M4-K10. Werte aus der Live-Probe Q00, Kalibrierung in M4-Q02.",
+  "decisions_question_overhead_tokens": {
+    "value": 100,
+    "source_url": "Live-Probe Q00, docs/plan/M4-reports/q00.md",
+    "verified_at": "2026-11-24"
+  },
+  "schema_overhead_tokens": {
+    "default_tokens": 0,
+    "rules": [
+      {
+        "provider": "anthropic",
+        "endpoint": "messages",
+        "tokens": 350
+      },
+      {
+        "provider": "openai",
+        "endpoint": "responses",
+        "tokens": 80
+      },
+      {
+        "provider": "openrouter",
+        "model_prefix": "openai/",
+        "tokens": 80
+      }
+    ],
+    "source_url": "Live-Probe Q00, docs/plan/M4-reports/q00.md",
+    "verified_at": "2026-11-24"
+  }
+}
