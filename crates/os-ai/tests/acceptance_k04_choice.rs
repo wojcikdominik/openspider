@@ -579,9 +579,11 @@ fn default_levels_per_task_type_on_capable_model() {
 // acceptance: independent
 #[test]
 fn decisions_api_has_no_level_and_no_max_tokens() {
-    let mut s = TaskSettings::default();
-    s.reasoning = Some(High);
-    s.max_tokens = Some(999);
+    let s = TaskSettings {
+        reasoning: Some(High),
+        max_tokens: Some(999),
+        ..TaskSettings::default()
+    };
     let p = plan(TaskType::Decision, &s, &["openai"]).unwrap();
     assert!(p.uses_decisions_api());
     assert_eq!(
