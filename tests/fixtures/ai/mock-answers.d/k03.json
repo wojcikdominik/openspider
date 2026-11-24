@@ -1,0 +1,14 @@
+{
+  "k03-structured": {
+    "default": {
+      "ok": true,
+      "label": "k03"
+    }
+  },
+  "k03-unnormalized": {
+    "embedding": [3.0, 0.0, 4.0, 0.0]
+  },
+  "k03-unnormalized-b": {
+    "embedding": [0.0, -2.0, 0.0, 0.0]
+  }
+}
