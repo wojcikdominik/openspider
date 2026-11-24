@@ -265,7 +265,9 @@
    "tests/fixtures/ai/mock-answers.d/k03.json",
    "crates/os-testsite/src/mocks/ai/gemini.rs (neu, Gemini-Mock nach 08 Konventionen, Klärung K4-14)",
    "crates/os-testsite/src/mocks/ai/mod.rs (nur Registrierung des Gemini-Mocks)",
-   "crates/os-testsite/tests/ai_mock_gemini*.rs"
+   "crates/os-testsite/tests/ai_mock_gemini*.rs",
+   "crates/os-ai/tests/pending_m4_k03.rs",
+   "Abnahmetests (Testagent): crates/os-ai/tests/acceptance_k03_{ollama,embeddings,env}.rs, crates/os-ai/tests/acceptance_k03_support/**, tests/fixtures/ai/k03-acceptance/**"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. AI-006 (Kosten 0, Tokens protokolliert, Erreichbarkeitsmeldung aus INTEG-160), AI-007 (P2, nach E-1 b erst nach 1.2: in der 1.1-Etappe nicht bauen, release_split) und Gemini-Mock in os-testsite unter `/gemini/v1beta/…`, Host `gemini.mock.test` (08 Konventionen, Nachtrag 21.11.2026; Endpunkte nach öffentlicher Anbieterdoku zum Bauzeitpunkt mit Quelle im Bericht; deckt INTEG-019 [M4] für Gemini), AI-008 Embedding-Schnittstelle für INTEG-180 ff., AI-081, AI-090. INTEG-005 [M4]: Ollama Standard 1 gleichzeitige Anfrage im Reiter „Erweitert“ (Anzeigetest liefert U01; hier Vorgabewert und Test). E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
   "release": "1.1 (teilweise, K4-18)",
