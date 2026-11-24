@@ -26,8 +26,8 @@ class StatusGate {
   async attach(page: Page) {
     await page.routeWebSocket(/token=/, ws => {
       const core = ws.connectToServer();
-      // The page's own connection; a further socket of the page (content from outside) is only passed through.
-      if (!this.page) { this.page = ws; this.core = core; }
+      // The page's latest own connection; a socket marked as coming from outside (`outside=1`) is only passed through.
+      if (!ws.url().includes("outside=1")) { this.page = ws; this.core = core; }
       ws.onMessage(message => {
         const text = String(message);
         if (this.holdCmd && text.includes(`"cmd":"${this.holdCmd}"`)) { this.held.push(text); this.note("held", text); return; }
@@ -440,7 +440,7 @@ test("P2: content replaced from outside (another connection opens a crawl in thi
   await expect.poll(() => selectedRows(page)).toHaveLength(3);
   // A second connection to the core, as CLI/MCP or another process would act: no begin in this window.
   const answer = await page.evaluate(async crawlId => {
-    const url = new URLSearchParams(location.search).get("bridge")!;
+    const url = `${new URLSearchParams(location.search).get("bridge")!}&outside=1`;
     return new Promise<string>(resolve => {
       const socket = new WebSocket(url);
       socket.onopen = () => socket.send(JSON.stringify({ id: 9001, cmd: "crawl.open", args: { kind: "id", crawlId }, window: "main" }));
