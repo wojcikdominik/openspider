@@ -4,7 +4,7 @@
 
 - Frühe Beta für SEO-Agenturen in Vorbereitung. Plattform-Smoke, Archiv-Kompatibilität und noch offene M2-Parität bleiben vor der Freigabe zu prüfen.
 
-## [1.0.2] - 2026-12-03
+## [1.0.2] - 2026-11-25
 
 OpenSpider 1.0.2 improves how AI assistants see the built-in MCP server. Crawling, analysis and exports work as in 1.0.1.
 
