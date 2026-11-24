@@ -1,0 +1,270 @@
+{
+  "description": "M4-K06 Golden-Test AI-015: Cache-Schl\u00fcssel = SHA-256 \u00fcber kanonisches JSON (Schl\u00fcssel nach Codepunkten sortiert, keine Leerzeichen, UTF-8). Werte unabh\u00e4ngig berechnet (Python json.dumps sort_keys, separators (',', ':'), ensure_ascii=False; hashlib.sha256). Textteile mit Escapes, damit Zeilenenden beim Auschecken den Inhalt nicht \u00e4ndern.",
+  "cases": [
+    {
+      "name": "decision-baseline",
+      "parts": [
+        {
+          "type": "text",
+          "text": "URL: http://ai.test:8080/produkte/rucksack\nTitle: Wanderrucksack 30 l\nMOCK-ID:product-1"
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "page-type",
+        "definition_version": "1.0.0",
+        "params": {},
+        "path": "decisions-api",
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "https://openai.mock.test/openai/v1",
+        "result_params": {},
+        "input_hash": "31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc"
+      },
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://openai.mock.test/openai/v1\",\"input_hash\":\"31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "0d544cc8505549ff6525057c3f4c09d79389ef8967b0e7198fb5429bf93049c3"
+    },
+    {
+      "name": "decision-new-version",
+      "parts": [
+        {
+          "type": "text",
+          "text": "URL: http://ai.test:8080/produkte/rucksack\nTitle: Wanderrucksack 30 l\nMOCK-ID:product-1"
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "page-type",
+        "definition_version": "1.1.0",
+        "params": {},
+        "path": "decisions-api",
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "https://openai.mock.test/openai/v1",
+        "result_params": {},
+        "input_hash": "31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc"
+      },
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.1.0\",\"endpoint\":\"https://openai.mock.test/openai/v1\",\"input_hash\":\"31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "380b468dcadc6f4100f0b07732f9ec7a05d507872675eb40b4177db91d8ab6b0"
+    },
+    {
+      "name": "decision-structured-output",
+      "parts": [
+        {
+          "type": "text",
+          "text": "URL: http://ai.test:8080/produkte/rucksack\nTitle: Wanderrucksack 30 l\nMOCK-ID:product-1"
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "page-type",
+        "definition_version": "1.0.0",
+        "params": {},
+        "path": "structured-output",
+        "provider": "anthropic",
+        "model": "mock-claude",
+        "endpoint": "https://anthropic.mock.test/anthropic/v1",
+        "result_params": {},
+        "input_hash": "31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc"
+      },
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://anthropic.mock.test/anthropic/v1\",\"input_hash\":\"31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc\",\"model\":\"mock-claude\",\"params\":{},\"path\":\"structured-output\",\"provider\":\"anthropic\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "7128cdfc6f093fc1f440dfb4e64ac539979c6c9e2e60539d97919ac1699afc22"
+    },
+    {
+      "name": "decision-other-model",
+      "parts": [
+        {
+          "type": "text",
+          "text": "URL: http://ai.test:8080/produkte/rucksack\nTitle: Wanderrucksack 30 l\nMOCK-ID:product-1"
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "page-type",
+        "definition_version": "1.0.0",
+        "params": {},
+        "path": "decisions-api",
+        "provider": "openai",
+        "model": "gpt-6-luna-mini",
+        "endpoint": "https://openai.mock.test/openai/v1",
+        "result_params": {},
+        "input_hash": "31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc"
+      },
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://openai.mock.test/openai/v1\",\"input_hash\":\"31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc\",\"model\":\"gpt-6-luna-mini\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "f6e3c13057f59bd30a993d9a2b0a32d0e2f94e8ba685480602afd00326c9b619"
+    },
+    {
+      "name": "decision-eu-endpoint",
+      "parts": [
+        {
+          "type": "text",
+          "text": "URL: http://ai.test:8080/produkte/rucksack\nTitle: Wanderrucksack 30 l\nMOCK-ID:product-1"
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "page-type",
+        "definition_version": "1.0.0",
+        "params": {},
+        "path": "decisions-api",
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "https://eu.openai.mock.test/openai/v1",
+        "result_params": {},
+        "input_hash": "31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc"
+      },
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://eu.openai.mock.test/openai/v1\",\"input_hash\":\"31e4c1c2440fc5a3096b6830955f7c4e8764fc8a85ff1d921e61d3270d72e1fc\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "8da040f2d46c928b9c0b3044a3c1c9179f32f1d819ea352aceaaedef476541a1"
+    },
+    {
+      "name": "language-de",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Gleicher Text f\u00fcr beide Seiten."
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "language-matches",
+        "definition_version": "2.0.0",
+        "params": {
+          "code": "de"
+        },
+        "path": "decisions-api",
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "https://openai.mock.test/openai/v1",
+        "result_params": {},
+        "input_hash": "c831d4edc8fcba0ae6764a8f9e16211ca58645191fadc09f1a4b7b45d0a60951"
+      },
+      "params_hash": "8a716236c10d5427d20f337af00ef91e3f4da25ef2eed8703d8deddfe2d5e10b",
+      "canonical": "{\"definition_id\":\"language-matches\",\"definition_version\":\"2.0.0\",\"endpoint\":\"https://openai.mock.test/openai/v1\",\"input_hash\":\"c831d4edc8fcba0ae6764a8f9e16211ca58645191fadc09f1a4b7b45d0a60951\",\"model\":\"gpt-6-luna\",\"params\":{\"code\":\"de\"},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "c6dc3549862123ed82ed41ca518b95c5f0b2ce9d9343f638236fc4d7035095fc"
+    },
+    {
+      "name": "language-en",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Gleicher Text f\u00fcr beide Seiten."
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "language-matches",
+        "definition_version": "2.0.0",
+        "params": {
+          "code": "en"
+        },
+        "path": "decisions-api",
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "https://openai.mock.test/openai/v1",
+        "result_params": {},
+        "input_hash": "c831d4edc8fcba0ae6764a8f9e16211ca58645191fadc09f1a4b7b45d0a60951"
+      },
+      "params_hash": "46e57b3487e667c7b01ee7c261d5f77d8d2d327f7f7741f0983ebe743e17bc6d",
+      "canonical": "{\"definition_id\":\"language-matches\",\"definition_version\":\"2.0.0\",\"endpoint\":\"https://openai.mock.test/openai/v1\",\"input_hash\":\"c831d4edc8fcba0ae6764a8f9e16211ca58645191fadc09f1a4b7b45d0a60951\",\"model\":\"gpt-6-luna\",\"params\":{\"code\":\"en\"},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "0fe63fd47b12f66e49d10c13bc57b1ca3ec1c58b9494630036936a7ccf2c80d3"
+    },
+    {
+      "name": "suggest-title-unicode",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Gr\u00f6\u00dfe: 30 l \u2013 Wandern \ud83e\udd7e\r\nZeile 2\t\"zitiert\""
+        }
+      ],
+      "key_input": {
+        "task": "suggest-title",
+        "definition_id": "title",
+        "definition_version": "1.0.0",
+        "params": {
+          "candidates": [
+            "A",
+            "B"
+          ],
+          "brand": "Wald & Weg"
+        },
+        "path": "structured-output",
+        "provider": "openrouter",
+        "model": "mock/text",
+        "endpoint": "https://openrouter.mock.test/openrouter/api/v1",
+        "result_params": {
+          "temperature": 0.2,
+          "max_tokens": 200
+        },
+        "input_hash": "c13b54631ccf688f115fcd10719a5bb7105cc56451a4f275ccfae6cb437868a3"
+      },
+      "params_hash": "0be181fb965276ebf625d6126cb4ed71798a93f16388906324481a13b5260810",
+      "canonical": "{\"definition_id\":\"title\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://openrouter.mock.test/openrouter/api/v1\",\"input_hash\":\"c13b54631ccf688f115fcd10719a5bb7105cc56451a4f275ccfae6cb437868a3\",\"model\":\"mock/text\",\"params\":{\"brand\":\"Wald & Weg\",\"candidates\":[\"A\",\"B\"]},\"path\":\"structured-output\",\"provider\":\"openrouter\",\"result_params\":{\"max_tokens\":200,\"temperature\":0.2},\"task\":\"suggest-title\",\"v\":1}",
+      "key": "2a72c6bde3982ce6b5feb72ce6991453ff7375f8e36e25c8aa865cd8934e51ce"
+    },
+    {
+      "name": "alt-text-image",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Alt-Text pr\u00fcfen"
+        },
+        {
+          "type": "image",
+          "media_type": "image/png",
+          "base64": "iVBORw0KGgpPcGVuU3BpZGVyIEswNiBmaXh0dXJlIGltYWdl"
+        },
+        {
+          "type": "image",
+          "media_type": "image/gif",
+          "base64": "R0lGODlhIGZpeHR1cmUgMg=="
+        }
+      ],
+      "key_input": {
+        "task": "decision",
+        "definition_id": "alt-matches-image",
+        "definition_version": "1.0.0",
+        "params": {},
+        "path": "decisions-api",
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "https://openai.mock.test/openai/v1",
+        "result_params": {},
+        "input_hash": "dc0a352c46777dfa29929a84b26a34b1d8cc57e913cfeaa7e9ae5b47544ad3f1"
+      },
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "canonical": "{\"definition_id\":\"alt-matches-image\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://openai.mock.test/openai/v1\",\"input_hash\":\"dc0a352c46777dfa29929a84b26a34b1d8cc57e913cfeaa7e9ae5b47544ad3f1\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
+      "key": "22ccb6aa813d580ae281467f83862dc8f13bbf31a46acd32e9332ba0a31ea756"
+    },
+    {
+      "name": "embedding-no-path",
+      "parts": [
+        {
+          "type": "text",
+          "text": "Wanderrucksack 30 l"
+        }
+      ],
+      "key_input": {
+        "task": "embedding",
+        "definition_id": "page-embedding",
+        "definition_version": "1",
+        "params": {},
+        "path": null,
+        "provider": "ollama",
+        "model": "mock-llama",
+        "endpoint": "http://localhost:11434/ollama",
+        "result_params": {
+          "dimensions": 256
+        },
+        "input_hash": "9db31413e2b2fd48267fe999cecb233b459cbe04f41b77455f68690049180b53"
+      },
+      "params_hash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "canonical": "{\"definition_id\":\"page-embedding\",\"definition_version\":\"1\",\"endpoint\":\"http://localhost:11434/ollama\",\"input_hash\":\"9db31413e2b2fd48267fe999cecb233b459cbe04f41b77455f68690049180b53\",\"model\":\"mock-llama\",\"params\":{},\"path\":null,\"provider\":\"ollama\",\"result_params\":{\"dimensions\":256},\"task\":\"embedding\",\"v\":1}",
+      "key": "a412a9e500c963d8db6516289a8542aa3bd9ed528a651028f1e5f1b33b320560"
+    }
+  ]
+}
