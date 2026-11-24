@@ -295,6 +295,9 @@ proptest! {
     }
 }
 
+/// Ein Eintrag des Lasttests: (Sätze-Index, geschätzte Eingabe, `max_tokens`, Bilder, Batch, Ist-Eingabe, Ist-Ausgabe).
+type PlanEntry = (usize, u64, u64, u64, bool, u64, u64);
+
 /// Lasttest mit Formel: 4 Worker, 200 Einträge (Text über mock-claude, Bilder über OpenRouter-Vision, Batch und
 /// EU über gpt-6-luna); Ist ≤ reservierte Tokens. Liefert die Summe der Ist-Kosten.
 fn formula_load(budget: u64, seed: u64) -> (u64, Arc<CrawlBudgetLedger>) {
@@ -305,7 +308,7 @@ fn formula_load(budget: u64, seed: u64) -> (u64, Arc<CrawlBudgetLedger>) {
         luna_responses(true),
     ]);
     let mut rng = Lcg(seed);
-    let plan: Arc<Vec<(usize, u64, u64, u64, bool, u64, u64)>> = Arc::new(
+    let plan: Arc<Vec<PlanEntry>> = Arc::new(
         (0..200)
             .map(|_| {
                 let which = rng.range(0, 3) as usize;
