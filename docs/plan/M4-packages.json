@@ -306,10 +306,12 @@
   "owns": [
    "crates/os-ai/src/{keys,catalog}/**",
    "crates/os-ai/tests/{keys,catalog,model_choice}*.rs",
-   "resources/ai/{pricing.json,provider-limits.json,task-defaults.json}"
+   "resources/ai/{pricing.json,provider-limits.json,task-defaults.json}",
+   "tests/fixtures/ai/k04/** (neu, Testdaten zu den Q00-Nachträgen von AI-010/AI-011)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Schlüssel nur über SecretStoreMut (M2 C13; Tests MemorySecretStore), Schema nach INTEG-002; Preisdatei mit `source_url` und `verified_at` je Eintrag (Werte nach K4-06 vor dem Release prüfen, Live-Abgleich in M4-Q02), Preisschlüssel (Anbieter, Modell, Endpunkt); Modellwahl je Aufgabentyp mit Ersatzliste bei fehlendem Anbieter. Dateiname der Standardmodelle `resources/ai/task-defaults.json` (AI-011). [abhängig von K4-12] Schlüsselbund-Kennung der KI-Konten (Spec `ai.<anbieter>` gegen Code `api/<kind>`) erst nach Klärung K4-12. E-4 b: Die Standardmodell-Liste schlägt der Orchestrator vor, der Nutzer bestätigt – bis dahin **Vorschlag ausstehend**: task-defaults.json nur mit Schema, Ladern und Tests gegen Testdaten bauen, keine eigenen Standardwerte erfinden. Aktualität von Standardmodellen und Preisen regelt AI-025 (Nachtrag 21.11.2026, Paket M4-K08); jeder Eintrag trägt verified_at. E-3 a: Standardweg für `decision` nach M4-Q00. E-7 a: Auf Linux/Docker nur Umgebungsvariablen `OPENSPIDER_AI_KEY_*`, keine verschlüsselte Datei.",
-  "release": "1.1"
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Schlüssel nur über SecretStoreMut (M2 C13; Tests MemorySecretStore), Schema nach INTEG-002; Preisdatei mit `source_url` und `verified_at` je Eintrag (Werte nach K4-06 vor dem Release prüfen, Live-Abgleich in M4-Q02), Preisschlüssel (Anbieter, Modell, Endpunkt); Modellwahl je Aufgabentyp mit Ersatzliste bei fehlendem Anbieter. Dateiname der Standardmodelle `resources/ai/task-defaults.json` (AI-011). [abhängig von K4-12] Schlüsselbund-Kennung der KI-Konten (Spec `ai.<anbieter>` gegen Code `api/<kind>`) erst nach Klärung K4-12. E-4 b: Die Standardmodell-Liste schlägt der Orchestrator vor, der Nutzer bestätigt – bis dahin **Vorschlag ausstehend**: task-defaults.json nur mit Schema, Ladern und Tests gegen Testdaten bauen, keine eigenen Standardwerte erfinden. Aktualität von Standardmodellen und Preisen regelt AI-025 (Nachtrag 21.11.2026, Paket M4-K08); jeder Eintrag trägt verified_at. E-3 a: Standardweg für `decision` nach M4-Q00. E-7 a: Auf Linux/Docker nur Umgebungsvariablen `OPENSPIDER_AI_KEY_*`, keine verschlüsselte Datei. Nachtrag Q00 (24.11.2026, verbindlich, ersetzt für die Felder `reasoning` und `answer_tokens` den Satz „keine eigenen Standardwerte erfinden“, nicht für die Standardmodelle): Auftragskern in docs/plan/M4.md Abschnitt 7 „Auftragskern K04“ – Katalog `reasoning_efforts`/`max_output_tokens` für OpenAI (AI-010), Reasoning-Stufe und Antwortanteil je Aufgabentyp mit den Werten der Tabelle in AI-011, `max_tokens`-Regel 2 × A + Reserve mit Kappung, `provider-limits.json` mit `decisions_question_overhead_tokens` = 100 und `schema_overhead_tokens` (AI-012); Typ `ReasoningLevel` aus M4-K09 verwenden, nicht neu anlegen. B2 für die Nachtrag-Kriterien von AI-010/AI-011 mit `// spec: <ID>`.",
+  "release": "1.1",
+  "start_condition": "Erster Commit von M4-K09 (Typ `ReasoningLevel` in `os-ai::provider`) liegt vor; der Worktree von M4-K04 wird auf diesem Commit angelegt (Orchestrator-Entscheidung 24.11.2026). Wer von K04 und K09 zuerst gemergt wird, bringt den Commit mit."
  },
  {
   "id": "M4-K05",
@@ -511,7 +513,9 @@
    "M4-K04",
    "M4-K05",
    "M4-K06",
-   "M4-K07"
+   "M4-K07",
+   "M4-K09",
+   "M4-K10"
   ],
   "owns": [
    "crates/os-ai/src/decisions/{format,library,input,exec,fallback,routing}/**",
@@ -601,7 +605,9 @@
    "M4-K05",
    "M4-K06",
    "M4-K07",
-   "M4-F02"
+   "M4-F02",
+   "M4-K09",
+   "M4-K10"
   ],
   "owns": [
    "crates/os-ai/src/tasks/suggest/** (ohne alt.rs, h1.rs, recrawl.rs)",
@@ -823,13 +829,16 @@
    "INTEG-005",
    "AI-012",
    "AI-018",
-   "AI-019"
+   "AI-019",
+   "AI-011"
   ],
   "depends_on": [
    "M4-K04",
    "M4-K05",
    "M4-K07",
-   "M4-F02"
+   "M4-F02",
+   "M4-K09",
+   "M4-K10"
   ],
   "owns": [
    "apps/desktop/src/features/ai/{settings,cost,consent}/** (ohne settings/accounts/**)",
@@ -893,7 +902,8 @@
   ],
   "extra_spec_ids": [],
   "depends_on": [
-   "M4-K04"
+   "M4-K04",
+   "M4-K09"
   ],
   "owns": [
    ".github/workflows/ai-catalog-check.yml (neu)",
@@ -927,7 +937,9 @@
    "M4-D01",
    "M4-U01",
    "M4-V01",
-   "M4-K08"
+   "M4-K08",
+   "M4-K09",
+   "M4-K10"
   ],
   "owns": [
    "crates/*/tests/pending_m4_*.rs",
@@ -1574,6 +1586,114 @@
    "docs/plan/M4-acceptance/live/probe-1/**"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Ausnahme von E6 nur für diese Probe: Live-Aufrufe mit `OPENSPIDER_LIVE_API_TESTS=1` und Schlüsseln, die der Nutzer selbst im Schlüsselbund hinterlegt (Agent sieht keine Werte). Gesamtbudget etwa 20 USD; Konten Anthropic, OpenAI (Responses, Decisions), OpenRouter; EU-Wege nur im Mock. Ergebnis: je Anbieter Abweichungen gegen 08 (Endpunkte, Feldnamen, Fehlerformen, Modell-IDs, Preise) und die ausdrückliche Feststellung, ob die Decisions API und `gpt-6-luna` noch wie spezifiziert existieren. Danach legt der Orchestrator nach E-3 a fest, ob Decisions (AI-004, Engine AI-033) oder der Ersatzweg über strukturierte Ausgabe (AI-034) Standardweg ist; Spec-Abweichungen gehen als Vorschlag an den Planer (08 „Vor Umsetzung zu verifizieren“). Keine Code-Änderung.",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-Q00b",
+  "kind": "measurement",
+  "model": "opus",
+  "wave": "4a",
+  "size": "S",
+  "runner": "local-mac",
+  "title": "Zweite kurze Live-Probe (V-A6, V-A8): Form von `thinking` bei Anthropic, `reasoning.effort = \"none\"` bei OpenAI Responses und OpenRouter, Wirkung auf Reasoning-Tokens, `store` bei Decisions; höchstens 1 USD",
+  "spec_ids": [],
+  "extra_spec_ids": [],
+  "depends_on": [
+   "M4-Q00"
+  ],
+  "owns": [
+   "docs/plan/M4-acceptance/live/probe-2/**"
+  ],
+  "start_condition": "Neue Testschlüssel des Nutzers im Schlüsselbund (Dienst `OpenSpider-Probe`, Konten `ai.<anbieter>`; die Schlüssel aus M4-Q00 sind widerrufen) und ein eigenes, ausdrückliches Ja des Nutzers zu diesem Live-Lauf (Obergrenze 1 USD); vorher nur Trockenlauf",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Ausnahme von E6 nur für diese Probe, wie M4-Q00: Live-Aufrufe mit `OPENSPIDER_LIVE_API_TESTS=1` und Schlüsseln, die der Nutzer selbst hinterlegt (Agent sieht keine Werte). Programm aus docs/plan/M4-acceptance/live/probe-1/probe nach probe-2/probe kopieren und erweitern (Kostenbremse, Schlüsselschutz und record::sanitize unverändert übernehmen; Gesamtgrenze 1 USD, je Anbieter höchstens 0,40 USD). Anfragen: je Anbieter (Anthropic `claude-haiku-5-5` und ein nicht abschaltbares Modell laut Modellliste, OpenAI Responses `gpt-6-luna`, OpenRouter `openai/gpt-6-luna`) dieselbe kleine Schema-Aufgabe mit Stufe off, low und ohne Parameter, Form nach 08 AI-002/AI-003/AI-005 (Nachtrag Q00) und nach der öffentlichen Anbieterdoku; dazu Anthropic `thinking.type = \"disabled\"` an ein Modell ohne `types.disabled` (Fehlerform); OpenRouter `reasoning.effort = \"none\"` mit `provider.require_parameters: true`; eine Decisions-Anfrage mit und eine ohne `store: false` (V-A8; Antwort aufzeichnen). Aufzuzeichnen je Anfrage: HTTP-Status, Fehlerform, `reasoning_tokens`/`thinking_tokens`, Ausgabe-Tokens, Antwort vorhanden ja/nein. Ergebnis: Tabelle „08 (Nachtrag Q00) ↔ beobachtet“ für V-A6 und V-A8 im README von probe-2, Abweichungen als Vorschlag an den Planer; das Ergebnis ist Merge-Voraussetzung für M4-K09. Keine Code-Änderung außerhalb von probe-2.",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-K09",
+  "kind": "package",
+  "model": "opus",
+  "wave": "4a",
+  "size": "L",
+  "runner": "local-mac",
+  "title": "Adapter- und Mock-Korrektur nach der Live-Probe Q00: Reasoning-Stufe im gemeinsamen Request (eigener erster Commit), Reasoning-Parameter und Abbruch an der Ausgabegrenze je Anbieter, store:false, OpenRouter usage.cost/Preisfelder, Request-IDs, ai-mock-Erweiterungen",
+  "spec_ids": [],
+  "extra_spec_ids": [
+   "AI-001",
+   "AI-002",
+   "AI-003",
+   "AI-004",
+   "AI-005",
+   "AI-006"
+  ],
+  "depends_on": [
+   "M4-T01",
+   "M4-K01",
+   "M4-K02",
+   "M4-K03",
+   "M4-Q00"
+  ],
+  "owns": [
+   "crates/os-ai/src/provider.rs (nur Typ `ReasoningLevel` und Feld `reasoning` im gemeinsamen Request sowie `reasoning_tokens` in der einheitlichen usage; erster eigener Commit, Vertrag in M4.md Abschnitt 7 „Auftragskern K09“)",
+   "crates/os-ai/src/adapters/{anthropic,openrouter,openai_responses,openai_decisions,ollama}/**",
+   "crates/os-testsite/src/mocks/ai/** (ohne gemini.rs)",
+   "crates/os-testsite/tests/ai_mock_*.rs",
+   "crates/os-ai/tests/{adapter_,contract}*.rs",
+   "crates/os-ai/tests/acceptance_k0{1,2,3}_*.rs und acceptance_k0{1,2,3}_support/** (nur Anpassung an die in 08 ausdrücklich ersetzten Kriterien und an die Decisions-Tokenzählung des Mocks je Frage; Liste im Bericht)",
+   "crates/os-ai/tests/{cost_,acceptance_k05_}*.rs (nur Anpassung an die Decisions-Tokenzählung des Mocks je Frage; Liste im Bericht)",
+   "tests/fixtures/ai/mock-answers.d/k09.json",
+   "tests/fixtures/ai/k09/**",
+   "crates/os-ai/tests/pending_m4_k09.rs",
+   "Abnahmetests (Testagent): crates/os-ai/tests/acceptance_k09_*.rs, crates/os-ai/tests/acceptance_k09_support/**, tests/fixtures/ai/k09-acceptance/**"
+  ],
+  "start_condition": "sofort nach dem Merge dieses Planstands (Orchestrator-Entscheidung 24.11.2026); der Merge von M4-K09 setzt das Ergebnis von M4-Q00b voraus (Formen von `thinking` und `reasoning.effort = \"none\"`, V-A6)",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je Nachtrag-Kriterium („Nachtrag 24.11.2026, Q00“) der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok. Auftragskern und Vertrag des Typs `ReasoningLevel`: docs/plan/M4.md Abschnitt 7 „Auftragskern K09“. Reihenfolge: (1) erster, eigener Commit nur mit `ReasoningLevel` in `os-ai::provider` (Name im Bericht nennen; M4-K04 setzt darauf auf); (2) Mock-Erweiterungen aus 08 Konventionen (Nachtrag Q00); (3) Adapter AI-002, AI-003, AI-004, AI-005, AI-006 nach den Nachträgen Q00; (4) Anpassung fremder Tests nur dort, wo 08 ein Kriterium ausdrücklich ersetzt oder die Decisions-Zählung des Mocks sie bricht. Der Status `Error: Output limit reached` ist Sache von M4-K10: K09 liefert die Erkennung als eigene Fehler- bzw. Antwortklasse des Adapters (Grund des Anbieters als Code) und bildet sie bis K10 auf den vorhandenen Fehlerweg ab; Platzhalter in pending_m4_k09.rs (`wartet auf M4-K10`). Formen von `thinking` und `reasoning.effort = \"none\"` sind nicht live belegt (V-A6): nach der öffentlichen Anbieterdoku zum Bauzeitpunkt bauen, Quelle im Bericht; Merge erst nach dem Ergebnis von M4-Q00b, Abweichungen daraus vor dem Merge einarbeiten. Kein `prompt_cache_retention` senden (V-A8). `store` nur bei Responses, nie bei Decisions.",
+  "release": "1.1"
+ },
+ {
+  "id": "M4-K10",
+  "kind": "package",
+  "model": "opus",
+  "wave": "4b",
+  "size": "L",
+  "runner": "local-mac",
+  "title": "Kern-Nachträge nach der Live-Probe Q00: Status `Error: Output limit reached` ohne Reparaturversuch, Reasoning-Stufe im Cache-Schlüssel, Kostenschätzung (Decisions je Frage, Ausgabe mit Reasoning), Ist-Kosten `reported`, Protokollspalten, Go-Dauern der Rate-Limit-Header, Policy-Feld `storage`",
+  "spec_ids": [],
+  "extra_spec_ids": [
+   "AI-012",
+   "AI-013",
+   "AI-014",
+   "AI-015",
+   "AI-017",
+   "AI-018",
+   "AI-020",
+   "AI-021"
+  ],
+  "depends_on": [
+   "M4-K04",
+   "M4-K05",
+   "M4-K06",
+   "M4-K07",
+   "M4-K09"
+  ],
+  "owns": [
+   "crates/os-model/src/ai/mod.rs (nur Status `Error: Output limit reached`, additiv wie K4-15)",
+   "crates/os-ai/src/provider.rs (nur Abbildung des Ausgabegrenzen-Abbruchs aus M4-K09 auf `Error: Output limit reached`)",
+   "crates/os-ai/src/{cost,cache,schema,limits}/**",
+   "crates/os-ai/src/policy/** (nur Feld `storage` in den Datenflusszeilen)",
+   "resources/ai/provider-policies.json (nur Feld `storage` je Anbieter und Endpunkt)",
+   "crates/os-store/src/ai/requests.rs",
+   "crates/os-store/migrations/0006_ai.sql (nur neue Spalten von `ai_requests`: `reasoning_level`, `reasoning_tokens`, `computed_cost`, `cost_mismatch`; 0006 steckt in keinem Release)",
+   "tests/fixtures/migrations/schema-v6/crawl.ospider (nur Neuerzeugung nach der 0006-Ergänzung)",
+   "tests/fixtures/ai/k06-acceptance/golden-cache-keys.json (nur Neuerzeugung, Reasoning-Stufe im Schlüssel)",
+   "crates/os-ai/tests/{cost,cache,schema,limits,policy,status_values}*.rs",
+   "crates/os-store/tests/ai_*.rs",
+   "crates/os-ai/tests/acceptance_k0{5,6,7}_*.rs, acceptance_f01_status.rs (nur Anpassung an die in 08 ausdrücklich ersetzten Kriterien und den neuen Statuswert; Liste im Bericht)",
+   "tests/fixtures/ai/mock-answers.d/k10.json",
+   "tests/fixtures/ai/k10/**",
+   "crates/os-ai/tests/pending_m4_k10.rs",
+   "Abnahmetests (Testagent): crates/os-ai/tests/acceptance_k10_*.rs, crates/os-ai/tests/acceptance_k10_support/**, crates/os-store/tests/acceptance_k10_*.rs, tests/fixtures/ai/k10-acceptance/**"
+  ],
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je Nachtrag-Kriterium („Nachtrag 24.11.2026, Q00“) der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok. Umfang laut docs/plan/M4.md Abschnitt 7 „Q00-Nachträge → Paket“: AI-020/AI-021 neuer Status ohne Reparaturversuch, nicht im Schutzschalter (AI-017); AI-015 Feld `reasoning` im Cache-Schlüssel, Golden neu; AI-012 Decisions-Formel je Frage (G aus provider-limits.json `decisions_question_overhead_tokens`, von M4-K04), Ausgabe-Schätzung (A + E) mit Ausgabe-Korrekturfaktor je (Modell, Aufgabe, Stufe), Schema-Zuschlag `schema_overhead_tokens`; AI-013 Reservierung mit max_tokens aus AI-011, overrides und internal_reasoning; AI-014 Spalten `Reasoning Level`, `Reasoning Tokens`, `Computed Cost (USD)`, `Price Source = reported`, `cost_mismatch`; AI-017 Go-Dauern; AI-018 Feld `storage` (Anzeige baut M4-U01). Ledger nur über os-store::ai::budget (Nachträge Welle 2, Punkt 2). Platzhalter aus pending_m4_k09.rs (`wartet auf M4-K10`) auflösen.",
   "release": "1.1"
  },
  {

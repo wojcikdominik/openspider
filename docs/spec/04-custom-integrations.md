@@ -25,6 +25,8 @@ Referenzstand: Oktober 2026, Referenzprodukt (Verhalten laut öffentlicher Doku,
 
 **Nachtrag 09.11.2026:** INTEG-085 (Abschnitt E, P1, 1.x) und INTEG-190 (Abschnitt K, P2, M4) sind in den Zählungen dieses Dokuments nicht enthalten.
 
+**Nachtrag 24.11.2026 (M4, Live-Probe Q00):** INTEG-162 und INTEG-179 haben je einen datierten Nachtrag zu Reasoning, Ausgabegrenze und dem Status `Error: Output limit reached` (Regeln in `08-ai.md`, AI-011, AI-020, AI-021); IDs und Zählungen bleiben unverändert.
+
 Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-Stubs auf führende Einträge anderer Bereiche (INTEG-016, 017, 034, 145, 146, 147); sie behalten ihre ID und tragen die Priorität des führenden Eintrags.
 
 ## Inhaltsverzeichnis
@@ -1831,6 +1833,14 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
   - [ ] Prompts laufen nur für interne HTML-URLs mit Status 200 (bzw. für Bild-URLs, wenn die Eingabe Bilder sind).
   - [ ] Pro URL und Prompt wird höchstens eine Anfrage gestellt (außer bei Wiederholung nach Fehler).
 - **Testfixture:** `fixtures/integ/ai/site/` (5 Seiten, 3 Bilder) + Mock-Chat-Endpunkte, die den empfangenen Prompt spiegeln.
+- **Nachtrag 24.11.2026 (M4, Live-Probe Q00-H1; OpenSpider-Festlegung, Entscheidung des Orchestrators):** Alle in der Probe aufgerufenen Modelle denken ohne Parameter nach (Reasoning/Thinking); die Reasoning-Tokens zählen zur Ausgabe, und bei knapper Ausgabegrenze kommt keine Antwort (`docs/spec/08-ai.md`, AI-011 Nachtrag). Für Prompts der Kategorie Chat gilt deshalb, ausgeführt über die Adapter aus 08 (AI-001):
+  - **Reasoning-Stufe `model-default`:** OpenSpider sendet keinen Reasoning-Parameter (kein `reasoning`, kein `thinking`, kein `output_config.effort`); das Verhalten des Modells bleibt unverändert. Eine Einstellung je Prompt gibt es nicht; wer steuern will, nutzt Modellparameter (INTEG-175).
+  - **Ausgabegrenze:** OpenSpider sendet `max_tokens` bzw. `max_output_tokens` = min(2 × 1.024 + 4.096, Ausgabegrenze des Modells) = höchstens 6.144 Tokens (Antwortanteil 1.024 und Reserve für `model-default` nach AI-011; Ausgabegrenze des Modells wie dort). Für Moderation, Embeddings, Bildgenerierung und Text-to-Speech gilt das nicht.
+  - **Vorrang der Modellparameter:** Setzt der Nutzer über INTEG-175 einen Parameter mit gleichem Namen (`max_tokens`, `max_output_tokens`, `reasoning`, `reasoning_effort`, `thinking`), sendet OpenSpider nur den Wert des Nutzers; der Schlüssel kommt nie doppelt vor.
+  - **Abbruch an der Ausgabegrenze:** Endet die Antwort an der Grenze (`stop_reason: "max_tokens"`, `incomplete_details.reason: "max_output_tokens"`, `finish_reason: "length"`, Ollama `done_reason: "length"`), wird kein Teiltext übernommen: `<Prompt> Status = Error: Output limit reached` (gehört zu `Error: …` in INTEG-174, zählt zum Filter „Errors“), keine automatische Wiederholung (AI-020, AI-021).
+  - [ ] Chat-Prompt über den Anthropic-Mock (Modell A, Ausgabegrenze laut Modellliste ≥ 6.144) → Request mit `max_tokens = 6144`, ohne `thinking` und ohne `output_config.effort`; über den OpenAI-Responses-Mock → `max_output_tokens = 6144`, ohne `reasoning`; auf einem Modell mit Ausgabegrenze 4.000 → 4.000 (Mock-Log).
+  - [ ] Modellparameter `max_tokens = 300` (Zahl, INTEG-175) → der Request enthält genau einmal `max_tokens` mit 300.
+  - [ ] Szenario `output-limit` des ai-mock → `<Prompt> Status = Error: Output limit reached`, Ergebniszelle leer, genau 1 Request für URL und Prompt.
 
 ### INTEG-163 Inhaltseingaben für Prompts
 - **Priorität:** P1
@@ -2026,6 +2036,8 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
   - [ ] Der Timeout eines Anbieters beeinflusst andere Anbieter nicht (OpenAI-Mock mit 100 s Antwortzeit gelingt bei OpenAI-Timeout 120 s, auch wenn Ollama auf 30 s steht).
   - [ ] Der Prompt-Tester (INTEG-170) verwendet denselben Timeout und zeigt bei Überschreitung die Timeout-Meldung.
 - **Testfixture:** Mock-Endpunkte mit Parameter `delay=<s>` für Chat und Bildgenerierung; Testuhr.
+- **Nachtrag 24.11.2026 (M4, Live-Probe Q00-H1):** Reasoning verlängert die Antwortzeit (beobachtet bis 12 s für eine kleine Schema-Aufgabe bei `gpt-6-luna` mit Standard-Reasoning); die Standardwerte oben reichen dafür und bleiben unverändert. Ein Abbruch an der Ausgabegrenze (`Error: Output limit reached`, INTEG-162 Nachtrag) ist kein Timeout: Er wird nicht nach INTEG-005 wiederholt und nicht als `Error: Timeout nach <n> s` gemeldet. Der Prompt-Tester (INTEG-170) zeigt ihn mit demselben Statuswert.
+  - [ ] Ai-mock-Szenario `output-limit` im Prompt-Tester → Meldung `Error: Output limit reached`, genau 1 Request, keine Wiederholung; Szenario `delay=130` mit Timeout 120 s → weiterhin `Error: Timeout nach 120 s` nach den Wiederholungen aus INTEG-005.
 
 ### INTEG-190 Prompts auch bei leerer Eingabe senden (Nachtrag 09.11.2026)
 - **Priorität:** P2
