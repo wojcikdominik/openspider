@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "crawlers": [
+    {
+      "token": "AcmeSearchBot",
+      "operator": "Acme",
+      "category": "search",
+      "ua_pattern": "AcmeSearchBot",
+      "ua_example": "Mozilla/5.0 (compatible; AcmeSearchBot/2.0; +https://acme.example/bot)",
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    }
+  ]
+}

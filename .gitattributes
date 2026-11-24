@@ -5,3 +5,4 @@
 *.ttf binary
 *.gz binary
 *.ospider binary
+tests/fixtures/ai/s01-acceptance/robots/ai-bom-crlf.txt -text

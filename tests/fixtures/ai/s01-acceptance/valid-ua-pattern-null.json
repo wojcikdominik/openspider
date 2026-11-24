@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "crawlers": [
+    {
+      "token": "SteuerToken",
+      "operator": "Beispiel GmbH",
+      "category": "control-token",
+      "ua_pattern": null,
+      "ua_example": null,
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "StillerBot",
+      "operator": "Beispiel GmbH",
+      "category": "training",
+      "ua_pattern": null,
+      "ua_example": null,
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": "Betreiber nennt keinen User-Agent",
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    }
+  ]
+}

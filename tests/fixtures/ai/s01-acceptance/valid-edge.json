@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "crawlers": [
+    {
+      "token": "ExampleBot",
+      "operator": "Beispiel GmbH",
+      "category": "search",
+      "ua_pattern": "ExampleBot",
+      "ua_example": "Mozilla/5.0 (compatible; ExampleBot/1.0; +https://example.org/bot)",
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": "Hinweis neben einer URL ist zulässig",
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "OldBot",
+      "operator": "Beispiel GmbH",
+      "category": "training",
+      "ua_pattern": "OldBot",
+      "ua_example": "Mozilla/5.0 (compatible; OldBot/1.0; +https://example.org/bot)",
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": true,
+      "replaced_by": "ExampleBot"
+    },
+    {
+      "token": "NoDocsBot",
+      "operator": "Beispiel GmbH",
+      "category": "search",
+      "ua_pattern": "NoDocsBot",
+      "ua_example": "Mozilla/5.0 (compatible; NoDocsBot/1.0; +https://example.org/bot)",
+      "respects_robots": "yes",
+      "docs_url": null,
+      "docs_note": "Keine Betreiberseite bekannt",
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "ControlTok",
+      "operator": "Beispiel GmbH",
+      "category": "control-token",
+      "ua_pattern": "ControlTok",
+      "ua_example": null,
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "FetchBot",
+      "operator": "Beispiel GmbH",
+      "category": "user-fetch",
+      "ua_pattern": "FetchBot",
+      "ua_example": "Mozilla/5.0 (compatible; FetchBot/1.0; +https://example.org/bot)",
+      "respects_robots": "partial",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "UnknownBot",
+      "operator": "Beispiel GmbH",
+      "category": "search",
+      "ua_pattern": "UnknownBot",
+      "ua_example": "Mozilla/5.0 (compatible; UnknownBot/1.0; +https://example.org/bot)",
+      "respects_robots": "unknown",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "NoBot",
+      "operator": "Beispiel GmbH",
+      "category": "search",
+      "ua_pattern": "NoBot",
+      "ua_example": "Mozilla/5.0 (compatible; NoBot/1.0; +https://example.org/bot)",
+      "respects_robots": "no",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    }
+  ]
+}

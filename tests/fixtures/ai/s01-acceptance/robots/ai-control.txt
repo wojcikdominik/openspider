@@ -1,0 +1,7 @@
+# Kontroll-Tokens gesperrt
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: *
+Allow: /

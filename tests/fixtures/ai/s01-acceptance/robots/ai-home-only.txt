@@ -1,0 +1,6 @@
+# nur die Startseite ist fuer GPTBot gesperrt
+User-agent: GPTBot
+Disallow: /$
+
+User-agent: *
+Allow: /

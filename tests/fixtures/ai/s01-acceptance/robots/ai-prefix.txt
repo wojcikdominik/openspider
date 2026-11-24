@@ -1,0 +1,12 @@
+# Tokens mit gleichem Anfang sind verschiedene Agenten
+User-agent: Applebot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: *
+Allow: /

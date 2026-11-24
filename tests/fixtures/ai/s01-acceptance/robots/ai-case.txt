@@ -1,0 +1,8 @@
+user-agent: gptbot
+disallow: /
+
+USER-AGENT: CLAUDE-SEARCHBOT
+DISALLOW: /
+
+User-agent: *
+Allow: /

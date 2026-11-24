@@ -1,0 +1,11 @@
+# Nutzerabrufe gesperrt
+User-agent: ChatGPT-User
+User-agent: Claude-User
+User-agent: Perplexity-User
+User-agent: Google-CloudVertexBot
+User-agent: Google-GeminiNotebook
+User-agent: Google-NotebookLM
+User-agent: Google-Agent
+User-agent: Meta-ExternalFetcher
+User-agent: MistralAI-User
+Disallow: /

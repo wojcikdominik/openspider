@@ -1,0 +1,9 @@
+# Voreinstellungen ohne ua_example (CRAWL-114 [M4], Festlegung Orchestrator)
+User-agent: *
+Disallow: /
+
+User-agent: Claude-SearchBot
+Disallow: /privat/
+
+User-agent: ClaudeBot
+Disallow: /nur-claudebot/

@@ -9,6 +9,7 @@ import { createClient, setClient } from "../../../ipc/client";
 import { MockCore } from "../../../ipc/transport/mock";
 import { useSession } from "../../../state/session";
 import uaToml from "../../../../../../crates/os-fetch/resources/user-agents.toml?raw";
+import catalogJson from "../../../../../../resources/ai/ai-crawlers.json?raw";
 import { ConfigHost } from "./ConfigHost";
 import { fieldLabelKey } from "./fields";
 import { fieldMeta } from "./schema";
@@ -17,6 +18,7 @@ import { closeConfig, openConfig } from "./store";
 import { installConfigCore, SCHEMA, type FakeConfigCore } from "./testing";
 import { resolveUa } from "../pages/user-agent";
 import { UA_PRESETS } from "../pages/user-agent/presets";
+import { derivePresets } from "../pages/user-agent/derivePresets";
 import { secretRefFor, hostOfPrefix } from "../pages/auth";
 import { hostOfUrl, normalizeHost } from "../pages/robots";
 import { HIGH_THREADS } from "../pages/speed";
@@ -83,13 +85,9 @@ describe("Seitenregister", () => {
 
 describe("User-Agent", () => {
   // Kein Spec-Tag: Fachfunktion eines anderen Pakets, hier nur Bedienung der Oberfläche.
-  it("die Voreinstellungsliste entspricht der Datendatei des Kerns (Kennung, Anzeigename, Token, User-Agent)", () => {
-    const blocks = uaToml.split("[[preset]]").slice(1);
-    const parsed = blocks.map((b) => {
-      const get = (k: string) => new RegExp(`^${k}\\s*=\\s*"(.*)"$`, "m").exec(b)?.[1] ?? null;
-      return { id: get("id"), name: get("name"), group: get("group"), userAgent: get("user_agent"), robotsToken: get("robots_token") };
-    });
-    expect(UA_PRESETS.map((p) => ({ ...p }))).toEqual(parsed);
+  it("die Voreinstellungsliste entspricht den Datendateien des Kerns (Kennung, Anzeigename, Token, User-Agent)", () => {
+    // user-agents.toml plus KI-Crawler aus resources/ai/ai-crawlers.json (CRAWL-114 [M4], M4-S01).
+    expect(UA_PRESETS.map((p) => ({ ...p }))).toEqual(derivePresets(uaToml, catalogJson));
   });
 
   // Kein Spec-Tag: Fachfunktion eines anderen Pakets, hier nur Bedienung der Oberfläche.

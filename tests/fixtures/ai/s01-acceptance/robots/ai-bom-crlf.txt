@@ -1,0 +1,5 @@
+﻿User-agent: DuckAssistBot
+Disallow: /privat/ # Kommentar
+
+User-agent : *
+Allow: /

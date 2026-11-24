@@ -1,0 +1,6 @@
+# AI-121 Kriterium 1
+User-agent: GPTBot
+Disallow: /
+
+User-agent: *
+Allow: /

@@ -1,0 +1,3 @@
+# Fixture AI-121 (ai-partial.test): /intern/ nur fuer ClaudeBot gesperrt, keine *-Gruppe.
+User-agent: ClaudeBot
+Disallow: /intern/

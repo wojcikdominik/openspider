@@ -1,0 +1,6 @@
+# AI-121 Kriterium 2: /intern/ für ClaudeBot
+User-agent: ClaudeBot
+Disallow: /intern/
+
+User-agent: *
+Allow: /
