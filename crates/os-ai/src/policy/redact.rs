@@ -328,10 +328,39 @@ fn is_word(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || !b.is_ascii()
 }
 
+const NBSP: &[u8] = "\u{a0}".as_bytes();
+const NNBSP: &[u8] = "\u{202f}".as_bytes();
+
+/// Length of a space-like character at `j` (space, no-break space, narrow no-break space), else 0.
+fn space_len(b: &[u8], j: usize) -> usize {
+    let rest = &b[j.min(b.len())..];
+    if rest.first() == Some(&b' ') {
+        1
+    } else if rest.starts_with(NBSP) {
+        NBSP.len()
+    } else if rest.starts_with(NNBSP) {
+        NNBSP.len()
+    } else {
+        0
+    }
+}
+
+/// `true` if the character before byte `i` is a word character (no-break spaces are not).
+fn preceded_by_word(b: &[u8], i: usize) -> bool {
+    i > 0 && !b[..i].ends_with(NBSP) && !b[..i].ends_with(NNBSP) && is_word(b[i - 1])
+}
+
+/// `true` if a word character starts at byte `j` (no-break spaces are not word characters).
+fn word_at(b: &[u8], j: usize) -> bool {
+    j < b.len() && space_len(b, j) == 0 && is_word(b[j])
+}
+
 fn fixed_matches(text: &str) -> Vec<(Range<usize>, Kind)> {
     let bytes = text.as_bytes();
     let mut matches = Vec::new();
     let mut protected: Vec<Range<usize>> = Vec::new();
+    // IBAN first: valid ones are replaced, IBAN-shaped strings with wrong check digits are protected from the
+    // telephone pattern (never partially replaced).
     for (range, valid) in iban_candidates(bytes) {
         if valid {
             matches.push((range, Kind::Iban));
@@ -339,19 +368,16 @@ fn fixed_matches(text: &str) -> Vec<(Range<usize>, Kind)> {
             protected.push(range);
         }
     }
-    let taken = |r: &Range<usize>, m: &[(Range<usize>, Kind)], p: &[Range<usize>]| {
-        m.iter()
-            .map(|(x, _)| x)
-            .chain(p.iter())
-            .any(|x| r.start < x.end && x.start < r.end)
-    };
-    for range in email_matches(bytes) {
-        if !taken(&range, &matches, &protected) {
+    let overlaps = |r: &Range<usize>, x: &Range<usize>| r.start < x.end && x.start < r.end;
+    for range in email_matches(text) {
+        if !matches.iter().any(|(x, _)| overlaps(&range, x)) {
             matches.push((range, Kind::Email));
         }
     }
     for range in phone_matches(bytes) {
-        if !taken(&range, &matches, &protected) {
+        let taken = matches.iter().any(|(x, _)| overlaps(&range, x))
+            || protected.iter().any(|x| overlaps(&range, x));
+        if !taken {
             matches.push((range, Kind::Phone));
         }
     }
@@ -359,7 +385,8 @@ fn fixed_matches(text: &str) -> Vec<(Range<usize>, Kind)> {
     matches
 }
 
-/// ISO 13616 check: move the first four characters to the end, letters → 10..35, remainder mod 97 must be 1.
+/// ISO 13616 check on the canonical form (upper case, no separators): move the first four characters to the end,
+/// letters → 10..35, remainder mod 97 must be 1.
 pub fn iban_is_valid(compact: &str) -> bool {
     let b = compact.as_bytes();
     if !(15..=34).contains(&b.len())
@@ -383,42 +410,65 @@ pub fn iban_is_valid(compact: &str) -> bool {
     rem == 1
 }
 
-/// IBAN-shaped spans: two capital letters, two digits, then capital letters/digits, optionally grouped by single
-/// spaces, 15–34 characters without spaces, ending at a word boundary. `true` = valid check digits.
+/// Maximum separator characters between two IBAN groups (spaces, no-break spaces, hyphens).
+const IBAN_MAX_SEPARATORS: usize = 3;
+
+/// IBAN-shaped spans, case-insensitive: two letters, two digits, then letters/digits, optionally in groups separated
+/// by spaces (also several, also no-break spaces) and hyphens; 15–34 characters without separators, ending at a
+/// word boundary. A group without digits is only accepted directly after the first group (bank codes such as
+/// `WEST` or `ABNA`), so following words are never glued to a candidate. `true` = valid check digits; the whole
+/// span is then one replacement.
 fn iban_candidates(b: &[u8]) -> Vec<(Range<usize>, bool)> {
-    let alnum = |c: u8| c.is_ascii_uppercase() || c.is_ascii_digit();
+    let alnum = |c: u8| c.is_ascii_alphanumeric();
     let mut out = Vec::new();
     let mut i = 0;
     while i + 4 <= b.len() {
-        let starts = (i == 0 || !is_word(b[i - 1]))
-            && b[i].is_ascii_uppercase()
-            && b[i + 1].is_ascii_uppercase()
+        let starts = !preceded_by_word(b, i)
+            && b[i].is_ascii_alphabetic()
+            && b[i + 1].is_ascii_alphabetic()
             && b[i + 2].is_ascii_digit()
             && b[i + 3].is_ascii_digit();
         if !starts {
             i += 1;
             continue;
         }
-        // Candidate ends: after a group whose next byte is not a word character.
         let mut ends: Vec<(usize, String)> = Vec::new();
         let mut compact = String::new();
         let mut j = i;
+        let mut group = 0;
         loop {
+            let group_start = j;
             while j < b.len() && alnum(b[j]) {
-                compact.push(char::from(b[j]));
+                compact.push(char::from(b[j].to_ascii_uppercase()));
                 j += 1;
             }
-            if compact.len() > 34 {
+            let has_digit = b[group_start..j].iter().any(u8::is_ascii_digit);
+            if compact.len() > 34 || (group >= 2 && !has_digit) {
                 break;
             }
-            if j < b.len() && is_word(b[j]) {
-                break; // lowercase letter or other word character glued to the group: no boundary here
+            if word_at(b, j) {
+                break; // other word character glued to the group: no boundary here
             }
             if compact.len() >= 15 {
                 ends.push((j, compact.clone()));
             }
-            if j + 1 < b.len() && b[j] == b' ' && alnum(b[j + 1]) {
-                j += 1;
+            // separators before the next group
+            let mut k = j;
+            let mut n = 0;
+            while k < b.len() && n < IBAN_MAX_SEPARATORS {
+                let len = match space_len(b, k) {
+                    0 if b[k] == b'-' => 1,
+                    len => len,
+                };
+                if len == 0 {
+                    break;
+                }
+                k += len;
+                n += 1;
+            }
+            if n > 0 && k < b.len() && alnum(b[k]) {
+                j = k;
+                group += 1;
             } else {
                 break;
             }
@@ -440,10 +490,13 @@ fn iban_candidates(b: &[u8]) -> Vec<(Range<usize>, bool)> {
     out
 }
 
-fn email_matches(b: &[u8]) -> Vec<Range<usize>> {
+/// E-mail addresses: local part (ASCII `[A-Za-z0-9._%+-]` and non-ASCII characters), `@`, a domain with at least one
+/// dot whose labels consist of letters (also non-ASCII, e.g. umlaut domains), digits and hyphens, and a top-level
+/// label of at least two letters. Obfuscated forms like `(at)` and dotless hosts are out of scope.
+fn email_matches(text: &str) -> Vec<Range<usize>> {
+    let b = text.as_bytes();
     // Non-ASCII bytes belong to the local part (internationalised addresses are redacted completely).
     let local = |c: u8| c.is_ascii_alphanumeric() || b"._%+-".contains(&c) || !c.is_ascii();
-    let domain = |c: u8| c.is_ascii_alphanumeric() || c == b'.' || c == b'-';
     let mut out: Vec<Range<usize>> = Vec::new();
     for (at, _) in b.iter().enumerate().filter(|(_, c)| **c == b'@') {
         if out.last().is_some_and(|r| r.end > at) {
@@ -456,23 +509,27 @@ fn email_matches(b: &[u8]) -> Vec<Range<usize>> {
         while s < at && b[s] == b'.' {
             s += 1;
         }
-        if s == at {
+        if s == at || !text.is_char_boundary(s) {
             continue;
         }
         let mut e = at + 1;
-        while e < b.len() && domain(b[e]) {
-            e += 1;
+        for (offset, c) in text[at + 1..].char_indices() {
+            if c.is_alphanumeric() || c == '.' || c == '-' {
+                e = at + 1 + offset + c.len_utf8();
+            } else {
+                break;
+            }
         }
         while e > at + 1 && (b[e - 1] == b'.' || b[e - 1] == b'-') {
             e -= 1;
         }
-        let host = &b[at + 1..e];
-        let labels: Vec<&[u8]> = host.split(|c| *c == b'.').collect();
+        let host = &text[at + 1..e];
+        let labels: Vec<&str> = host.split('.').collect();
         let ok = labels.len() >= 2
             && labels.iter().all(|l| !l.is_empty())
-            && labels
-                .last()
-                .is_some_and(|tld| tld.len() >= 2 && tld.iter().all(u8::is_ascii_alphabetic));
+            && labels.last().is_some_and(|tld| {
+                tld.chars().count() >= 2 && tld.chars().all(char::is_alphabetic)
+            });
         if ok {
             out.push(s..e);
         }
@@ -480,19 +537,19 @@ fn email_matches(b: &[u8]) -> Vec<Range<usize>> {
     out
 }
 
-/// Telephone numbers: start with `+<digit>`, `0<digit>` or `(` before `0`/`+`, not preceded by a word character;
-/// digits with single separators (space, `-`, `/`, parentheses; at most two separator characters in a row);
-/// 7–15 digits (E.164 maximum); must not be followed by a word character.
+/// Telephone numbers: start with `+<digit>`, `0<digit>`, `0 <digit>` or `(` before `0`/`+`, not preceded by a word
+/// character; digits with separators (space, `-`, `/`, parentheses; at most two separator characters in a row, or
+/// ` / ` between area code and number); numbers starting with `+` may also use dots (without `+`, dots are no
+/// separator, so dates are not hit); 7–15 digits (E.164 maximum); must not be followed by a word character.
 fn phone_matches(b: &[u8]) -> Vec<Range<usize>> {
-    let sep = |c: u8| matches!(c, b' ' | b'-' | b'/' | b'(' | b')');
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
         let next_digit = |k: usize| k < b.len() && b[k].is_ascii_digit();
-        let starts = (i == 0 || !(is_word(b[i - 1]) || b[i - 1] == b'+'))
+        let starts = !(preceded_by_word(b, i) || (i > 0 && b[i - 1] == b'+'))
             && match b[i] {
                 b'+' => next_digit(i + 1),
-                b'0' => next_digit(i + 1),
+                b'0' => next_digit(i + 1) || (space_len(b, i + 1) == 1 && next_digit(i + 2)),
                 b'(' => i + 1 < b.len() && (b[i + 1] == b'0' || b[i + 1] == b'+'),
                 _ => false,
             };
@@ -500,6 +557,9 @@ fn phone_matches(b: &[u8]) -> Vec<Range<usize>> {
             i += 1;
             continue;
         }
+        let international = b[i] == b'+' || b.get(i + 1) == Some(&b'+');
+        let sep =
+            |c: u8| matches!(c, b' ' | b'-' | b'/' | b'(' | b')') || (international && c == b'.');
         let mut j = i + 1;
         let mut digits = usize::from(b[i].is_ascii_digit());
         let mut last_digit_end = if b[i].is_ascii_digit() { i + 1 } else { i };
@@ -510,7 +570,7 @@ fn phone_matches(b: &[u8]) -> Vec<Range<usize>> {
                 digits += 1;
                 run = 0;
                 last_digit_end = j + 1;
-            } else if sep(c) && run < 2 {
+            } else if sep(c) && (run < 2 || (run == 2 && c == b' ' && &b[j - 2..j] == b" /")) {
                 run += 1;
             } else {
                 break;
@@ -520,8 +580,7 @@ fn phone_matches(b: &[u8]) -> Vec<Range<usize>> {
         // A closing parenthesis right after the last digit belongs to the number only when balanced; keep it simple
         // and end at the last digit.
         let end = last_digit_end;
-        let followed_by_word = end < b.len() && is_word(b[end]);
-        if (7..=15).contains(&digits) && !followed_by_word {
+        if (7..=15).contains(&digits) && !word_at(b, end) {
             out.push(i..end);
             i = end;
         } else {
