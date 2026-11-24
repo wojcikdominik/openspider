@@ -54,6 +54,13 @@ test.describe("UI-146 Budgets", () => {
     });
     const side = (span: number) => Math.min(8_000, Math.ceil(span * 0.05) + 400);
     await page.setViewportSize({ width: side(bounds.maxX - bounds.minX) + 300, height: side(bounds.maxY - bounds.minY) + 100 });
+    // Die Fläche übernimmt die neue Größe erst im ResizeObserver (nächster Rendering-Schritt); bis dahin zeichnet und
+    // exportiert sie mit der alten. Erst messen, wenn die Zeichenfläche die Größe ihrer Bühne meldet.
+    await page.waitForFunction(() => {
+      const c = document.querySelector<HTMLCanvasElement>(".os-viz-canvas");
+      const stage = c?.parentElement?.getBoundingClientRect();
+      return !!c && !!stage && parseFloat(c.style.width) === stage.width && parseFloat(c.style.height) === stage.height;
+    });
     const box = await page.locator(".os-viz-canvas").boundingBox();
     await page.evaluate(
       ({ b, w, h }) => window.__osViz!.setTransform({ k: 0.05, x: w / 2 - ((b.minX + b.maxX) / 2) * 0.05, y: h / 2 - ((b.minY + b.maxY) / 2) * 0.05 }),
