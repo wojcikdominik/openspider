@@ -45,6 +45,10 @@ pub enum AiStatus {
     MissingAnswer,
     #[serde(rename = "Error: Batch expired")]
     BatchExpired,
+    /// Keine HTTP-Antwort (DNS, Verbindungsaufbau, TLS, Verbindungsabbruch) nach allen Wiederholungen
+    /// (AI-020, Nachtrag 24.11.2026, K4-15); die Ursache steht im Protokoll als `transport/<art>`.
+    #[serde(rename = "Error: Connection failed")]
+    ConnectionFailed,
     Timeout {
         seconds: u64,
     },
@@ -65,6 +69,7 @@ impl AiStatus {
                 | Self::InvalidOutput
                 | Self::MissingAnswer
                 | Self::BatchExpired
+                | Self::ConnectionFailed
                 | Self::HttpError { .. }
         )
     }
@@ -93,6 +98,7 @@ impl std::fmt::Display for AiStatus {
             Self::InvalidOutput => f.write_str("Error: Invalid output"),
             Self::MissingAnswer => f.write_str("Error: Missing answer"),
             Self::BatchExpired => f.write_str("Error: Batch expired"),
+            Self::ConnectionFailed => f.write_str("Error: Connection failed"),
             Self::Timeout { seconds } => write!(f, "Error: Timeout nach {seconds} s"),
             Self::HttpError { code, message } => write!(f, "Error: {code} {message}"),
         }

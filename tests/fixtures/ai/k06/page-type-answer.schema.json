@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "M4-K06 Testschema (AI-021): Antwort einer choice-Frage mit Enum, optionalem Feld als [typ, null] und verschachteltem Objekt. Keine Produktfrage; die Fragenbibliothek gehört M4-D01/D03.",
+  "type": "object",
+  "properties": {
+    "page_type": {
+      "type": "string",
+      "enum": ["home", "category", "product", "article", "contact", "legal", "search", "other"]
+    },
+    "probability": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "note": {
+      "type": ["string", "null"]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": { "type": "string" },
+          "quote": { "type": "string" }
+        },
+        "required": ["field", "quote"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["page_type", "probability", "note", "evidence"],
+  "additionalProperties": false
+}
