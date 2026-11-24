@@ -35,7 +35,7 @@ import { resolveTheme, systemPrefersDark } from "../../ui/tokens/theme";
 import { ColumnsMenu } from "./ColumnsMenu";
 import { confirmsRemoval } from "./RemovalConfirmationSettings";
 import { saveTableState } from "../../state/tabs";
-import { TableController } from "./controller";
+import { TableController, continuesCrawl } from "./controller";
 import { setDetailSelection } from "../detail/frame/selection";
 import { useSidebarNavigation } from "../sidebar/frame/state";
 import { openExport as openExportDialog, registerExportContext } from "../export/model";
@@ -106,7 +106,14 @@ function RegularUpperTable() {
   const total = filters.find(f => f.id === "All")?.count;
   const fail = controller.fail;
   useEffect(() => { controller.activate(); return () => { controller.dispose(); browserResolve.current?.(false); copyResolve.current?.(false); }; }, [controller]);
-  useEffect(() => { controller.resetCrawl(); }, [controller, crawlId]);
+  // UI-018: the first crawl id for the view already on screen continues it (selection, focus row, position stay).
+  const knownCrawl = useRef(crawlId);
+  const continuedCrawl = useRef<string>(undefined);
+  useEffect(() => {
+    const continues = knownCrawl.current !== crawlId && continuesCrawl(knownCrawl.current, crawlId, controller.source !== undefined);
+    knownCrawl.current = crawlId; continuedCrawl.current = continues ? crawlId : undefined;
+    controller.resetCrawl(continues);
+  }, [controller, crawlId]);
   // UI-006: a click in Overview/Issues sets tab, filter and search (A01-03). The store keeps the latest request, so a
   // request made before this table mounted is applied as well; every revision is applied once.
   const navigation = useSidebarNavigation(s => s.target);
@@ -143,8 +150,9 @@ function RegularUpperTable() {
     openedFor.current = !query.search && !query.rules && !segments.filter ? `${crawlId ?? ""}|${tabs.active}|${query.filter}` : null;
     const key = JSON.stringify([tabs.active, query.filter, query.search, query.sort, query.rules ?? null, segmentKey]);
     const keepRows = openedView.current !== undefined && openedView.current.key === key && openedView.current.crawlId !== crawlId;
-    openedView.current = { crawlId, key };
-    void controller.open(tabs.active, query, { keepRows });
+    const continues = keepRows && continuedCrawl.current === crawlId;
+    openedView.current = { crawlId, key }; continuedCrawl.current = undefined;
+    void controller.open(tabs.active, query, { keepRows, continues });
     setText(query.search);
     if (query.rules) setText(query.rules.text);
   }, [controller, tabs.loaded, tabs.active, query.filter, query.search, JSON.stringify(query.sort), JSON.stringify(query.rules ?? null), crawlId, segmentKey]);
