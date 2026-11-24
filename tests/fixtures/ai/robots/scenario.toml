@@ -1,4 +1,4 @@
-# Fixture AI-121: robots.txt je KI-Crawler (tests/fixtures/ai/search/robots, M4-S01).
+# Fixture AI-121: robots.txt je KI-Crawler (tests/fixtures/ai/robots, M4-S01).
 # Virtuelle Hosts unter hosts/<host>/ (nur Dateien): ai-block-all.test, ai-mixed.test, ai-search-blocked.test,
 # ai-partial.test (40 HTML-URLs, davon 10 unter /intern/), ai-none.test (ohne robots.txt -> 404).
 # ai-5xx.test hat kein Host-Verzeichnis und wird nur ueber die hostgebundenen Routen unten bedient.

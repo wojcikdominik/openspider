@@ -1,7 +1,7 @@
-//! AI-Crawler-Katalog (AI-120) gegen die Fixtures unter `tests/fixtures/ai/search/`:
-//! `catalog-minimum.json` (maschinenlesbare Kopie der Mindestliste), `catalog-invalid/` (Negativfälle),
-//! `catalog-valid-edge.json`, `catalog-stale.json`, `catalog-extra.json` und das Schema
-//! `ai-crawlers.schema.json`.
+//! AI-Crawler-Katalog (AI-120) gegen die Fixtures `tests/fixtures/ai/catalog-minimum.json` (maschinenlesbare Kopie
+//! der Mindestliste), `tests/fixtures/ai/catalog-invalid/` (Negativfälle), `tests/fixtures/ai/search/`
+//! (`catalog-valid-edge.json`, `catalog-stale.json`, `catalog-extra.json`) und das Schema
+//! `resources/ai/schemas/ai-crawlers.schema.json`.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -12,12 +12,16 @@ use os_analyze::ai_search::catalog::{
 };
 use serde_json::Value;
 
-fn fixture(rel: &str) -> PathBuf {
+fn repo() -> PathBuf {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for part in ["..", "..", "tests", "fixtures", "ai", "search"] {
-        p.push(part);
-    }
-    p.join(rel)
+    p.push("..");
+    p.push("..");
+    p
+}
+
+/// Pfad relativ zu `tests/fixtures/ai/`.
+fn fixture(rel: &str) -> PathBuf {
+    repo().join("tests").join("fixtures").join("ai").join(rel)
 }
 
 fn read(rel: &str) -> String {
@@ -135,7 +139,17 @@ fn shipped_catalog_passes_validation_and_matches_the_schema() {
     );
 
     // Das JSON-Schema beschreibt dieselben Regeln wie die Prüfung im Code.
-    let schema = json("ai-crawlers.schema.json");
+    let schema: Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            repo()
+                .join("resources")
+                .join("ai")
+                .join("schemas")
+                .join("ai-crawlers.schema.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
     let crawler = &schema["$defs"]["crawler"];
     let required: Vec<&str> = crawler["required"]
         .as_array()
@@ -278,7 +292,7 @@ fn invalid_catalogs_are_rejected_with_the_expected_error() {
 // Zulässig: docs_note neben einer URL, replaced_by auf ein vorhandenes Token (andere Schreibweise).
 #[test]
 fn docs_note_next_to_url_and_replacement_are_valid() {
-    let c = Catalog::parse(&read("catalog-valid-edge.json")).expect("gültig");
+    let c = Catalog::parse(&read("search/catalog-valid-edge.json")).expect("gültig");
     assert_eq!(c.len(), 2);
     assert!(c.get("abot").unwrap().docs_url.is_some());
     assert!(c.get("ABOT").unwrap().docs_note.is_some());
@@ -354,7 +368,7 @@ fn user_entry_with_an_existing_token_is_rejected() {
         .with_user_catalog(&saved)
         .expect("Benutzerkatalog");
     assert_eq!(reloaded, c);
-    let extra = read("catalog-extra.json");
+    let extra = read("search/catalog-extra.json");
     let with_extra = Catalog::builtin()
         .with_user_catalog(&extra)
         .expect("ergänzt");
@@ -371,7 +385,7 @@ fn user_entry_with_an_existing_token_is_rejected() {
 // mitgelieferten Katalogs ist er heute warnungsfrei.
 #[test]
 fn release_check_warns_about_entries_older_than_180_days() {
-    let c = Catalog::parse(&read("catalog-stale.json")).unwrap();
+    let c = Catalog::parse(&read("search/catalog-stale.json")).unwrap();
     let warnings = c.release_check_warnings("2026-11-24");
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(warnings[0].contains("OldBot"), "{warnings:?}");

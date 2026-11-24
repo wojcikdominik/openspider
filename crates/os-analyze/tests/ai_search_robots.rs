@@ -1,6 +1,6 @@
 //! robots.txt-Auswertung je AI-Crawler (AI-121).
 //!
-//! Fixtures: `tests/fixtures/ai/search/robots/` (Hosts `ai-block-all.test`, `ai-mixed.test`,
+//! Fixtures: `tests/fixtures/ai/robots/` (Hosts `ai-block-all.test`, `ai-mixed.test`,
 //! `ai-search-blocked.test`, `ai-partial.test`, `ai-none.test`, `ai-5xx.test`) und `tests/fixtures/crawl-robots`.
 //!
 //! **Parser:** Die Tests werten mit dem RFC-9309-Parser des Crawl-Kerns aus. `os-analyze` hat keine
@@ -410,7 +410,7 @@ fn tokens_of(cat: Category) -> Vec<String> {
 // keine zusätzlichen HTTP-Requests (Request-Log der Fixture unverändert).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fixture_hosts_from_stored_crawls() {
-    let site = TestSite::start_dir(fixtures_root().join("ai/search/robots"), 0)
+    let site = TestSite::start_dir(fixtures_root().join("ai/robots"), 0)
         .await
         .expect("Testsite");
     let mut cfg = CrawlConfig::default();

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openspider.de/schemas/ai/ai-crawlers.schema.json",
   "title": "AI-Crawler-Katalog (AI-120)",
-  "description": "Datendatei resources/ai/ai-crawlers.json. Eindeutigkeit der Tokens ohne Rücksicht auf Groß-/Kleinschreibung und Verweise von replaced_by prüft os_analyze::ai_search::catalog (JSON-Schema kann beides nicht ausdrücken). Vorgesehener Ort: resources/ai/schemas/ai-crawlers.schema.json (Datendatei-Schema, nicht strikt).",
+  "description": "Datendatei resources/ai/ai-crawlers.json (Datendatei-Schema, nicht strikt; siehe DATA_FILE_SCHEMAS in crates/os-ai/tests/schema_strict.rs). Eindeutigkeit der Tokens ohne Rücksicht auf Groß-/Kleinschreibung und Verweise von replaced_by prüft os_analyze::ai_search::catalog (JSON-Schema kann beides nicht ausdrücken).",
   "type": "object",
   "required": ["schema_version", "crawlers"],
   "additionalProperties": false,
