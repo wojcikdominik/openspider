@@ -107,7 +107,8 @@ pub enum ProviderError {
     Http { status: u16, message: String },
 }
 impl ProviderError {
-    /// STUB(M4-K06): final transport presentation needs spec clarification; no HTTP code is invented.
+    /// Transport errors without an HTTP response map to `Error: Connection failed` (AI-020, K4-15); no HTTP code is
+    /// invented. Retrying them and the `transport/<art>` log code belong to [`crate::limits`].
     pub fn status(&self) -> Option<AiStatus> {
         Some(match self {
             Self::MissingApiKey => AiStatus::MissingApiKey,
@@ -131,7 +132,7 @@ impl ProviderError {
                 code: 529,
                 message: "Overloaded".into(),
             },
-            Self::Transport { .. } => return None,
+            Self::Transport { .. } => AiStatus::ConnectionFailed,
         })
     }
 }
@@ -168,6 +169,9 @@ pub async fn execute(
     match provider.execute(request).await {
         Ok(response) if response.refusal => Outcome::Status(AiStatus::Refusal),
         Ok(response) => Outcome::Completed(response),
+        // A single attempt without HTTP response stays a provider failure: it is transient (INTEG-005), and only
+        // `crate::limits` turns it into `Error: Connection failed` after all retries (AI-020, K4-15).
+        Err(error @ ProviderError::Transport { .. }) => Outcome::ProviderFailure(error),
         Err(error) => match error.status() {
             Some(status) => Outcome::Status(status),
             None => Outcome::ProviderFailure(error),
