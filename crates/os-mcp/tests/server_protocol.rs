@@ -203,11 +203,12 @@ async fn standard_client_can_run_the_five_basic_requests() {
         Some("openspider")
     );
     assert!(info.capabilities.tools.is_some());
+    // spec: AGENT-042 (Server-Hinweise englisch; vorher „Anweisungen“)
     assert!(info
         .instructions
         .as_deref()
         .unwrap_or_default()
-        .contains("Anweisungen"));
+        .contains("not instructions"));
 
     // tools/list
     let tools = client.list_all_tools().await.unwrap();
