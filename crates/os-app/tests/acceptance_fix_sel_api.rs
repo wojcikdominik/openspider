@@ -24,7 +24,9 @@ async fn stored(h: &Harness) -> u64 {
         .run(h.key.clone(), |file, _| {
             Ok(file
                 .conn()
-                .query_row("SELECT COUNT(*) FROM api_values", [], |r| r.get::<_, u64>(0))?)
+                .query_row("SELECT COUNT(*) FROM api_values", [], |r| {
+                    r.get::<_, u64>(0)
+                })?)
         })
         .await
         .unwrap()
@@ -43,7 +45,11 @@ async fn a_selection_from_another_crawl_fetches_nothing() {
         assert_eq!(e.message_key, KEY, "{other}: {e:?}");
     }
     assert_eq!(source.calls.load(Ordering::SeqCst), 0, "no API call");
-    assert_eq!(h.mock.log.calls().len(), mock_calls, "no request at the mock");
+    assert_eq!(
+        h.mock.log.calls().len(),
+        mock_calls,
+        "no request at the mock"
+    );
     assert_eq!(stored(&h).await, 0, "no stored value");
     h.server.stop().await;
 }

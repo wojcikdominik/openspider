@@ -2,8 +2,6 @@
 //! Crawl-ID der View, aus der die Auswahl stammt. Weicht sie vom Crawl der Sitzung ab, lehnt der Kern mit
 //! `err-selection-other-crawl` ab und schreibt keine Datei. Gleiche ID (wie die View sie nennt) oder keine ID: bisheriges
 //! Verhalten. Annahme bis zum Endstand: die ID steht als `crawlId` auf oberster Ebene der Argumente.
-#[path = "runtime_common.rs"]
-mod common;
 #[path = "cmd_catalog_fixture.rs"]
 mod fixture;
 use fixture::*;
@@ -42,7 +40,10 @@ async fn refused(fx: &Fx, args: Value) -> CmdError {
 #[tokio::test]
 async fn a_selection_from_another_crawl_writes_no_file() {
     let fx = Fx::new();
-    for (i, other) in ["01JC0THERCRAWL0000000000AA", "not-a-crawl"].iter().enumerate() {
+    for (i, other) in ["01JC0THERCRAWL0000000000AA", "not-a-crawl"]
+        .iter()
+        .enumerate()
+    {
         let path = fx.dir.path().join(format!("other-{i}.csv"));
         let e = refused(&fx, detail(&path, Some(other))).await;
         assert_eq!(e.message_key, KEY, "{other}: {e:?}");
