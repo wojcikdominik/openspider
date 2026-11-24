@@ -1,8 +1,9 @@
-//! Unabhängige Abnahmetests AGENT-042, Nachtrag 24.11.2026, viertes Kriterium: Werkzeug-Annotationen
+//! Unabhängige Abnahmetests AGENT-042 (Rückportierung 1.0.2, 1.0-Linie ohne M4: kein Schalter „KI (Vorschau)“,
+//! keine KI-Werkzeuge nach AGENT-030; 17 Werkzeuge), Nachtrag 24.11.2026, viertes Kriterium: Werkzeug-Annotationen
 //! (`title`, `readOnlyHint`, `destructiveHint`) und englische Werkzeugbeschreibungen/Server-Hinweise.
 //! acceptance: independent
 //!
-//! Erwartungen ausschließlich aus `docs/spec/10-agent-interface.md` (AGENT-001/-003/-004/-020/-021/-030/-042 und
+//! Erwartungen ausschließlich aus `docs/spec/10-agent-interface.md` (AGENT-001/-003/-004/-020/-021/-042 und
 //! den Klassenangaben der lesenden Werkzeuge AGENT-010 … -019), `docs/spec/06-*.md` OUT-285 und den
 //! Festlegungen des Orchestrators (Freigabeklassen unverändert, `crawl_status` bleibt Klasse `crawl`,
 //! Laufzeit-Fehlermeldungen nicht Teil der Übersetzung, Marker `<<<UNTRUSTED_CONTENT>>>` wörtlich).
@@ -56,25 +57,21 @@ const READ_ONLY: [&str; 11] = [
 
 /// Werkzeuge, die etwas starten, verändern, Kosten auslösen oder Dateien schreiben: AGENT-020 (`start_crawl`,
 /// `pause_crawl`, `stop_crawl`, `resume_crawl`), AGENT-021 (`export` schreibt Dateien), AGENT-003 Klasse `cost`
-/// (`fetch_link_metrics`, „derzeit Linkmetriken“) und AGENT-030 (die vier KI-Werkzeuge, Klasse `cost`).
-const CHANGING: [&str; 10] = [
+/// (`fetch_link_metrics`, „derzeit Linkmetriken“). Die KI-Werkzeuge aus AGENT-030 gibt es auf der 1.0-Linie nicht.
+const CHANGING: [&str; 6] = [
     "start_crawl",
     "pause_crawl",
     "stop_crawl",
     "resume_crawl",
     "export",
     "fetch_link_metrics",
-    "run_decisions",
-    "suggest_metadata",
-    "redirect_mapping",
-    "internal_link_suggestions",
 ];
 
 /// `destructiveHint = true` verlangt AGENT-042 mindestens für `stop_crawl` (AGENT-020: „beendet den Crawl
 /// endgültig“). `export` hängt vom Verhalten ab (eigener Test).
 const MUST_BE_DESTRUCTIVE: [&str; 1] = ["stop_crawl"];
 
-/// Klassen aus AGENT-003/-020/-021/-030 (Festlegung: `crawl_status` bleibt `crawl`).
+/// Klassen aus AGENT-003/-020/-021 (Festlegung: `crawl_status` bleibt `crawl`).
 const CRAWL_CLASS: [&str; 5] = [
     "start_crawl",
     "crawl_status",
@@ -83,21 +80,14 @@ const CRAWL_CLASS: [&str; 5] = [
     "resume_crawl",
 ];
 const WRITE_CLASS: [&str; 1] = ["export"];
-const COST_CLASS: [&str; 5] = [
-    "fetch_link_metrics",
-    "run_decisions",
-    "suggest_metadata",
-    "redirect_mapping",
-    "internal_link_suggestions",
-];
+const COST_CLASS: [&str; 1] = ["fetch_link_metrics"];
 
 type Client = RunningService<RoleClient, ()>;
 
-/// Datenordner mit `settings.toml`: Schalter „KI (Vorschau)“ und optional Exportordner.
-fn home_with(preview: bool, export_dir: Option<&Path>) -> tempfile::TempDir {
+/// Datenordner mit `settings.toml`, optional mit Exportordner.
+fn home_with(export_dir: Option<&Path>) -> tempfile::TempDir {
     let home = tempfile::tempdir().unwrap();
     let mut settings = AppSettings::default();
-    settings.ai_app.preview_enabled = preview;
     if let Some(dir) = export_dir {
         settings.export.directory = Some(dir.to_string_lossy().into_owned());
     }
@@ -282,9 +272,9 @@ fn schema_texts(value: &Value, path: &str, out: &mut Vec<(String, String)>) {
     }
 }
 
-/// Vollständige Freigabe aller Klassen; `preview` schaltet „KI (Vorschau)“.
-async fn full_listing(preview: bool) -> Vec<Value> {
-    let home = home_with(preview, None);
+/// Vollständige Freigabe aller Klassen.
+async fn full_listing() -> Vec<Value> {
+    let home = home_with(None);
     let crawls = tempfile::tempdir().unwrap();
     let client = spawn(home.path(), crawls.path(), &["--allow", "crawl,write,cost"]).await;
     let tools = tools_json(&client).await;
@@ -293,21 +283,20 @@ async fn full_listing(preview: bool) -> Vec<Value> {
 }
 
 // spec: AGENT-042
-// spec: AGENT-030
 // acceptance: independent
-// Prüfpunkt 1: Bei voller Freigabe (mit und ohne Schalter „KI (Vorschau)“) hat jedes Werkzeug
-// `annotations.title` (nicht leer, englisch), `readOnlyHint` und `destructiveHint` als Wahrheitswerte; jedes
-// gelistete Werkzeug ist in dieser Abnahme eingestuft, und mit Schalter an erscheinen alle 21.
+// Prüfpunkt 1: Bei voller Freigabe hat jedes Werkzeug `annotations.title` (nicht leer, englisch), `readOnlyHint`
+// und `destructiveHint` als Wahrheitswerte; jedes gelistete Werkzeug ist in dieser Abnahme eingestuft, und es
+// erscheinen genau die 17 Werkzeuge der 1.0-Linie.
 #[tokio::test]
 async fn every_tool_carries_title_read_only_and_destructive_hints() {
-    for preview in [false, true] {
-        let tools = full_listing(preview).await;
+    {
+        let tools = full_listing().await;
         assert!(!tools.is_empty());
         let mut problems = Vec::new();
         for tool in &tools {
             let name = tool["name"].as_str().unwrap();
             // Protokoll für den Abnahmebericht: gemeldete Werte je Werkzeug.
-            eprintln!("ANNOT preview={preview} {name}: {}", tool["annotations"]);
+            eprintln!("ANNOT {name}: {}", tool["annotations"]);
             if !READ_ONLY.contains(&name) && !CHANGING.contains(&name) {
                 problems.push(format!(
                     "{name}: nicht eingestuft (Abnahme kennt das Werkzeug nicht)"
@@ -336,8 +325,8 @@ async fn every_tool_carries_title_read_only_and_destructive_hints() {
                 }
             }
         }
-        assert!(problems.is_empty(), "preview={preview}: {problems:#?}");
-        if preview {
+        assert!(problems.is_empty(), "{problems:#?}");
+        {
             let mut got = names(&tools);
             got.sort();
             let mut expected: Vec<String> = READ_ONLY
@@ -346,7 +335,7 @@ async fn every_tool_carries_title_read_only_and_destructive_hints() {
                 .map(|s| s.to_string())
                 .collect();
             expected.sort();
-            assert_eq!(got, expected, "volle Werkzeugliste mit Schalter an");
+            assert_eq!(got, expected, "volle Werkzeugliste der 1.0-Linie");
         }
     }
 }
@@ -358,7 +347,7 @@ async fn every_tool_carries_title_read_only_and_destructive_hints() {
 // `readOnlyHint = false`; kein Werkzeug ist zugleich nur lesend und zerstörerisch.
 #[tokio::test]
 async fn read_only_hint_matches_the_spec_classification() {
-    let tools = by_name(&full_listing(true).await);
+    let tools = by_name(&full_listing().await);
     let mut problems = Vec::new();
     for name in READ_ONLY {
         let tool = tools.get(name).unwrap_or_else(|| panic!("{name} fehlt"));
@@ -388,7 +377,7 @@ async fn read_only_hint_matches_the_spec_classification() {
 // Prüfpunkt 3a: `stop_crawl` beendet einen Crawl endgültig und ist als zerstörerisch markiert.
 #[tokio::test]
 async fn stop_crawl_is_destructive() {
-    let tools = by_name(&full_listing(false).await);
+    let tools = by_name(&full_listing().await);
     for name in MUST_BE_DESTRUCTIVE {
         let tool = tools.get(name).unwrap_or_else(|| panic!("{name} fehlt"));
         assert!(
@@ -414,7 +403,7 @@ async fn export_destructive_hint_matches_observed_overwrite_behaviour() {
     let world = World::new();
     let stored = world.add("out-basic-site", "/", base_config(), 4201).await;
     let exports = tempfile::tempdir().unwrap();
-    let home = home_with(false, Some(exports.path()));
+    let home = home_with(Some(exports.path()));
     let client = spawn(home.path(), world.dir.path(), &["--allow", "write"]).await;
     let export = by_name(&tools_json(&client).await)
         .remove("export")
@@ -493,7 +482,7 @@ async fn tools_marked_read_only_leave_crawl_files_and_listing_unchanged() {
     let a = world.add("out-basic-site", "/", base_config(), 4202).await;
     let b = world.add("out-basic-site", "/", base_config(), 4203).await;
     let start = a.fx.site.url("/");
-    let home = home_with(false, None);
+    let home = home_with(None);
     let client = spawn(home.path(), world.dir.path(), &["--allow", "crawl"]).await;
     let tools = by_name(&tools_json(&client).await);
 
@@ -554,9 +543,9 @@ async fn tools_marked_read_only_leave_crawl_files_and_listing_unchanged() {
 // Annotationen hängen nicht von der Freigabe ab.
 #[tokio::test]
 async fn permissions_are_unchanged_and_crawl_status_needs_the_crawl_class() {
-    let full = by_name(&full_listing(true).await);
+    let full = by_name(&full_listing().await);
     for args in [&[][..], &["--read-only"][..]] {
-        let home = home_with(true, None);
+        let home = home_with(None);
         let crawls = tempfile::tempdir().unwrap();
         let client = spawn(home.path(), crawls.path(), args).await;
         let tools = tools_json(&client).await;
@@ -586,7 +575,6 @@ async fn permissions_are_unchanged_and_crawl_status_needs_the_crawl_class() {
             ("stop_crawl", "crawl"),
             ("export", "write"),
             ("fetch_link_metrics", "cost"),
-            ("run_decisions", "cost"),
         ] {
             let (rejected, texts) = call(&client, name, json!({"crawl_id": "x"})).await;
             assert!(rejected, "{args:?}: {name} nicht abgelehnt: {texts:?}");
@@ -599,7 +587,7 @@ async fn permissions_are_unchanged_and_crawl_status_needs_the_crawl_class() {
         client.cancel().await.unwrap();
     }
 
-    let home = home_with(true, None);
+    let home = home_with(None);
     let crawls = tempfile::tempdir().unwrap();
     let client = spawn(home.path(), crawls.path(), &["--allow", "crawl"]).await;
     let listed = names(&tools_json(&client).await);
@@ -629,7 +617,7 @@ async fn permissions_are_unchanged_and_crawl_status_needs_the_crawl_class() {
 async fn descriptions_and_instructions_are_english_and_keep_the_untrusted_notice() {
     let world = World::new();
     let stored = world.add("out-basic-site", "/", base_config(), 4204).await;
-    let home = home_with(true, None);
+    let home = home_with(None);
     let client = spawn(
         home.path(),
         world.dir.path(),
@@ -762,13 +750,13 @@ fn check_markdown(markdown: &str, tools: &[Value], problems: &mut Vec<String>) {
 // spec: OUT-285
 // acceptance: independent
 // Prüfpunkt 7a (über das Protokoll): Die Ressource `openspider://tools` (`openspider-mcp-tools.md`) stimmt in
-// Namen, Anzahl, Beschreibungen und Parameterschemata mit `tools/list` überein – bei voller Freigabe mit
-// Schalter an und im Auslieferungszustand.
+// Namen, Anzahl, Beschreibungen und Parameterschemata mit `tools/list` überein – bei voller Freigabe
+// und im Auslieferungszustand.
 #[tokio::test]
 async fn markdown_resource_matches_tools_list() {
     let mut problems = Vec::new();
     for args in [&["--allow", "crawl,write,cost"][..], &[][..]] {
-        let home = home_with(true, None);
+        let home = home_with(None);
         let crawls = tempfile::tempdir().unwrap();
         let client = spawn(home.path(), crawls.path(), args).await;
         let tools = tools_json(&client).await;
