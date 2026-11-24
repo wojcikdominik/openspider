@@ -5341,6 +5341,7 @@ dependencies = [
  "os-fetch",
  "os-model",
  "os-store",
+ "os-testsite",
  "proptest",
  "rand 0.8.8",
  "reqwest",
