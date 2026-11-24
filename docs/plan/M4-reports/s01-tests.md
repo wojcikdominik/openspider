@@ -1,6 +1,6 @@
 # M4-S01 – Unabhängige Abnahmetests
 
-Zweig `ai/s01-tests` ab Bauer-Stand `ee20f467`. Erwartungen nur aus `docs/spec/08-ai.md` (AI-120, AI-121), `docs/spec/01-crawl.md` (CRAWL-098 … 100, CRAWL-114 [M4]) und den Festlegungen des Orchestrators (`ua_pattern` = Teilzeichenkette ohne Groß-/Kleinschreibung und Pflichtfeld; Grundmenge `Blocked %` = gecrawlte interne HTML-URLs des Hosts; `Host` = Schema+Host+Port; 5xx → `robots.txt Error`; Kontroll-Tokens wie Crawler). Bauer-Bericht, Bauer-Tests und Commit-Texte wurden nicht gelesen; vom Produktcode nur Signaturen und Doc-Kommentare. Jeder Test trägt `// spec: <ID>` und `// acceptance: independent`.
+Zweig `ai/s01-tests` ab Bauer-Stand `ee20f467`; Wiederholung nach Nacharbeit gegen `e0fb5042` (Merge `fa162c64`). Erwartungen nur aus `docs/spec/08-ai.md` (AI-120, AI-121), `docs/spec/01-crawl.md` (CRAWL-098 … 100, CRAWL-114 [M4]) und den Festlegungen des Orchestrators (`ua_pattern` = Teilzeichenkette ohne Groß-/Kleinschreibung und Pflichtfeld; Grundmenge `Blocked %` = gecrawlte interne HTML-URLs des Hosts; `Host` = Schema+Host+Port; 5xx → `robots.txt Error`; Kontroll-Tokens wie Crawler). Bauer-Bericht, Bauer-Tests und Commit-Texte wurden nicht gelesen; vom Produktcode nur Signaturen und Doc-Kommentare. Jeder Test trägt `// spec: <ID>` und `// acceptance: independent`.
 
 ## Dateien
 
@@ -11,6 +11,20 @@ Zweig `ai/s01-tests` ab Bauer-Stand `ee20f467`. Erwartungen nur aus `docs/spec/0
 - Fixtures `tests/fixtures/ai/s01-acceptance/`: `catalog-minimum.json` (eigene Abschrift der Tabelle AI-120), `valid-base.json`, `valid-edge.json`, `invalid/*.json` (21 Negativfälle), Benutzerkataloge, Erweiterungseinträge, `robots/*.txt` (18 robots.txt-Varianten, u. a. die sechs Hosts aus der AI-121-Testfixture)
 
 ## Ergebnis
+
+### Wiederholung gegen `e0fb5042` (Lauf `run3`)
+
+Nach den Festlegungen des Orchestrators (s. u.) umgearbeitet und um Grenzfälle ergänzt. Prüfzeile im Log: `PRUEF Bauer e0fb5042 Zweig fa162c64`. fmt grün, clippy grün. **73 Tests: 73 grün, 0 rot, 0 ignoriert** (catalog 28, robots 24, presets 10, robots_ai_tokens 11).
+
+Änderungen gegenüber dem ersten Lauf:
+
+- `ua_pattern` (Festlegung 1): statt „nicht leer in jedem Eintrag“ jetzt `every_entry_has_ua_pattern_key_with_null_or_non_empty_string` (Rohdatei: Schlüssel überall, Wert `null` oder nicht leer), `entries_with_ua_example_have_a_ua_pattern` (dokumentierter User-Agent ⇒ Muster), `control_token_ua_pattern_is_null_or_non_empty`, `empty_ua_pattern_is_rejected` (`""` abgelehnt), `missing_ua_pattern_is_rejected` (unverändert), `null_ua_pattern_is_accepted_without_documented_user_agent` (Fixture `valid-ua-pattern-null.json`; `invalid/ua-pattern-null.json` entfernt). Alle grün.
+- Schema am Spec-Pfad (Festlegung 2): `json_schema_file_exists_at_the_spec_path` unverändert, jetzt grün.
+- Voreinstellungen ohne `ua_example` (Festlegung 3): `presets_without_ua_example_resolve_per_decision` (alle betroffenen Tokens: neue → OpenSpider-Standard-User-Agent, feste → User-Agent der Voreinstellungsdatei, Token = Katalog-Token) und Ende-zu-Ende `presets_without_ua_example_end_to_end` (MiniServer, Claude-SearchBot neu und ClaudeBot fest: gesendeter User-Agent auch beim robots.txt-Abruf, eigene Gruppe greift, `*` nicht). Grün.
+- `Access` (Festlegung 4): `homepage_blocked_but_other_urls_allowed_is_partially_blocked`, `homepage_allowed_but_all_crawled_urls_blocked_is_partially_blocked`, `homepage_and_all_crawled_urls_blocked_is_blocked_without_homepage_row`, `without_html_urls_the_homepage_decides`, `robots_error_counts_follow_the_policy_for_every_token` (beide Policies, mit und ohne HTML-URL, auch Kategorien je URL), `robots_error_policy_from_crawl_config`. Grün.
+- CRLF (Festlegung 6): Zeile `tests/fixtures/ai/s01-acceptance/robots/ai-bom-crlf.txt -text` in `.gitattributes`, Datei mit CRLF neu eingecheckt (Index geprüft); `bom_crlf_comments_and_spaces_with_ai_token` prüft jetzt zusätzlich, dass die gelesene Datei BOM und ausschließlich CRLF enthält. Grün.
+
+### Erster Lauf gegen `ee20f467` (Lauf `run2`, historisch)
 
 Lauf auf dem Mini (`run2`): fmt grün, clippy (`-p os-analyze -p os-fetch --all-targets -D warnings`) grün. **63 Tests: 59 grün, 4 rot, 0 ignoriert.**
 
@@ -78,6 +92,9 @@ Lauf auf dem Mini (`run2`): fmt grün, clippy (`-p os-analyze -p os-fetch --all-
 
 ## Befunde
 
+Stand nach Wiederholung: Befunde 1 und 2 erledigt (Festlegung 1 bzw. Umzug des Bauers), 3 und 4 durch Festlegungen 3 und 4 geklärt und getestet, 8 behoben; 5 bleibt (Sache der 1.2-Etappe), 6 erledigt (Umzug), 7 akzeptiert (kommt in die Spec). Ursprünglicher Text:
+
+
 1. **B1 – `ua_pattern` ist nicht Pflicht.** Festlegung des Orchestrators: „`ua_pattern` ist … Pflichtfeld“. Beobachtet: 11 von 27 Einträgen haben `"ua_pattern": null` (ClaudeBot, Claude-SearchBot, Claude-User, anthropic-ai, Google-NotebookLM, Bytespider, cohere-ai, YouBot, Diffbot sowie die Kontroll-Tokens Google-Extended, Applebot-Extended), und `Catalog::parse` nimmt `null` und `""` an (nur ein fehlender Schlüssel wird abgelehnt; Doc-Kommentar `REQUIRED_FIELDS`: „`ua_pattern` … dürfen `null` sein“). Erwartet: nicht leere Zeichenkette in jedem Eintrag, Ablehnung von `null`/`""`. Rote Tests: `every_crawling_entry_has_a_non_empty_ua_pattern`, `control_tokens_have_a_non_empty_ua_pattern`, `null_or_empty_ua_pattern_is_rejected`. Siehe Frage 1.
 2. **B1 – JSON-Schema fehlt am Spec-Pfad.** AI-120 „Testfixture: … Schema `resources/ai/schemas/ai-crawlers.schema.json`“. Beobachtet: Datei fehlt; ein Schema liegt nur unter `tests/fixtures/ai/search/ai-crawlers.schema.json`. Vermutlich Teil des angekündigten Umzugs; Test bleibt rot, bis die Datei am Spec-Pfad liegt. Roter Test: `json_schema_file_exists_at_the_spec_path`.
 3. **B2 – Voreinstellungen ohne `ua_example`.** CRAWL-114 [M4]: „HTTP-User-Agent = `ua_example`“. Für ClaudeBot, Claude-SearchBot, Claude-User, Google-CloudVertexBot (und Google-Extended) ist `ua_example` `null`. Beobachtet: feste Voreinstellung ClaudeBot behält ihren alten HTTP-User-Agent aus `user-agents.toml`; neue Voreinstellungen Claude-SearchBot, Claude-User, Google-CloudVertexBot sind „nur Token“ und senden damit laut Doc-Kommentar von `resolve` den OpenSpider-Standard-User-Agent. Die Spec regelt diesen Fall nicht (Frage 2).
@@ -89,6 +106,9 @@ Lauf auf dem Mini (`run2`): fmt grün, clippy (`-p os-analyze -p os-fetch --all-
 8. **B3 – CRLF der Fixture `robots/ai-bom-crlf.txt` geht im Repo verloren:** Die Zeilenende-Normalisierung von git speichert die Datei mit LF; der Test prüft nach dem Auschecken nur noch BOM, Kommentar und Leerzeichen vor dem Doppelpunkt. CRLF selbst deckt die bestehende `crawl-robots`-Variante `bom.site.test` ab. Ein `-text`-Eintrag in `.gitattributes` wäre eine fremde Datei und wurde nicht angelegt.
 
 ## Offene Fragen an die Spec
+
+Alle drei durch die Festlegungen 1, 3 und 4 des Orchestrators beantwortet. Ursprünglicher Text:
+
 
 1. Gilt die Pflicht für `ua_pattern` auch für Kontroll-Tokens (crawlen nicht, kein User-Agent) und für Betreiber ohne dokumentierten User-Agent (z. B. Anthropic-Seite nennt keinen)? Falls nicht: Festlegung auf „Pflicht, außer Kategorie `control-token`“ oder „Schlüssel Pflicht, Wert darf `null` sein“.
 2. Was sendet eine KI-Voreinstellung, deren Katalogeintrag keinen `ua_example` hat: den bisherigen festen User-Agent, den OpenSpider-Standard oder soll die Voreinstellung entfallen bzw. eine Warnung zeigen?
