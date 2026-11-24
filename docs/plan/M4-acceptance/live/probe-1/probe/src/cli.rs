@@ -12,6 +12,8 @@ pub enum Mode {
         note: Option<String>,
     },
     Live,
+    /// Ohne Netz und Schlüsselbund: vorhandene Ergebnisse bereinigen und `summary.json` neu zusammensetzen.
+    Rebuild,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +69,7 @@ openspider-live-probe – frühe Live-Probe M4-Q00 (Anthropic, OpenAI Responses/
   --live                    echte Aufrufe; nur zusammen mit OPENSPIDER_LIVE_API_TESTS=1
   --only <anbieter>         anthropic | openai | openrouter
   --models-only             nur kostenlose Abfragen (Modelllisten, OpenRouter /key)
+  --rebuild-results         ohne Netz: results/*.json bereinigen, summary.json aus allen Anbieterdateien neu bilden
   --max-total-usd <betrag>  Gesamtgrenze senken (höchstens 6, Standard 6)
   --model-anthropic <id>    Modell vorgeben (muss in der Modellliste stehen)
   --model-openai <id>       Modell für Responses vorgeben (Decisions nutzt immer gpt-6-luna)
@@ -78,6 +81,7 @@ openspider-live-probe – frühe Live-Probe M4-Q00 (Anthropic, OpenAI Responses/
 pub fn parse_args(args: &[String], live_env: Option<&str>) -> Result<Options, String> {
     let mut o = Options::default();
     let mut live = false;
+    let mut rebuild = false;
     let mut it = args.iter();
     let value = |it: &mut std::slice::Iter<'_, String>, name: &str| {
         it.next()
@@ -89,6 +93,7 @@ pub fn parse_args(args: &[String], live_env: Option<&str>) -> Result<Options, St
             "--dry-run" => live = false,
             "--live" => live = true,
             "--models-only" => o.models_only = true,
+            "--rebuild-results" => rebuild = true,
             "--help" | "-h" => o.help = true,
             "--only" => {
                 let v = value(&mut it, "--only")?;
@@ -112,6 +117,7 @@ pub fn parse_args(args: &[String], live_env: Option<&str>) -> Result<Options, St
         }
     }
     o.mode = match (live, live_env == Some("1")) {
+        _ if rebuild => Mode::Rebuild,
         (true, true) => Mode::Live,
         (true, false) => Mode::DryRun {
             note: Some(format!(

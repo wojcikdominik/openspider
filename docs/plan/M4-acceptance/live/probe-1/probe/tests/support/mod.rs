@@ -215,7 +215,8 @@ fn route(method: &str, path: &str, body: &str, b: &Behavior) -> (u16, Value) {
         ("POST", "/anthropic/v1/messages") => (
             200,
             json!({"id": "msg_test", "type": "message", "role": "assistant", "model": model,
-                   "content": [{"type": "text", "text": answer}], "stop_reason": "end_turn",
+                   "content": [{"type": "thinking", "thinking": "", "signature": "SIGBLOB-0123456789"},
+                               {"type": "text", "text": answer}], "stop_reason": "end_turn",
                    "usage": {"input_tokens": b.input_tokens, "output_tokens": 5,
                              "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}}),
         ),
@@ -223,7 +224,8 @@ fn route(method: &str, path: &str, body: &str, b: &Behavior) -> (u16, Value) {
             200,
             json!({"object": "list", "data": [
                 {"id": "gpt-6-luna", "object": "model", "created": 1, "owned_by": "openai"},
-                {"id": "gpt-test-nano", "object": "model", "created": 1, "owned_by": "openai"}
+                {"id": "gpt-test-nano", "object": "model", "created": 1, "owned_by": "openai"},
+                {"id": "davinci:ft-acmecorp-2023-07-19", "object": "model", "created": 1, "owned_by": "acmecorp"}
             ]}),
         ),
         ("POST", "/openai/v1/responses") if unknown => (
@@ -234,7 +236,8 @@ fn route(method: &str, path: &str, body: &str, b: &Behavior) -> (u16, Value) {
         ("POST", "/openai/v1/responses") => (
             200,
             json!({"id": "resp_test", "object": "response", "status": "completed", "model": model,
-                   "output": [{"type": "message", "role": "assistant",
+                   "output": [{"type": "reasoning", "id": "rs_test", "encrypted_content": "ENCBLOB-0123456789", "summary": []},
+                              {"type": "message", "role": "assistant", "id": "msg_test",
                                "content": [{"type": "output_text", "text": answer}]}],
                    "usage": {"input_tokens": b.input_tokens, "output_tokens": 5,
                              "input_tokens_details": {"cached_tokens": 0}}}),
@@ -300,18 +303,22 @@ fn route(method: &str, path: &str, body: &str, b: &Behavior) -> (u16, Value) {
         ),
         ("GET", "/openrouter/api/v1/key") => (
             200,
-            json!({"data": {"label": masked(&b.echo_key), "limit": null, "limit_remaining": null,
+            json!({"data": {"label": masked(&b.echo_key), "creator_user_id": "user_SECRETACCOUNT",
+                            "workspace_id": "SECRETWORKSPACE-uuid", "organization_id": null,
+                            "expires_at": "2026-12-01T16:45:26.171Z", "limit": null, "limit_remaining": null,
                             "limit_reset": null, "usage": 0.5, "usage_daily": 0.1, "usage_weekly": 0.2,
                             "usage_monthly": 0.5, "is_free_tier": false}}),
         ),
         ("POST", "/openrouter/api/v1/chat/completions") if unknown => (
             400,
-            json!({"error": {"code": 400, "message": format!("{model} is not a valid model ID")}}),
+            json!({"error": {"code": 400, "message": format!("{model} is not a valid model ID")}, "user_id": "user_SECRETACCOUNT"}),
         ),
         ("POST", "/openrouter/api/v1/chat/completions") => (
             200,
             json!({"id": "gen-test", "model": model,
-                   "choices": [{"index": 0, "message": {"role": "assistant", "content": answer}, "finish_reason": "stop"}],
+                   "choices": [{"index": 0, "message": {"role": "assistant", "content": answer,
+                       "reasoning_details": [{"type": "reasoning.encrypted", "data": "ENCBLOB-0123456789", "id": "rs_test"}]},
+                       "finish_reason": "stop"}],
                    "usage": {"prompt_tokens": b.input_tokens, "completion_tokens": 5, "total_tokens": b.input_tokens + 5}}),
         ),
         _ => (

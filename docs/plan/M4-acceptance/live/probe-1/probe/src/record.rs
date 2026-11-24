@@ -141,7 +141,14 @@ pub fn model_entries(body: &Value) -> Vec<Value> {
 /// Modellliste reduziert: Feldpfade (mit JSON-Typen und Häufigkeit), Felder außerhalb von `data`, wenige
 /// Beispiel-Einträge, optional alle IDs.
 pub fn summarize_models(body: &Value, include_ids: bool) -> Value {
-    let entries = model_entries(body);
+    let all = model_entries(body);
+    let is_custom = |e: &Value| {
+        e.get("id")
+            .and_then(Value::as_str)
+            .is_some_and(is_custom_model)
+    };
+    let custom = all.iter().filter(|e| is_custom(e)).count();
+    let entries: Vec<Value> = all.into_iter().filter(|e| !is_custom(e)).collect();
     let mut paths: BTreeMap<String, BTreeSet<&'static str>> = BTreeMap::new();
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for entry in &entries {
@@ -172,7 +179,8 @@ pub fn summarize_models(body: &Value, include_ids: bool) -> Value {
         })
         .unwrap_or_default();
     let mut out = json!({
-        "count": entries.len(),
+        "count": entries.len() + custom,
+        "custom_models_omitted": custom,
         "top_level_fields": top_level,
         "entry_field_paths": field_paths,
         "examples": entries.iter().take(MODEL_EXAMPLES).map(|e| reduce_with(e, 160)).collect::<Vec<_>>(),
@@ -395,7 +403,11 @@ fn typical(m: &RouterModel, images: u32) -> f64 {
     crate::plan::cost_usd(&m.rates, 500, 128, images)
 }
 
-/// OpenRouter: billigstes wählbares Modell je Fähigkeit (Text; strukturierte Ausgabe laut `supported_parameters`;
+/// Bevorzugtes OpenRouter-Modell: dieselbe Spec-ID wie bei OpenAI (AI-004, AI-010), damit Antworten und Preise
+/// zwischen direktem Weg und OpenRouter vergleichbar sind.
+pub const OPENROUTER_PREFERRED: &str = "openai/gpt-6-luna";
+
+/// OpenRouter: bevorzugt [`OPENROUTER_PREFERRED`], sonst das billigste wählbare Modell je Fähigkeit (Text; strukturierte Ausgabe laut `supported_parameters`;
 /// Bild laut `architecture.input_modalities`).
 pub fn choose_openrouter(
     body: &Value,
@@ -426,6 +438,20 @@ pub fn choose_openrouter(
         ModelNeed::Vision => (|m| m.vision, 1, "mit Bildeingabe"),
         _ => (|_| true, 0, "Text"),
     };
+    // Vergleichbarkeit (Auswertung Q00, 24.11.2026): die in 08 genannte ID über OpenRouter, wenn wählbar und fähig;
+    // die billigsten Modelle der Liste waren untypisch (Spezialmodelle) und taugen nicht als Vergleich.
+    if let Some(m) = models
+        .iter()
+        .find(|m| m.id == OPENROUTER_PREFERRED && filter(m))
+    {
+        return Ok(Choice {
+            id: m.id.clone(),
+            rule: format!(
+                "{OPENROUTER_PREFERRED} (Spec-ID aus 08 über OpenRouter, {label}; Preise aus der Liste)"
+            ),
+            rates: m.rates,
+        });
+    }
     models
         .iter()
         .filter(|m| filter(m))
@@ -456,4 +482,120 @@ pub fn tokens_from_usage(usage: &Value) -> Option<(u64, u64)> {
         .or_else(|| n("completion_tokens"))
         .unwrap_or(0);
     Some((input + cache, output))
+}
+
+/// Ersatztext für Konto-, Organisations-, Projekt- und Nutzerkennungen.
+pub const OMITTED_ACCOUNT: &str = "(ausgelassen: Kontokennung)";
+/// Ersatztext für kundeneigene Modelle (Fine-Tunes), deren ID Organisation oder Zweck verrät.
+pub const OMITTED_CUSTOM_MODEL: &str = "(ausgelassen: kundeneigenes Modell)";
+
+/// Felder, deren Wert (sofern nicht `null`) eine Konto-, Organisations-, Projekt- oder Nutzerkennung ist.
+fn is_account_field(key: &str) -> bool {
+    let k = key.to_ascii_lowercase();
+    [
+        "user_id",
+        "workspace_id",
+        "organization_id",
+        "organisation_id",
+        "project_id",
+        "account_id",
+        "org_id",
+        "owner_id",
+        "customer_id",
+        "team_id",
+    ]
+    .iter()
+    .any(|suffix| k == *suffix || k.ends_with(&format!("_{suffix}")))
+        || matches!(
+            k.as_str(),
+            "email" | "user" | "safety_identifier" | "expires_at" | "organization" | "project"
+        )
+}
+
+/// Felder mit Anbieter-Request- bzw. Antwort-IDs (Header und Körper). Bei `id` nur, wenn der Wert wie eine
+/// Anbieter-ID aussieht (Modell-IDs bleiben).
+fn is_request_id_field(key: &str) -> bool {
+    let k = key.to_ascii_lowercase();
+    k == "request_id"
+        || k == "provider_request_id"
+        || k.contains("request-id")
+        || k.contains("generation-id")
+}
+
+const PROVIDER_ID_PREFIXES: [&str; 9] = [
+    "msg_",
+    "req_",
+    "resp_",
+    "rs_",
+    "gen-",
+    "chatcmpl-",
+    "dec_",
+    "call_",
+    "fc_",
+];
+
+fn looks_like_provider_id(text: &str) -> bool {
+    PROVIDER_ID_PREFIXES.iter().any(|p| text.starts_with(p))
+}
+
+/// Formhinweis statt Wert: Präfix bleiben (`req_…`), der Rest entfällt.
+pub fn id_hint(text: &str) -> String {
+    match PROVIDER_ID_PREFIXES.iter().find(|p| text.starts_with(*p)) {
+        Some(p) => format!("{p}…(ausgelassen: Anbieter-ID)"),
+        None if text == VALUE_NOT_RECORDED => text.to_string(),
+        None => "(ausgelassen: Anbieter-ID)".into(),
+    }
+}
+
+/// Undurchsichtige Blobs (signierte bzw. verschlüsselte Reasoning-Inhalte): verraten nichts Prüfbares, sind aber an
+/// das Konto gebunden.
+fn is_opaque_blob(key: &str, parent: &Map<String, Value>) -> bool {
+    let k = key.to_ascii_lowercase();
+    k == "signature"
+        || k == "encrypted_content"
+        || (k == "data"
+            && parent
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t.contains("encrypted")))
+}
+
+/// Kundeneigenes Modell (Fine-Tune) an der ID erkennbar.
+pub fn is_custom_model(id: &str) -> bool {
+    id.starts_with("ft:") || id.contains(":ft-") || id.contains(":ft:")
+}
+
+/// Entfernt Kennungen aus einem aufgezeichneten Dokument (Antwortkörper, Header, Adapterergebnisse): Konto- und
+/// Nutzerkennungen, Anbieter-Request-IDs (nur Präfix bleibt), signierte/verschlüsselte Blobs, IDs kundeneigener
+/// Modelle. Idempotent.
+pub fn sanitize(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| {
+                    let clean = match v {
+                        Value::Null => Value::Null,
+                        Value::String(s) if s.starts_with("(ausgelassen") => v.clone(),
+                        _ if is_account_field(k) && !v.is_object() && !v.is_array() => {
+                            json!(OMITTED_ACCOUNT)
+                        }
+                        Value::String(s) if is_opaque_blob(k, map) => json!(format!(
+                            "(ausgelassen: undurchsichtiger Blob, {} Zeichen aufgezeichnet)",
+                            s.chars().count()
+                        )),
+                        Value::String(s) if is_request_id_field(k) => json!(id_hint(s)),
+                        Value::String(s) if k == "id" && looks_like_provider_id(s) => {
+                            json!(id_hint(s))
+                        }
+                        Value::String(s) if is_custom_model(s) => json!(OMITTED_CUSTOM_MODEL),
+                        _ => sanitize(v),
+                    };
+                    (k.clone(), clean)
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(sanitize).collect()),
+        Value::String(s) if is_custom_model(s) => json!(OMITTED_CUSTOM_MODEL),
+        other => other.clone(),
+    }
 }

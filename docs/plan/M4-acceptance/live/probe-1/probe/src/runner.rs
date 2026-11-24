@@ -332,21 +332,18 @@ impl<'a> Probe<'a> {
             );
             self.write_json(&format!("{}.json", provider.name()), &result)?;
         }
-        let summary = json!({
-            "probe": "M4-Q00",
+        let last_run = json!({
             "generated_at_unix": now_unix(),
-            "mode": "live",
             "models_only": self.config.options.models_only,
+            "providers": providers,
+            "requests": self.ledger.total_requests(),
+            "estimated_cost_usd": self.ledger.total_usd(),
             "caps": {
                 "provider_usd": self.ledger.provider_cap(),
                 "total_usd": self.ledger.total_cap(),
-                "max_requests": Provider::ALL.iter().map(|p| (p.name().to_string(), json!(p.max_requests()))).collect::<Map<_, _>>(),
             },
-            "price_basis": "Anthropic/OpenAI: vorsichtige Annahme 30/150 USD je 1 Mio. Tokens (Obergrenze, keine Abrechnung); OpenRouter: Preise aus der Modellliste",
-            "providers": providers,
-            "total_requests": self.ledger.total_requests(),
-            "total_estimated_cost_usd": self.ledger.total_usd(),
         });
+        let summary = compose_summary(&self.config.results_dir, Some(last_run))?;
         self.write_json("summary.json", &summary)?;
         self.say(&format!(
             "Fertig: {} Anfragen, geschätzt höchstens {:.4} USD; Ergebnisse in {}",
@@ -362,7 +359,7 @@ impl<'a> Probe<'a> {
     }
 
     fn write_json(&self, name: &str, value: &Value) -> io::Result<()> {
-        let clean = self.scrubber.json(value);
+        let clean = self.scrubber.json(&record::sanitize(value));
         let text = serde_json::to_string_pretty(&clean).map_err(io::Error::other)?;
         std::fs::write(self.config.results_dir.join(name), format!("{text}\n"))
     }
@@ -864,4 +861,79 @@ fn skipped(step: &Step, reason: &str) -> Value {
         "executed": false,
         "skip_reason": reason,
     })
+}
+
+fn write_pretty(path: &std::path::Path, value: &Value) -> io::Result<()> {
+    let text = serde_json::to_string_pretty(value).map_err(io::Error::other)?;
+    std::fs::write(path, format!("{text}\n"))
+}
+
+/// `summary.json` aus allen vorhandenen Anbieterdateien in `dir` (auch aus getrennten `--only`-Läufen);
+/// `last_run` beschreibt den Lauf, der die Datei zuletzt geschrieben hat.
+pub fn compose_summary(dir: &std::path::Path, last_run: Option<Value>) -> io::Result<Value> {
+    let mut providers = Map::new();
+    let (mut requests, mut cost) = (0u64, 0.0f64);
+    for provider in Provider::ALL {
+        let path = dir.join(format!("{}.json", provider.name()));
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let doc: Value = serde_json::from_str(&text).map_err(io::Error::other)?;
+        let totals = doc.get("totals").cloned().unwrap_or(Value::Null);
+        let n = totals.get("requests").and_then(Value::as_u64).unwrap_or(0);
+        let usd = totals
+            .get("estimated_cost_usd")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+        requests += n;
+        cost += usd;
+        providers.insert(
+            provider.name().into(),
+            json!({
+                "generated_at_unix": doc.get("generated_at_unix"),
+                "models_only": doc.get("models_only"),
+                "key": doc.get("key"),
+                "selection": doc.get("selection").map(|s| {
+                    ["text", "structured", "vision"].iter()
+                        .map(|k| (k.to_string(), s.get(k).and_then(|c| c.get("model")).cloned().unwrap_or(Value::Null)))
+                        .collect::<Map<_, _>>()
+                }),
+                "requests": n,
+                "estimated_cost_usd": usd,
+                "aborted": totals.get("aborted"),
+            }),
+        );
+    }
+    Ok(json!({
+        "probe": "M4-Q00",
+        "composed_from": "alle Anbieterdateien in results/ (auch aus getrennten Läufen); Zeitpunkte je Anbieter unter providers.*.generated_at_unix",
+        "caps": {
+            "provider_usd": plan::PROVIDER_CAP_USD,
+            "total_usd": plan::TOTAL_CAP_USD,
+            "max_requests": Provider::ALL.iter().map(|p| (p.name().to_string(), json!(p.max_requests()))).collect::<Map<_, _>>(),
+        },
+        "price_basis": "Anthropic/OpenAI: vorsichtige Annahme 30/150 USD je 1 Mio. Tokens (Obergrenze, keine Abrechnung); OpenRouter: Preise aus der Modellliste",
+        "providers": providers,
+        "total_requests": requests,
+        "total_estimated_cost_usd": cost,
+        "last_run": last_run,
+    }))
+}
+
+/// Ohne Netz und ohne Schlüsselbund: vorhandene Anbieterdateien erneut bereinigen ([`record::sanitize`]) und
+/// `summary.json` aus ihnen neu zusammensetzen. Gibt die Zahl der bearbeiteten Anbieterdateien zurück.
+pub fn rebuild_results(dir: &std::path::Path) -> io::Result<usize> {
+    let mut n = 0;
+    for provider in Provider::ALL {
+        let path = dir.join(format!("{}.json", provider.name()));
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let doc: Value = serde_json::from_str(&text).map_err(io::Error::other)?;
+        write_pretty(&path, &record::sanitize(&doc))?;
+        n += 1;
+    }
+    let summary = compose_summary(dir, None)?;
+    write_pretty(&dir.join("summary.json"), &record::sanitize(&summary))?;
+    Ok(n)
 }

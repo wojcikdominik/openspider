@@ -30,6 +30,16 @@ async fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Mode::Rebuild => match probe::runner::rebuild_results(&probe::default_results_dir()) {
+            Ok(n) => {
+                println!("{n} Anbieterdateien bereinigt, summary.json neu zusammengesetzt");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("Ergebnisse nicht bearbeitbar: {e}");
+                ExitCode::FAILURE
+            }
+        },
         Mode::Live => {
             let config = RunConfig::new(options, probe::default_results_dir());
             let probe = match Probe::new(&config, &mut stdout) {

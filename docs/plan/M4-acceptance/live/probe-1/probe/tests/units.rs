@@ -285,3 +285,41 @@ fn raw_bodies_follow_spec_wording() {
     assert_eq!(dec.questions.len(), 3);
     assert!(plan::steps(Provider::OpenAi).any(|s| s.path == "/decisions"));
 }
+
+// spec: AI-004, AI-010; Auswertung Q00: Spec-ID über OpenRouter bevorzugt (Vergleichbarkeit)
+#[test]
+fn openrouter_prefers_the_spec_model_when_eligible() {
+    let body = json!({"data": [
+        {"id": "tiny/cheap", "pricing": {"prompt": "0.00000001", "completion": "0.00000001"},
+         "supported_parameters": ["structured_outputs"], "architecture": {"input_modalities": ["text", "image"]}},
+        {"id": "openai/gpt-6-luna", "pricing": {"prompt": "0.0000001", "completion": "0.0000005"},
+         "supported_parameters": ["structured_outputs", "response_format"],
+         "architecture": {"input_modalities": ["file", "image", "text"], "output_modalities": ["text"]}}
+    ]});
+    for need in [ModelNeed::Text, ModelNeed::Structured, ModelNeed::Vision] {
+        let c = choose_openrouter(&body, None, need).unwrap();
+        assert_eq!(c.id, record::OPENROUTER_PREFERRED);
+        assert!(c.rule.contains("Spec-ID"));
+    }
+    let without = json!({"data": [body["data"][0].clone()]});
+    assert_eq!(
+        choose_openrouter(&without, None, ModelNeed::Text)
+            .unwrap()
+            .id,
+        "tiny/cheap"
+    );
+}
+
+// spec: AI-009; Auswertung Q00
+#[test]
+fn sanitize_keeps_model_ids_and_spec_fields() {
+    let v = json!({"id": "claude-haiku-5-5", "model": "gpt-6-luna", "label": "poor", "request_id": "req_1",
+                   "budgets": [{"budget_id": null}], "limit_remaining": 50, "usage": {"input_tokens": 3}});
+    let s = record::sanitize(&v);
+    assert_eq!(s["id"], "claude-haiku-5-5");
+    assert_eq!(s["label"], "poor");
+    assert_eq!(s["request_id"], "req_…(ausgelassen: Anbieter-ID)");
+    assert!(s["budgets"][0]["budget_id"].is_null());
+    assert_eq!(s["limit_remaining"], 50);
+    assert_eq!(record::sanitize(&s), s);
+}

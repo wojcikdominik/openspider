@@ -155,6 +155,24 @@ async fn full_run_executes_every_planned_step_once_and_never_leaks_the_key() {
         "Fehlermeldung mit Schlüssel wurde geschwärzt"
     );
 
+    // Keine Konto-/Nutzerkennungen, Request-IDs, undurchsichtigen Blobs oder kundeneigenen Modelle (Auswertung Q00).
+    for needle in [
+        "SECRETACCOUNT",
+        "SECRETWORKSPACE",
+        "acmecorp",
+        "SIGBLOB",
+        "ENCBLOB",
+        "req_test",
+        "xreq_test",
+        "msg_test",
+        "gen-test",
+        "resp_test",
+        "2026-12-01T16:45",
+    ] {
+        assert!(!files.contains(needle), "{needle} in Ergebnisdateien");
+    }
+    assert!(files.contains(record::OMITTED_ACCOUNT));
+
     // Header: Rate-Limit- und Request-ID-Werte ja, andere nur mit Namen.
     let a = read_json(&dir, "anthropic.json");
     let text = a["requests"]
@@ -168,7 +186,14 @@ async fn full_run_executes_every_planned_step_once_and_never_leaks_the_key() {
         text["response_headers"]["anthropic-ratelimit-requests-remaining"],
         "49"
     );
-    assert_eq!(text["response_headers"]["request-id"], "req_test");
+    assert_eq!(
+        text["response_headers"]["request-id"],
+        "req_…(ausgelassen: Anbieter-ID)"
+    );
+    assert_eq!(
+        text["response_body"]["id"],
+        "msg_…(ausgelassen: Anbieter-ID)"
+    );
     assert_eq!(text["response_headers"]["x-echo-key"], VALUE_NOT_RECORDED);
     assert_eq!(text["status"], 200);
     assert_eq!(text["cost_basis"], "usage");
@@ -208,6 +233,9 @@ async fn full_run_executes_every_planned_step_once_and_never_leaks_the_key() {
 
     let summary_file = read_json(&dir, "summary.json");
     assert_eq!(summary_file["total_requests"], planned);
+    let o_models = o["requests"][0]["response_body"].clone();
+    assert_eq!(o_models["custom_models_omitted"], 1);
+    assert_eq!(o_models["count"], 3);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -463,6 +491,12 @@ fn live_needs_both_env_and_flag() {
         parse_args(&args(&["--base-url", "x"]), None).is_err(),
         "keine Option für andere Hosts"
     );
+    assert_eq!(
+        parse_args(&args(&["--rebuild-results", "--live"]), Some("1"))
+            .unwrap()
+            .mode,
+        Mode::Rebuild
+    );
 }
 
 // spec: AI-009
@@ -476,4 +510,78 @@ fn secret_debug_and_scrubber_hide_the_key() {
     assert_eq!(s.text("sk-...XYZW"), "sk-...[REDACTED]");
     let v = s.json(&serde_json::json!({TEST_KEY: [TEST_KEY]}));
     assert!(!v.to_string().contains(TEST_KEY));
+}
+
+// spec: AI-009 (keine Kennungen in Ergebnissen); Auswertung Q00: summary.json aus getrennten --only-Läufen
+#[tokio::test]
+async fn separate_only_runs_are_composed_into_one_summary() {
+    let server = Server::start(Behavior::new(TEST_KEY)).await;
+    let dir = temp_dir("compose");
+    for provider in [Provider::Anthropic, Provider::OpenRouter] {
+        let options = Options {
+            only: Some(provider),
+            ..live_options()
+        };
+        run(&server, options, &TestKeys::all(), &dir, None).await;
+    }
+    let summary = read_json(&dir, "summary.json");
+    let providers = summary["providers"].as_object().unwrap();
+    assert_eq!(providers.len(), 2, "{summary:#}");
+    let expected =
+        plan::steps(Provider::Anthropic).count() + plan::steps(Provider::OpenRouter).count();
+    assert_eq!(summary["total_requests"], expected);
+    assert_eq!(
+        summary["last_run"]["requests"],
+        plan::steps(Provider::OpenRouter).count()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// spec: AI-009; Auswertung Q00: Bereinigen vorhandener Dateien ohne Netz
+#[test]
+fn rebuild_sanitizes_existing_files_and_composes_summary() {
+    let dir = temp_dir("rebuild");
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = serde_json::json!({
+        "provider": "openrouter",
+        "totals": {"requests": 3, "estimated_cost_usd": 0.5, "aborted": null},
+        "requests": [{"response_body": {"id": "gen-123-abc", "user_id": "user_X",
+            "data": {"workspace_id": "cdc3-uuid", "creator_user_id": "user_Y", "organization_id": null}},
+            "response_headers": {"x-request-id": "2a5f384a-0de2-4644-bb6b-df4483fb4eb1", "x-generation-id": "gen-9"},
+            "content": [{"type": "thinking", "signature": "CAQS..."}],
+            "ids": ["gpt-6-luna", "davinci:ft-acme-2023"]}]
+    });
+    std::fs::write(dir.join("openrouter.json"), doc.to_string()).unwrap();
+    std::fs::write(
+        dir.join("openai.json"),
+        serde_json::json!({"totals": {"requests": 2, "estimated_cost_usd": 0.25}}).to_string(),
+    )
+    .unwrap();
+    assert_eq!(probe::runner::rebuild_results(&dir).unwrap(), 2);
+    let text = std::fs::read_to_string(dir.join("openrouter.json")).unwrap();
+    for needle in [
+        "user_X",
+        "user_Y",
+        "cdc3-uuid",
+        "2a5f384a",
+        "gen-123",
+        "gen-9",
+        "CAQS",
+        "acme",
+    ] {
+        assert!(!text.contains(needle), "{needle}");
+    }
+    let cleaned: Value = serde_json::from_str(&text).unwrap();
+    assert!(cleaned["requests"][0]["response_body"]["data"]["organization_id"].is_null());
+    assert_eq!(cleaned["requests"][0]["ids"][0], "gpt-6-luna");
+    let summary = read_json(&dir, "summary.json");
+    assert_eq!(summary["total_requests"], 5);
+    assert!((summary["total_estimated_cost_usd"].as_f64().unwrap() - 0.75).abs() < 1e-12);
+    // Idempotent.
+    probe::runner::rebuild_results(&dir).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(dir.join("openrouter.json")).unwrap(),
+        text
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
