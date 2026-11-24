@@ -120,13 +120,18 @@ impl ResponsesReply {
 
 /// Endgültiger Fehler eines Abbruchs an der Ausgabegrenze bis M4-K10: vorhandener Fehlerweg `Error: Invalid output`,
 /// nicht wiederholbar, `HTTP Status` der Antwort, `Error Code` = Grund (AI-014, Nachtrag).
-pub fn output_limit_error(reason: &str, http_status: u16) -> FinalError {
+pub fn output_limit_error(
+    reason: &str,
+    http_status: u16,
+    provider_request_id: Option<String>,
+) -> FinalError {
     FinalError {
         error: ProviderError::InvalidOutput,
         status: AiStatus::InvalidOutput,
         http_status: Some(http_status),
         error_code: Some(reason.to_string()),
         message: format!("output limit reached ({reason})"),
+        provider_request_id,
     }
 }
 
@@ -382,6 +387,7 @@ impl OpenAiResponses {
                     error: output_limit_error(
                         reply.output_limit().unwrap_or(OUTPUT_LIMIT_REASON),
                         reply.http_status,
+                        reply.provider_request_id.clone(),
                     ),
                     meta,
                 }),

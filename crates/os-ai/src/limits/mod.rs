@@ -124,6 +124,9 @@ pub struct AttemptFailure {
     pub error_code: Option<String>,
     /// `Retry-After` der Antwort; hat Vorrang vor dem Backoff (INTEG-005).
     pub retry_after: Option<Duration>,
+    /// Anbieter-Request-ID der Fehlerantwort (AI-001, Nachtrag 24.11.2026, Q00-N2; Supportfälle); `None` ohne Antwort
+    /// oder wenn der Anbieter keine meldet (M4-K09, Befund B1).
+    pub provider_request_id: Option<String>,
 }
 
 impl AttemptFailure {
@@ -137,6 +140,7 @@ impl AttemptFailure {
             http_status: None,
             error_code: None,
             retry_after: None,
+            provider_request_id: None,
         }
     }
 
@@ -156,6 +160,12 @@ impl AttemptFailure {
     /// Setzt den Fehlercode für das Protokoll.
     pub fn with_error_code(mut self, code: impl Into<String>) -> Self {
         self.error_code = Some(code.into());
+        self
+    }
+
+    /// Setzt die Anbieter-Request-ID der Fehlerantwort (AI-001, Nachtrag Q00-N2).
+    pub fn with_request_id(mut self, provider_request_id: Option<String>) -> Self {
+        self.provider_request_id = provider_request_id;
         self
     }
 
@@ -209,6 +219,7 @@ impl From<ProviderError> for AttemptFailure {
             http_status: None,
             error_code: None,
             retry_after,
+            provider_request_id: None,
         }
     }
 }
@@ -225,6 +236,8 @@ pub struct FinalError {
     pub error_code: Option<String>,
     /// Meldung für das Protokoll.
     pub message: String,
+    /// Protokollspalte `Provider Request ID` der letzten Fehlerantwort (AI-001, Nachtrag Q00-N2; M4-K09, Befund B1).
+    pub provider_request_id: Option<String>,
 }
 
 /// Wirkung eines Endergebnisses auf den Schutzschalter.
@@ -903,5 +916,6 @@ fn final_error(failure: AttemptFailure) -> FinalError {
         status,
         error_code,
         message,
+        provider_request_id: failure.provider_request_id,
     }
 }

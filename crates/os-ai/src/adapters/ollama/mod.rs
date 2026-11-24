@@ -630,6 +630,7 @@ impl OllamaAdapter {
                 error.error_code.unwrap_or_else(|| UNREACHABLE_CODE.into())
             }),
             message,
+            provider_request_id: None,
         }
     }
 
@@ -951,6 +952,7 @@ impl EmbeddingProvider for OllamaAdapter {
                 http_status: None,
                 error_code: Some(UNREACHABLE_CODE.into()),
                 message,
+                provider_request_id: None,
             })
     }
 

@@ -7,6 +7,7 @@
 //! werden über `error.metadata.limit_source` unterschieden; Verweigerungen kommen als HTTP 200 (Form a) oder HTTP 403
 //! mit `error.type = "refusal"` (Form b, vor allen anderen 403-Regeln geprüft).
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -488,6 +489,8 @@ pub struct OpenRouterAdapter {
     latch: QuotaLatch,
     balance: Mutex<Option<KeyBalance>>,
     models: Mutex<Option<HashMap<String, OpenRouterModel>>>,
+    /// Requests mit ausdrücklicher Reasoning-Stufe, die mangels Modellliste ohne `reasoning` gingen.
+    reasoning_skipped: AtomicU64,
 }
 
 impl std::fmt::Debug for OpenRouterAdapter {
@@ -509,6 +512,7 @@ impl OpenRouterAdapter {
             latch: QuotaLatch::default(),
             balance: Mutex::new(None),
             models: Mutex::new(None),
+            reasoning_skipped: AtomicU64::new(0),
         }
     }
 
@@ -572,7 +576,10 @@ impl OpenRouterAdapter {
         if status.is_success() {
             Ok(body)
         } else {
-            Err(self.classify_error(status, &headers, &body).0)
+            Err(self
+                .classify_error(status, &headers, &body)
+                .0
+                .with_request_id(request_id(&body, &headers)))
         }
     }
 
@@ -589,6 +596,13 @@ impl OpenRouterAdapter {
         *self.models.lock().unwrap_or_else(|p| p.into_inner()) =
             Some(models.iter().map(|m| (m.id.clone(), m.clone())).collect());
         Ok(models)
+    }
+
+    /// Zahl der Requests mit ausdrücklicher Reasoning-Stufe, bei denen mangels geladener Modellliste kein `reasoning`
+    /// gesendet wurde (konservativ). Ersatz für eine Debug-Logzeile, bis `os-ai` eine Log-Abhängigkeit hat; enthält
+    /// weder Schlüssel noch Inhalte.
+    pub fn reasoning_skipped_without_model_list(&self) -> u64 {
+        self.reasoning_skipped.load(Ordering::Relaxed)
     }
 
     /// Modell aus der zuletzt geladenen Liste.
@@ -703,6 +717,14 @@ impl OpenRouterAdapter {
         }
         if request.reasoning != ReasoningLevel::ModelDefault {
             self.ensure_models().await;
+            let loaded = self
+                .models
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_some();
+            if !loaded {
+                self.reasoning_skipped.fetch_add(1, Ordering::Relaxed);
+            }
         }
         let body = self.request_body(request, repair);
         let structured = request.response_schema.is_some();
@@ -746,7 +768,7 @@ impl OpenRouterAdapter {
                 // Die Kontostandsanzeige wird neu geladen (AI-005); ein Fehler dabei ändert den Eintrag nicht.
                 let _ = self.key_balance().await;
             }
-            return Err(failure);
+            return Err(failure.with_request_id(request_id(&body, &headers)));
         }
         let body = match parsed {
             Ok(body) => body,

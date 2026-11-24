@@ -360,7 +360,9 @@ impl AnthropicAdapter {
                 .map_err(|e| AttemptFailure::from_reqwest(&e))?;
             let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
             if !status.is_success() {
-                return Err(self.classify_error(status, &headers, &body));
+                return Err(self
+                    .classify_error(status, &headers, &body)
+                    .with_request_id(request_id(&headers, &body)));
             }
             let page = body.get("data").and_then(Value::as_array);
             out.extend(
@@ -511,7 +513,9 @@ impl AnthropicAdapter {
         let duration_ms = elapsed_ms(started);
         if !status.is_success() {
             let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-            return Err(self.classify_error(status, &headers, &body));
+            return Err(self
+                .classify_error(status, &headers, &body)
+                .with_request_id(request_id(&headers, &body)));
         }
         let structured = request.response_schema.is_some();
         let body: Value = match serde_json::from_slice(&bytes) {
@@ -567,7 +571,9 @@ impl AnthropicAdapter {
             .map_err(|e| AttemptFailure::from_reqwest(&e))?;
         let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
         if !status.is_success() {
-            return Err(self.classify_error(status, &headers, &body));
+            return Err(self
+                .classify_error(status, &headers, &body)
+                .with_request_id(request_id(&headers, &body)));
         }
         body.get("input_tokens")
             .and_then(Value::as_u64)

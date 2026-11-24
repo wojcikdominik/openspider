@@ -65,6 +65,7 @@ fn final_error(error: ProviderError, status: AiStatus, error_code: Option<String
         status,
         http_status: None,
         error_code,
+        provider_request_id: None,
     }
 }
 
