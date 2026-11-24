@@ -525,8 +525,87 @@ async fn error_request_id_falls_back_to_the_body() {
         .send(&req("m", "x", ModelDefault, None), None)
         .await
         .expect_err("400");
-    assert!(
-        format!("{failure:?}").contains("req_err_9"),
+    assert_eq!(
+        failure.provider_request_id.as_deref(),
+        Some("req_err_9"),
         "Das Fehlerergebnis trägt die Anbieter-Request-ID nicht: {failure:?}"
     );
+}
+
+// spec: AI-001 [M4]
+// spec: AI-002 [M4]
+// acceptance: independent
+// Fehlerweg mit Header: der Header `request-id` hat Vorrang vor `request_id` im Körper; gegen den ai-mock (Szenario
+// `401`) kommt `req_mock_<n>` im Fehlerergebnis an. Auch der Abbruch an der Ausgabegrenze trägt die Request-ID.
+#[tokio::test]
+async fn error_and_output_limit_results_carry_the_request_id() {
+    let error_body = json!({"type": "error", "error": {"type": "api_error", "message": "boom"},
+                            "request_id": "req_body_2"});
+    let stub =
+        Stub::start(Canned::json(500, error_body).with_header("request-id", "req_hdr_2")).await;
+    let adapter = AnthropicAdapter::new(
+        acceptance_k09_support::client(),
+        AnthropicConfig::new(ApiKey::new(ANTHROPIC_KEY)).with_base_url(stub.url("")),
+    );
+    let failure = adapter
+        .send(&req("m", "x", ModelDefault, None), None)
+        .await
+        .expect_err("500");
+    assert_eq!(failure.provider_request_id.as_deref(), Some("req_hdr_2"));
+
+    let mock = Mock::start().await;
+    let [a, ..] = ids(&mock).await;
+    let adapter = mock.anthropic();
+    let failure = adapter
+        .send(
+            &req(&a, "K09 MOCK-SCENARIO:401 err", ModelDefault, None),
+            None,
+        )
+        .await
+        .expect_err("401");
+    let id = failure
+        .provider_request_id
+        .expect("Request-ID im Fehlerweg");
+    assert!(id.starts_with("req_mock_"), "{id}");
+
+    let reply = adapter
+        .send(
+            &req(&a, "K09 MOCK-SCENARIO:output-limit id", Off, None),
+            None,
+        )
+        .await
+        .unwrap();
+    let limit = reply
+        .for_repair()
+        .expect_err("Abbruch an der Ausgabegrenze");
+    let id = limit.provider_request_id.clone().expect("Request-ID");
+    assert!(id.starts_with("req_mock_"), "{id}");
+    assert_eq!(limit.attempt_failure().provider_request_id, Some(id));
+}
+
+// spec: AI-002 [M4]
+// spec: AI-011 [M4]
+// acceptance: independent
+// Entscheidung des Orchestrators (B2-2): Fallback allein nach `resolve_reasoning_level` – `minimal` auf Modell A
+// (abschaltbar, Aufwand `low` … `max`) ergibt die nächstniedrigere verfügbare Stufe `off` → `thinking: disabled`, kein
+// Aufwand. Eine ausdrückliche Stufe gewinnt über das ältere Feld `Request.effort`.
+#[tokio::test]
+async fn minimal_on_a_falls_back_to_off_and_level_beats_legacy_effort() {
+    let mock = Mock::start().await;
+    let [a, b, ..] = ids(&mock).await;
+    let adapter = mock.anthropic();
+    let body = sent_body(&mock, &adapter, &req(&a, "minimal A", Minimal, None)).await;
+    assert_eq!(body["thinking"], json!({"type": "disabled"}), "{body}");
+    assert_eq!(effort(&body), None, "{body}");
+
+    let mut legacy = req(&a, "off with legacy effort", Off, None);
+    legacy.effort = Some("high".into());
+    let body = sent_body(&mock, &adapter, &legacy).await;
+    assert_eq!(body["thinking"], json!({"type": "disabled"}), "{body}");
+    assert_eq!(effort(&body), None, "{body}");
+
+    let mut legacy = req(&b, "medium with legacy effort", Medium, None);
+    legacy.effort = Some("high".into());
+    let body = sent_body(&mock, &adapter, &legacy).await;
+    assert_eq!(effort(&body), Some("medium"), "{body}");
 }

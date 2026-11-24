@@ -348,3 +348,56 @@ async fn decisions_models_have_no_reasoning_levels() {
     assert!(!models.is_empty());
     assert!(models.iter().all(|m| m.reasoning_levels.is_empty()));
 }
+
+// spec: AI-001 [M4]
+// spec: AI-004 [M4]
+// acceptance: independent
+// Request-ID im Fehlerweg (Q00-N6: Header `x-request-id`): Fehlerantwort → Wert im Fehlerergebnis eines Versuchs und
+// in den Protokolldaten des Requests; gegen den ai-mock (Szenario `401`) `req_mock_<n>`.
+#[tokio::test]
+async fn error_results_carry_x_request_id() {
+    let stub = Stub::start(
+        Canned::json(
+            400,
+            json!({"error": {"type": "invalid_request_error", "message": "bad", "code": null}}),
+        )
+        .with_header("x-request-id", "req_err_6"),
+    )
+    .await;
+    let adapter = OpenAiDecisions::new(openai_http(&stub.url("/v1")));
+    let questions = vec![Question::predicate("is_product", "Product?")];
+    let failure = adapter
+        .send("gpt-6-luna", &DecisionInput::text("x"), &questions, None)
+        .await
+        .expect_err("400");
+    assert_eq!(failure.provider_request_id.as_deref(), Some("req_err_6"));
+    let run = adapter
+        .decide(
+            &fast_limiter(),
+            &DecisionInput::text("x"),
+            &questions,
+            &DecideOptions::default(),
+        )
+        .await;
+    assert_eq!(
+        run.requests[0].meta.provider_request_id.as_deref(),
+        Some("req_err_6")
+    );
+
+    let mock = Mock::start().await;
+    let run = mock
+        .decisions()
+        .decide(
+            &fast_limiter(),
+            &DecisionInput::text("K09 MOCK-SCENARIO:401 d"),
+            &questions,
+            &DecideOptions::default(),
+        )
+        .await;
+    let id = run.requests[0]
+        .meta
+        .provider_request_id
+        .clone()
+        .expect("Request-ID im Fehlerweg");
+    assert!(id.starts_with("req_mock_"), "{id}");
+}

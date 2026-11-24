@@ -421,6 +421,67 @@ async fn request_id_comes_from_x_request_id() {
     assert!(id.starts_with("req_mock_"), "{id}");
 }
 
+// spec: AI-001 [M4]
+// spec: AI-003 [M4]
+// acceptance: independent
+// Request-ID im Fehlerweg: Fehlerantwort mit Header `x-request-id` → Wert im Fehlerergebnis und in den Protokolldaten;
+// ebenso beim Abbruch an der Ausgabegrenze und gegen den ai-mock (Szenario `401`).
+#[tokio::test]
+async fn error_results_carry_x_request_id() {
+    let stub = Stub::start(
+        Canned::json(
+            400,
+            json!({"error": {"type": "invalid_request_error", "message": "bad", "code": null}}),
+        )
+        .with_header("x-request-id", "req_err_4"),
+    )
+    .await;
+    let (result, meta) = OpenAiResponses::new(openai_http(&stub.url("/v1")))
+        .run(&fast_limiter(), &req(Vec::new(), "x", ModelDefault), 10)
+        .await;
+    let error = result.expect_err("400");
+    assert_eq!(error.provider_request_id.as_deref(), Some("req_err_4"));
+    assert_eq!(meta.provider_request_id.as_deref(), Some("req_err_4"));
+
+    let mock = Mock::start().await;
+    let (result, meta) = mock
+        .responses()
+        .run(
+            &fast_limiter(),
+            &req(Vec::new(), "K09 MOCK-SCENARIO:401 e", ModelDefault),
+            10,
+        )
+        .await;
+    let error = result.expect_err("401");
+    let id = error
+        .provider_request_id
+        .clone()
+        .expect("Request-ID im Fehlerweg");
+    assert!(id.starts_with("req_mock_"), "{id}");
+    assert_eq!(meta.provider_request_id, Some(id));
+
+    let schema = ResponseSchema::new(ok_schema()).unwrap();
+    let run = mock
+        .responses()
+        .run_structured(
+            &fast_limiter(),
+            &req(catalog_levels(), "K09 MOCK-SCENARIO:output-limit id", Off),
+            &schema,
+            RepairAttempts::new(1).unwrap(),
+            10,
+        )
+        .await;
+    let StructuredOutcome::Failed(failure) = &run.outcome else {
+        panic!("{:?}", run.outcome);
+    };
+    let id = failure
+        .error
+        .provider_request_id
+        .clone()
+        .expect("Request-ID");
+    assert!(id.starts_with("req_mock_"), "{id}");
+}
+
 // spec: AI-003 [M4]
 // acceptance: independent
 // Über alle Stufen und beide Katalogvarianten: `reasoning` ist entweder nicht vorhanden oder genau `{"effort": <Wert

@@ -138,3 +138,25 @@ async fn output_limit_is_length_with_one_request_and_no_cost() {
         "Kosten 0"
     );
 }
+
+// spec: AI-001 [M4]
+// spec: AI-006 [M4]
+// acceptance: independent
+// Ollama meldet keine Anbieter-Request-ID – auch im Fehlerweg bleibt sie leer.
+#[tokio::test]
+async fn ollama_errors_have_no_request_id() {
+    let mock = Mock::start().await;
+    let failure = mock
+        .ollama()
+        .send(
+            &req(
+                "K09 MOCK-SCENARIO:500-always o",
+                ReasoningLevel::ModelDefault,
+                None,
+            ),
+            None,
+        )
+        .await
+        .expect_err("500");
+    assert_eq!(failure.provider_request_id, None);
+}

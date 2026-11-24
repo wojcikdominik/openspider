@@ -662,3 +662,90 @@ async fn request_id_from_generation_header_or_body() {
     let id = reply.provider_request_id.expect("Request-ID");
     assert!(id.starts_with("gen-mock-"), "{id}");
 }
+
+// spec: AI-001 [M4]
+// spec: AI-005 [M4]
+// acceptance: independent
+// Request-ID im Fehlerweg: Fehlerantwort mit Header `x-generation-id` → Wert im Fehlerergebnis; gegen den ai-mock
+// (`unknown-model`, Q00-N3) `gen-mock-<n>`; auch der Abbruch an der Ausgabegrenze trägt sie.
+#[tokio::test]
+async fn error_results_carry_the_generation_id() {
+    let stub = Stub::start(
+        Canned::json(500, json!({"error": {"code": 500, "message": "upstream"}}))
+            .with_header("x-generation-id", "gen-err-3"),
+    )
+    .await;
+    let failure = stub_adapter(&stub)
+        .send(&req("m", "x", ModelDefault, None), None)
+        .await
+        .expect_err("500");
+    assert_eq!(failure.provider_request_id.as_deref(), Some("gen-err-3"));
+
+    let mock = Mock::start().await;
+    let roles = roles(&mock).await;
+    let adapter = mock.openrouter();
+    mock.scenario("openrouter", "unknown-model", 1).await;
+    let failure = adapter
+        .send(&req("k09/none", "K09 unknown id", ModelDefault, None), None)
+        .await
+        .expect_err("400");
+    let id = failure
+        .provider_request_id
+        .expect("Request-ID im Fehlerweg");
+    assert!(id.starts_with("gen-mock-"), "{id}");
+    assert!(!id.contains("mock-user"));
+
+    let reply = adapter
+        .send(
+            &req(&roles.r1, "K09 OR MOCK-SCENARIO:output-limit id", Off, None),
+            None,
+        )
+        .await
+        .unwrap();
+    let limit = reply.for_repair().expect_err("Abbruch");
+    let id = limit
+        .attempt_failure()
+        .provider_request_id
+        .expect("Request-ID");
+    assert!(id.starts_with("gen-mock-"), "{id}");
+}
+
+// spec: AI-005 [M4]
+// acceptance: independent
+// Ohne ladbare Modellliste geht eine ausdrückliche Stufe nicht still verloren: der Request trägt kein erfundenes
+// `reasoning`, und der Adapter zählt den Fall; mit geladener Liste zählt er nichts.
+#[tokio::test]
+async fn missing_model_list_is_counted() {
+    let stub = Stub::start(Canned::json(
+        503,
+        json!({"error": {"code": 503, "message": "down"}}),
+    ))
+    .await;
+    let adapter = stub_adapter(&stub);
+    let _ = adapter
+        .send(&req("m", "K09 no list", Off, None), None)
+        .await;
+    assert_eq!(adapter.reasoning_skipped_without_model_list(), 1);
+    let sent: Vec<Value> = stub
+        .bodies()
+        .iter()
+        .filter_map(|b| serde_json::from_str(b).ok())
+        .collect();
+    assert!(
+        sent.iter().all(|b| b.get("reasoning").is_none()),
+        "{sent:?}"
+    );
+
+    let mock = Mock::start().await;
+    let roles = roles(&mock).await;
+    let adapter = mock.openrouter();
+    adapter
+        .send(&req(&roles.r1, "K09 with list", Off, None), None)
+        .await
+        .unwrap();
+    adapter
+        .send(&req(&roles.r1, "K09 default", ModelDefault, None), None)
+        .await
+        .unwrap();
+    assert_eq!(adapter.reasoning_skipped_without_model_list(), 0);
+}
