@@ -9,6 +9,7 @@ import type { DataGridProps } from "../../grid/DataGrid";
 import { createClient, setClient } from "../../ipc/client";
 import { crawl } from "../../ipc/crawl";
 import { crawlBegin, type CrawlBegin } from "../../ipc/crawlBegin";
+import { IpcError, localError } from "../../ipc/errors";
 import { eventBus } from "../../ipc/events";
 import type { CrawlStatus } from "../../ipc/gen/CrawlStatus";
 import type { Tick } from "../../ipc/gen/Tick";
@@ -22,7 +23,7 @@ import { runAction } from "../../ui/actions";
 import fixtureTick from "../../ipc/__fixtures__/Tick.json";
 import { useDetailSelection } from "../detail/frame/selection";
 import { UpperTable } from "./UpperTable";
-import { continuesCrawl } from "./controller";
+import { continuesCrawl, type ViewOrigin } from "./controller";
 import { useTableSelection } from "./selection";
 import { fixtureTabs, tableFixture } from "./fixtures/core";
 
@@ -72,18 +73,19 @@ describe("first crawl id for a view on screen", () => {
   afterEach(async () => { detach(); await flushUiState(); cleanup(); setClient(null); crawlBegin.reset(); vi.restoreAllMocks(); });
 
   // spec: UI-018
-  it("continues only the crawl this window began, in a view opened after the answer", () => {
+  it("continues only the crawl this window began, in a view requested after the answer", () => {
     const begun: CrawlBegin = { revision: 1, crawlId: "crawl-a" };
-    expect(continuesCrawl("crawl-a", begun, begun)).toBe(true);
+    const after: ViewOrigin = { revision: 1, answer: "crawl-a", settled: true, proof: false, crawl: undefined };
+    expect(continuesCrawl("crawl-a", begun, after)).toBe(true);
     // No begin in this window (content from elsewhere).
-    expect(continuesCrawl("crawl-a", { revision: 0, crawlId: undefined }, { revision: 0, crawlId: undefined })).toBe(false);
-    // View opened before the core answered the begin.
-    expect(continuesCrawl("crawl-a", begun, { revision: 1, crawlId: undefined })).toBe(false);
-    // View opened before a later begin.
-    expect(continuesCrawl("crawl-b", { revision: 2, crawlId: "crawl-b" }, begun)).toBe(false);
+    expect(continuesCrawl("crawl-a", { revision: 0, crawlId: undefined }, { ...after, revision: 0, answer: undefined })).toBe(false);
+    // View requested before the core answered the begin (also after it saw the core switch).
+    expect(continuesCrawl("crawl-a", begun, { ...after, answer: undefined, settled: false, proof: true })).toBe(false);
+    // View requested before a later begin.
+    expect(continuesCrawl("crawl-b", { revision: 2, crawlId: "crawl-b" }, { ...after, answer: "crawl-b" })).toBe(false);
     // Another crawl than the one begun.
-    expect(continuesCrawl("crawl-b", begun, begun)).toBe(false);
-    expect(continuesCrawl(undefined, begun, begun)).toBe(false);
+    expect(continuesCrawl("crawl-b", begun, after)).toBe(false);
+    expect(continuesCrawl(undefined, begun, after)).toBe(false);
     expect(continuesCrawl("crawl-a", begun, undefined)).toBe(false);
   });
 
@@ -148,5 +150,82 @@ describe("first crawl id for a view on screen", () => {
     await waitFor(() => expect(capture.grid?.source.viewId).not.toBe(first.viewId));
     expect(capture.grid!.source.continues(first)).toBe(false);
     expectNoSelection();
+  });
+
+  // spec: UI-018
+  // spec: UI-114
+  it("hides the old rows from the begin until the answer and shows the new crawl's rows only from a view requested after it", async () => {
+    let answer!: (value: unknown) => void;
+    fx.core.handlers.set("crawl.start", () => new Promise(resolve => { answer = resolve; }));
+    const { container } = render(<UpperTable />);
+    const first = await selectedInTable(2);
+    let pending: Promise<unknown> = Promise.resolve();
+    act(() => { pending = crawl.start({ source: { kind: "list", items: ["http://example.test/"], label: "fix-sel" }, scope: "domain" }); });
+    // The rows of the old content are out of reach at once; the table shows the state without a crawl.
+    await waitFor(() => expect(container.querySelector('[data-empty-state="NO_DATA_YET"]')).not.toBeNull());
+    expect(screen.getByTestId("grid").closest("[hidden]")).not.toBeNull();
+    expectNoSelection();
+    // A click into the hidden old rows selects nothing.
+    act(() => capture.grid!.onSelectionChange(SelectionModel.empty().select(2)));
+    expectNoSelection();
+    const opensBefore = opens();
+    answer({ crawlId: "crawl-b", file: "crawl-b.openspider" });
+    await act(async () => { await pending; });
+    // A view requested after the answer shows the new content; the old one is gone.
+    await waitFor(() => expect(capture.grid?.source.viewId).not.toBe(first.viewId));
+    expect(opens()).toBe(opensBefore + 1);
+    await waitFor(() => expect(container.querySelector('[data-empty-state="NO_DATA_YET"]')).toBeNull());
+    expect(screen.getByTestId("grid").closest("[hidden]")).toBeNull();
+    expectNoSelection();
+  });
+
+  // spec: UI-018
+  it("brings back the old rows without selection when the begin fails (the core keeps its content)", async () => {
+    fx.core.handlers.set("crawl.start", () => { throw new IpcError(localError("InvalidInput", "err-start-url")); });
+    const { container } = render(<UpperTable />);
+    const first = await selectedInTable(2);
+    const opensBefore = opens();
+    await act(async () => { await crawl.start({ source: { kind: "spider", url: "bad" }, scope: "domain" } as never).catch(() => undefined); });
+    await waitFor(() => expect(screen.getByTestId("grid").closest("[hidden]")).toBeNull());
+    expect(container.querySelector('[data-empty-state="NO_DATA_YET"]')).toBeNull();
+    // The same view: the core never released it.
+    expect(capture.grid!.source.viewId).toBe(first.viewId);
+    expect(opens()).toBe(opensBefore);
+    expectNoSelection();
+    act(() => capture.grid!.onSelectionChange(SelectionModel.empty().select(3)));
+    expect(capture.grid!.selection.value).toEqual({ kind: "ids", ids: [3] });
+  });
+
+  // spec: UI-018
+  it("a view request that failed while the begin was outstanding does not stop the continuation", async () => {
+    let answer!: (value: unknown) => void;
+    fx.core.handlers.set("crawl.start", () => new Promise(resolve => { answer = resolve; }));
+    const open = fx.core.handlers.get("view.open")!;
+    let noCrawl = false;
+    fx.core.handlers.set("view.open", (args, ctx) => {
+      if (noCrawl) throw new IpcError(localError("NoCrawl", "err-no-crawl"));
+      return open(args, ctx);
+    });
+    render(<UpperTable />);
+    await waitFor(() => expect(capture.grid?.source.rowKey(2)).toBe(3));
+    let pending: Promise<unknown> = Promise.resolve();
+    act(() => { pending = crawl.start({ source: { kind: "list", items: ["http://example.test/"], label: "fix-sel" }, scope: "domain" }); });
+    // While the answer is outstanding the user switches the filter; the core answers that request with an error.
+    noCrawl = true;
+    const failed = fx.core.calls.filter(c => c.cmd === "view.open").length;
+    act(() => useTabs.getState().select("Internal", "Client Error (4xx)"));
+    await waitFor(() => expect(fx.core.calls.filter(c => c.cmd === "view.open").length).toBeGreaterThan(failed));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    noCrawl = false;
+    answer({ crawlId: "crawl-b", file: "crawl-b.openspider" });
+    await act(async () => { await pending; });
+    // The view requested after the answer shows crawl B (4xx: URL 2); a choice in it stays when B's status arrives.
+    await waitFor(() => expect(capture.grid?.source.rowKey(0)).toBe(2));
+    act(() => capture.grid!.onSelectionChange(SelectionModel.empty().select(2)));
+    const before = capture.grid!.source.viewId;
+    act(() => eventBus.emit({ kind: "tick", tick: tick(14, completed("crawl-b")) }));
+    await waitFor(() => expect(capture.grid?.source.viewId).not.toBe(before));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
+    expect(capture.grid!.selection.value).toEqual({ kind: "ids", ids: [2] });
   });
 });

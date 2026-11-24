@@ -35,7 +35,7 @@ import { resolveTheme, systemPrefersDark } from "../../ui/tokens/theme";
 import { ColumnsMenu } from "./ColumnsMenu";
 import { confirmsRemoval } from "./RemovalConfirmationSettings";
 import { saveTableState } from "../../state/tabs";
-import { TableController, continuesCrawl } from "./controller";
+import { TableController } from "./controller";
 import { crawlBegin } from "../../ipc/crawlBegin";
 import { setDetailSelection } from "../detail/frame/selection";
 import { useSidebarNavigation } from "../sidebar/frame/state";
@@ -55,6 +55,8 @@ import { formatRule } from "../table-advanced/query";
 import { segmentColor, useSearchHistory, useSegments } from "../table-advanced/stores";
 import "./table.css";
 
+const ignoreSelection = () => undefined;
+const ignoreContext = () => undefined;
 export function UpperTable() {
   const active = useComparison(s => !!s.session);
   const overview = useTabs(s => s.view === "overview");
@@ -79,6 +81,8 @@ function RegularUpperTable() {
   const controller = useMemo(() => new TableController(), []);
   useSyncExternalStore(controller.subscribe, controller.snapshot);
   const source = controller.source;
+  // fix-sel (UI-018, UI-114): rows of content the core may no longer hold are hidden and cannot be selected.
+  const hidden = source !== undefined && !controller.shows;
   const grid = useRef<GridController | null>(null);
   const search = useRef<HTMLDivElement>(null); const filterRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState(query.search);
@@ -94,7 +98,7 @@ function RegularUpperTable() {
   const confirmLargeCopy = () => new Promise<boolean>(resolve => { copyResolve.current?.(false); copyResolve.current = resolve; setCopyConfirm(true); });
   const [browserConfirm, setBrowserConfirm] = useState(false);
   const browserResolve = useRef<((ok: boolean) => void) | undefined>(undefined);
-  const count = source ? controller.selection.count(source.total) : 0;
+  const count = source && !hidden ? controller.selection.count(source.total) : 0;
   const current = tabs.catalog.find(tab => tab.id === tabs.active);
   // UI-018 (M2-N27): while the crawl runs, filter counts come from the shared, throttled count. The active filter's
   // chip, list entry and the footer follow the live view total instead (≤ 1 s) when the view is exactly that filter.
@@ -107,26 +111,13 @@ function RegularUpperTable() {
   const total = filters.find(f => f.id === "All")?.count;
   const fail = controller.fail;
   useEffect(() => { controller.activate(); return () => { controller.dispose(); browserResolve.current?.(false); copyResolve.current?.(false); }; }, [controller]);
-  // UI-018: a begin of new content in this window (start, open, clear) ends the selection at once. The first crawl id
-  // after it continues the view on screen only if that view shows exactly this crawl (`continuesCrawl`); any other change
-  // of the crawl is a new crawl for the table.
+  // UI-018 (fix-sel): a begin of new content in this window hides the old rows and ends the selection; the first crawl
+  // id after it continues the view on screen only if that view shows exactly this crawl (`TableController.crawlChanged`).
+  useEffect(() => crawlBegin.subscribe(controller.onBegin), [controller]);
   const knownCrawl = useRef(crawlId);
   const continuedCrawl = useRef<string>(undefined);
-  // A crawl id that arrived before this table mounted already used up the begin.
-  const consumedBegin = useRef(crawlId === undefined ? -1 : crawlBegin.get().revision);
   useEffect(() => {
-    let revision = crawlBegin.get().revision;
-    return crawlBegin.subscribe(() => {
-      if (crawlBegin.get().revision === revision) return;
-      revision = crawlBegin.get().revision;
-      controller.setSelection(SelectionModel.empty());
-    });
-  }, [controller]);
-  useEffect(() => {
-    const begin = crawlBegin.get();
-    const continues = knownCrawl.current !== crawlId && consumedBegin.current !== begin.revision
-      && controller.source !== undefined && continuesCrawl(crawlId, begin, controller.openedAt);
-    if (knownCrawl.current !== crawlId) consumedBegin.current = begin.revision;
+    const continues = controller.crawlChanged(knownCrawl.current, crawlId);
     knownCrawl.current = crawlId; continuedCrawl.current = continues ? crawlId : undefined;
     controller.resetCrawl(continues);
   }, [controller, crawlId]);
@@ -195,6 +186,7 @@ function RegularUpperTable() {
     return () => { live = false; };
   }, [source, tabs.focusRequest]);
   useEffect(() => { if (status?.state === "failed" && status.error) fail(status.error); }, [status]);
+  useEffect(() => { if (hidden) setContext(undefined); }, [hidden]);
   // UI-114: removed URLs cannot stay selected; the counter would otherwise keep showing "1 selected" for an empty table.
   useEffect(() => { if (operation?.action === "remove" && status?.state === "done") controller.setSelection(SelectionModel.empty()); }, [operation, status?.state, controller]);
   useEffect(() => { if (analysis && !analysis.running && analysis.steps.length && analysis.steps.every(step => !step.stale)) setStale(false); }, [analysis]);
@@ -339,7 +331,7 @@ function RegularUpperTable() {
       </div>
       {/* UI-015: one export entry above the table – the view export, ▾ for the multi export (K2-77 design: „Exportieren ▾“). */}
       <div className="u34-split">
-        <Button onPress={() => openExport()} isDisabled={!source}><Upload size={16} aria-hidden />{t("u10-export")}</Button>
+        <Button onPress={() => openExport()} isDisabled={!source || hidden}><Upload size={16} aria-hidden />{t("u10-export")}</Button>
         <Menu label={t("u34-export-more")} entries={[
           { id: "export-view", label: t("u34-export-view"), isDisabled: !source, onAction: () => openExport() },
           { id: "export-multi", label: t("u34-export-multi"), onAction: () => { runAction("export.multi"); } },
@@ -363,21 +355,25 @@ function RegularUpperTable() {
       {busy && <Button onPress={() => void op.cancel({ opId: operation.id }).catch(fail)}>{t("u10-cancel")}</Button>}
     </div>}
     <div className="u10-grid-host">
-      {empty ? <EmptyState state={empty} /> : source && columns.length > 0 ?
+      {empty ? <EmptyState state={empty} /> : source && columns.length > 0 ? <>
+        {/* While hidden, the table shows the state without a crawl; the grid stays mounted (columns, scroll) but out of reach. */}
+        {hidden && <EmptyState state={{ code: "NO_DATA_YET" }} />}
+        <div hidden={hidden} style={hidden ? undefined : { display: "contents" }}>
         <DataGrid source={source} columns={columns.map(c => ({ ...c, sort: query.sort.find(s => s.column === c.key)?.dir }))}
-          selection={controller.selection} onSelectionChange={controller.setSelection}
+          selection={controller.selection} onSelectionChange={hidden ? ignoreSelection : controller.setSelection}
           cellColors={cellColors}
           onSortChange={sort => tabs.query({ sort })} onSortGesture={(column, extend) => tabs.query({ sort: cycleSort(query.sort, column, extend) })}
           headerTitle={column => { const index = query.sort.findIndex(s => s.column === column); const title = columnLabel(t, column); return index < 0 ? title : `${title} ${query.sort[index].dir === "asc" ? "↑" : "↓"}${query.sort.length > 1 ? index + 1 : ""}`; }}
           onColumnsChange={next => void columnState.change(tabs.active, next).catch(fail)}
-          onContextMenu={showContext} onActivate={() => undefined} onError={fail} controller={setGrid}
+          onContextMenu={hidden ? ignoreContext : showContext} onActivate={() => undefined} onError={fail} controller={setGrid}
           confirmLargeCopy={confirmLargeCopy} onExportSelection={() => openExport()}
           rowHeight={SIZES.rowHeight[appearance.density]} locale={locale} ariaLabel={t("u10-table")}
           theme={{ tokens: resolveTokens(resolveTheme(appearance.theme, systemPrefersDark()), appearance.accent),
-            fontFamily: FONT_STACKS[currentPlatform()].ui, fontSize: SIZES.fontTable[appearance.density], zebra: appearance.zebra }} /> :
+            fontFamily: FONT_STACKS[currentPlatform()].ui, fontSize: SIZES.fontTable[appearance.density], zebra: appearance.zebra }} />
+        </div></> :
         controller.pending ? <ProgressBar label={t("u04-loading")} /> : <EmptyState state={{ code: "NO_MATCH" }} />}
     </div>
-    <LiveViewTotal source={source}>{liveTotal => {
+    <LiveViewTotal source={hidden ? undefined : source}>{liveTotal => {
       const shown = empty ? 0 : liveTotal ?? 0;
       return <div className="u10-counter" role="status">{t("u10-count", { shown, total: total == null && !(source && liveCountEnabled && query.filter === "All") ? "–" : Math.max(total ?? 0, shown) })}
         {(query.search || query.rules) && ` · ${t("u10-search-active")}`}{count > 0 && ` · ${t("u10-selected", { count })}`}</div>;
