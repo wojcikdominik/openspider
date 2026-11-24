@@ -1,0 +1,2101 @@
+{
+  "base_url": "https://api.openai.com/v1",
+  "facts": {
+    "gpt_6_luna_listed": true,
+    "ids_containing_luna": [
+      "gpt-5.6-luna",
+      "gpt-6-luna"
+    ],
+    "selection_source": "openai.raw.models"
+  },
+  "generated_at_unix": 1795539890,
+  "key": {
+    "account": "ai.openai",
+    "found": true,
+    "service": "OpenSpider-Probe"
+  },
+  "models_only": false,
+  "price_basis": "vorsichtige Annahme 30 USD (Eingabe) / 150 USD (Ausgabe) je 1 Mio. Tokens – Obergrenze, keine Abrechnung",
+  "probe": "M4-Q00",
+  "provider": "openai",
+  "requests": [
+    {
+      "cost_basis": "free",
+      "cost_cap_usd": 0.0,
+      "cost_usd": 0.0,
+      "duration_ms": 691,
+      "executed": true,
+      "method": "GET",
+      "model": null,
+      "purpose": "Modellliste: Feldnamen; steht gpt-6-luna darin? (AI-003, AI-004, K4-06)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": null,
+        "headers": {}
+      },
+      "response_body": {
+        "count": 104,
+        "entry_field_paths": {
+          "created": {
+            "entries": 104,
+            "types": [
+              "number"
+            ]
+          },
+          "id": {
+            "entries": 104,
+            "types": [
+              "string"
+            ]
+          },
+          "object": {
+            "entries": 104,
+            "types": [
+              "string"
+            ]
+          },
+          "owned_by": {
+            "entries": 104,
+            "types": [
+              "string"
+            ]
+          },
+          "shutdown_date": {
+            "entries": 104,
+            "types": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "created": 1773451076,
+            "id": "gpt-5.4-mini-2026-03-17",
+            "object": "model",
+            "owned_by": "system",
+            "shutdown_date": null
+          },
+          {
+            "created": 1748475349,
+            "id": "o3-pro",
+            "object": "model",
+            "owned_by": "system",
+            "shutdown_date": "2026-12-11"
+          },
+          {
+            "created": 1776399795,
+            "id": "gpt-image-2",
+            "object": "model",
+            "owned_by": "system",
+            "shutdown_date": "2027-02-10"
+          }
+        ],
+        "ids": [
+          "gpt-5.4-mini-2026-03-17",
+          "o3-pro",
+          "gpt-image-2",
+          "gpt-5.4-pro",
+          "gpt-4o-mini-tts",
+          "gpt-realtime-mini-2025-12-15",
+          "text-embedding-ada-002",
+          "gpt-4o-2024-08-06",
+          "gpt-realtime-2.1",
+          "o3",
+          "gpt-4.1",
+          "text-embedding-3-large",
+          "gpt-5.5",
+          "gpt-6-sol",
+          "gpt-live-1.1",
+          "tts-1-hd-1106",
+          "gpt-realtime-mini",
+          "gpt-4o-transcribe-diarize",
+          "gpt-5.4",
+          "gpt-audio-1.5",
+          "gpt-image-1-mini",
+          "gpt-image-1.5",
+          "gpt-5.1-2025-11-13",
+          "text-embedding-3-small",
+          "gpt-5.6-terra",
+          "gpt-6-astra",
+          "gpt-6.1-terra",
+          "gpt-6.2-sol",
+          "gpt-5",
+          "gpt-4o",
+          "gpt-4o-mini-transcribe",
+          "gpt-image-2-2026-04-21",
+          "gpt-4o-mini-tts-2025-12-15",
+          "gpt-audio",
+          "gpt-5.4-nano",
+          "gpt-5.3-codex",
+          "gpt-5-search-api-2025-10-14",
+          "gpt-audio-mini-2025-12-15",
+          "gpt-transcribe",
+          "omni-moderation-latest",
+          "gpt-5.4-mini",
+          "gpt-4o-2024-11-20",
+          "tts-1-hd",
+          "gpt-realtime-1.5",
+          "gpt-realtime-2",
+          "gpt-realtime",
+          "gpt-5.1",
+          "gpt-5-search-api",
+          "gpt-5.5-2026-04-23",
+          "whisper-1",
+          "gpt-5-pro",
+          "gpt-realtime-whisper",
+          "gpt-5.2-pro",
+          "gpt-live-1",
+          "gpt-image-2.6-sunburst",
+          "tts-1",
+          "omni-moderation-2024-09-26",
+          "gpt-realtime-2.1-mini",
+          "gpt-realtime-2025-08-28",
+          "gpt-live-transcribe",
+          "gpt-5-mini",
+          "gpt-5.4-2026-03-05",
+          "gpt-5-mini-2025-08-07",
+          "gpt-5-nano",
+          "gpt-5.6-luna",
+          "gpt-image-2.5-sunburst-2026-09-08",
+          "gpt-image-2.6-flare",
+          "o3-2025-04-16",
+          "gpt-4.1-mini",
+          "gpt-5.2-2025-12-11",
+          "chatgpt-image-latest",
+          "gpt-4o-mini",
+          "gpt-image-2.5-sunburst",
+          "gpt-image-2.5-flare-2026-09-08",
+          "gpt-6-luna",
+          "gpt-5-nano-2025-08-07",
+          "gpt-4o-mini-tts-2025-03-20",
+          "gpt-audio-mini",
+          "gpt-4o-transcribe",
+          "gpt-5.2",
+          "gpt-4o-mini-2024-07-18",
+          "gpt-4.1-2025-04-14",
+          "gpt-4.1-mini-2025-04-14",
+          "gpt-5.4-nano-2026-03-17",
+          "gpt-image-2.5-flare",
+          "gpt-6.1-sol",
+          "gpt-5-2025-08-07",
+          "gpt-4o-mini-transcribe-2025-12-15",
+          "o3-pro-2025-06-10",
+          "chat-latest",
+          "gpt-5.5-pro",
+          "gpt-realtime-translate",
+          "gpt-audio-2025-08-28",
+          "gpt-4o-mini-transcribe-2025-03-20",
+          "gpt-5.4-pro-2026-03-05",
+          "gpt-5-pro-2025-10-06",
+          "tts-1-1106",
+          "gpt-5.5-pro-2026-04-23",
+          "gpt-5.2-pro-2025-12-11",
+          "gpt-5.6-sol",
+          "gpt-6.2-astra",
+          "(ausgelassen: kundeneigenes Modell)",
+          "(ausgelassen: kundeneigenes Modell)",
+          "(ausgelassen: kundeneigenes Modell)"
+        ],
+        "top_level_fields": {
+          "object": "list"
+        }
+      },
+      "response_headers": {
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-organization": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "414",
+        "openai-project": "(Wert nicht aufgezeichnet)",
+        "openai-version": "2020-10-01",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-openai-proxy-wasm": "(Wert nicht aufgezeichnet)",
+        "x-request-id": "(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.0,
+      "status": 200,
+      "step": "openai.raw.models",
+      "url": "https://api.openai.com/v1/models",
+      "usage": null,
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "count": 104,
+        "examples": [
+          {
+            "capabilities": {
+              "batch": false,
+              "decisions": false,
+              "embeddings": false,
+              "local": false,
+              "prices_via_api": false,
+              "structured_output": false,
+              "text": false,
+              "vision": false
+            },
+            "capability_source": "model_catalog",
+            "endpoint": "responses",
+            "id": "gpt-5.4-mini-2026-03-17",
+            "provider": "openai"
+          },
+          {
+            "capabilities": {
+              "batch": false,
+              "decisions": false,
+              "embeddings": false,
+              "local": false,
+              "prices_via_api": false,
+              "structured_output": false,
+              "text": false,
+              "vision": false
+            },
+            "capability_source": "model_catalog",
+            "endpoint": "responses",
+            "id": "o3-pro",
+            "provider": "openai"
+          },
+          {
+            "capabilities": {
+              "batch": false,
+              "decisions": false,
+              "embeddings": false,
+              "local": false,
+              "prices_via_api": false,
+              "structured_output": false,
+              "text": false,
+              "vision": false
+            },
+            "capability_source": "model_catalog",
+            "endpoint": "responses",
+            "id": "gpt-image-2",
+            "provider": "openai"
+          }
+        ],
+        "gpt_6_luna_listed": true,
+        "ok": true
+      },
+      "cost_basis": "free",
+      "cost_cap_usd": 0.0,
+      "cost_usd": 0.0,
+      "duration_ms": 519,
+      "executed": true,
+      "method": "GET",
+      "model": null,
+      "purpose": "Adapter list_models (Responses)",
+      "running_cost_usd": 0.0,
+      "step": "openai.adapter.models",
+      "url": "https://api.openai.com/v1/models",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.023909999999999997,
+      "cost_usd": 0.0017399999999999998,
+      "duration_ms": 2537,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Responses-Textanfrage: output[], usage, Rate-Limit-Header (AI-003, AI-017)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "Reply with exactly one word: pong",
+          "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+          "max_output_tokens": 128,
+          "model": "gpt-6-luna"
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1795539858,
+        "created_at": 1795539857,
+        "error": null,
+        "frequency_penalty": 0.0,
+        "id": "resp_…(ausgelassen: Anbieter-ID)",
+        "image": {
+          "context_compression": "disabled"
+        },
+        "incomplete_details": null,
+        "input_transformations": [],
+        "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+        "max_output_tokens": 128,
+        "max_tool_calls": null,
+        "metadata": {},
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "pong",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_…(ausgelassen: Anbieter-ID)",
+            "phase": "final_answer",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0.0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "status": "completed",
+        "store": true,
+        "temperature": 1.0,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 33,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 0
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 5,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 38
+        },
+        "user": null
+      },
+      "response_headers": {
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-organization": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "1475",
+        "openai-project": "(Wert nicht aufgezeichnet)",
+        "openai-version": "2020-10-01",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "180000000",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.0017399999999999998,
+      "status": 200,
+      "step": "openai.raw.responses_text",
+      "url": "https://api.openai.com/v1/responses",
+      "usage": {
+        "input_tokens": 33,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cache_write_tokens_details": {
+            "ttl_12h_tokens": 0,
+            "ttl_30m_tokens": 0
+          },
+          "cached_tokens": 0
+        },
+        "output_tokens": 5,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 38
+      },
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "ok": true,
+        "response": {
+          "content": "pong",
+          "duration_ms": 1060,
+          "provider_request_id": "req_…(ausgelassen: Anbieter-ID)",
+          "refusal": false,
+          "usage": {
+            "cache_write_tokens": null,
+            "cached_input_tokens": 0,
+            "input_tokens": 33,
+            "output_tokens": 5
+          }
+        }
+      },
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.03114,
+      "cost_usd": 0.0017399999999999998,
+      "duration_ms": 1060,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Adapter: Responses-Textanfrage",
+      "running_cost_usd": 0.0034799999999999996,
+      "step": "openai.adapter.responses_text",
+      "url": "https://api.openai.com/v1/responses",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.05046,
+      "cost_usd": 0.01335,
+      "duration_ms": 12978,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Strukturierte Ausgabe text.format json_schema strict mit AI-034-Schema (AI-003, AI-034)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Estimate calibrated probabilities for the page type.",
+          "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+          "max_output_tokens": 256,
+          "model": "gpt-6-luna",
+          "text": {
+            "format": {
+              "name": "openspider_probe",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "probabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "category": {
+                        "type": "number"
+                      },
+                      "other": {
+                        "type": "number"
+                      },
+                      "product": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "product",
+                      "category",
+                      "other"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "probabilities",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "json_schema"
+            }
+          }
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1795539872,
+        "created_at": 1795539861,
+        "error": null,
+        "frequency_penalty": 0.0,
+        "id": "resp_…(ausgelassen: Anbieter-ID)",
+        "image": {
+          "context_compression": "disabled"
+        },
+        "incomplete_details": null,
+        "input_transformations": [],
+        "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+        "max_output_tokens": 256,
+        "max_tool_calls": null,
+        "metadata": {},
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "object": "response",
+        "output": [
+          {
+            "content": [],
+            "encrypted_content": "(ausgelassen: undurchsichtiger Blob, 424 Zeichen aufgezeichnet)",
+            "id": "rs_…(ausgelassen: Anbieter-ID)",
+            "summary": [],
+            "type": "reasoning"
+          },
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"abstain\":false,\"probabilities\":{\"category\":0.01,\"other\":0.01,\"product\":0.98}}",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_…(ausgelassen: Anbieter-ID)",
+            "phase": "final_answer",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0.0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "status": "completed",
+        "store": true,
+        "temperature": 1.0,
+        "text": {
+          "format": {
+            "description": null,
+            "name": "openspider_probe",
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "abstain": {
+                  "type": "boolean"
+                },
+                "probabilities": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "category": {
+                      "type": "number"
+                    },
+                    "other": {
+                      "type": "number"
+                    },
+                    "product": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "product",
+                    "category",
+                    "other"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "probabilities",
+                "abstain"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "json_schema"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 110,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 0
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 67,
+          "output_tokens_details": {
+            "reasoning_tokens": 27
+          },
+          "total_tokens": 177
+        },
+        "user": null
+      },
+      "response_headers": {
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-organization": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "12092",
+        "openai-project": "(Wert nicht aufgezeichnet)",
+        "openai-version": "2020-10-01",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "180000000",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.01683,
+      "status": 200,
+      "step": "openai.raw.responses_structured",
+      "url": "https://api.openai.com/v1/responses",
+      "usage": {
+        "input_tokens": 110,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cache_write_tokens_details": {
+            "ttl_12h_tokens": 0,
+            "ttl_30m_tokens": 0
+          },
+          "cached_tokens": 0
+        },
+        "output_tokens": 67,
+        "output_tokens_details": {
+          "reasoning_tokens": 27
+        },
+        "total_tokens": 177
+      },
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "ok": true,
+        "response": {
+          "content": {
+            "abstain": false,
+            "probabilities": {
+              "category": 0.01,
+              "other": 0.01,
+              "product": 0.98
+            }
+          },
+          "duration_ms": 1988,
+          "provider_request_id": "req_…(ausgelassen: Anbieter-ID)",
+          "refusal": false,
+          "usage": {
+            "cache_write_tokens": null,
+            "cached_input_tokens": 0,
+            "input_tokens": 110,
+            "output_tokens": 60
+          }
+        }
+      },
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.05628,
+      "cost_usd": 0.012299999999999998,
+      "duration_ms": 1988,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Adapter: strukturierte Ausgabe",
+      "running_cost_usd": 0.02913,
+      "step": "openai.adapter.responses_structured",
+      "url": "https://api.openai.com/v1/responses",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.08052,
+      "cost_usd": 0.05427,
+      "duration_ms": 3657,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "V-A5: Schema mit 20 Enum-Werten und 2.000 Zeichen Beschreibung",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Choose the page_type value that fits best.",
+          "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+          "max_output_tokens": 256,
+          "model": "gpt-6-luna",
+          "text": {
+            "format": {
+              "name": "openspider_probe",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "page_type": {
+                    "description": "Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria…[gekürzt, 2000 Zeichen]",
+                    "enum": [
+                      "type_01",
+                      "type_02",
+                      "type_03",
+                      "type_04",
+                      "type_05",
+                      "type_06",
+                      "type_07",
+                      "type_08",
+                      "type_09",
+                      "type_10",
+                      "type_11",
+                      "type_12",
+                      "type_13",
+                      "type_14",
+                      "type_15",
+                      "type_16",
+                      "type_17",
+                      "type_18",
+                      "type_19",
+                      "type_20"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page_type",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "json_schema"
+            }
+          }
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": null,
+        "created_at": 1795539875,
+        "error": null,
+        "frequency_penalty": 0.0,
+        "id": "resp_…(ausgelassen: Anbieter-ID)",
+        "image": {
+          "context_compression": "disabled"
+        },
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "input_transformations": [],
+        "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+        "max_output_tokens": 256,
+        "max_tool_calls": null,
+        "metadata": {},
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "object": "response",
+        "output": [
+          {
+            "content": [],
+            "encrypted_content": "(ausgelassen: undurchsichtiger Blob, 424 Zeichen aufgezeichnet)",
+            "id": "rs_…(ausgelassen: Anbieter-ID)",
+            "summary": [],
+            "type": "reasoning"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0.0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "status": "incomplete",
+        "store": true,
+        "temperature": 1.0,
+        "text": {
+          "format": {
+            "description": null,
+            "name": "openspider_probe",
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "abstain": {
+                  "type": "boolean"
+                },
+                "page_type": {
+                  "description": "Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria…[gekürzt, 2000 Zeichen]",
+                  "enum": [
+                    "type_01",
+                    "type_02",
+                    "type_03",
+                    "type_04",
+                    "type_05",
+                    "type_06",
+                    "type_07",
+                    "type_08",
+                    "type_09",
+                    "type_10",
+                    "type_11",
+                    "type_12",
+                    "type_13",
+                    "type_14",
+                    "type_15",
+                    "type_16",
+                    "type_17",
+                    "type_18",
+                    "type_19",
+                    "type_20"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "page_type",
+                "abstain"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "json_schema"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 529,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 0
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 256,
+          "output_tokens_details": {
+            "reasoning_tokens": 256
+          },
+          "total_tokens": 785
+        },
+        "user": null
+      },
+      "response_headers": {
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-organization": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "3534",
+        "openai-project": "(Wert nicht aufgezeichnet)",
+        "openai-version": "2020-10-01",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "179999892",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.0834,
+      "status": 200,
+      "step": "openai.raw.responses_structured_limits",
+      "url": "https://api.openai.com/v1/responses",
+      "usage": {
+        "input_tokens": 529,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cache_write_tokens_details": {
+            "ttl_12h_tokens": 0,
+            "ttl_30m_tokens": 0
+          },
+          "cached_tokens": 0
+        },
+        "output_tokens": 256,
+        "output_tokens_details": {
+          "reasoning_tokens": 256
+        },
+        "total_tokens": 785
+      },
+      "via": "raw"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.07377,
+      "cost_usd": 0.00441,
+      "duration_ms": 1400,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Bildanfrage: input_image als Data-URL (AI-003)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": [
+            {
+              "content": [
+                {
+                  "text": "What is the dominant colour of this image? Answer with one word.",
+                  "type": "input_text"
+                },
+                {
+                  "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAMK0lEQVR4AQEgDN/zANwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFADcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBQA3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3B…[gekürzt, 4254 Zeichen]",
+                  "type": "input_image"
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+          "max_output_tokens": 128,
+          "model": "gpt-6-luna"
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1795539879,
+        "created_at": 1795539878,
+        "error": null,
+        "frequency_penalty": 0.0,
+        "id": "resp_…(ausgelassen: Anbieter-ID)",
+        "image": {
+          "context_compression": "disabled"
+        },
+        "incomplete_details": null,
+        "input_transformations": [],
+        "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+        "max_output_tokens": 128,
+        "max_tool_calls": null,
+        "metadata": {},
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "object": "response",
+        "output": [
+          {
+            "content": [],
+            "encrypted_content": "(ausgelassen: undurchsichtiger Blob, 424 Zeichen aufgezeichnet)",
+            "id": "rs_…(ausgelassen: Anbieter-ID)",
+            "summary": [],
+            "type": "reasoning"
+          },
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "Red",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_…(ausgelassen: Anbieter-ID)",
+            "phase": "final_answer",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0.0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "status": "completed",
+        "store": true,
+        "temperature": 1.0,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 42,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cache_write_tokens_details": {
+              "ttl_12h_tokens": 0,
+              "ttl_30m_tokens": 0
+            },
+            "cached_tokens": 0
+          },
+          "output_tokens": 21,
+          "output_tokens_details": {
+            "reasoning_tokens": 14
+          },
+          "total_tokens": 63
+        },
+        "user": null
+      },
+      "response_headers": {
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-organization": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "1312",
+        "openai-project": "(Wert nicht aufgezeichnet)",
+        "openai-version": "2020-10-01",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-input-images": "50000",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-input-images": "49999",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "180000000",
+        "x-ratelimit-reset-input-images": "1ms",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.08781,
+      "status": 200,
+      "step": "openai.raw.responses_image",
+      "url": "https://api.openai.com/v1/responses",
+      "usage": {
+        "input_tokens": 42,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cache_write_tokens_details": {
+            "ttl_12h_tokens": 0,
+            "ttl_30m_tokens": 0
+          },
+          "cached_tokens": 0
+        },
+        "output_tokens": 21,
+        "output_tokens_details": {
+          "reasoning_tokens": 14
+        },
+        "total_tokens": 63
+      },
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "ok": true,
+        "response": {
+          "content": "Red",
+          "duration_ms": 1197,
+          "provider_request_id": "req_…(ausgelassen: Anbieter-ID)",
+          "refusal": false,
+          "usage": {
+            "cache_write_tokens": null,
+            "cached_input_tokens": 0,
+            "input_tokens": 42,
+            "output_tokens": 24
+          }
+        }
+      },
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.08031,
+      "cost_usd": 0.00486,
+      "duration_ms": 1197,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Adapter: Bildanfrage",
+      "running_cost_usd": 0.09267,
+      "step": "openai.adapter.responses_image",
+      "url": "https://api.openai.com/v1/responses",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "worst_case",
+      "cost_cap_usd": 0.02421,
+      "cost_usd": 0.02421,
+      "duration_ms": 193,
+      "executed": true,
+      "method": "POST",
+      "model": "openspider-probe-no-such-model",
+      "purpose": "Fehlerform bei unbekanntem Modell",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "Reply with exactly one word: pong",
+          "instructions": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+          "max_output_tokens": 128,
+          "model": "openspider-probe-no-such-model"
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "error": {
+          "code": "model_not_found",
+          "message": "The model `openspider-probe-no-such-model` does not exist or you do not have access to it.",
+          "param": null,
+          "type": "invalid_request_error"
+        }
+      },
+      "response_headers": {
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-organization": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "101",
+        "openai-project": "(Wert nicht aufgezeichnet)",
+        "openai-version": "2020-10-01",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.11688,
+      "status": 404,
+      "step": "openai.raw.responses_unknown_model",
+      "url": "https://api.openai.com/v1/responses",
+      "usage": null,
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "error": {
+          "Http": {
+            "message": "The model `openspider-probe-no-such-model` does not exist or you do not have access to it.",
+            "status": 404
+          }
+        },
+        "ok": false,
+        "status_text": "Error: 404 The model `openspider-probe-no-such-model` does not exist or you do not have access to it."
+      },
+      "cost_basis": "worst_case",
+      "cost_cap_usd": 0.031439999999999996,
+      "cost_usd": 0.031439999999999996,
+      "duration_ms": 7228,
+      "executed": true,
+      "method": "POST",
+      "model": "openspider-probe-no-such-model",
+      "purpose": "Adapter: Fehlerklasse bei unbekanntem Modell",
+      "running_cost_usd": 0.14832,
+      "step": "openai.adapter.responses_unknown_model",
+      "url": "https://api.openai.com/v1/responses",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.01863,
+      "cost_usd": 0.01485,
+      "duration_ms": 199,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Decisions-Beta mit gpt-6-luna: je eine predicate-, choice-, score-Frage; Antwortfelder, usage, confidence (AI-004, V-A1)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "URL: https://shop.example/red-running-shoe\nTitle: Red running shoe - Example Shop\nText: Red running shoe for road running. Price 49 EUR. In stock. Add to cart.",
+          "model": "gpt-6-luna",
+          "questions": [
+            {
+              "instructions": "Answer true if the page tells the visitor that the requested product or content no longer exists, although the page itself loads normally.",
+              "name": "soft_404",
+              "type": "predicate"
+            },
+            {
+              "choices": [
+                {
+                  "description": "A page that offers one single product for sale.",
+                  "value": "product"
+                },
+                {
+                  "description": "A page that lists several products.",
+                  "value": "category"
+                },
+                {
+                  "description": "An editorial article or guide.",
+                  "value": "article"
+                },
+                {
+                  "description": "Any other kind of page.",
+                  "value": "other"
+                }
+              ],
+              "instructions": "Classify the type of the page from its observable content.",
+              "name": "page_type",
+              "type": "choice"
+            },
+            {
+              "instructions": "Rate how helpful and specific the page content is for a visitor.",
+              "levels": [
+                {
+                  "description": "Thin or unhelpful content.",
+                  "label": "poor"
+                },
+                {
+                  "description": "Some useful information, but incomplete.",
+                  "label": "fair"
+                },
+                {
+                  "description": "Helpful, complete and specific content.",
+                  "label": "good"
+                }
+              ],
+              "name": "content_quality",
+              "type": "score"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "answers": [
+          {
+            "name": "soft_404",
+            "probability": 0.0,
+            "type": "predicate"
+          },
+          {
+            "choice": "product",
+            "confidence": 1.0,
+            "name": "page_type",
+            "probabilities": [
+              {
+                "probability": 1.0,
+                "value": "product"
+              },
+              {
+                "probability": 0.0,
+                "value": "category"
+              },
+              {
+                "probability": 0.0,
+                "value": "article"
+              },
+              {
+                "probability": 0.0,
+                "value": "other"
+              }
+            ],
+            "type": "choice"
+          },
+          {
+            "confidence": 0.7,
+            "name": "content_quality",
+            "probabilities": [
+              {
+                "label": "poor",
+                "probability": 0.19,
+                "value": 0
+              },
+              {
+                "label": "fair",
+                "probability": 0.8,
+                "value": 1
+              },
+              {
+                "label": "good",
+                "probability": 0.01,
+                "value": 2
+              }
+            ],
+            "score": 0.82,
+            "type": "score"
+          }
+        ],
+        "model": "gpt-6-luna",
+        "usage": {
+          "input_tokens": 495,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 0,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 495
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "134",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing-total": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-openai-proxy-wasm": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "179999502",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.16317,
+      "status": 200,
+      "step": "openai.raw.decisions_3q",
+      "url": "https://api.openai.com/v1/decisions",
+      "usage": {
+        "input_tokens": 495,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 495
+      },
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "ok": true,
+        "response": {
+          "content": {
+            "answers": [
+              {
+                "answer": {
+                  "probability": 0.0,
+                  "type": "predicate"
+                },
+                "name": "soft_404",
+                "status": "Success"
+              },
+              {
+                "answer": {
+                  "choice": "product",
+                  "confidence": 1.0,
+                  "confidence_raw": 1.0,
+                  "probabilities": [
+                    {
+                      "probability": 1.0,
+                      "value": "product"
+                    },
+                    {
+                      "probability": 0.0,
+                      "value": "category"
+                    },
+                    {
+                      "probability": 0.0,
+                      "value": "article"
+                    },
+                    {
+                      "probability": 0.0,
+                      "value": "other"
+                    }
+                  ],
+                  "type": "choice"
+                },
+                "name": "page_type",
+                "status": "Success"
+              },
+              {
+                "answer": {
+                  "confidence": 0.8,
+                  "confidence_raw": 0.7,
+                  "level": "fair",
+                  "level_index": 1,
+                  "probabilities": [
+                    {
+                      "label": "poor",
+                      "probability": 0.19,
+                      "value": 0
+                    },
+                    {
+                      "label": "fair",
+                      "probability": 0.8,
+                      "value": 1
+                    },
+                    {
+                      "label": "good",
+                      "probability": 0.01,
+                      "value": 2
+                    }
+                  ],
+                  "score": 0.82,
+                  "type": "score"
+                },
+                "name": "content_quality",
+                "status": "Success"
+              }
+            ]
+          },
+          "duration_ms": 197,
+          "provider_request_id": "req_…(ausgelassen: Anbieter-ID)",
+          "refusal": false,
+          "usage": {
+            "cache_write_tokens": null,
+            "cached_input_tokens": 0,
+            "input_tokens": 495,
+            "output_tokens": 0
+          }
+        }
+      },
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.02628,
+      "cost_usd": 0.01485,
+      "duration_ms": 197,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Adapter: dieselben drei Fragen",
+      "running_cost_usd": 0.17802,
+      "step": "openai.adapter.decisions_3q",
+      "url": "https://api.openai.com/v1/decisions",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.05385,
+      "cost_usd": 0.00495,
+      "duration_ms": 539,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "Decisions mit input_image (Data-URL) und einer predicate-Frage (AI-004)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": [
+            {
+              "content": [
+                {
+                  "text": "Image from a product page.",
+                  "type": "input_text"
+                },
+                {
+                  "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAMK0lEQVR4AQEgDN/zANwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFADcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBQA3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3B…[gekürzt, 4254 Zeichen]",
+                  "type": "input_image"
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "model": "gpt-6-luna",
+          "questions": [
+            {
+              "instructions": "Answer true if the image is predominantly red.",
+              "name": "is_red",
+              "type": "predicate"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "answers": [
+          {
+            "name": "is_red",
+            "probability": 0.95,
+            "type": "predicate"
+          }
+        ],
+        "model": "gpt-6-luna",
+        "usage": {
+          "input_tokens": 165,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 0,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 165
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "464",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing-total": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-openai-proxy-wasm": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "179999835",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.18297,
+      "status": 200,
+      "step": "openai.raw.decisions_image",
+      "url": "https://api.openai.com/v1/decisions",
+      "usage": {
+        "input_tokens": 165,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 165
+      },
+      "via": "raw"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.02202,
+      "cost_usd": 0.05283,
+      "duration_ms": 270,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "V-A1: 11 Fragen in einem Request (OS-Grenze 10)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "URL: https://shop.example/red-running-shoe\nTitle: Red running shoe - Example Shop\nText: Red running shoe for road running. Price 49 EUR. In stock. Add to cart.",
+          "model": "gpt-6-luna",
+          "questions": [
+            {
+              "instructions": "Answer true if the page text contains the number 1.",
+              "name": "check_01",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 2.",
+              "name": "check_02",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 3.",
+              "name": "check_03",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 4.",
+              "name": "check_04",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 5.",
+              "name": "check_05",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 6.",
+              "name": "check_06",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 7.",
+              "name": "check_07",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 8.",
+              "name": "check_08",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 9.",
+              "name": "check_09",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 10.",
+              "name": "check_10",
+              "type": "predicate"
+            },
+            {
+              "instructions": "Answer true if the page text contains the number 11.",
+              "name": "check_11",
+              "type": "predicate"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "answers": [
+          {
+            "name": "check_01",
+            "probability": 0.93,
+            "type": "predicate"
+          },
+          {
+            "name": "check_02",
+            "probability": 0.03,
+            "type": "predicate"
+          },
+          {
+            "name": "check_03",
+            "probability": 0.01,
+            "type": "predicate"
+          },
+          {
+            "name": "check_04",
+            "probability": 0.79,
+            "type": "predicate"
+          },
+          {
+            "name": "check_05",
+            "probability": 0.23,
+            "type": "predicate"
+          },
+          {
+            "name": "check_06",
+            "probability": 0.01,
+            "type": "predicate"
+          },
+          {
+            "name": "check_07",
+            "probability": 0.0,
+            "type": "predicate"
+          },
+          {
+            "name": "check_08",
+            "probability": 0.01,
+            "type": "predicate"
+          },
+          {
+            "name": "check_09",
+            "probability": 0.82,
+            "type": "predicate"
+          },
+          {
+            "name": "check_10",
+            "probability": 0.0,
+            "type": "predicate"
+          },
+          {
+            "name": "check_11",
+            "probability": 0.0,
+            "type": "predicate"
+          }
+        ],
+        "model": "gpt-6-luna",
+        "usage": {
+          "input_tokens": 1761,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 0,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1761
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "209",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing-total": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-openai-proxy-wasm": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "179998239",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.2358,
+      "status": 200,
+      "step": "openai.raw.decisions_11q",
+      "url": "https://api.openai.com/v1/decisions",
+      "usage": {
+        "input_tokens": 1761,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 1761
+      },
+      "via": "raw"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.06591,
+      "cost_usd": 0.00135,
+      "duration_ms": 298,
+      "executed": true,
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "purpose": "V-A1: instructions mit 4.000 Zeichen (OS-Grenze 2.000)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "URL: https://shop.example/red-running-shoe\nTitle: Red running shoe - Example Shop\nText: Red running shoe for road running. Price 49 EUR. In stock. Add to cart.",
+          "model": "gpt-6-luna",
+          "questions": [
+            {
+              "instructions": "Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria…[gekürzt, 4000 Zeichen]",
+              "name": "long_instructions",
+              "type": "predicate"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "answers": [
+          {
+            "name": "long_instructions",
+            "type": "refusal"
+          }
+        ],
+        "model": "gpt-6-luna",
+        "usage": {
+          "input_tokens": 45,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 0,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 45
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "238",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing-total": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-openai-proxy-wasm": "(Wert nicht aufgezeichnet)",
+        "x-ratelimit-limit-requests": "30000",
+        "x-ratelimit-limit-tokens": "180000000",
+        "x-ratelimit-remaining-requests": "29999",
+        "x-ratelimit-remaining-tokens": "179999100",
+        "x-ratelimit-reset-requests": "2ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.23715,
+      "status": 200,
+      "step": "openai.raw.decisions_long_instructions",
+      "url": "https://api.openai.com/v1/decisions",
+      "usage": {
+        "input_tokens": 45,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 45
+      },
+      "via": "raw"
+    },
+    {
+      "cost_basis": "worst_case",
+      "cost_cap_usd": 0.00813,
+      "cost_usd": 0.00813,
+      "duration_ms": 74,
+      "executed": true,
+      "method": "POST",
+      "model": "openspider-probe-no-such-model",
+      "purpose": "Decisions-Fehlerform bei unbekanntem Modell",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "input": "URL: https://shop.example/red-running-shoe\nTitle: Red running shoe - Example Shop\nText: Red running shoe for road running. Price 49 EUR. In stock. Add to cart.",
+          "model": "openspider-probe-no-such-model",
+          "questions": [
+            {
+              "instructions": "Answer true if the page tells the visitor that the requested product or content no longer exists, although the page itself loads normally.",
+              "name": "soft_404",
+              "type": "predicate"
+            }
+          ]
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "error": {
+          "code": "model_not_found",
+          "message": "The model `openspider-probe-no-such-model` does not exist or you do not have access to it.",
+          "param": null,
+          "type": "invalid_request_error"
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet), (Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "openai-processing-ms": "1",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing-total": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-openai-proxy-wasm": "(Wert nicht aufgezeichnet)",
+        "x-request-id": "req_…(ausgelassen: Anbieter-ID)"
+      },
+      "running_cost_usd": 0.24528,
+      "status": 404,
+      "step": "openai.raw.decisions_unknown_model",
+      "url": "https://api.openai.com/v1/decisions",
+      "usage": null,
+      "via": "raw"
+    }
+  ],
+  "selection": {
+    "structured": {
+      "model": "gpt-6-luna",
+      "rates_usd_per_token": {
+        "input_per_token": 0.00003,
+        "output_per_token": 0.00015,
+        "per_image": 0.0,
+        "per_request": 0.0
+      },
+      "rule": "gpt-6-luna gelistet (08 AI-010 nennt es für responses)"
+    },
+    "text": {
+      "model": "gpt-6-luna",
+      "rates_usd_per_token": {
+        "input_per_token": 0.00003,
+        "output_per_token": 0.00015,
+        "per_image": 0.0,
+        "per_request": 0.0
+      },
+      "rule": "gpt-6-luna gelistet (08 AI-010 nennt es für responses)"
+    },
+    "vision": {
+      "model": "gpt-6-luna",
+      "rates_usd_per_token": {
+        "input_per_token": 0.00003,
+        "output_per_token": 0.00015,
+        "per_image": 0.0,
+        "per_request": 0.0
+      },
+      "rule": "gpt-6-luna gelistet (08 AI-010 nennt es für responses)"
+    }
+  },
+  "totals": {
+    "aborted": null,
+    "estimated_cost_usd": 0.24528,
+    "requests": 17
+  }
+}

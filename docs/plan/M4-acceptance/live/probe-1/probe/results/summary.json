@@ -1,0 +1,70 @@
+{
+  "caps": {
+    "max_requests": {
+      "anthropic": 14,
+      "openai": 18,
+      "openrouter": 14
+    },
+    "provider_usd": 2.0,
+    "total_usd": 6.0
+  },
+  "composed_from": "alle Anbieterdateien in results/ (auch aus getrennten Läufen); Zeitpunkte je Anbieter unter providers.*.generated_at_unix",
+  "last_run": null,
+  "price_basis": "Anthropic/OpenAI: vorsichtige Annahme 30/150 USD je 1 Mio. Tokens (Obergrenze, keine Abrechnung); OpenRouter: Preise aus der Modellliste",
+  "probe": "M4-Q00",
+  "providers": {
+    "anthropic": {
+      "aborted": null,
+      "estimated_cost_usd": 0.17391,
+      "generated_at_unix": 1795539696,
+      "key": {
+        "account": "ai.anthropic",
+        "found": true,
+        "service": "OpenSpider-Probe"
+      },
+      "models_only": false,
+      "requests": 12,
+      "selection": {
+        "structured": "claude-haiku-5-5",
+        "text": "claude-haiku-5-5",
+        "vision": "claude-haiku-5-5"
+      }
+    },
+    "openai": {
+      "aborted": null,
+      "estimated_cost_usd": 0.24528,
+      "generated_at_unix": 1795539890,
+      "key": {
+        "account": "ai.openai",
+        "found": true,
+        "service": "OpenSpider-Probe"
+      },
+      "models_only": false,
+      "requests": 17,
+      "selection": {
+        "structured": "gpt-6-luna",
+        "text": "gpt-6-luna",
+        "vision": "gpt-6-luna"
+      }
+    },
+    "openrouter": {
+      "aborted": null,
+      "estimated_cost_usd": 0.0772186,
+      "generated_at_unix": 1795539726,
+      "key": {
+        "account": "ai.openrouter",
+        "found": true,
+        "service": "OpenSpider-Probe"
+      },
+      "models_only": false,
+      "requests": 13,
+      "selection": {
+        "structured": "openai/gpt-6-luna",
+        "text": "openai/gpt-6-luna",
+        "vision": "openai/gpt-6-luna"
+      }
+    }
+  },
+  "total_estimated_cost_usd": 0.4964086,
+  "total_requests": 42
+}
