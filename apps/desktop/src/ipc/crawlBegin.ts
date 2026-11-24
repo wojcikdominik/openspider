@@ -12,17 +12,39 @@ export interface CrawlBegin {
 }
 
 let state: CrawlBegin = { revision: 0, crawlId: undefined };
+/** Revision whose request has been answered or has failed: the core holds its final content for it. */
+let settledRevision = 0;
 const listeners = new Set<() => void>();
-const set = (next: CrawlBegin) => { state = next; for (const listener of listeners) listener(); };
+
+/**
+ * A failing listener never affects the IPC call (fix-sel B3): the error goes the window's usual way for errors outside
+ * React – an `error` event on the window, which `installGlobalErrorLogging` writes to the core log. The event is
+ * dispatched, not thrown.
+ */
+function report(error: unknown): void {
+  try {
+    if (typeof window === "undefined" || typeof ErrorEvent !== "function") return;
+    // Message only: the logger records the message; an event without `error` is no uncaught exception for test runners.
+    window.dispatchEvent(new ErrorEvent("error", { message: `crawl begin listener: ${error instanceof Error ? error.message : String(error)}` }));
+  } catch { /* nothing left to report to */ }
+}
+function notify(): void {
+  for (const listener of [...listeners]) {
+    try { listener(); } catch (error) { report(error); }
+  }
+}
+const set = (next: CrawlBegin) => { state = next; notify(); };
 
 export const crawlBegin = {
   get: (): CrawlBegin => state,
+  /** The latest begin has been answered (or failed); views requested from now on show its content. */
+  settled: (): boolean => settledRevision === state.revision,
   subscribe(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener); }; },
   /** Test reset. */
-  reset(): void { set({ revision: 0, crawlId: undefined }); },
+  reset(): void { settledRevision = 0; set({ revision: 0, crawlId: undefined }); },
 };
 
-/** Notes a begin before the request leaves and the crawl id once the core answered (`client.invoke`). */
+/** Notes a begin before the request leaves and its outcome once the core answered (`client.invoke`). */
 export function trackBegin<T>(cmd: string, request: () => Promise<T>): Promise<T> {
   if (!BEGIN_COMMANDS.has(cmd)) return request();
   const revision = state.revision + 1;
@@ -31,7 +53,14 @@ export function trackBegin<T>(cmd: string, request: () => Promise<T>): Promise<T
   void result.then(value => {
     if (state.revision !== revision) return;
     const id = cmd === "crawl.clear" ? null : (value as { crawlId?: unknown } | null)?.crawlId;
+    settledRevision = revision;
     if (id === null || typeof id === "string") set({ revision, crawlId: id });
-  }, () => undefined);
+    else notify();
+  }, () => {
+    if (state.revision !== revision) return;
+    // A failed begin leaves the core's content as it was (the session is replaced only after a successful start/open).
+    settledRevision = revision;
+    notify();
+  });
   return result;
 }

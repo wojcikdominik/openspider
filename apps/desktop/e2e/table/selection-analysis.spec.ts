@@ -10,11 +10,15 @@ import { startBridge } from "../support/bridge";
  * before the window knows of crawl end and analysis end, then delivers them in their original order.
  */
 async function holdEvents(page: Page, bridgeUrl: string) {
-  const state = { hold: false, queue: [] as Array<() => void> };
+  const state = { hold: false, queue: [] as Array<() => void>, holdStart: false, starts: [] as Array<() => void> };
   const port = new URL(bridgeUrl).port;
   await page.routeWebSocket(new RegExp(`^ws://127\\.0\\.0\\.1:${port}/`), ws => {
     const server = ws.connectToServer();
-    ws.onMessage(message => server.send(message));
+    ws.onMessage(message => {
+      // `crawl.start` requests can be held before the core, to look at the window while the begin is outstanding.
+      if (state.holdStart && typeof message === "string" && message.includes('"cmd":"crawl.start"')) state.starts.push(() => server.send(message));
+      else server.send(message);
+    });
     server.onMessage(message => {
       // Answers to requests pass; events ({"event": …}) wait while held, in their order.
       let event = false;
@@ -25,6 +29,9 @@ async function holdEvents(page: Page, bridgeUrl: string) {
   return {
     hold() { state.hold = true; },
     release() { state.hold = false; for (const send of state.queue.splice(0)) send(); },
+    holdStart() { state.holdStart = true; },
+    heldStarts: () => state.starts.length,
+    releaseStart() { state.holdStart = false; for (const send of state.starts.splice(0)) send(); },
   };
 }
 
@@ -60,6 +67,8 @@ test("a row selected before the window learns of crawl end and analysis end stay
     const events = await holdEvents(page, bridge!.url);
     await page.goto(`/?bridge=${encodeURIComponent(bridge!.url)}`);
     await expect(page.locator("[data-shell-ready]")).toHaveAttribute("data-shell-ready", "true");
+    // The table has asked the core once and knows there is no crawl yet (its first view request is answered).
+    await expect(page.locator('.u10-grid-host [data-empty-state="NO_DATA_YET"]')).toBeVisible({ timeout: 20_000 });
     events.hold();
     await page.evaluate(async url => {
       const { crawl } = await import(/* @vite-ignore */ String("/src/ipc/crawl.ts"));
@@ -127,6 +136,8 @@ test("beginning another crawl ends a selection in rows whose crawl the window ne
     const events = await holdEvents(page, bridge!.url);
     await page.goto(`/?bridge=${encodeURIComponent(bridge!.url)}`);
     await expect(page.locator("[data-shell-ready]")).toHaveAttribute("data-shell-ready", "true");
+    // The table has asked the core once and knows there is no crawl yet (its first view request is answered).
+    await expect(page.locator('.u10-grid-host [data-empty-state="NO_DATA_YET"]')).toBeVisible({ timeout: 20_000 });
     events.hold();
     await begin(urlA);
     await expect.poll(() => page.evaluate(async () => {
@@ -160,6 +171,79 @@ test("beginning another crawl ends a selection in rows whose crawl the window ne
     await expect(details).not.toContainText(urlA);
     await expect(details).not.toContainText(urlB);
     await expect(page.getByText(/ selected$/)).toHaveCount(0);
+  } finally {
+    await bridge?.stop(); await new Promise<void>(resolve => site.close(() => resolve()));
+  }
+});
+
+// spec: UI-018
+// spec: UI-114
+test("from the moment crawl.start is sent the old rows are out of reach, and no row action reaches the new crawl", async ({ page }) => {
+  test.setTimeout(60_000);
+  const bridge = await startBridge();
+  expect(bridge).not.toBeNull();
+  const site = createServer((request, response) => { response.setHeader("Content-Type", "text/html"); response.end(`<html><head><title>${request.url}</title></head><body>Fixture</body></html>`); });
+  await new Promise<void>(resolve => site.listen(0, "127.0.0.1", resolve));
+  const address = site.address(); if (!address || typeof address === "string") throw new Error("Fixture server has no port");
+  const base = `http://127.0.0.1:${address.port}`;
+  const items = (prefix: string) => Array.from({ length: 4 }, (_, i) => `${base}/${prefix}${i + 1}`);
+  const total = () => page.evaluate(async () => {
+    const { view } = await import(/* @vite-ignore */ String("/src/ipc/view.ts"));
+    const handle = await view.open({ spec: { kind: "tab", tab: "Internal", filter: "All", search: null, sort: [] }, columns: ["Address"] });
+    try { return handle.total as number; } finally { await view.close({ viewId: handle.viewId }); }
+  });
+  try {
+    const events = await holdEvents(page, bridge!.url);
+    await page.goto(`/?bridge=${encodeURIComponent(bridge!.url)}`);
+    await expect(page.locator("[data-shell-ready]")).toHaveAttribute("data-shell-ready", "true");
+    // The table has asked the core once and knows there is no crawl yet (its first view request is answered).
+    await expect(page.locator('.u10-grid-host [data-empty-state="NO_DATA_YET"]')).toBeVisible({ timeout: 20_000 });
+    const start = (urls: string[]) => page.evaluate(async urls => {
+      const { crawl } = await import(/* @vite-ignore */ String("/src/ipc/crawl.ts"));
+      return (await crawl.start({ source: { kind: "list", items: urls, label: "fix-sel" }, scope: "domain" })).crawlId as string;
+    }, urls);
+    const first = await start(items("z"));
+    await expect.poll(() => page.evaluate(async () => {
+      const { useSession } = await import(/* @vite-ignore */ String("/src/state/session.ts"));
+      const s = useSession.getState(); return s.crawl?.phase === "completed" && s.analysis?.running === false;
+    }), { timeout: 30_000 }).toBe(true);
+    expect(first).toBeTruthy();
+    await expect(page.getByText("Showing: 4 of 4", { exact: true })).toBeVisible({ timeout: 20_000 });
+    const grid = page.locator(".os-data-grid");
+    await grid.click({ position: { x: 225, y: 71 } });
+    await expect(grid.locator('[role=row][aria-selected="true"]')).toHaveCount(1);
+
+    // crawl.start for crawl 2 is sent but held before the core: the old rows are hidden at once.
+    events.holdStart(); events.hold();
+    const second = start(items("a"));
+    await expect.poll(() => events.heldStarts()).toBe(1);
+    await expect(grid).toBeHidden();
+    await expect(page.locator('.u10-grid-host [data-empty-state="NO_DATA_YET"]')).toBeVisible();
+    await expect(grid.locator('[role=row][aria-selected="true"]')).toHaveCount(0);
+    await expect(page.getByText(/ selected$/)).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Details", exact: true })).not.toContainText(`${base}/z`);
+    // Neither the context menu key nor the actions reach a row.
+    await page.keyboard.press("Shift+F10");
+    await expect(page.getByRole("menuitem", { name: "Remove", exact: true })).toHaveCount(0);
+    expect(await page.evaluate(async () => {
+      const { runAction } = await import(/* @vite-ignore */ String("/src/ui/actions.ts"));
+      return runAction("context.menu");
+    })).toBe(false);
+
+    events.releaseStart();
+    const idB = await second;
+    await expect.poll(async () => (await total()), { timeout: 30_000 }).toBe(4);
+    events.release();
+    await expect.poll(() => page.evaluate(async () => {
+      const { useSession } = await import(/* @vite-ignore */ String("/src/state/session.ts"));
+      return useSession.getState().crawl?.crawlId;
+    }), { timeout: 20_000 }).toBe(idB);
+    // Rows come back only from crawl 2, unselected; crawl 2 keeps all its URLs.
+    await expect(grid).toBeVisible();
+    await expect(grid).toContainText(`${base}/a1`);
+    await expect(grid).not.toContainText(`${base}/z1`);
+    await expect(grid.locator('[role=row][aria-selected="true"]')).toHaveCount(0);
+    expect(await total()).toBe(4);
   } finally {
     await bridge?.stop(); await new Promise<void>(resolve => site.close(() => resolve()));
   }
