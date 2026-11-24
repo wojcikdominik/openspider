@@ -239,48 +239,113 @@ test("P2: start, open and clear in this window leave no selection, at once and a
   await expectNoSelection(page, "after clearing");
 });
 
-// spec: UI-018
-// spec: UI-114
-// spec: UI-142
-test("P2: a row clicked in the old rows after crawl.start was sent carries no action into the new crawl", async ({ page }) => {
-  const one = await start(page, fixture.urls("z", 8), "fix-sel-1");
-  await finished(page, one.crawlId, 8);
-  gate.holdStart = true; gate.hold();
-  const started = start(page, fixture.urls("a", 8), "fix-sel-2");
-  await expect.poll(() => gate.log.some(line => line.startsWith("held"))).toBe(true);
-  await expectNoSelection(page, "begin empties the selection");
-  // Still crawl 1 on screen: the user clicks its second row.
-  await clickRow(page, 1);
-  await expect.poll(() => selectedRows(page)).toHaveLength(1);
-  gate.releaseStart();
-  const { crawlId } = await started;
-  await expect.poll(() => gate.coreFinished(crawlId), { timeout: 30_000 }).toBe(true);
-  // The core holds crawl 2 now; the window has not learned it yet.
-  const shown = await rowsOf(page, "z").count();
-  test.info().annotations.push({ type: "observed", description: `rows of crawl 1 on screen after the core switched: ${shown}` });
-  const s = await state(page);
-  expect.soft(s.ids, "no selection while the core holds crawl 2 (only old rows on screen)").toEqual([]);
-  if (Array.isArray(s.ids) && s.ids.length > 0) {
-    // Demonstrate what the leftover selection does: Remove acts on the core's crawl, i.e. on crawl 2.
-    await page.keyboard.press("Shift+F10");
-    const remove = page.getByRole("menuitem", { name: "Remove", exact: true });
-    await expect(remove).toBeVisible();
-    if (await remove.isEnabled()) {
-      await remove.click();
-      await page.getByRole("button", { name: "Remove", exact: true }).click();
-      await expect.poll(async () => { const now = await state(page); return now.opsRunning === 0 && now.opsDone > s.opsDone; }, { timeout: 20_000 }).toBe(true);
-    } else await page.keyboard.press("Escape");
-  }
-  gate.release();
-  await expect.poll(async () => (await state(page)).crawlId).toBe(crawlId);
-  await expectNoSelection(page, "after crawl 2's status arrived");
-  // Crawl 2 must be complete: no URL of it was chosen by the user.
-  const total = await page.evaluate(async () => {
+/** Total of Internal/All in the core's current content for this window. */
+async function coreTotal(page: Page): Promise<number> {
+  return page.evaluate(async () => {
     const { view } = await import("/src/ipc/view.ts" as string);
     const handle = await view.open({ spec: { kind: "tab", tab: "Internal", filter: "All", sort: [] }, columns: ["Address"] });
     try { return handle.total as number; } finally { await view.close({ viewId: handle.viewId }); }
   });
-  expect(total, "URLs of crawl 2 after the leftover selection was used").toBe(8);
+}
+const rowAction = (page: Page) => page.getByRole("menuitem", { name: /^(Recrawl|Remove)$/ });
+const removeConfirm = (page: Page) => page.getByRole("button", { name: "Remove", exact: true });
+/**
+ * Orchestrator decision (fix-sel, 24.11.): from the moment this window sends start/open/clear the old rows are hidden and
+ * unusable: empty state, no selection, no Recrawl/Remove on old rows, no old URL in the details.
+ */
+async function expectOldRowsGone(page: Page, oldPrefix: string, why: string) {
+  await expect(page.locator('[data-empty-state="NO_DATA_YET"]'), why).toBeVisible();
+  await expect(grid(page), why).toBeHidden();
+  await expect(rowsOf(page, oldPrefix).filter({ visible: true }), why).toHaveCount(0);
+  await expectNoSelection(page, why);
+  await expect(rowAction(page), why).toHaveCount(0);
+}
+/** Everything a user can do on the place of the old rows, by mouse and keyboard. Returns what became reachable. */
+async function tryOldRows(page: Page, box: { x: number; y: number }): Promise<string[]> {
+  const reached: string[] = [];
+  const check = async (what: string) => {
+    const s = await state(page);
+    if (Array.isArray(s.ids) ? s.ids.length > 0 : true) reached.push(`${what}: selection ${JSON.stringify(s.ids)}`);
+    if (await rowAction(page).count()) reached.push(`${what}: context menu with row actions`);
+    if (await removeConfirm(page).count()) reached.push(`${what}: removal confirmation`);
+  };
+  await page.mouse.click(box.x + 225, box.y + 43 + 28); await check("click on the second row's place");
+  await page.keyboard.down("Shift"); await page.mouse.click(box.x + 225, box.y + 43 + 28 * 3); await page.keyboard.up("Shift"); await check("shift+click");
+  await page.mouse.click(box.x + 225, box.y + 43 + 28, { button: "right" }); await check("right click");
+  await page.mouse.dblclick(box.x + 225, box.y + 43); await check("double click");
+  for (const key of ["Shift+F10", "ContextMenu", "Delete", "ControlOrMeta+a", "Shift+F10", "Delete", "ControlOrMeta+Backspace"]) {
+    await page.keyboard.press(key); await check(`key ${key}`);
+  }
+  return reached;
+}
+
+// spec: UI-018
+// spec: UI-114
+// spec: UI-142
+test("P2: after crawl.start is sent the old rows are gone and nothing done there reaches the new crawl", async ({ page }) => {
+  test.setTimeout(120_000);
+  const one = await start(page, fixture.urls("z", 8), "fix-sel-1");
+  await finished(page, one.crawlId, 8);
+  await clickRow(page, 1);
+  await expect.poll(() => selectedRows(page)).toHaveLength(1);
+  const box = (await grid(page).boundingBox())!;
+  gate.holdStart = true; gate.hold();
+  const started = start(page, fixture.urls("a", 8), "fix-sel-2");
+  await expect.poll(() => gate.log.some(line => line.startsWith("held"))).toBe(true);
+  // Phase A: the start is on its way, the core still holds crawl 1.
+  await expectOldRowsGone(page, "z", "start sent, not answered");
+  const reachedA = await tryOldRows(page, box);
+  expect.soft(reachedA, "reachable on the old rows while crawl.start is on its way").toEqual([]);
+  // Whatever stayed open is used only once the core holds crawl 2 (the dangerous order).
+  gate.releaseStart();
+  const { crawlId } = await started;
+  await expect.poll(() => gate.coreFinished(crawlId), { timeout: 30_000 }).toBe(true);
+  const menuRemove = page.getByRole("menuitem", { name: "Remove", exact: true });
+  if (await removeConfirm(page).count()) await removeConfirm(page).click();
+  else if (await menuRemove.count() && await menuRemove.isEnabled()) {
+    await menuRemove.click();
+    if (await removeConfirm(page).count()) await removeConfirm(page).click();
+  }
+  if (await page.getByRole("menu").count()) await page.keyboard.press("Escape");
+  // Phase B: answered, crawl 2 finished in the core, its status not yet in the window: no row of crawl 1 comes back.
+  expect(await rowsOf(page, "z").filter({ visible: true }).count(), "old rows after the answer").toBe(0);
+  await expectNoSelection(page, "answer arrived, status held");
+  gate.release();
+  await expect.poll(async () => (await state(page)).crawlId).toBe(crawlId);
+  await expect.poll(() => rowsOf(page, "a").count(), { timeout: 20_000, message: "crawl 2's rows are shown" }).toBeGreaterThan(0);
+  await expect(page.getByText("Showing: 8 of 8", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expectNoSelection(page, "after crawl 2's status arrived");
+  await expect.poll(async () => (await state(page)).opsRunning).toBe(0);
+  expect(await coreTotal(page), "URLs of crawl 2: untouched by anything done on the old rows").toBe(8);
+});
+
+// spec: UI-018
+// spec: UI-114
+test("P2: a failed start brings the old rows back without a selection", async ({ page }) => {
+  const one = await start(page, fixture.urls("z", 8), "fix-sel-1");
+  await finished(page, one.crawlId, 8);
+  await clickRow(page, 1);
+  await expect.poll(() => selectedRows(page)).toHaveLength(1);
+  gate.holdStart = true;
+  const failed = page.evaluate(async () => {
+    const { crawl } = await import("/src/ipc/crawl.ts" as string);
+    try { await crawl.start({ source: { kind: "list", items: [], label: "fix-sel-empty" }, scope: "domain" }); return "answered"; }
+    catch (error) { return (error as { cmdError?: { code?: string } }).cmdError?.code ?? String(error); }
+  });
+  await expect.poll(() => gate.log.some(line => line.startsWith("held"))).toBe(true);
+  await expectOldRowsGone(page, "z", "start sent, not answered");
+  gate.releaseStart();
+  expect(await failed, "crawl.start with an empty list must fail").not.toBe("answered");
+  await expect(grid(page)).toBeVisible();
+  await expect.poll(() => rowsOf(page, "z").count()).toBeGreaterThan(0);
+  await expect(page.getByText("Showing: 8 of 8", { exact: true })).toBeVisible();
+  await expectNoSelection(page, "after the failed start");
+  expect((await state(page)).crawlId).toBe(one.crawlId);
+  // The rows are usable again.
+  await clickRow(page, 2);
+  await expect.poll(() => selectedRows(page)).toHaveLength(1);
+  await expectRowActions(page);
+  expect(await coreTotal(page)).toBe(8);
 });
 
 // spec: UI-018
@@ -290,8 +355,7 @@ test("P3: a filter switch keeps the selected URL that is in the new view", async
   await clickRow(page, 2);
   await expect.poll(() => selectedRows(page)).toHaveLength(1);
   const before = await state(page);
-  await page.getByRole("button", { name: /Filter/, exact: true }).click();
-  await page.getByRole("option", { name: /^HTML/ }).first().click();
+  await page.getByRole("button", { name: /^HTML \(/ }).click();
   await expect.poll(async () => (await state(page)).viewId).not.toBe(before.viewId);
   const after = await state(page);
   expect({ ids: after.ids, focus: after.focus }).toEqual({ ids: before.ids, focus: before.focus });
