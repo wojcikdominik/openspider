@@ -32,11 +32,10 @@ impl Tool for ListCrawls {
     }
 
     fn description(&self) -> &'static str {
-        "Listet die gespeicherten Crawls (neueste zuerst): crawl_id, Modus, Start-URL bzw. URL-Liste, \
-         Projekt, Name, Zustand (Running, Paused, Completed, Incomplete = unterbrochen, Failed), Start- und \
-         Endzeit und die Zahl der URLs in der Datei. Die crawl_id brauchen alle anderen Werkzeuge. Pausierte \
-         und unterbrochene Crawls sind sichtbar und lesbar. Paginiert über limit (1–500, Standard 50) und \
-         cursor."
+        "Lists the saved crawls (newest first): crawl_id, mode, start URL or URL list, project, name, \
+         state (Running, Paused, Completed, Incomplete = interrupted, Failed), start and end time and the \
+         number of URLs in the file. All other tools need the crawl_id. Paused and interrupted crawls are \
+         visible and readable. Paginated with limit (1 to 500, default 50) and cursor."
     }
 
     fn input_schema(&self) -> Json {
@@ -44,8 +43,8 @@ impl Tool for ListCrawls {
             "type": "object",
             "properties": {
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50,
-                          "description": "Crawls je Seite"},
-                "cursor": {"type": "string", "description": "next_cursor der vorigen Antwort"}
+                          "description": "Crawls per page"},
+                "cursor": {"type": "string", "description": "next_cursor of the previous response"}
             },
             "additionalProperties": false
         })

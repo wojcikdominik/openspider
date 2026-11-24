@@ -34,18 +34,18 @@ impl Tool for CrawlOverview {
     }
 
     fn description(&self) -> &'static str {
-        "Überblick über einen Crawl: Kennzahlen je Abschnitt (Summary, Crawl Data, Response Codes, je Tab alle \
-         Filter mit Anzahl und Anteil, Crawl Depth, Issues) – exakt die Zahlen des Reports „Crawl Overview“ – \
-         und die wichtigsten Issues nach Typ und Priorität (top_issues). Filter ohne Zahl (urls = null) \
-         brauchen die Crawl-Analyse; sie stehen in needs_crawl_analysis. Die vollständige Issue-Liste mit \
-         Texten liefert list_issues, die URLs eines Filters liefert query_urls."
+        "Overview of a crawl: figures per section (Summary, Crawl Data, Response Codes, all filters of each \
+         tab with count and share, Crawl Depth, Issues), exactly the numbers of the \"Crawl Overview\" \
+         report, and the most important issues by type and priority (top_issues). Filters without a number \
+         (urls = null) need crawl analysis; they are listed in needs_crawl_analysis. list_issues returns the \
+         complete issue list with texts, query_urls returns the URLs of a filter."
     }
 
     fn input_schema(&self) -> Json {
         json!({
             "type": "object",
             "properties": {
-                "crawl_id": {"type": "string", "description": "Kennung aus list_crawls"}
+                "crawl_id": {"type": "string", "description": "ID from list_crawls"}
             },
             "required": ["crawl_id"],
             "additionalProperties": false
