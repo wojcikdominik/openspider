@@ -1,0 +1,23 @@
+{
+  "comment": "Redaction cases (AI-024). `redact` = expected output with redaction on; IBAN check digits verified with ISO 13616 mod 97.",
+  "cases": [
+    {"text": "Mail an kontakt@example.test.", "redact": "Mail an [EMAIL]."},
+    {"text": "first.last+tag@sub.example.co.uk schreibt", "redact": "[EMAIL] schreibt"},
+    {"text": "Kein Mailformat: name@localhost und @handle", "redact": "Kein Mailformat: name@localhost und @handle"},
+    {"text": "Tel. +49 30 123456 an.", "redact": "Tel. [PHONE] an."},
+    {"text": "Ruf an: 030 1234567", "redact": "Ruf an: [PHONE]"},
+    {"text": "Hotline 0800-123-456-7", "redact": "Hotline [PHONE]"},
+    {"text": "Fax +49 (0)30 1234567.", "redact": "Fax [PHONE]."},
+    {"text": "Mobil 0171/1234567", "redact": "Mobil [PHONE]"},
+    {"text": "Datum 01.12.2026, PLZ 01067, Preis 0,99 EUR, Jahr 2026", "redact": "Datum 01.12.2026, PLZ 01067, Preis 0,99 EUR, Jahr 2026"},
+    {"text": "Bestellnummer 123456789", "redact": "Bestellnummer 123456789"},
+    {"text": "IBAN DE89 3704 0044 0532 0130 00 bei der Bank", "redact": "IBAN [IBAN] bei der Bank"},
+    {"text": "IBAN DE89370400440532013000.", "redact": "IBAN [IBAN]."},
+    {"text": "GB82 WEST 1234 5698 7654 32", "redact": "[IBAN]"},
+    {"text": "NL91ABNA0417164300 und FR14 2004 1010 0505 0001 3M02 606", "redact": "[IBAN] und [IBAN]"},
+    {"text": "AT61 1904 3002 3457 3201 BIC ABCDATWW", "redact": "[IBAN] BIC ABCDATWW"},
+    {"text": "Artikel DE12 3456 7890 1234 5678 90", "redact": "Artikel DE12 3456 7890 1234 5678 90"},
+    {"text": "Falsche Prüfziffer DE00 3704 0044 0532 0130 00", "redact": "Falsche Prüfziffer DE00 3704 0044 0532 0130 00"},
+    {"text": "Über uns: grüße@example.com? nein, info@example.com ja", "redact": "Über uns: [EMAIL]? nein, [EMAIL] ja"}
+  ]
+}

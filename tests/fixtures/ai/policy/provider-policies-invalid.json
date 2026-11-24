@@ -1,0 +1,11 @@
+{
+  "format_version": 1,
+  "providers": {
+    "example": {
+      "training_use": "no",
+      "summary": "Invalid on purpose: verification date is not an ISO date.",
+      "source_url": "https://example.test/policy",
+      "verified_at": "13.10.2026"
+    }
+  }
+}

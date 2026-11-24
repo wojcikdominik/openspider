@@ -1,0 +1,10 @@
+{
+  "comment": "Task data flows for the overview and consent tests (field sets as in 08, AI-040 ff. and the question library; own test configuration).",
+  "flows": [
+    {"task": "suggest-title", "provider": "openai", "model": "gpt-6-luna", "endpoint": "https://openai.mock.test/openai/v1", "region": null, "fields": ["url", "title", "meta_description", "h1"], "max_chars": null},
+    {"task": "page-type", "provider": "openai", "model": "gpt-6-luna", "endpoint": "https://openai.mock.test/openai/v1", "region": null, "fields": ["url", "title", "h1", "h2", "structured_data_types", "page_text"], "max_chars": 3000},
+    {"task": "search-intent", "provider": "anthropic", "model": "mock-claude", "endpoint": "https://anthropic.mock.test/anthropic/v1", "region": null, "fields": ["url", "title", "meta_description", "h1", "page_text"], "max_chars": 2000},
+    {"task": "alt-text-describes-image", "provider": "openrouter", "model": "mock/vision", "endpoint": "https://openrouter.mock.test/openrouter/api/v1", "region": null, "fields": ["image", "alt", "image_context"], "max_chars": null},
+    {"task": "ymyl", "provider": "ollama", "model": "llama-mock", "endpoint": "http://localhost:11434", "region": null, "fields": ["url", "title", "h1", "page_text"], "max_chars": 3000}
+  ]
+}
