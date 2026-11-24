@@ -8,7 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { DataGridProps } from "../../grid/DataGrid";
 import { createClient, setClient } from "../../ipc/client";
 import { crawl } from "../../ipc/crawl";
-import { crawlBegin } from "../../ipc/crawlBegin";
+import { crawlBegin } from "../../ipc/begin/crawlBegin";
 import { IpcError, localError } from "../../ipc/errors";
 import { eventBus } from "../../ipc/events";
 import type { AnalysisStatus } from "../../ipc/gen/AnalysisStatus";

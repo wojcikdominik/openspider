@@ -13,8 +13,8 @@ type CrawlState = { opsRunning: number; opsDone: number; crawlId: string | null;
 class StatusGate {
   /** Ticks reach the page without `crawl` and `analysis`. */
   holdStatus = false;
-  /** `crawl.start` requests wait here instead of reaching the core. */
-  holdStart = false;
+  /** Requests of this command wait here instead of reaching the core (`crawl.start`, `crawl.open`, `crawl.clear`). */
+  holdCmd: string | null = null;
   latestCrawl: Json | null = null;
   latestAnalysis: Json | null = null;
   private lastTick: Json | null = null;
@@ -26,10 +26,11 @@ class StatusGate {
   async attach(page: Page) {
     await page.routeWebSocket(/token=/, ws => {
       const core = ws.connectToServer();
-      this.page = ws; this.core = core;
+      // The page's own connection; a further socket of the page (content from outside) is only passed through.
+      if (!this.page) { this.page = ws; this.core = core; }
       ws.onMessage(message => {
         const text = String(message);
-        if (this.holdStart && text.includes('"cmd":"crawl.start"')) { this.held.push(text); this.note("held", text); return; }
+        if (this.holdCmd && text.includes(`"cmd":"${this.holdCmd}"`)) { this.held.push(text); this.note("held", text); return; }
         this.note("send", text);
         core.send(message);
       });
@@ -62,7 +63,7 @@ class StatusGate {
     const last = this.lastTick!;
     this.page!.send(JSON.stringify({ event: "tick", window: this.window, data: { ...last, seq: (last.seq as number) + 0.5, crawl: this.latestCrawl, analysis: this.latestAnalysis, views: [], ops: [], notices: [] } }));
   }
-  releaseStart() { this.holdStart = false; for (const text of this.held.splice(0)) this.core!.send(text); }
+  releaseHeld() { this.holdCmd = null; for (const text of this.held.splice(0)) this.core!.send(text); }
 }
 
 async function site(): Promise<{ server: Server; urls: (prefix: string, n: number) => string[] }> {
@@ -289,7 +290,7 @@ test("P2: after crawl.start is sent the old rows are gone and nothing done there
   await clickRow(page, 1);
   await expect.poll(() => selectedRows(page)).toHaveLength(1);
   const box = (await grid(page).boundingBox())!;
-  gate.holdStart = true; gate.hold();
+  gate.holdCmd = "crawl.start"; gate.hold();
   const started = start(page, fixture.urls("a", 8), "fix-sel-2");
   await expect.poll(() => gate.log.some(line => line.startsWith("held"))).toBe(true);
   // Phase A: the start is on its way, the core still holds crawl 1.
@@ -297,7 +298,7 @@ test("P2: after crawl.start is sent the old rows are gone and nothing done there
   const reachedA = await tryOldRows(page, box);
   expect.soft(reachedA, "reachable on the old rows while crawl.start is on its way").toEqual([]);
   // Whatever stayed open is used only once the core holds crawl 2 (the dangerous order).
-  gate.releaseStart();
+  gate.releaseHeld();
   const { crawlId } = await started;
   await expect.poll(() => gate.coreFinished(crawlId), { timeout: 30_000 }).toBe(true);
   const menuRemove = page.getByRole("menuitem", { name: "Remove", exact: true });
@@ -326,7 +327,7 @@ test("P2: a failed start brings the old rows back without a selection", async ({
   await finished(page, one.crawlId, 8);
   await clickRow(page, 1);
   await expect.poll(() => selectedRows(page)).toHaveLength(1);
-  gate.holdStart = true;
+  gate.holdCmd = "crawl.start";
   const failed = page.evaluate(async () => {
     const { crawl } = await import("/src/ipc/crawl.ts" as string);
     try { await crawl.start({ source: { kind: "list", items: [], label: "fix-sel-empty" }, scope: "domain" }); return "answered"; }
@@ -334,7 +335,7 @@ test("P2: a failed start brings the old rows back without a selection", async ({
   });
   await expect.poll(() => gate.log.some(line => line.startsWith("held"))).toBe(true);
   await expectOldRowsGone(page, "z", "start sent, not answered");
-  gate.releaseStart();
+  gate.releaseHeld();
   expect(await failed, "crawl.start with an empty list must fail").not.toBe("answered");
   await expect(grid(page)).toBeVisible();
   await expect.poll(() => rowsOf(page, "z").count()).toBeGreaterThan(0);
@@ -359,4 +360,116 @@ test("P3: a filter switch keeps the selected URL that is in the new view", async
   await expect.poll(async () => (await state(page)).viewId).not.toBe(before.viewId);
   const after = await state(page);
   expect({ ids: after.ids, focus: after.focus }).toEqual({ ids: before.ids, focus: before.focus });
+});
+
+/** Opens a crawl or clears, through the page's client (a begin in this window); not awaited. */
+function begin(page: Page, cmd: "open" | "clear", crawlId?: string): Promise<string> {
+  return page.evaluate(async ({ cmd, crawlId }) => {
+    const { crawl } = await import("/src/ipc/crawl.ts" as string);
+    try { if (cmd === "open") await crawl.open({ kind: "id", crawlId }); else await crawl.clear(); return "answered"; }
+    catch (error) { return (error as { cmdError?: { messageKey?: string } }).cmdError?.messageKey ?? String(error); }
+  }, { cmd, crawlId });
+}
+/** Two finished crawls of 8 URLs each (prefixes z and a); the window shows the second. */
+async function twoCrawls(page: Page) {
+  const one = await start(page, fixture.urls("z", 8), "fix-sel-1");
+  await finished(page, one.crawlId, 8);
+  const two = await start(page, fixture.urls("a", 8), "fix-sel-2");
+  await finished(page, two.crawlId, 8);
+  await expect.poll(() => rowsOf(page, "a").count()).toBeGreaterThan(0);
+  return { one: one.crawlId, two: two.crawlId };
+}
+/** Total of crawl `id` in the core, by opening it (leaves it open). */
+async function totalOf(page: Page, id: string): Promise<number> {
+  expect(await begin(page, "open", id)).toBe("answered");
+  await expect.poll(async () => (await state(page)).crawlId).toBe(id);
+  return coreTotal(page);
+}
+
+// spec: UI-018
+// spec: UI-114
+test("P2: after crawl.open is sent the old rows are gone and nothing done there reaches either crawl", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { one, two } = await twoCrawls(page);
+  await clickRow(page, 1);
+  await expect.poll(() => selectedRows(page)).toHaveLength(1);
+  const box = (await grid(page).boundingBox())!;
+  gate.holdCmd = "crawl.open";
+  const opened = begin(page, "open", one);
+  await expect.poll(() => gate.log.some(line => line.startsWith("held"))).toBe(true);
+  await expectOldRowsGone(page, "a", "open sent, not answered");
+  expect.soft(await tryOldRows(page, box), "reachable on the old rows while crawl.open is on its way").toEqual([]);
+  gate.releaseHeld();
+  expect(await opened).toBe("answered");
+  await expect.poll(async () => (await state(page)).crawlId).toBe(one);
+  await expect.poll(() => rowsOf(page, "z").count(), { timeout: 20_000 }).toBeGreaterThan(0);
+  expect(await rowsOf(page, "a").filter({ visible: true }).count(), "no row of crawl 2").toBe(0);
+  await expectNoSelection(page, "after crawl 1 was opened");
+  await expect.poll(async () => (await state(page)).opsRunning).toBe(0);
+  expect(await coreTotal(page), "crawl 1 complete").toBe(8);
+  expect(await totalOf(page, two), "crawl 2 complete").toBe(8);
+});
+
+// spec: UI-018
+// spec: UI-114
+test("P2: after crawl.clear is sent the old rows are gone and nothing done there reaches the crawl", async ({ page }) => {
+  test.setTimeout(120_000);
+  const one = await start(page, fixture.urls("z", 8), "fix-sel-1");
+  await finished(page, one.crawlId, 8);
+  await clickRow(page, 1);
+  await expect.poll(() => selectedRows(page)).toHaveLength(1);
+  const box = (await grid(page).boundingBox())!;
+  gate.holdCmd = "crawl.clear";
+  const cleared = begin(page, "clear");
+  await expect.poll(() => gate.log.some(line => line.startsWith("held"))).toBe(true);
+  await expectOldRowsGone(page, "z", "clear sent, not answered");
+  expect.soft(await tryOldRows(page, box), "reachable on the old rows while crawl.clear is on its way").toEqual([]);
+  gate.releaseHeld();
+  expect(await cleared).toBe("answered");
+  await expectNoSelection(page, "after clearing");
+  expect(await rowsOf(page, "z").filter({ visible: true }).count(), "no old row after clearing").toBe(0);
+  await expect.poll(async () => (await state(page)).opsRunning).toBe(0);
+  expect(await totalOf(page, one.crawlId), "the cleared crawl is complete").toBe(8);
+});
+
+// spec: UI-018
+// spec: UI-142
+test("P2: content replaced from outside (another connection opens a crawl in this window) empties the selection", async ({ page }) => {
+  const { one } = await twoCrawls(page);
+  await clickRow(page, 1); await clickRow(page, 3, true);
+  await expect.poll(() => selectedRows(page)).toHaveLength(3);
+  // A second connection to the core, as CLI/MCP or another process would act: no begin in this window.
+  const answer = await page.evaluate(async crawlId => {
+    const url = new URLSearchParams(location.search).get("bridge")!;
+    return new Promise<string>(resolve => {
+      const socket = new WebSocket(url);
+      socket.onopen = () => socket.send(JSON.stringify({ id: 9001, cmd: "crawl.open", args: { kind: "id", crawlId }, window: "main" }));
+      socket.onmessage = event => { const msg = JSON.parse(String(event.data)); if (msg.id === 9001) { socket.close(); resolve("err" in msg ? JSON.stringify(msg.err) : "answered"); } };
+      socket.onerror = () => resolve("socket error");
+    });
+  }, one);
+  expect(answer).toBe("answered");
+  await expect.poll(async () => (await state(page)).crawlId, { timeout: 30_000 }).toBe(one);
+  await expect.poll(() => rowsOf(page, "z").count(), { timeout: 20_000 }).toBeGreaterThan(0);
+  await expectNoSelection(page, "content replaced from outside");
+});
+
+// spec: UI-018
+// spec: UI-114
+// spec: CRAWL-131
+test("core: recrawl and remove with a selection from the previous crawl are refused and change nothing", async ({ page }) => {
+  const { one, two } = await twoCrawls(page);
+  const requests = await page.evaluate(async ({ one }) => {
+    const { crawl } = await import("/src/ipc/crawl.ts" as string);
+    const out: string[] = [];
+    for (const action of ["recrawl", "remove"] as const) {
+      try { await crawl[action]({ selection: { kind: "ids", ids: [1, 2] }, crawlId: one }); out.push(`${action}: accepted`); }
+      catch (error) { out.push(`${action}: ${(error as { cmdError?: { messageKey?: string } }).cmdError?.messageKey}`); }
+    }
+    return out;
+  }, { one });
+  expect(requests).toEqual(["recrawl: err-selection-other-crawl", "remove: err-selection-other-crawl"]);
+  await expect.poll(async () => (await state(page)).opsRunning).toBe(0);
+  expect(await coreTotal(page), "crawl 2 complete").toBe(8);
+  expect((await state(page)).crawlId).toBe(two);
 });
