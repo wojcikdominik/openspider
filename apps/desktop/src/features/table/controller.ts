@@ -13,6 +13,7 @@ import { SelectionModel } from "../../state/selection";
 import type { TabQuery } from "../../state/tabs";
 import type { SegmentFilter } from "../../ipc/gen/SegmentFilter";
 import { useSegments } from "../table-advanced/stores";
+import { crawlBegin, type CrawlBegin } from "../../ipc/crawlBegin";
 
 export function tabSpec(tab: string, query: TabQuery, segment: SegmentFilter | null = useSegments.getState().filter): ViewSpec {
   const search = query.rules ? { kind: "rules" as const, tree: query.rules.tree, caseSensitive: query.rules.caseSensitive }
@@ -35,6 +36,8 @@ export class TableController {
   counts: FilterCounts = { version: -1, filters: [] };
   error: unknown = null;
   pending = false;
+  /** The window's crawl begin when the view of `source` was requested (`continuesCrawl`); kept by silent replacements. */
+  openedAt?: CrawlBegin;
   private generation = 0;
   private countsRequest = 0;
   private countsEpoch = 0;
@@ -90,7 +93,7 @@ export class TableController {
       await this.opening;
       return;
     }
-    this.source = undefined; this.unsubscribe?.(); this.pending = true; this.error = null; this.emit();
+    this.source = undefined; this.openedAt = undefined; this.unsubscribe?.(); this.pending = true; this.error = null; this.emit();
     // Retain explicit URL ids across tabs; an all-selection belongs to its old snapshot.
     if (this.selection.value.kind === "all") this.setSelection(SelectionModel.empty());
     if (previous) void previous.dispose().catch(this.fail);
@@ -98,11 +101,12 @@ export class TableController {
       try {
         const columns = await catalog.columns({ tab });
         if (generation !== this.generation || this.disposed) return;
+        const requested = crawlBegin.get();
         const opened = await view.open({ spec: tabSpec(tab, query), columns: columns.map(c => c.key) });
         const handle = await this.built(opened, generation);
         if (!handle || generation !== this.generation || this.disposed) { await view.close({ viewId: opened.viewId }); return; }
         const source = this.adopt(handle, query);
-        this.source = source; this.unsubscribe = source.subscribe(() => this.emit());
+        this.source = source; this.openedAt = requested; this.unsubscribe = source.subscribe(() => this.emit());
         useTableSelection.setState({ selection: this.selection, viewId: source.viewId, version: source.version });
         this.pending = false; this.emit();
         // Version announcements that reached the session store before this source existed (UI-142, A01-21).
@@ -157,6 +161,7 @@ export class TableController {
       for (let attempt = 0; attempt < REPLACE_ATTEMPTS; attempt++) {
         if (attempt > 0) { await delay(REPLACE_BACKOFF_MS * attempt); if (!live()) return; }
         let source: ViewDataSource;
+        const requested = crawlBegin.get();
         try {
           const columns = await catalog.columns({ tab: target.tab });
           if (!live()) return;
@@ -179,7 +184,7 @@ export class TableController {
         if (!live()) { await source.dispose().catch(() => undefined); return; }
         // The source swallows a failed load (released or outdated replacement): try another one.
         if (!loaded(source, from, to)) { await source.dispose().catch(() => undefined); continue; }
-        await this.install(source, released);
+        await this.install(source, released, opening ? requested : this.openedAt);
         return;
       }
       // No replacement delivered rows: the old rows stay, the next round follows after a pause.
@@ -189,9 +194,9 @@ export class TableController {
     }
   }
   /** Shows `source` in place of `released` and frees the latter. */
-  private async install(source: ViewDataSource, released: ViewDataSource): Promise<void> {
+  private async install(source: ViewDataSource, released: ViewDataSource, openedAt: CrawlBegin | undefined): Promise<void> {
     this.unsubscribe?.();
-    this.source = source; this.unsubscribe = source.subscribe(() => this.emit());
+    this.source = source; this.openedAt = openedAt; this.unsubscribe = source.subscribe(() => this.emit());
     this.pending = false;
     if (this.selection.value.kind === "all") this.setSelection(SelectionModel.empty());
     else useTableSelection.setState({ selection: this.selection, viewId: source.viewId, version: source.version });
@@ -205,7 +210,7 @@ export class TableController {
   /** Removes `released` from the screen without a successor (an open for a new crawl failed). */
   private drop(released: ViewDataSource): void {
     this.unsubscribe?.(); this.unsubscribe = undefined;
-    this.source = undefined; this.pending = false;
+    this.source = undefined; this.openedAt = undefined; this.pending = false;
     void released.dispose().catch(() => undefined);
     this.emit();
   }
@@ -294,17 +299,20 @@ export class TableController {
   dispose() {
     this.clearTimers();
     this.disposed = true; this.generation++; this.countsRequest++; this.abortBuild?.(); this.unsubscribe?.(); this.listeners.clear();
-    void this.source?.dispose().catch(() => undefined); this.source = undefined;
+    void this.source?.dispose().catch(() => undefined); this.source = undefined; this.openedAt = undefined;
     useTableSelection.setState({ selection: SelectionModel.empty(), viewId: undefined, version: undefined });
   }
 }
 /**
  * UI-018: the window learns a crawl's id from its status, which can arrive after the table already opened a view and the
- * user selected rows in it (a short crawl reports its status first with its end and the automatic analysis). With no crawl
- * known before and a view on screen, that view shows this crawl: the change of `crawlId` is no new crawl for the table.
+ * user selected rows in it (a short crawl reports its status first with its end and the automatic analysis). That view
+ * shows the arriving crawl only if this window began it (`crawl.start`/`crawl.open`, answered with this id) and opened the
+ * view after the answer: `openedAt` is the begin noted when the view was opened, `begin` the current one. Content from
+ * elsewhere (no begin in this window) or a view opened before the answer counts as a new crawl.
  */
-export function continuesCrawl(previous: string | undefined, next: string | undefined, hasView: boolean): boolean {
-  return previous === undefined && next !== undefined && hasView;
+export function continuesCrawl(next: string | undefined, begin: CrawlBegin, openedAt: CrawlBegin | undefined): boolean {
+  return next !== undefined && openedAt !== undefined && openedAt.revision === begin.revision && begin.revision > 0
+    && begin.crawlId === next && openedAt.crawlId === next;
 }
 /** All rows of the inclusive window are in memory (an empty view has none to load). */
 function loaded(source: ViewDataSource, first: number, last: number): boolean {

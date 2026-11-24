@@ -36,6 +36,7 @@ import { ColumnsMenu } from "./ColumnsMenu";
 import { confirmsRemoval } from "./RemovalConfirmationSettings";
 import { saveTableState } from "../../state/tabs";
 import { TableController, continuesCrawl } from "./controller";
+import { crawlBegin } from "../../ipc/crawlBegin";
 import { setDetailSelection } from "../detail/frame/selection";
 import { useSidebarNavigation } from "../sidebar/frame/state";
 import { openExport as openExportDialog, registerExportContext } from "../export/model";
@@ -106,11 +107,26 @@ function RegularUpperTable() {
   const total = filters.find(f => f.id === "All")?.count;
   const fail = controller.fail;
   useEffect(() => { controller.activate(); return () => { controller.dispose(); browserResolve.current?.(false); copyResolve.current?.(false); }; }, [controller]);
-  // UI-018: the first crawl id for the view already on screen continues it (selection, focus row, position stay).
+  // UI-018: a begin of new content in this window (start, open, clear) ends the selection at once. The first crawl id
+  // after it continues the view on screen only if that view shows exactly this crawl (`continuesCrawl`); any other change
+  // of the crawl is a new crawl for the table.
   const knownCrawl = useRef(crawlId);
   const continuedCrawl = useRef<string>(undefined);
+  // A crawl id that arrived before this table mounted already used up the begin.
+  const consumedBegin = useRef(crawlId === undefined ? -1 : crawlBegin.get().revision);
   useEffect(() => {
-    const continues = knownCrawl.current !== crawlId && continuesCrawl(knownCrawl.current, crawlId, controller.source !== undefined);
+    let revision = crawlBegin.get().revision;
+    return crawlBegin.subscribe(() => {
+      if (crawlBegin.get().revision === revision) return;
+      revision = crawlBegin.get().revision;
+      controller.setSelection(SelectionModel.empty());
+    });
+  }, [controller]);
+  useEffect(() => {
+    const begin = crawlBegin.get();
+    const continues = knownCrawl.current !== crawlId && consumedBegin.current !== begin.revision
+      && controller.source !== undefined && continuesCrawl(crawlId, begin, controller.openedAt);
+    if (knownCrawl.current !== crawlId) consumedBegin.current = begin.revision;
     knownCrawl.current = crawlId; continuedCrawl.current = continues ? crawlId : undefined;
     controller.resetCrawl(continues);
   }, [controller, crawlId]);
