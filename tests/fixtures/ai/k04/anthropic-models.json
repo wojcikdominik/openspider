@@ -1,0 +1,128 @@
+{
+  "_comment": "Modelle A-D nach 08 Konventionen, Nachtrag Q00 (Mock-Erweiterungen, Besitz der Mock-Dateien: T01/K09). Eigene Testdaten von M4-K04 bis zum Merge von K09.",
+  "data": [
+    {
+      "id": "mock-claude",
+      "display_name": "A",
+      "max_input_tokens": 200000,
+      "max_tokens": 8192,
+      "capabilities": {
+        "structured_outputs": {
+          "supported": true
+        },
+        "image_input": {
+          "supported": true
+        },
+        "batch": {
+          "supported": true
+        },
+        "effort": {
+          "supported": true,
+          "low": {
+            "supported": true
+          },
+          "medium": {
+            "supported": true
+          },
+          "high": {
+            "supported": true
+          },
+          "xhigh": {
+            "supported": false
+          },
+          "max": {
+            "supported": true
+          }
+        },
+        "thinking": {
+          "supported": true,
+          "types": {
+            "adaptive": {
+              "supported": true
+            },
+            "disabled": {
+              "supported": true
+            },
+            "enabled": {
+              "supported": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "mock-claude-b",
+      "display_name": "B",
+      "max_tokens": 4000,
+      "capabilities": {
+        "structured_outputs": {
+          "supported": true
+        },
+        "image_input": {
+          "supported": true
+        },
+        "batch": {
+          "supported": true
+        },
+        "effort": {
+          "supported": true,
+          "low": {
+            "supported": true
+          },
+          "medium": {
+            "supported": true
+          },
+          "high": {
+            "supported": true
+          },
+          "xhigh": {
+            "supported": true
+          },
+          "max": {
+            "supported": false
+          }
+        },
+        "thinking": {
+          "supported": true,
+          "types": {
+            "adaptive": {
+              "supported": true
+            },
+            "disabled": {
+              "supported": false
+            },
+            "enabled": {
+              "supported": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "mock-claude-c",
+      "display_name": "C",
+      "capabilities": {
+        "effort": {
+          "supported": false
+        },
+        "structured_outputs": {
+          "supported": false
+        },
+        "image_input": {
+          "supported": false
+        },
+        "batch": {
+          "supported": false
+        },
+        "thinking": {
+          "supported": false
+        }
+      }
+    },
+    {
+      "id": "mock-claude-d",
+      "display_name": "D"
+    }
+  ],
+  "has_more": false
+}
