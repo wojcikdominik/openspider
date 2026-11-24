@@ -38,28 +38,28 @@ impl Tool for ListIssues {
     }
 
     fn description(&self) -> &'static str {
-        "Listet die Issues eines Crawls (Befunde mit Treffern) sortiert nach Typ (Issue = Fehler, Warning = \
-         Warnung, Opportunity = Hinweis), Priorität (High, Medium, Low) und Anzahl – wie der Issues-Tab. Je \
-         Issue: id, Typ, Priorität, Tab, Filter, Anzahl betroffener URLs, Anteil, die Texte what (was ist es), \
-         why (warum relevant) und fix (Behebung) und query: Tab und Filter, mit denen query_urls genau diese \
-         Anzahl an URLs liefert. Bis zu 5 Beispiel-URLs je Issue stehen im markierten Datenblock. Filter: \
-         priority (high, medium, low), type (issue oder error, warning, opportunity oder notice); ein \
-         ungültiger Wert liefert einen Fehler mit den gültigen Werten. lang wählt die Textsprache (de oder en, \
-         Standard en wie im Export). Issues, deren Filter noch die Crawl-Analyse brauchen, stehen in \
-         not_evaluated. Paginiert über limit (1–500, Standard 50) und cursor."
+        "Lists the issues of a crawl (findings with matches) sorted by type (Issue = error, Warning = \
+         warning, Opportunity = hint), priority (High, Medium, Low) and count, like the Issues tab. Per \
+         issue: id, type, priority, tab, filter, number of affected URLs, share, the texts what (what it \
+         is), why (why it matters) and fix (how to fix it), and query: tab and filter with which query_urls \
+         returns exactly this number of URLs. Up to 5 example URLs per issue are in the marked data block. \
+         Filters: priority (high, medium, low), type (issue or error, warning, opportunity or notice); an \
+         invalid value returns an error listing the valid values. lang selects the text language (de or en, \
+         default en as in the export). Issues whose filters still need crawl analysis are listed in \
+         not_evaluated. Paginated with limit (1 to 500, default 50) and cursor."
     }
 
     fn input_schema(&self) -> Json {
         json!({
             "type": "object",
             "properties": {
-                "crawl_id": {"type": "string", "description": "Kennung aus list_crawls"},
+                "crawl_id": {"type": "string", "description": "ID from list_crawls"},
                 "priority": {"type": "string", "enum": ["high", "medium", "low"]},
                 "type": {"type": "string", "enum": ["issue", "warning", "opportunity"],
-                         "description": "issue (auch: error), warning, opportunity (auch: notice)"},
+                         "description": "issue (also: error), warning, opportunity (also: notice)"},
                 "lang": {"type": "string", "enum": ["de", "en"], "default": "en"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
-                "cursor": {"type": "string", "description": "next_cursor der vorigen Antwort"}
+                "cursor": {"type": "string", "description": "next_cursor of the previous response"}
             },
             "required": ["crawl_id"],
             "additionalProperties": false

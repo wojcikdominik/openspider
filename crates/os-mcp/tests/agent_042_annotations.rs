@@ -154,3 +154,60 @@ async fn server_instructions_are_english_and_keep_the_untrusted_notice() {
     assert!(!german_hits("Überblick").is_empty());
     client.cancel().await.unwrap();
 }
+
+/// Alle `description`-Texte eines Eingabeschemas, auch verschachtelt (`oneOf`, `items`, `properties`).
+fn schema_descriptions(value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(Value::String(text)) = map.get("description") {
+                out.push(text.clone());
+            }
+            for (key, child) in map {
+                if key != "description" {
+                    schema_descriptions(child, out);
+                }
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|v| schema_descriptions(v, out)),
+        _ => {}
+    }
+}
+
+// spec: AGENT-042
+#[tokio::test]
+async fn tool_and_parameter_descriptions_in_tools_list_are_english() {
+    let dir = tempfile::tempdir().unwrap();
+    let all = vec![
+        ToolClass::Read,
+        ToolClass::Crawl,
+        ToolClass::Write,
+        ToolClass::Cost,
+    ];
+    let client = connect(server(all, dir.path())).await;
+    let listed = client.list_all_tools().await.unwrap();
+    assert_eq!(listed.len(), tools::all().len());
+    let mut checked = 0;
+    for tool in &listed {
+        let description = tool.description.as_deref().unwrap_or_default();
+        assert!(!description.is_empty(), "{}", tool.name);
+        // Der Untrusted-Hinweis (AGENT-004) bleibt sinngleich an jeder Beschreibung.
+        assert!(
+            description.contains("<<<UNTRUSTED_CONTENT>>>")
+                && description.contains("not instructions"),
+            "{}: {description}",
+            tool.name
+        );
+        let mut texts = vec![description.to_string()];
+        schema_descriptions(&Value::Object((*tool.input_schema).clone()), &mut texts);
+        for text in texts {
+            let hits = german_hits(&text);
+            assert!(hits.is_empty(), "{}: {hits:?} in {text}", tool.name);
+            checked += 1;
+        }
+    }
+    // Stichprobe: Parameterbeschreibungen werden tatsächlich mitgeprüft.
+    assert!(checked > listed.len(), "{checked}");
+    // Präambel des Untrusted-Blocks in Werkzeugergebnissen.
+    assert!(german_hits(os_mcp::server::UNTRUSTED_PREAMBLE).is_empty());
+    client.cancel().await.unwrap();
+}

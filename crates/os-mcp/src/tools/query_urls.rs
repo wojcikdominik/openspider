@@ -33,27 +33,26 @@ impl Tool for QueryUrls {
     }
 
     fn description(&self) -> &'static str {
-        "Fragt die URLs eines Tabs und Filters ab (dieselben Namen wie in der Oberfläche und im Export, z. B. \
-         tab \"Response Codes\", filter \"Client Error (4xx)\"; ohne filter gilt \"All\"). Ergebnis: Spaltennamen \
-         (columns), url_ids und die Zeilen in gleicher Reihenfolge wie der Tab-Export bei gleicher Sortierung. \
-         Spalten: Standardspalten, \"all\" für alle oder eine Liste von Spaltennamen (Mehrfachspalten wie \
-         \"Meta Robots 1\" über die nummerierte Schreibweise). Sortierung: Liste von Spaltennamen oder \
-         {column, descending}. Ein ungültiger Name liefert einen Fehler mit den gültigen Namen. Ist ein Filter \
-         noch nicht auswertbar (Crawl-Analyse, Konfiguration oder Rendering fehlen), meldet filter_state den \
-         Grund statt einer 0. Zeitstempel stehen in UTC (ISO 8601 mit Z), Response Time in Sekunden, \
-         Größen in Bytes. Paginiert über limit (1–500, Standard 50) und cursor; total ist die Zahl aller \
-         Treffer."
+        "Queries the URLs of a tab and filter (the same names as in the UI and the export, e.g. tab \
+         \"Response Codes\", filter \"Client Error (4xx)\"; without filter \"All\" applies). Result: column \
+         names (columns), url_ids and the rows in the same order as the tab export with the same sorting. \
+         Columns: default columns, \"all\" for all, or a list of column names (multi-value columns such as \
+         \"Meta Robots 1\" via the numbered spelling). Sorting: list of column names or {column, descending}. \
+         An invalid name returns an error listing the valid names. If a filter cannot be evaluated yet \
+         (crawl analysis, configuration or rendering missing), filter_state reports the reason instead of a \
+         0. Timestamps are in UTC (ISO 8601 with Z), Response Time in seconds, sizes in bytes. Paginated \
+         with limit (1 to 500, default 50) and cursor; total is the number of all matches."
     }
 
     fn input_schema(&self) -> Json {
         json!({
             "type": "object",
             "properties": {
-                "crawl_id": {"type": "string", "description": "Kennung aus list_crawls"},
-                "tab": {"type": "string", "description": "Tab, z. B. \"Internal\" oder \"Response Codes\"; auch als \"Tab:Filter\" möglich"},
-                "filter": {"type": "string", "description": "Filter des Tabs, z. B. \"Client Error (4xx)\" (Standard \"All\"); Schwellen als Zahl oder X"},
+                "crawl_id": {"type": "string", "description": "ID from list_crawls"},
+                "tab": {"type": "string", "description": "Tab, e.g. \"Internal\" or \"Response Codes\"; \"Tab:Filter\" is also accepted"},
+                "filter": {"type": "string", "description": "Filter of the tab, e.g. \"Client Error (4xx)\" (default \"All\"); thresholds as a number or X"},
                 "columns": {
-                    "description": "\"all\", \"default\" oder eine Liste von Spaltennamen",
+                    "description": "\"all\", \"default\" or a list of column names",
                     "oneOf": [
                         {"type": "string", "enum": ["all", "default"]},
                         {"type": "array", "items": {"type": "string"}}
@@ -61,7 +60,7 @@ impl Tool for QueryUrls {
                 },
                 "sort": {
                     "type": "array",
-                    "description": "Sortierung; Gleichstand entscheidet die Adresse, dann die Entdeckungsreihenfolge",
+                    "description": "Sorting; ties are broken by address, then by discovery order",
                     "items": {"oneOf": [
                         {"type": "string"},
                         {"type": "object", "properties": {
@@ -70,9 +69,9 @@ impl Tool for QueryUrls {
                         }, "required": ["column"]}
                     ]}
                 },
-                "search": {"type": "string", "description": "Teilzeichenkette der Adresse (Groß-/Kleinschreibung egal)"},
+                "search": {"type": "string", "description": "Substring of the address (case-insensitive)"},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
-                "cursor": {"type": "string", "description": "next_cursor der vorigen Antwort"}
+                "cursor": {"type": "string", "description": "next_cursor of the previous response"}
             },
             "required": ["crawl_id", "tab"],
             "additionalProperties": false

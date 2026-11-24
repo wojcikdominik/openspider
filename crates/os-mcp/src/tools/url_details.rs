@@ -55,35 +55,35 @@ impl Tool for UrlDetails {
     }
 
     fn description(&self) -> &'static str {
-        "Details zu einer URL eines Crawls. Die URL wird als url (Adresse wie in query_urls) oder url_id (aus \
-         query_urls) angegeben. sections wählt Abschnitte: overview (Spalten des Tabs Internal bzw. External), \
-         inlinks, outlinks (paginiert mit limit und je Abschnitt eigenem Cursor: cursor, wenn nur ein \
-         Linkabschnitt angefragt ist, sonst inlinks_cursor bzw. outlinks_cursor; die Zusammenfassung nennt \
-         total und next_cursor je Abschnitt), headers, issues (welche Issues der Katalogs die URL betreffen), \
-         directives, canonicals, hreflang, structured_data und rendering (beide in M1 nicht erhoben). Ohne \
-         sections kommen alle. Wurde die URL nicht gecrawlt, steht der Grund in reason und message \
-         (excluded, robots_txt, url_limit, depth_limit, queued, not_found u. a.)."
+        "Details of one URL of a crawl. The URL is given as url (address as in query_urls) or url_id (from \
+         query_urls). sections selects sections: overview (columns of the Internal or External tab), \
+         inlinks, outlinks (paginated with limit and a cursor per section: cursor if only one link section \
+         is requested, otherwise inlinks_cursor or outlinks_cursor; the summary gives total and next_cursor \
+         per section), headers, issues (which catalog issues affect the URL), directives, canonicals, \
+         hreflang, structured_data and rendering (both not collected in M1). Without sections all are \
+         returned. If the URL was not crawled, reason and message give the cause (excluded, robots_txt, \
+         url_limit, depth_limit, queued, not_found and others)."
     }
 
     fn input_schema(&self) -> Json {
         json!({
             "type": "object",
             "properties": {
-                "crawl_id": {"type": "string", "description": "Kennung aus list_crawls"},
-                "url": {"type": "string", "description": "Adresse der URL"},
-                "url_id": {"type": "integer", "description": "Kennung der URL (url_ids aus query_urls)"},
+                "crawl_id": {"type": "string", "description": "ID from list_crawls"},
+                "url": {"type": "string", "description": "Address of the URL"},
+                "url_id": {"type": "integer", "description": "ID of the URL (url_ids from query_urls)"},
                 "sections": {
-                    "description": "Abschnitte (Standard: alle)",
+                    "description": "Sections (default: all)",
                     "oneOf": [
                         {"type": "string"},
                         {"type": "array", "items": {"type": "string", "enum": SECTIONS}}
                     ]
                 },
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50,
-                          "description": "Zeilen je Seite der Linkabschnitte"},
-                "cursor": {"type": "string", "description": "Fortsetzung, wenn nur inlinks ODER outlinks angefragt ist"},
-                "inlinks_cursor": {"type": "string", "description": "Fortsetzung der Inlinks"},
-                "outlinks_cursor": {"type": "string", "description": "Fortsetzung der Outlinks"}
+                          "description": "Rows per page of the link sections"},
+                "cursor": {"type": "string", "description": "Continuation if only inlinks OR outlinks is requested"},
+                "inlinks_cursor": {"type": "string", "description": "Continuation of the inlinks"},
+                "outlinks_cursor": {"type": "string", "description": "Continuation of the outlinks"}
             },
             "required": ["crawl_id"],
             "additionalProperties": false
