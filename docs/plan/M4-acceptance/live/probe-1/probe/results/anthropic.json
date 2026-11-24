@@ -1,0 +1,1538 @@
+{
+  "base_url": "https://api.anthropic.com",
+  "facts": {
+    "selection_source": "anthropic.raw.models"
+  },
+  "generated_at_unix": 1795539696,
+  "key": {
+    "account": "ai.anthropic",
+    "found": true,
+    "service": "OpenSpider-Probe"
+  },
+  "models_only": false,
+  "price_basis": "vorsichtige Annahme 30 USD (Eingabe) / 150 USD (Ausgabe) je 1 Mio. Tokens – Obergrenze, keine Abrechnung",
+  "probe": "M4-Q00",
+  "provider": "anthropic",
+  "requests": [
+    {
+      "cost_basis": "free",
+      "cost_cap_usd": 0.0,
+      "cost_usd": 0.0,
+      "duration_ms": 344,
+      "executed": true,
+      "method": "GET",
+      "model": null,
+      "purpose": "Modellliste: Feldnamen, capabilities-Knoten (structured_outputs, image_input, batch, effort), Paginierungsfelder (AI-002, AI-001)",
+      "request": {
+        "auth_header": "x-api-key (nicht aufgezeichnet)",
+        "body": null,
+        "headers": {
+          "anthropic-version": "2023-06-01"
+        }
+      },
+      "response_body": {
+        "count": 15,
+        "entry_field_paths": {
+          "capabilities": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.batch": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.batch.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.citations": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.citations.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.code_execution": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.code_execution.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.context_management": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.context_management.clear_thinking_20251015": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.context_management.clear_thinking_20251015.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.context_management.clear_tool_uses_20250919": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.context_management.clear_tool_uses_20250919.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.context_management.compact_20260112": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.context_management.compact_20260112.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.context_management.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.effort": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.effort.high": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.effort.high.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.effort.low": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.effort.low.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.effort.max": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.effort.max.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.effort.medium": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.effort.medium.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.effort.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.effort.xhigh": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.effort.xhigh.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.image_input": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.image_input.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.pdf_input": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.pdf_input.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.server_tools": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.server_tools.code_execution": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.server_tools.code_execution.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.server_tools.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.server_tools.web_search": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.server_tools.web_search.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.structured_outputs": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.structured_outputs.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.thinking": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.thinking.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.thinking.types": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.thinking.types.adaptive": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.thinking.types.adaptive.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.thinking.types.between_tools": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.thinking.types.between_tools.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.thinking.types.disabled": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.thinking.types.disabled.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "capabilities.thinking.types.enabled": {
+            "entries": 15,
+            "types": [
+              "object"
+            ]
+          },
+          "capabilities.thinking.types.enabled.supported": {
+            "entries": 15,
+            "types": [
+              "boolean"
+            ]
+          },
+          "created_at": {
+            "entries": 15,
+            "types": [
+              "string"
+            ]
+          },
+          "deprecated_at": {
+            "entries": 15,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "display_name": {
+            "entries": 15,
+            "types": [
+              "string"
+            ]
+          },
+          "id": {
+            "entries": 15,
+            "types": [
+              "string"
+            ]
+          },
+          "lifecycle": {
+            "entries": 15,
+            "types": [
+              "string"
+            ]
+          },
+          "line": {
+            "entries": 15,
+            "types": [
+              "string"
+            ]
+          },
+          "max_input_tokens": {
+            "entries": 15,
+            "types": [
+              "number"
+            ]
+          },
+          "max_tokens": {
+            "entries": 15,
+            "types": [
+              "number"
+            ]
+          },
+          "retires_at": {
+            "entries": 15,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "entries": 15,
+            "types": [
+              "string"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "capabilities": {
+              "batch": {
+                "supported": true
+              },
+              "citations": {
+                "supported": true
+              },
+              "code_execution": {
+                "supported": true
+              },
+              "context_management": {
+                "clear_thinking_20251015": {
+                  "supported": true
+                },
+                "clear_tool_uses_20250919": {
+                  "supported": true
+                },
+                "compact_20260112": {
+                  "supported": true
+                },
+                "supported": true
+              },
+              "effort": {
+                "high": {
+                  "supported": true
+                },
+                "low": {
+                  "supported": true
+                },
+                "max": {
+                  "supported": true
+                },
+                "medium": {
+                  "supported": true
+                },
+                "supported": true,
+                "xhigh": {
+                  "supported": true
+                }
+              },
+              "image_input": {
+                "supported": true
+              },
+              "pdf_input": {
+                "supported": true
+              },
+              "server_tools": {
+                "code_execution": {
+                  "supported": true
+                },
+                "supported": true,
+                "web_search": {
+                  "supported": true
+                }
+              },
+              "structured_outputs": {
+                "supported": true
+              },
+              "thinking": {
+                "supported": true,
+                "types": {
+                  "adaptive": {
+                    "supported": true
+                  },
+                  "between_tools": {
+                    "supported": false
+                  },
+                  "disabled": {
+                    "supported": false
+                  },
+                  "enabled": {
+                    "supported": false
+                  }
+                }
+              }
+            },
+            "created_at": "2026-11-09T18:30:00Z",
+            "deprecated_at": null,
+            "display_name": "Claude Fable 5.2",
+            "id": "claude-fable-5-2",
+            "lifecycle": "active",
+            "line": "fable",
+            "max_input_tokens": 1000000,
+            "max_tokens": 128000,
+            "retires_at": null,
+            "type": "model"
+          },
+          {
+            "capabilities": {
+              "batch": {
+                "supported": true
+              },
+              "citations": {
+                "supported": true
+              },
+              "code_execution": {
+                "supported": true
+              },
+              "context_management": {
+                "clear_thinking_20251015": {
+                  "supported": true
+                },
+                "clear_tool_uses_20250919": {
+                  "supported": true
+                },
+                "compact_20260112": {
+                  "supported": true
+                },
+                "supported": true
+              },
+              "effort": {
+                "high": {
+                  "supported": true
+                },
+                "low": {
+                  "supported": true
+                },
+                "max": {
+                  "supported": true
+                },
+                "medium": {
+                  "supported": true
+                },
+                "supported": true,
+                "xhigh": {
+                  "supported": true
+                }
+              },
+              "image_input": {
+                "supported": true
+              },
+              "pdf_input": {
+                "supported": true
+              },
+              "server_tools": {
+                "code_execution": {
+                  "supported": true
+                },
+                "supported": true,
+                "web_search": {
+                  "supported": true
+                }
+              },
+              "structured_outputs": {
+                "supported": true
+              },
+              "thinking": {
+                "supported": true,
+                "types": {
+                  "adaptive": {
+                    "supported": true
+                  },
+                  "between_tools": {
+                    "supported": false
+                  },
+                  "disabled": {
+                    "supported": true
+                  },
+                  "enabled": {
+                    "supported": false
+                  }
+                }
+              }
+            },
+            "created_at": "2026-10-07T18:00:00Z",
+            "deprecated_at": null,
+            "display_name": "Claude Haiku 5.5",
+            "id": "claude-haiku-5-5",
+            "lifecycle": "active",
+            "line": "haiku",
+            "max_input_tokens": 1000000,
+            "max_tokens": 128000,
+            "retires_at": null,
+            "type": "model"
+          },
+          {
+            "capabilities": {
+              "batch": {
+                "supported": true
+              },
+              "citations": {
+                "supported": true
+              },
+              "code_execution": {
+                "supported": true
+              },
+              "context_management": {
+                "clear_thinking_20251015": {
+                  "supported": true
+                },
+                "clear_tool_uses_20250919": {
+                  "supported": true
+                },
+                "compact_20260112": {
+                  "supported": true
+                },
+                "supported": true
+              },
+              "effort": {
+                "high": {
+                  "supported": true
+                },
+                "low": {
+                  "supported": true
+                },
+                "max": {
+                  "supported": true
+                },
+                "medium": {
+                  "supported": true
+                },
+                "supported": true,
+                "xhigh": {
+                  "supported": true
+                }
+              },
+              "image_input": {
+                "supported": true
+              },
+              "pdf_input": {
+                "supported": true
+              },
+              "server_tools": {
+                "code_execution": {
+                  "supported": true
+                },
+                "supported": true,
+                "web_search": {
+                  "supported": true
+                }
+              },
+              "structured_outputs": {
+                "supported": true
+              },
+              "thinking": {
+                "supported": true,
+                "types": {
+                  "adaptive": {
+                    "supported": true
+                  },
+                  "between_tools": {
+                    "supported": true
+                  },
+                  "disabled": {
+                    "supported": false
+                  },
+                  "enabled": {
+                    "supported": false
+                  }
+                }
+              }
+            },
+            "created_at": "2026-09-28T00:00:00Z",
+            "deprecated_at": null,
+            "display_name": "Claude Sonnet 5.5",
+            "id": "claude-sonnet-5-5",
+            "lifecycle": "active",
+            "line": "sonnet",
+            "max_input_tokens": 1000000,
+            "max_tokens": 128000,
+            "retires_at": null,
+            "type": "model"
+          }
+        ],
+        "ids": [
+          "claude-fable-5-2",
+          "claude-haiku-5-5",
+          "claude-sonnet-5-5",
+          "claude-opus-5-5",
+          "claude-fable-5-1",
+          "claude-opus-5",
+          "claude-sonnet-5",
+          "claude-fable-5",
+          "claude-opus-4-8",
+          "claude-opus-4-7",
+          "claude-sonnet-4-6",
+          "claude-opus-4-6",
+          "claude-opus-4-5-20251101",
+          "claude-haiku-4-5-20251001",
+          "claude-sonnet-4-5-20250929"
+        ],
+        "top_level_fields": {
+          "first_id": "claude-fable-5-2",
+          "has_more": false,
+          "last_id": "claude-sonnet-4-5-20250929"
+        }
+      },
+      "response_headers": {
+        "anthropic-organization-id": "(Wert nicht aufgezeichnet)",
+        "anthropic-workspace-id": "(Wert nicht aufgezeichnet)",
+        "cache-control": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-security-policy": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "request-id": "req_…(ausgelassen: Anbieter-ID)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-robots-tag": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.0,
+      "status": 200,
+      "step": "anthropic.raw.models",
+      "url": "https://api.anthropic.com/v1/models",
+      "usage": null,
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "count": 15,
+        "examples": [
+          "AnthropicModel { id: \"claude-fable-5-2\", display_name: Some(\"Claude Fable 5.2\"), max_input_tokens: Some(1000000), max_tokens: Some(128000), capabilities_known: true, structured_output: true, vision: true, batch: true, effort_supported: true, effort_levels: [\"low\", \"medium\", \"high\", \"xhigh\", \"max\"] }",
+          "AnthropicModel { id: \"claude-haiku-5-5\", display_name: Some(\"Claude Haiku 5.5\"), max_input_tokens: Some(1000000), max_tokens: Some(128000), capabilities_known: true, structured_output: true, vision: true, batch: true, effort_supported: true, effort_levels: [\"low\", \"medium\", \"high\", \"xhigh\", \"max\"] }",
+          "AnthropicModel { id: \"claude-sonnet-5-5\", display_name: Some(\"Claude Sonnet 5.5\"), max_input_tokens: Some(1000000), max_tokens: Some(128000), capabilities_known: true, structured_output: true, vision: true, batch: true, effort_supported: true, effort_levels: [\"low\", \"medium\", \"high\", \"xhigh\", \"max\"] }"
+        ],
+        "models_without_capabilities": 0,
+        "ok": true,
+        "selected_model_as_parsed": "AnthropicModel { id: \"claude-haiku-5-5\", display_name: Some(\"Claude Haiku 5.5\"), max_input_tokens: Some(1000000), max_tokens: Some(128000), capabilities_known: true, structured_output: true, vision: true, batch: true, effort_supported: true, effort_levels: [\"low\", \"medium\", \"high\", \"xhigh\", \"max\"] }"
+      },
+      "cost_basis": "free",
+      "cost_cap_usd": 0.0,
+      "cost_usd": 0.0,
+      "duration_ms": 228,
+      "executed": true,
+      "method": "GET",
+      "model": null,
+      "purpose": "Adapter list_models: liest er die echten capabilities?",
+      "running_cost_usd": 0.0,
+      "step": "anthropic.adapter.models",
+      "url": "https://api.anthropic.com/v1/models?limit=1000",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "worst_case",
+      "cost_cap_usd": 0.0048,
+      "cost_usd": 0.0048,
+      "duration_ms": 172,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "Tokenzählung für Kostenschätzung (AI-002 optional, AI-012)",
+      "request": {
+        "auth_header": "x-api-key (nicht aufgezeichnet)",
+        "body": {
+          "messages": [
+            {
+              "content": "Reply with exactly one word: pong",
+              "role": "user"
+            }
+          ],
+          "model": "claude-haiku-5-5",
+          "system": "You are the endpoint of an API compatibility probe. Answer as briefly as possible."
+        },
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "input_tokens": 49
+      },
+      "response_headers": {
+        "anthropic-organization-id": "(Wert nicht aufgezeichnet)",
+        "anthropic-workspace-id": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-length": "(Wert nicht aufgezeichnet)",
+        "content-security-policy": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "request-id": "req_…(ausgelassen: Anbieter-ID)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "x-robots-tag": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.0048,
+      "status": 200,
+      "step": "anthropic.raw.count_tokens",
+      "url": "https://api.anthropic.com/v1/messages/count_tokens",
+      "usage": null,
+      "via": "raw"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.02427,
+      "cost_usd": 0.00207,
+      "duration_ms": 658,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "Textanfrage: system, messages, usage-Felder, stop_reason, Rate-Limit-Header (AI-002, AI-017)",
+      "request": {
+        "auth_header": "x-api-key (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 128,
+          "messages": [
+            {
+              "content": "Reply with exactly one word: pong",
+              "role": "user"
+            }
+          ],
+          "model": "claude-haiku-5-5",
+          "system": "You are the endpoint of an API compatibility probe. Answer as briefly as possible."
+        },
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "container": null,
+        "content": [
+          {
+            "text": "pong",
+            "type": "text"
+          }
+        ],
+        "diagnostics": null,
+        "id": "msg_…(ausgelassen: Anbieter-ID)",
+        "model": "claude-haiku-5-5",
+        "role": "assistant",
+        "stop_details": null,
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "type": "message",
+        "usage": {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "inference_geo": "global",
+          "input_tokens": 49,
+          "output_tokens": 4,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "service_tier": "standard",
+          "speed": "standard"
+        }
+      },
+      "response_headers": {
+        "anthropic-organization-id": "(Wert nicht aufgezeichnet)",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-11-24T17:01:24Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-11-24T17:01:24Z",
+        "anthropic-ratelimit-requests-limit": "4000",
+        "anthropic-ratelimit-requests-remaining": "3999",
+        "anthropic-ratelimit-requests-reset": "2026-11-24T17:01:24Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-11-24T17:01:24Z",
+        "anthropic-workspace-id": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-security-policy": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "request-id": "req_…(ausgelassen: Anbieter-ID)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "traceresponse": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-robots-tag": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.00687,
+      "status": 200,
+      "step": "anthropic.raw.text",
+      "url": "https://api.anthropic.com/v1/messages",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 49,
+        "output_tokens": 4,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "service_tier": "standard",
+        "speed": "standard"
+      },
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "ok": true,
+        "response": {
+          "content": "pong",
+          "duration_ms": 599,
+          "provider_request_id": "msg_…(ausgelassen: Anbieter-ID)",
+          "refusal": false,
+          "usage": {
+            "cache_write_tokens": 0,
+            "cached_input_tokens": 0,
+            "input_tokens": 49,
+            "output_tokens": 4
+          }
+        }
+      },
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.031259999999999996,
+      "cost_usd": 0.00207,
+      "duration_ms": 599,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "Adapter: Textanfrage",
+      "running_cost_usd": 0.00894,
+      "step": "anthropic.adapter.text",
+      "url": "https://api.anthropic.com/v1/messages",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.05037,
+      "cost_usd": 0.01827,
+      "duration_ms": 3373,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "Strukturierte Ausgabe output_config.format json_schema mit AI-034-Schema (AI-002, AI-021, AI-034)",
+      "request": {
+        "auth_header": "x-api-key (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 256,
+          "messages": [
+            {
+              "content": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Estimate calibrated probabilities for the page type.",
+              "role": "user"
+            }
+          ],
+          "model": "claude-haiku-5-5",
+          "output_config": {
+            "format": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "probabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "category": {
+                        "type": "number"
+                      },
+                      "other": {
+                        "type": "number"
+                      },
+                      "product": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "product",
+                      "category",
+                      "other"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "probabilities",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "type": "json_schema"
+            }
+          },
+          "system": "You are the endpoint of an API compatibility probe. Answer as briefly as possible."
+        },
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "container": null,
+        "content": [
+          {
+            "text": "{\"abstain\": false, \"probabilities\": {\"category\": 0.1, \"other\": 0.05, \"product\": 0.85}}",
+            "type": "text"
+          }
+        ],
+        "diagnostics": null,
+        "id": "msg_…(ausgelassen: Anbieter-ID)",
+        "model": "claude-haiku-5-5",
+        "role": "assistant",
+        "stop_details": null,
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "type": "message",
+        "usage": {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "inference_geo": "global",
+          "input_tokens": 399,
+          "output_tokens": 42,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "service_tier": "standard",
+          "speed": "standard"
+        }
+      },
+      "response_headers": {
+        "anthropic-organization-id": "(Wert nicht aufgezeichnet)",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-11-24T17:01:28Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-11-24T17:01:28Z",
+        "anthropic-ratelimit-requests-limit": "4000",
+        "anthropic-ratelimit-requests-remaining": "3999",
+        "anthropic-ratelimit-requests-reset": "2026-11-24T17:01:25Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-11-24T17:01:28Z",
+        "anthropic-workspace-id": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-security-policy": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "request-id": "req_…(ausgelassen: Anbieter-ID)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "traceresponse": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-robots-tag": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.02721,
+      "status": 200,
+      "step": "anthropic.raw.structured",
+      "url": "https://api.anthropic.com/v1/messages",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 399,
+        "output_tokens": 42,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "service_tier": "standard",
+        "speed": "standard"
+      },
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "ok": true,
+        "response": {
+          "content": {
+            "abstain": false,
+            "probabilities": {
+              "category": 0.1,
+              "other": 0.05,
+              "product": 0.85
+            }
+          },
+          "duration_ms": 1591,
+          "provider_request_id": "msg_…(ausgelassen: Anbieter-ID)",
+          "refusal": false,
+          "usage": {
+            "cache_write_tokens": 0,
+            "cached_input_tokens": 0,
+            "input_tokens": 399,
+            "output_tokens": 42
+          }
+        }
+      },
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.0564,
+      "cost_usd": 0.01827,
+      "duration_ms": 1603,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "Adapter: strukturierte Ausgabe inkl. lokaler Schema-Validierung",
+      "running_cost_usd": 0.04547999999999999,
+      "step": "anthropic.adapter.structured",
+      "url": "https://api.anthropic.com/v1/messages",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.08046,
+      "cost_usd": 0.0675,
+      "duration_ms": 4240,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "V-A5: Schema mit 20 Enum-Werten und 2.000 Zeichen Beschreibung",
+      "request": {
+        "auth_header": "x-api-key (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 256,
+          "messages": [
+            {
+              "content": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Choose the page_type value that fits best.",
+              "role": "user"
+            }
+          ],
+          "model": "claude-haiku-5-5",
+          "output_config": {
+            "format": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "page_type": {
+                    "description": "Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria from the page content to decide. Use only observable criteria…[gekürzt, 2000 Zeichen]",
+                    "enum": [
+                      "type_01",
+                      "type_02",
+                      "type_03",
+                      "type_04",
+                      "type_05",
+                      "type_06",
+                      "type_07",
+                      "type_08",
+                      "type_09",
+                      "type_10",
+                      "type_11",
+                      "type_12",
+                      "type_13",
+                      "type_14",
+                      "type_15",
+                      "type_16",
+                      "type_17",
+                      "type_18",
+                      "type_19",
+                      "type_20"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page_type",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "type": "json_schema"
+            }
+          },
+          "system": "You are the endpoint of an API compatibility probe. Answer as briefly as possible."
+        },
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "container": null,
+        "content": [
+          {
+            "signature": "(ausgelassen: undurchsichtiger Blob, 424 Zeichen aufgezeichnet)",
+            "thinking": "",
+            "type": "thinking"
+          }
+        ],
+        "diagnostics": null,
+        "id": "msg_…(ausgelassen: Anbieter-ID)",
+        "model": "claude-haiku-5-5",
+        "role": "assistant",
+        "stop_details": null,
+        "stop_reason": "max_tokens",
+        "stop_sequence": null,
+        "type": "message",
+        "usage": {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "inference_geo": "global",
+          "input_tokens": 970,
+          "output_tokens": 256,
+          "output_tokens_details": {
+            "thinking_tokens": 256
+          },
+          "service_tier": "standard",
+          "speed": "standard"
+        }
+      },
+      "response_headers": {
+        "anthropic-organization-id": "(Wert nicht aufgezeichnet)",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-11-24T17:01:33Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-11-24T17:01:34Z",
+        "anthropic-ratelimit-requests-limit": "4000",
+        "anthropic-ratelimit-requests-remaining": "3999",
+        "anthropic-ratelimit-requests-reset": "2026-11-24T17:01:30Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-11-24T17:01:33Z",
+        "anthropic-workspace-id": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-security-policy": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "request-id": "req_…(ausgelassen: Anbieter-ID)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "traceresponse": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-robots-tag": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.11298,
+      "status": 200,
+      "step": "anthropic.raw.structured_limits",
+      "url": "https://api.anthropic.com/v1/messages",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 970,
+        "output_tokens": 256,
+        "output_tokens_details": {
+          "thinking_tokens": 256
+        },
+        "service_tier": "standard",
+        "speed": "standard"
+      },
+      "via": "raw"
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.07419,
+      "cost_usd": 0.00249,
+      "duration_ms": 593,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "Bildanfrage: image-Block mit base64-Quelle, Testbild 32x32 PNG (AI-002)",
+      "request": {
+        "auth_header": "x-api-key (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 128,
+          "messages": [
+            {
+              "content": [
+                {
+                  "source": {
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAMK0lEQVR4AQEgDN/zANwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFNwUFADcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBTcFBQA3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU3BQU…[gekürzt, 4232 Zeichen]",
+                    "media_type": "image/png",
+                    "type": "base64"
+                  },
+                  "type": "image"
+                },
+                {
+                  "text": "What is the dominant colour of this image? Answer with one word.",
+                  "type": "text"
+                }
+              ],
+              "role": "user"
+            }
+          ],
+          "model": "claude-haiku-5-5",
+          "system": "You are the endpoint of an API compatibility probe. Answer as briefly as possible."
+        },
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "container": null,
+        "content": [
+          {
+            "text": "Red",
+            "type": "text"
+          }
+        ],
+        "diagnostics": null,
+        "id": "msg_…(ausgelassen: Anbieter-ID)",
+        "model": "claude-haiku-5-5",
+        "role": "assistant",
+        "stop_details": null,
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "type": "message",
+        "usage": {
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "inference_geo": "global",
+          "input_tokens": 63,
+          "output_tokens": 4,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "service_tier": "standard",
+          "speed": "standard"
+        }
+      },
+      "response_headers": {
+        "anthropic-organization-id": "(Wert nicht aufgezeichnet)",
+        "anthropic-ratelimit-input-tokens-limit": "2000000",
+        "anthropic-ratelimit-input-tokens-remaining": "2000000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-11-24T17:01:35Z",
+        "anthropic-ratelimit-output-tokens-limit": "400000",
+        "anthropic-ratelimit-output-tokens-remaining": "400000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-11-24T17:01:35Z",
+        "anthropic-ratelimit-requests-limit": "4000",
+        "anthropic-ratelimit-requests-remaining": "3999",
+        "anthropic-ratelimit-requests-reset": "2026-11-24T17:01:34Z",
+        "anthropic-ratelimit-tokens-limit": "2400000",
+        "anthropic-ratelimit-tokens-remaining": "2400000",
+        "anthropic-ratelimit-tokens-reset": "2026-11-24T17:01:35Z",
+        "anthropic-workspace-id": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-security-policy": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "request-id": "req_…(ausgelassen: Anbieter-ID)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "traceresponse": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-robots-tag": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.11547,
+      "status": 200,
+      "step": "anthropic.raw.image",
+      "url": "https://api.anthropic.com/v1/messages",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 63,
+        "output_tokens": 4,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "service_tier": "standard",
+        "speed": "standard"
+      },
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "ok": true,
+        "response": {
+          "content": "Red",
+          "duration_ms": 593,
+          "provider_request_id": "msg_…(ausgelassen: Anbieter-ID)",
+          "refusal": false,
+          "usage": {
+            "cache_write_tokens": 0,
+            "cached_input_tokens": 0,
+            "input_tokens": 63,
+            "output_tokens": 4
+          }
+        }
+      },
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.08043,
+      "cost_usd": 0.00249,
+      "duration_ms": 593,
+      "executed": true,
+      "method": "POST",
+      "model": "claude-haiku-5-5",
+      "purpose": "Adapter: Bildanfrage",
+      "running_cost_usd": 0.11796,
+      "step": "anthropic.adapter.image",
+      "url": "https://api.anthropic.com/v1/messages",
+      "via": "adapter"
+    },
+    {
+      "cost_basis": "worst_case",
+      "cost_cap_usd": 0.02448,
+      "cost_usd": 0.02448,
+      "duration_ms": 219,
+      "executed": true,
+      "method": "POST",
+      "model": "openspider-probe-no-such-model",
+      "purpose": "Fehlerform bei unbekanntem Modell (Status, error.type, Meldung)",
+      "request": {
+        "auth_header": "x-api-key (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 128,
+          "messages": [
+            {
+              "content": "Reply with exactly one word: pong",
+              "role": "user"
+            }
+          ],
+          "model": "openspider-probe-no-such-model",
+          "system": "You are the endpoint of an API compatibility probe. Answer as briefly as possible."
+        },
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "error": {
+          "message": "model: openspider-probe-no-such-model",
+          "type": "not_found_error"
+        },
+        "request_id": "req_…(ausgelassen: Anbieter-ID)",
+        "type": "error"
+      },
+      "response_headers": {
+        "anthropic-organization-id": "(Wert nicht aufgezeichnet)",
+        "anthropic-workspace-id": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-security-policy": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "request-id": "req_…(ausgelassen: Anbieter-ID)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "server-timing": "(Wert nicht aufgezeichnet)",
+        "strict-transport-security": "(Wert nicht aufgezeichnet)",
+        "traceresponse": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-robots-tag": "(Wert nicht aufgezeichnet)",
+        "x-should-retry": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.14244,
+      "status": 404,
+      "step": "anthropic.raw.unknown_model",
+      "url": "https://api.anthropic.com/v1/messages",
+      "usage": null,
+      "via": "raw"
+    },
+    {
+      "adapter_result": {
+        "error": {
+          "Http": {
+            "message": "model: openspider-probe-no-such-model",
+            "status": 404
+          }
+        },
+        "ok": false,
+        "status_text": "Error: 404 model: openspider-probe-no-such-model"
+      },
+      "cost_basis": "worst_case",
+      "cost_cap_usd": 0.03147,
+      "cost_usd": 0.03147,
+      "duration_ms": 216,
+      "executed": true,
+      "method": "POST",
+      "model": "openspider-probe-no-such-model",
+      "purpose": "Adapter: Fehlerklasse bei unbekanntem Modell",
+      "running_cost_usd": 0.17391,
+      "step": "anthropic.adapter.unknown_model",
+      "url": "https://api.anthropic.com/v1/messages",
+      "via": "adapter"
+    }
+  ],
+  "selection": {
+    "structured": {
+      "model": "claude-haiku-5-5",
+      "rates_usd_per_token": {
+        "input_per_token": 0.00003,
+        "output_per_token": 0.00015,
+        "per_image": 0.0,
+        "per_request": 0.0
+      },
+      "rule": "Modelle mit structured_outputs.supported und image_input.supported; erstes mit „haiku“ in der ID, sonst erstes (Liste ohne Preise, AI-002)"
+    },
+    "text": {
+      "model": "claude-haiku-5-5",
+      "rates_usd_per_token": {
+        "input_per_token": 0.00003,
+        "output_per_token": 0.00015,
+        "per_image": 0.0,
+        "per_request": 0.0
+      },
+      "rule": "Modelle mit structured_outputs.supported und image_input.supported; erstes mit „haiku“ in der ID, sonst erstes (Liste ohne Preise, AI-002)"
+    },
+    "vision": {
+      "model": "claude-haiku-5-5",
+      "rates_usd_per_token": {
+        "input_per_token": 0.00003,
+        "output_per_token": 0.00015,
+        "per_image": 0.0,
+        "per_request": 0.0
+      },
+      "rule": "Modelle mit structured_outputs.supported und image_input.supported; erstes mit „haiku“ in der ID, sonst erstes (Liste ohne Preise, AI-002)"
+    }
+  },
+  "totals": {
+    "aborted": null,
+    "estimated_cost_usd": 0.17391,
+    "requests": 12
+  }
+}
