@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "page_type": {
+      "type": "string",
+      "enum": [
+        "homepage",
+        "category",
+        "product",
+        "article",
+        "landing",
+        "local",
+        "contact",
+        "about",
+        "legal",
+        "search-results",
+        "account",
+        "media",
+        "error",
+        "other"
+      ]
+    },
+    "reason": {
+      "type": ["string", "null"]
+    },
+    "details": {
+      "type": "object",
+      "properties": {
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "required": ["confidence"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["page_type", "reason", "details"],
+  "additionalProperties": false
+}
