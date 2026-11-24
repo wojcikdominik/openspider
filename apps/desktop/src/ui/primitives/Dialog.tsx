@@ -28,11 +28,61 @@ export function Dialog(props: DialogProps) {
   // header, detail frame) do not run the overlay machinery of their closed dialogs. Focus still returns on close.
   return props.isOpen ? <OpenDialog {...props} /> : null;
 }
+/**
+ * UI-015/UI-113: does this Escape `keydown` close `dialog` although the focus is not inside it?
+ *
+ * React Aria closes a modal on Escape only from inside the dialog. When the focus was last moved without a key or pointer
+ * event (screen reader, programmatic focus), it moves the focus into a freshly opened dialog only after an animation frame
+ * and after running CSS transitions; an Escape in that window reached the trigger and was lost, the dialog stayed open.
+ * Yes when the dialog is the topmost open dialog, the focus is outside it, no handler took the key (`preventDefault`, e.g.
+ * an open popover) and no IME composition is open. With the focus inside, React Aria handles Escape itself.
+ */
+export function dialogEscapeCloses(
+  e: Pick<KeyboardEvent, "key" | "isComposing" | "defaultPrevented" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey" | "target">,
+  dialog: Element,
+): boolean {
+  if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return false;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+  if (e.target instanceof Node && dialog.contains(e.target)) return false;
+  const open = dialog.ownerDocument.querySelectorAll(".os-dialog");
+  return open[open.length - 1] === dialog;
+}
+
 function OpenDialog({ title, isOpen, onOpenChange, children, footer, description, size = "medium", isDismissable = true, icon }: DialogProps) {
+  const ref = useRef<HTMLElement>(null);
+  const latest = useRef(onOpenChange);
+  latest.current = onOpenChange;
+  // The trigger, read while rendering (before the modal makes the rest of the page inert and the trigger loses focus).
+  const trigger = useRef<Element | null>(typeof document !== "undefined" ? document.activeElement : null);
+  // Escape closes the dialog as soon as it is shown, even before React Aria has moved the focus into it (bubble phase:
+  // handlers inside the page and in popovers keep the key).
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    let escaped = false;
+    const onKey = (e: KeyboardEvent) => {
+      if (!dialogEscapeCloses(e, dialog)) return;
+      e.preventDefault();
+      escaped = true;
+      latest.current(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      // React Aria returns the focus only from a scope the focus has entered; here it never did. Return it to the trigger
+      // once the page is no longer inert (after the unmount cleanups), unless something else took the focus meanwhile.
+      const el = trigger.current;
+      if (!escaped || !(el instanceof HTMLElement) || el === el.ownerDocument.body) return;
+      queueMicrotask(() => {
+        const active = el.ownerDocument.activeElement;
+        if (el.isConnected && (!active || active === el.ownerDocument.body)) el.focus({ preventScroll: true });
+      });
+    };
+  }, []);
   return (
     <ModalOverlay className="os-overlay" isOpen={isOpen} onOpenChange={onOpenChange} isDismissable={isDismissable}>
       <Modal className={cx("os-modal", `os-modal-${size}`)}>
-        <RacDialog className="os-dialog">
+        <RacDialog ref={ref} className="os-dialog">
           {({ close }) => (
             <>
               {icon ? (
