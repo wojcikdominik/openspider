@@ -1,0 +1,21 @@
+# Fixture AI-121: robots.txt je KI-Crawler (tests/fixtures/ai/search/robots, M4-S01).
+# Virtuelle Hosts unter hosts/<host>/ (nur Dateien): ai-block-all.test, ai-mixed.test, ai-search-blocked.test,
+# ai-partial.test (40 HTML-URLs, davon 10 unter /intern/), ai-none.test (ohne robots.txt -> 404).
+# ai-5xx.test hat kein Host-Verzeichnis und wird nur ueber die hostgebundenen Routen unten bedient.
+
+[[route]]
+path = "/robots.txt"
+host = "ai-5xx.test"
+status = 503
+content_type = "text/plain"
+body = "Service Unavailable"
+
+[[route]]
+path = "/"
+host = "ai-5xx.test"
+body = "<!doctype html><html><head><title>Start</title></head><body><h1>Start</h1><a href=\"/a.html\">a</a></body></html>"
+
+[[route]]
+path = "/a.html"
+host = "ai-5xx.test"
+body = "<!doctype html><html><head><title>A</title></head><body><h1>A</h1></body></html>"

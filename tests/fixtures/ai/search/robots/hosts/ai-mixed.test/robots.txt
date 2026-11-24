@@ -1,0 +1,14 @@
+# Fixture AI-121 (ai-mixed.test: Training gesperrt, Suche erlaubt), erzeugt aus resources/ai/ai-crawlers.json (Stand 2026-11-24).
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: anthropic-ai
+User-agent: CCBot
+User-agent: Bytespider
+User-agent: Meta-ExternalAgent
+User-agent: cohere-ai
+User-agent: AI2Bot
+User-agent: Diffbot
+Disallow: /
+
+User-agent: *
+Allow: /
