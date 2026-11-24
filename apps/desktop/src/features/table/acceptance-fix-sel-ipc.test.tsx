@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import commands from "../../ipc/commands.json";
 import { client, createClient, setClient } from "../../ipc/client";
-import { crawlBegin } from "../../ipc/crawlBegin";
+import { crawlBegin } from "../../ipc/begin/crawlBegin";
 import { IpcError, localError } from "../../ipc/errors";
 import { MockCore } from "../../ipc/transport/mock";
 
