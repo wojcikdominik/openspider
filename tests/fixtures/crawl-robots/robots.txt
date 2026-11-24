@@ -24,3 +24,8 @@ Disallow: /zweite-gruppe/
 
 Sitemap: {{BASE_URL}}/sitemap.xml
 Sitemap: {{BASE_URL}}/sitemap-news.xml
+
+# [M4] Gruppe fuer OAI-SearchBot (CRAWL-114 [M4], AI-121): eigene Gruppe, daher greift `*` (alles gesperrt) nicht.
+User-agent: OAI-SearchBot
+Disallow: /privat/
+Allow: /privat/oeffentlich
