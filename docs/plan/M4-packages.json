@@ -201,7 +201,8 @@
   "owns": [
    "crates/os-ai/src/adapters/{anthropic,openrouter}/**",
    "crates/os-ai/tests/adapter_{anthropic,openrouter}*.rs",
-   "tests/fixtures/ai/mock-answers.d/k01.json"
+   "tests/fixtures/ai/mock-answers.d/k01.json",
+   "crates/os-ai/Cargo.toml und Cargo.lock (nur die Zeile `os-testsite.workspace = true` unter [dev-dependencies] für Tests gegen ai-mock; wortgleich in K01, K02, K07; Orchestrator-Entscheidung 24.11.2026)"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Alle Kriterien von AI-002 und AI-005 gegen ai-mock, inkl. Kontingent-Szenarien der Tabelle (insufficient-quota, spend-limit-user/-workspace, 402-billing, 429-spend-cap ohne retry-after, 529; OpenRouter 402-credits/-key-limit/-weight/-in-flight, 403-guardrail, refusal, refusal-filter-only, refusal-403), Fähigkeiten der Anthropic-Modelle live aus `GET /v1/models`. Kein Backoff bei Verweigerung.",
   "extra_spec_ids": [],
@@ -226,7 +227,8 @@
   "owns": [
    "crates/os-ai/src/adapters/{openai_responses,openai_decisions}/**",
    "crates/os-ai/tests/adapter_openai*.rs",
-   "tests/fixtures/ai/mock-answers.d/k02.json"
+   "tests/fixtures/ai/mock-answers.d/k02.json",
+   "crates/os-ai/Cargo.toml und Cargo.lock (nur die Zeile `os-testsite.workspace = true` unter [dev-dependencies] für Tests gegen ai-mock; wortgleich in K01, K02, K07; Orchestrator-Entscheidung 24.11.2026)"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kriterien AI-003/AI-004 gegen ai-mock; Decisions-Grenzen als OS-Festlegung (≤ 10 Fragen je Request, V-A1 bis GA offen), fehlendes `usage` → Tokenfelder null, `Price Source = estimate`; `confidence` = höchste Einzelwahrscheinlichkeit. EU-Basis-URL nur über die Richtlinie aus K07 (hier nur Parameter). E-3 a: Der Adapter wird gebaut; ob Decisions oder der Ersatzweg (AI-034) Standardweg ist, legt der Orchestrator nach der Live-Probe M4-Q00 fest.",
   "extra_spec_ids": [],
@@ -326,7 +328,12 @@
    "crates/os-model/src/budget.rs",
    "crates/os-store/src/ai/{budget,requests}.rs",
    "crates/os-ai/tests/cost_*.rs",
-   "crates/os-store/tests/ai_budget*.rs"
+   "crates/os-store/tests/ai_budget*.rs",
+   "crates/os-store/migrations/0006_ai.sql (nur Spalten `ai_requests.estimated_input_tokens` und `api_budget.over_reservation_ack`; 0006 steckt in keinem Release; Orchestrator-Entscheidung 24.11.2026)",
+   "tests/fixtures/migrations/schema-v6/crawl.ospider (nur Neuerzeugung nach der 0006-Ergänzung)",
+   "crates/os-ai/tests/pending_m4_k05.rs",
+   "tests/fixtures/ai/k05/**",
+   "Abnahmetests (Testagent): crates/os-model/tests/acceptance_k05_ledger.rs, crates/os-store/tests/acceptance_k05_budget_store.rs, crates/os-ai/tests/acceptance_k05_{reserve,estimate,log}.rs, crates/os-ai/tests/acceptance_k05_support/**"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kritischer Pfad für M5 (BudgetLedger). Kriterien AI-012/AI-013/AI-014 ohne die [M5]-Teile (Tests dafür `#[ignore = \"M5: …\"]`, löst M5-K03 auf); Reservierung vor jedem Request so, dass das Budget bei korrektem Preiskatalog nie überschritten wird, auch bei parallelen Workern; Mikro-USD als Ganzzahl; INTEG-176 (P2) mit Regel „zuerst erreichte Grenze“. Schnittstelle so, dass M5 DataForSEO als zweiten Bereich anmeldet, ohne os-ai zu kennen (Ledger in os-model, Verbrauch aus ai_requests + dfs_cost_log). E-5 a: Standardwerte der Spec (Crawl-Budget 5,00 USD, Bestätigung ab 1,00 USD, Warnschwelle 80 %); EUR-Anzeige nicht in 1.1. INTEG-176 (P2) nicht in der 1.1-Etappe (release_split). E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
   "extra_spec_ids": [],
@@ -364,7 +371,14 @@
   "owns": [
    "crates/os-ai/src/{cache,batch,limits,schema}/**",
    "crates/os-store/src/ai/{cache,batches}.rs",
-   "crates/os-ai/tests/{cache,batch,limits,schema}*.rs"
+   "crates/os-ai/tests/{cache,batch,limits,schema}*.rs",
+   "crates/os-store/tests/ai_cache*.rs",
+   "crates/os-model/src/ai/mod.rs (nur Status `Error: Connection failed`, K4-15; Orchestrator-Entscheidung 24.11.2026)",
+   "crates/os-ai/src/provider.rs (nur Abbildung Transportfehler → `Error: Connection failed`, K4-15; Orchestrator-Entscheidung 24.11.2026)",
+   "crates/os-ai/tests/{status_values,acceptance_f01_status}.rs (nur der neue Statuswert, K4-15)",
+   "crates/os-ai/tests/pending_m4_k06.rs",
+   "tests/fixtures/ai/k06/**",
+   "Abnahmetests (Testagent): crates/os-ai/tests/acceptance_k06_{cache,limits,schema}.rs, crates/os-store/tests/acceptance_k06_ai_cache.rs, tests/fixtures/ai/k06-acceptance/**"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Cache-Schlüssel SHA-256 über kanonisches JSON nach AI-015; Batch mit Polling über Testuhr (batch-partial, batch-expired); Token-Bucket je Modell, Backoff nach INTEG-005, Timeout nach INTEG-179 (Konfiguration), lokale Schema-Validierung jeder Antwort (schema-violation, malformed-json, missing-answer). E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
   "extra_spec_ids": [],
@@ -402,7 +416,8 @@
    "crates/os-ai/src/policy/**",
    "resources/ai/provider-policies.json",
    "crates/os-ai/tests/policy_*.rs",
-   "tests/fixtures/ai/policy/**"
+   "tests/fixtures/ai/policy/**",
+   "crates/os-ai/Cargo.toml und Cargo.lock (nur die Zeile `os-testsite.workspace = true` unter [dev-dependencies] für Tests gegen ai-mock; wortgleich in K01, K02, K07; Orchestrator-Entscheidung 24.11.2026)"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Einwilligung je (Anbieter, Aufgabentyp, Feldmenge), ohne sie null Requests und Status `Pending (consent)`; EU-Richtlinie mit region-denied/region-no-endpoint → `Skipped (policy)`; Nur-lokal → nur Ollama; Schwärzung lokal vor dem Senden mit festen Mustern (Impressum/Kontakt der Fixture-Site). Dialog-UI macht M4-U01; hier Kern, Commands-Rumpf in `crates/os-app/src/commands/ai_consent.rs` nur über E3. E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
   "extra_spec_ids": [],
