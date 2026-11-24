@@ -18,7 +18,7 @@ use os_ai::provider::{
 use os_ai::schema::ResponseSchema;
 use os_ai::{AiStatus, PreviewSwitch};
 use os_model::budget::{BudgetLedger, BudgetLimits, BudgetScope, CrawlBudgetLedger, MicroUsd};
-use os_testsite::mocks::ai::token_count;
+use os_testsite::mocks::ai::decisions_input_tokens;
 use proptest::prelude::*;
 use serde_json::{json, Value};
 use support::{limiter, limiter_timeout, route_site, test_price, Mock, EU_HOST, GLOBAL_HOST};
@@ -347,11 +347,11 @@ async fn cost_is_input_tokens_times_input_price_only() {
     let record = &run.requests[0];
     let usage = record.meta.usage.clone().unwrap();
     let input = usage.input_tokens.unwrap();
-    assert_eq!(input, token_count(&mock.bodies(DECISIONS)[0]) as u64);
-    assert!(
-        usage.output_tokens.unwrap() > 0,
-        "the mock reports output tokens"
-    );
+    // Nachtrag 24.11.2026 (08 Konventionen, Q00-M1): der ai-mock zählt die Decisions-Eingabe je Frage und meldet 0
+    // Ausgabe-Tokens; „Ausgabe trägt 0 bei, auch wenn welche gemeldet werden“ prüfen die Sätze mit Ausgabepreis unten
+    // und der Stub-Test in acceptance_k02_decisions.rs (500.000 Ausgabe-Tokens).
+    assert_eq!(input, decisions_input_tokens(&mock.bodies(DECISIONS)[0]));
+    assert_eq!(usage.output_tokens, Some(0));
     // 0,10 USD je 1 Mio. Tokens = 0,1 µUSD je Token, kaufmännisch gerundet.
     let expected = MicroUsd((input + 5) / 10);
     assert!(expected.0 > 0);

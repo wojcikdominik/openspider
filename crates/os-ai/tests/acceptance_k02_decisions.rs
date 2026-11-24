@@ -353,8 +353,9 @@ async fn k5_cost_ignores_cache_split() {
 }
 
 // spec: AI-004
-// Kriterium 5 gegen den Mock: der Mock meldet Ausgabe-Tokens > 0; die Kosten entsprechen trotzdem nur den
-// Eingabe-Tokens × Eingabepreis.
+// Kriterium 5 gegen den Mock: die Kosten entsprechen nur den Eingabe-Tokens × Eingabepreis, auch mit Sätzen, die einen
+// Ausgabepreis hätten. Nachtrag 24.11.2026 (08 Konventionen, Q00-M1): der ai-mock meldet für Decisions 0 Ausgabe-Tokens
+// (wie die echte API); „auch wenn der Mock welche meldet“ prüft der Stub-Test oben mit 500.000 Ausgabe-Tokens.
 #[tokio::test]
 async fn k5_mock_reported_output_tokens_cost_nothing() {
     let mock = Mock::start().await;
@@ -370,9 +371,10 @@ async fn k5_mock_reported_output_tokens_cost_nothing() {
         &outcome,
     );
     let input_tokens = record.input_tokens.expect("Mock meldet usage");
-    assert!(
-        record.output_tokens.unwrap_or(0) > 0,
-        "Mock meldet Ausgabe-Tokens"
+    assert_eq!(
+        record.output_tokens,
+        Some(0),
+        "Mock meldet 0 Ausgabe-Tokens"
     );
     let expected = cost_of(
         &TokenCounts::plain(input_tokens, 0),

@@ -312,7 +312,8 @@ async fn k3_usage_fields_are_transferred() {
         output_tokens: Some(56),
         cached_input_tokens: Some(789),
         cache_write_tokens: None,
-        reasoning_tokens: None,
+        // Nachtrag 24.11.2026 (AI-003, Q00-H1): `output_tokens_details.reasoning_tokens` wird übertragen.
+        reasoning_tokens: Some(0),
     };
     assert_eq!(meta.usage, Some(expected.clone()));
     let mut req = request(vec![text("x")]);

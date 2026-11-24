@@ -320,6 +320,7 @@ async fn k4_usage_felder_werden_in_die_einheitlichen_felder_uebertragen() {
                 }),
             ),
         )
+        .with_header("request-id", "req_k01")
     })
     .await;
     let reply = adapter(&stub.base())
@@ -333,8 +334,9 @@ async fn k4_usage_felder_werden_in_die_einheitlichen_felder_uebertragen() {
     // nur, dass der Wert übertragen und nicht verkleinert wird.
     let input = reply.usage.input_tokens.expect("input_tokens übertragen");
     assert!(input >= 100, "input_tokens = {input}");
-    // AI-001: gemeinsames Ergebnis mit Anbieter-Request-ID.
-    assert_eq!(reply.provider_request_id.as_deref(), Some("msg_k01"));
+    // AI-001: gemeinsames Ergebnis mit Anbieter-Request-ID. Nachtrag 24.11.2026 (Q00-N2): Header `request-id`, nie die
+    // Antwort-`id` (`msg_…`).
+    assert_eq!(reply.provider_request_id.as_deref(), Some("req_k01"));
 }
 
 // spec: AI-002
@@ -377,13 +379,16 @@ async fn k4_fehlende_usage_felder_ergeben_null_nicht_null_wert() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// K5: stop_reason max_tokens bei Schema-Aufgabe → Error: Invalid output
+// K5: stop_reason max_tokens bei Schema-Aufgabe → kein Teilergebnis. Nachtrag 24.11.2026 (AI-002, Q00-H1) ersetzt
+// „→ Error: Invalid output“ und K01-Auslegung 1 (Reparaturversuch): Abbruch an der Ausgabegrenze ohne Reparaturversuch,
+// `Error Code = max_tokens`. Statuswert `Error: Output limit reached` folgt mit M4-K10 (bis dahin `Error: Invalid output`).
 
 // spec: AI-002
 // spec: AI-021
+// spec: AI-002 [M4]
 // acceptance: independent
 #[tokio::test]
-async fn k5_max_tokens_bei_schema_aufgabe_ergibt_invalid_output() {
+async fn k5_max_tokens_bei_schema_aufgabe_ohne_teilergebnis_und_ohne_reparatur() {
     let mock = Mock::start().await;
     let (limiter, _) = new_limiter(1, 10);
     let adapter = adapter(&mock.anthropic_base());
@@ -402,13 +407,33 @@ async fn k5_max_tokens_bei_schema_aufgabe_ergibt_invalid_output() {
         "K5 MOCK-SCENARIO:max-tokens b",
         Some(ok_schema()),
     );
-    let run = structured(&limiter, &adapter, &req).await;
-    assert!(
-        matches!(run.outcome, StructuredOutcome::InvalidOutput { .. }),
-        "erwartet Error: Invalid output: {:?}",
-        run.outcome
+    let schema = ResponseSchema::new(req.response_schema.clone().unwrap()).unwrap();
+    let (limiter, req, adapter) = (&*limiter, &req, &adapter);
+    let run = run_with_repair(&schema, RepairAttempts::default(), |repair| async move {
+        let exec = run_entry(limiter, "anthropic", &req.model.id, |_| {
+            let repair = repair.as_ref();
+            adapter.send(req, repair)
+        })
+        .await;
+        match exec.result {
+            Ok(reply) => reply
+                .for_repair()
+                .map(|(raw, _)| (raw, ()))
+                .map_err(|limit| limit.reason),
+            Err(error) => Err(format!("{error:?}")),
+        }
+    })
+    .await;
+    assert_eq!(
+        run.outcome,
+        StructuredOutcome::Failed("max_tokens".to_string())
     );
-    assert_eq!(run.outcome.status(), Some(AiStatus::InvalidOutput));
+    let sent = mock
+        .requests_to("POST", "/anthropic/v1/messages")
+        .into_iter()
+        .filter(|r| r.body.contains("K5 MOCK-SCENARIO:max-tokens b"))
+        .count();
+    assert_eq!(sent, 1, "kein Reparaturversuch");
 }
 
 // ---------------------------------------------------------------------------------------------------------------

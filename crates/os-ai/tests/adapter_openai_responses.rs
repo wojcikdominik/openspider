@@ -238,8 +238,10 @@ async fn refusal_part_is_flagged_and_its_text_goes_to_the_request_log_only() {
 }
 
 // spec: AI-003
+// spec: AI-003 [M4]
 // `usage.input_tokens`, `usage.output_tokens` und `usage.input_tokens_details.cached_tokens` werden übertragen;
-// Cache-Schreiben meldet OpenAI nicht (`null`, AI-001). `input_tokens` enthält die gecachten Tokens bereits
+// Nachtrag 24.11.2026 (Q00-N1): `input_tokens_details.cache_write_tokens` ebenfalls (ai-mock meldet 0 → 0, nicht
+// leer); fehlt das Feld beim Anbieter, bleibt es `null` (AI-001). `input_tokens` enthält die gecachten Tokens bereits
 // (Festlegung 24.11.2026). Ohne `usage` bleiben alle Tokenfelder `null` und die Kosten kommen aus der Schätzung.
 #[tokio::test]
 async fn usage_fields_are_transferred_and_missing_usage_stays_null() {
@@ -266,9 +268,10 @@ async fn usage_fields_are_transferred_and_missing_usage_stays_null() {
         Some(text.chars().count().div_ceil(4) as u64)
     );
     assert_eq!(usage.cached_input_tokens, Some(0));
-    assert_eq!(usage.cache_write_tokens, None);
+    assert_eq!(usage.cache_write_tokens, Some(0));
     assert_eq!(meta.usage, Some(usage));
-    assert_eq!(reply.provider_request_id.as_deref(), Some("mock-request"));
+    // Nachtrag Q00-N2: Header `x-request-id` des ai-mock (`req_mock_<lfd. Nr.>`).
+    assert_eq!(reply.provider_request_id.as_deref(), Some("req_mock_1"));
 
     // Gecachte Tokens laut Anbieter: unverändert übertragen, `input_tokens` enthält sie.
     let site = route_site(
@@ -600,6 +603,7 @@ async fn contract_task_returns_the_parsed_ok_result() {
     assert_eq!(response.content, Some(json!({"ok": true})));
     assert!(!response.refusal);
     assert!(response.usage.input_tokens.is_some());
-    assert_eq!(response.usage.cache_write_tokens, None);
+    // Nachtrag 24.11.2026 (AI-003, Q00-N1): der ai-mock meldet `cache_write_tokens: 0`, der Adapter überträgt es.
+    assert_eq!(response.usage.cache_write_tokens, Some(0));
     assert_eq!(mock.requests_to(RESPONSES).len(), 1);
 }
