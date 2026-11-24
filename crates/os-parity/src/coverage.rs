@@ -12,6 +12,9 @@
 //!    - sonst `open` (kein Test, kein Ergebnis, `FAILED`, Platzhalter-Ignores wie `wartet auf M1-Pxx`).
 //!    - `verified` bleibt erhalten, wenn es schon in der Statusdatei steht und der Test weiter `ok` ist
 //!      (P29 setzt es aus dem Paritätsbericht).
+//!    - Ignores mit Gründen späterer Meilensteine (`M4:`, `M5:`, `P2:`, `Klärung K4-nn`, `wartet auf M4-xx`) an
+//!      Tests ohne M1-ID stehen nicht unter „ignoriert ohne gültigen Grund“; sie prüft `--milestone M4|M5`.
+//!      Trägt der Test auch eine M1-ID, gilt weiter die M1-Regel.
 //! 4. **Benchmarks und Zusatz-IDs** (5.4 Punkt 4): Ein Ignore-Grund mit Präfix `Benchmark` ist gültig;
 //!    solche Tests sind für den Status neutral (weder `implemented` noch `deferred`), stehen nicht unter
 //!    „ignoriert ohne gültigen Grund“, und eine ID nur mit Benchmark-Tests bleibt `open`. IDs im
@@ -238,6 +241,15 @@ pub fn valid_defer_reason(reason: &str) -> bool {
         r.strip_prefix(prefix)
             .is_some_and(|rest| rest.chars().next().is_some_and(|c| c.is_ascii_digit()))
     })
+}
+
+/// Grund eines späteren Meilensteins: die Zurückstellungen aus M3.md D7 (`M4:`, `M5:`, `P2:`, `Manuell:`,
+/// `Klärung K3-nn`/`K4-nn`/`K5-nn`) oder ein Platzhalter `wartet auf M4-…`/`wartet auf M5-…` (Plan M4 E4).
+/// Im M1-Lauf gilt er nur für Tests ohne M1-ID als gültig; geprüft wird er dann von `--milestone M3|M4|M5`
+/// (Modul `mx`).
+pub fn later_milestone_reason(reason: &str) -> bool {
+    let r = reason.trim();
+    mx::valid_defer_reason(3, r) || (4..=5u8).any(|n| r.starts_with(&format!("wartet auf M{n}-")))
 }
 
 /// Ist der Ignore-Grund ein Benchmark-Grund (`Benchmark (P28): …`)? Gültig, aber für den Status neutral.
@@ -529,6 +541,14 @@ pub(crate) fn compute_with_reason(
         let problem = if reason.trim().is_empty() {
             Some("#[ignore] ohne Grund")
         } else if is_benchmark_reason(reason) {
+            None
+        } else if !t.ids.is_empty()
+            && t.ids.iter().all(|id| {
+                !package_specs.specs.contains_key(id) && !package_specs.extra.contains_key(id)
+            })
+            && later_milestone_reason(reason)
+        {
+            // Test ohne M1-ID mit Grund eines späteren Meilensteins: Sache von `--milestone M4|M5`.
             None
         } else if !t.ids.is_empty() && !valid_defer_reason(reason) {
             Some("Grund beginnt nicht mit M2:/M3:/Klärung K-xx (Platzhalter zählen nicht als deferred)")

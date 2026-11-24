@@ -254,6 +254,85 @@ fn ignored_tests_without_valid_reason_are_listed() {
     assert_eq!(placeholder["spec_ids"][0], "ALPHA-006");
 }
 
+// Plan M4 E4: Platzhalter `wartet auf M4-xx` und `M5:`-Gründe an Tests ohne M1-ID prüft `--milestone M4`;
+// der M1-Lauf (`--strict` in der CI) wertet sie nicht als ungültig. Mit M1-ID bleibt die M1-Regel.
+#[test]
+fn later_milestone_reasons_only_count_for_tests_without_an_m1_id() {
+    let dir = tempfile::tempdir().unwrap();
+    copy_tree(&data().join("ws"), dir.path());
+    std::fs::write(
+        dir.path().join("crates/beta/tests/pending_m4_x01.rs"),
+        r#"// spec: AI-900
+#[test]
+#[ignore = "wartet auf M4-D01: Lauf gegen den Mock"]
+fn m4_placeholder_without_m1_id() {}
+
+// spec: AI-901 [M5]
+#[test]
+#[ignore = "M5: gemeinsames Budget"]
+fn m5_reason_without_m1_id() {}
+
+// spec: AI-902
+#[test]
+#[ignore = "Klärung K4-15: offen"]
+fn k4_clarification_without_m1_id() {}
+
+// spec: AI-905
+#[test]
+#[ignore = "P2: Adapter folgt später"]
+fn p2_reason_without_m1_id() {}
+
+// spec: AI-903, BETA-003
+#[test]
+#[ignore = "wartet auf M4-D01"]
+fn m4_placeholder_with_m1_id() {}
+
+// spec: AI-904
+#[test]
+#[ignore = "kommt später"]
+fn free_text_without_m1_id() {}
+"#,
+    )
+    .unwrap();
+    let write = dir.path().join("docs/plan/M1-status.json");
+    let args = CoverageArgs {
+        milestone: os_parity::coverage::Milestone::M1,
+        gate: false,
+        wave: 0,
+        merged: Vec::new(),
+        merged_log: None,
+        frontend_junit: Vec::new(),
+        packages: Some(data().join("packages.json")),
+        test_output: Some(data().join("sample-test-output.txt")),
+        junit: None,
+        write: Some(write.clone()),
+        root: dir.path().to_path_buf(),
+        strict: false,
+        parity_report: None,
+        evidence: None,
+    };
+    run(&args).unwrap();
+    let json: Value = serde_json::from_str(&std::fs::read_to_string(write).unwrap()).unwrap();
+    let names: Vec<String> = json["ignored_without_valid_reason"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["test"].as_str().unwrap().to_string())
+        .collect();
+    for ok in [
+        "m4_placeholder_without_m1_id",
+        "m5_reason_without_m1_id",
+        "k4_clarification_without_m1_id",
+        "p2_reason_without_m1_id",
+    ] {
+        assert!(!names.iter().any(|n| n == ok), "{ok} in {names:?}");
+    }
+    for bad in ["m4_placeholder_with_m1_id", "free_text_without_m1_id"] {
+        assert!(names.iter().any(|n| n == bad), "{bad} fehlt in {names:?}");
+    }
+    assert_eq!(names.len(), 5, "drei aus dem Beispiel plus zwei: {names:?}");
+}
+
 #[test]
 fn junit_output_resolves_package_names_and_duplicate_test_files() {
     let o = run_with(None, Some("sample-nextest.xml"));
