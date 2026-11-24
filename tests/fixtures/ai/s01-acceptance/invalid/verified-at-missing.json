@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "crawlers": [
+    {
+      "token": "ExampleBot",
+      "operator": "Beispiel GmbH",
+      "category": "search",
+      "ua_pattern": "ExampleBot",
+      "ua_example": "Mozilla/5.0 (compatible; ExampleBot/1.0; +https://example.org/bot)",
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "deprecated": false,
+      "replaced_by": null
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# CRAWL-098 Testfälle aus crawl-robots, Gruppe für OAI-SearchBot
+User-agent: *
+Disallow: /
+
+User-agent: OAI-SearchBot
+Disallow: /privat/
+Allow: /privat/oeffentlich
+Disallow: /*.pdf$
+Disallow: /*?sessionid=
+Allow: /seite$
+Disallow: /seite

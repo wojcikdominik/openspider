@@ -1,0 +1,9 @@
+# zwei Gruppen für dasselbe Token werden zusammengeführt
+User-agent: GPTBot
+Disallow: /a/
+
+User-agent: *
+Disallow: /c/
+
+User-agent: GPTBot
+Disallow: /b/

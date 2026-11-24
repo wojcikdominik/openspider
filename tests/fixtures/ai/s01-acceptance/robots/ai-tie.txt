@@ -1,0 +1,3 @@
+User-agent: PerplexityBot
+Disallow: /gleich
+Allow: /gleich

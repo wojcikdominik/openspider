@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "crawlers": [
+    {
+      "token": "gptbot",
+      "operator": "Jemand",
+      "category": "search",
+      "ua_pattern": "gptbot",
+      "ua_example": "Mozilla/5.0 (compatible; gptbot/1.0; +https://example.org/bot)",
+      "respects_robots": "yes",
+      "docs_url": "https://example.org/bot",
+      "docs_note": null,
+      "verified_at": "2026-10-13",
+      "deprecated": false,
+      "replaced_by": null
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+# Training gesperrt, Suche erlaubt
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: anthropic-ai
+User-agent: CCBot
+User-agent: Bytespider
+User-agent: Meta-ExternalAgent
+User-agent: cohere-ai
+User-agent: AI2Bot
+User-agent: Diffbot
+Disallow: /
+
+User-agent: *
+Allow: /

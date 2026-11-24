@@ -1,0 +1,13 @@
+{
+  "token": "NewSearchBot",
+  "operator": "Neu AG",
+  "category": "search",
+  "ua_pattern": "NewSearchBot",
+  "ua_example": "Mozilla/5.0 (compatible; NewSearchBot/1.0; +https://neu.example/bot)",
+  "respects_robots": "yes",
+  "docs_url": "https://example.org/bot",
+  "docs_note": null,
+  "verified_at": "2026-10-13",
+  "deprecated": false,
+  "replaced_by": null
+}

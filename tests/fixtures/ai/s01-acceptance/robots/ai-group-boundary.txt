@@ -1,0 +1,7 @@
+# aufeinanderfolgende User-agent-Zeilen bilden eine Gruppe, auch mit Sitemap dazwischen
+User-agent: GPTBot
+Sitemap: https://ai.test/sitemap.xml
+User-agent: ClaudeBot
+Disallow: /
+User-agent: CCBot
+Disallow: /nur-ccbot/
