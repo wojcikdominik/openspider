@@ -33,9 +33,10 @@ const confirm = (page: Page) => page.getByRole("dialog", { name: "Delete task", 
 
 async function openScheduling(page: Page) {
   const trigger = page.getByRole("button", { name: "Scheduling", exact: true });
-  // The harness trigger is a plain <button>; WebKit does not focus it on click, so focus it first (as a keyboard user).
+  // The harness trigger is a plain <button>; WebKit moves the focus to body on a mouse click there, so open it by
+  // keyboard (a test-page artefact, the app's own triggers are focusable React Aria buttons).
   await trigger.focus();
-  await trigger.click();
+  await page.keyboard.press("Enter");
   await expect(scheduling(page)).toBeVisible();
   await scheduling(page).getByRole("checkbox", { name: "Select Nightly" }).check();
   return trigger;
