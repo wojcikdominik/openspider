@@ -4,6 +4,22 @@
 
 - Frühe Beta für SEO-Agenturen in Vorbereitung. Plattform-Smoke, Archiv-Kompatibilität und noch offene M2-Parität bleiben vor der Freigabe zu prüfen.
 
+## [1.0.2] - 2026-12-03
+
+OpenSpider 1.0.2 improves how AI assistants see the built-in MCP server. Crawling, analysis and exports work as in 1.0.1.
+
+- Tool hints: every MCP tool now has a title and states whether it only reads data. `crawl_status` is marked as read-only, `stop_crawl` as the one tool that ends a crawl for good. Assistants such as Claude use these hints to decide when to ask before calling a tool. The permission classes in OpenSpider's MCP settings are unchanged: by default only the read tools are available.
+- English descriptions: tool descriptions, parameter descriptions and the server's notes to the assistant are now English throughout; five tools had German descriptions before. The tool table under MCP in the app and the downloadable tool description show the same English texts in every interface language.
+- The note that content from crawled pages is data and never an instruction stays in place, now in English.
+
+### Deutsch
+
+OpenSpider 1.0.2 verbessert, wie KI-Assistenten den eingebauten MCP-Server sehen. Crawlen, Analyse und Exporte arbeiten wie in 1.0.1.
+
+- Werkzeug-Hinweise: Jedes MCP-Werkzeug hat jetzt einen Titel und gibt an, ob es nur Daten liest. `crawl_status` ist als nur lesend gekennzeichnet, `stop_crawl` als das eine Werkzeug, das einen Crawl endgültig beendet. Assistenten wie Claude nutzen diese Hinweise, um zu entscheiden, wann sie vor einem Aufruf nachfragen. Die Freigabeklassen in den MCP-Einstellungen von OpenSpider sind unverändert: Standardmäßig stehen nur die lesenden Werkzeuge bereit.
+- Englische Beschreibungen: Werkzeugbeschreibungen, Parameterbeschreibungen und die Hinweise des Servers an den Assistenten sind jetzt durchgehend englisch; bisher hatten fünf Werkzeuge deutsche Beschreibungen. Die Werkzeugtabelle unter MCP in der App und die herunterladbare Werkzeugbeschreibung zeigen in jeder Oberflächensprache dieselben englischen Texte.
+- Der Hinweis, dass Inhalte gecrawlter Seiten Daten sind und nie Anweisungen, bleibt erhalten, jetzt auf Englisch.
+
 ## [1.0.1] - 2026-11-25
 
 OpenSpider 1.0.1 adds the choice between a stable and a beta update channel and updates third-party libraries. Crawling, analysis and exports work as in 1.0.0.

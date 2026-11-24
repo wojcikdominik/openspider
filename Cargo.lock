@@ -4941,7 +4941,7 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "openspider-desktop"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "os-app",
  "os-model",
@@ -5004,7 +5004,7 @@ dependencies = [
 
 [[package]]
 name = "os-analyze"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "base64 0.23.1",
  "criterion",
@@ -5027,7 +5027,7 @@ dependencies = [
 
 [[package]]
 name = "os-app"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -5072,7 +5072,7 @@ dependencies = [
 
 [[package]]
 name = "os-cli"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "base64 0.23.1",
  "calamine",
@@ -5110,7 +5110,7 @@ dependencies = [
 
 [[package]]
 name = "os-engine"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "bytes",
  "calamine",
@@ -5138,7 +5138,7 @@ dependencies = [
 
 [[package]]
 name = "os-export"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "calamine",
  "csv",
@@ -5168,7 +5168,7 @@ dependencies = [
 
 [[package]]
 name = "os-fetch"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "base64 0.23.1",
  "brotli",
@@ -5198,7 +5198,7 @@ dependencies = [
 
 [[package]]
 name = "os-integrations"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "aes-gcm",
  "base64 0.23.1",
@@ -5225,7 +5225,7 @@ dependencies = [
 
 [[package]]
 name = "os-loadtest"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "libc",
@@ -5244,7 +5244,7 @@ dependencies = [
 
 [[package]]
 name = "os-mcp"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "axum",
  "clap",
@@ -5273,7 +5273,7 @@ dependencies = [
 
 [[package]]
 name = "os-model"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "fancy-regex",
  "proptest",
@@ -5289,7 +5289,7 @@ dependencies = [
 
 [[package]]
 name = "os-parity"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "csv",
@@ -5305,7 +5305,7 @@ dependencies = [
 
 [[package]]
 name = "os-parse"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "criterion",
  "ego-tree",
@@ -5333,7 +5333,7 @@ dependencies = [
 
 [[package]]
 name = "os-render"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "base64 0.23.1",
  "chromiumoxide",
@@ -5354,7 +5354,7 @@ dependencies = [
 
 [[package]]
 name = "os-sched"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "criterion",
  "dirs",
@@ -5375,7 +5375,7 @@ dependencies = [
 
 [[package]]
 name = "os-store"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -5396,7 +5396,7 @@ dependencies = [
 
 [[package]]
 name = "os-testsite"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -5418,7 +5418,7 @@ dependencies = [
 
 [[package]]
 name = "os-url"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "fancy-regex",
  "idna",
