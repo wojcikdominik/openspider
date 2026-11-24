@@ -1,4 +1,4 @@
-use super::{token_count, AnswerBook};
+use super::{q00, token_count, AnswerBook};
 use axum::{
     http::Method,
     response::{IntoResponse, Response},
@@ -167,11 +167,20 @@ pub(super) async fn scenario(
     }
     Some(r)
 }
-fn models(provider: &str, host: &str) -> Value {
+pub(super) fn models(provider: &str, host: &str) -> Value {
     match provider {
         "anthropic" => {
-            let caps = |max: bool| json!({"structured_outputs":{"supported":true},"image_input":{"supported":true},"batch":{"supported":true},"effort":{"supported":true,"low":{"supported":true},"medium":{"supported":true},"high":{"supported":true},"max":{"supported":max}}});
-            json!({"data":[{"id":"mock-claude","display_name":"A","max_input_tokens":200000,"max_tokens":8192,"capabilities":caps(true)}, {"id":"mock-claude-b","display_name":"B","capabilities":caps(false)}, {"id":"mock-claude-c","display_name":"C","capabilities":{"effort":{"supported":false},"structured_outputs":{"supported":false},"image_input":{"supported":false},"batch":{"supported":false}}}, {"id":"mock-claude-d","display_name":"D"}],"has_more":false})
+            // A–D (AI-002) mit `thinking` (Nachtrag Q00): A adaptiv und abschaltbar, B nur adaptiv mit `max_tokens = 4000`,
+            // C ohne Thinking, D ohne `capabilities`; A und B mit `xhigh` (AI-002: `max` auf B → `xhigh`).
+            let caps = |max: bool, thinking: Value| json!({"structured_outputs":{"supported":true},"image_input":{"supported":true},"batch":{"supported":true},"effort":{"supported":true,"low":{"supported":true},"medium":{"supported":true},"high":{"supported":true},"xhigh":{"supported":true},"max":{"supported":max}},"thinking":thinking});
+            let thinking = |disabled: bool| json!({"supported":true,"types":{"adaptive":{"supported":true},"disabled":{"supported":disabled},"enabled":{"supported":false}}});
+            let retires = |days: i64| json!(format!("{}T00:00:00Z", q00::date_in_days(days)));
+            json!({"data":[
+                {"id":"mock-claude","display_name":"A","max_input_tokens":200000,"max_tokens":8192,"retires_at":null,"capabilities":caps(true, thinking(true))},
+                {"id":"mock-claude-b","display_name":"B","max_tokens":4000,"retires_at":retires(30),"capabilities":caps(false, thinking(false))},
+                {"id":"mock-claude-c","display_name":"C","retires_at":retires(200),"capabilities":{"effort":{"supported":false},"structured_outputs":{"supported":false},"image_input":{"supported":false},"batch":{"supported":false},"thinking":{"supported":false}}},
+                {"id":"mock-claude-d","display_name":"D"}
+            ],"has_more":false})
         }
         "openrouter" => {
             let mut data = vec![
@@ -191,6 +200,29 @@ fn models(provider: &str, host: &str) -> Value {
                 model["name"] = json!(name);
                 data.push(model);
             }
+            // Rollen nach 08 Konventionen (Nachtrag Q00), weiterhin 8 Modelle:
+            // M-R1 = mock/text-small, M-R2 = mock/text-large (auch `max_completion_tokens = 4000`),
+            // M-LC = mock/global-a (Ablauf in 30 Tagen), M-IR = mock/global-b (Ablauf in 200 Tagen),
+            // M-R3 = mock/global-c (`expiration_date = null`, ohne `reasoning`).
+            let with_reasoning = |model: &mut Value, reasoning: Value| {
+                model["supported_parameters"] =
+                    json!(["response_format", "structured_outputs", "reasoning"]);
+                model["reasoning"] = reasoning;
+            };
+            with_reasoning(
+                &mut data[3],
+                json!({"supported_efforts":["none","low","medium","high"],"default_enabled":true,"default_effort":"medium","mandatory":false}),
+            );
+            with_reasoning(
+                &mut data[4],
+                json!({"supported_efforts":["low","medium","high"],"mandatory":true}),
+            );
+            data[4]["top_provider"] = json!({"max_completion_tokens":4000});
+            data[5]["pricing"] = json!({"prompt":"0.000001","completion":"0.000002","request":"0","image":"0","overrides":[{"min_prompt_tokens":1000,"prompt":"0.000002","completion":"0.000004"}]});
+            data[5]["expiration_date"] = json!(q00::date_in_days(30));
+            data[6]["pricing"] = json!({"prompt":"0.000001","completion":"0.000002","internal_reasoning":"0.000010","request":"0","image":"0"});
+            data[6]["expiration_date"] = json!(q00::date_in_days(200));
+            data[7]["expiration_date"] = Value::Null;
             if host.starts_with("eu.") {
                 data.truncate(5);
             }
@@ -204,6 +236,7 @@ fn models(provider: &str, host: &str) -> Value {
         }
     }
 }
+#[allow(clippy::too_many_arguments)]
 pub(super) fn success(
     book: &AnswerBook,
     provider: &str,
@@ -212,6 +245,7 @@ pub(super) fn success(
     path: &str,
     input: &Value,
     scenario: &str,
+    custom_models: Option<&Value>,
 ) -> Response {
     let expected = match provider {
         "anthropic" => ["/v1/models", "/v1/messages", "/v1/messages/count_tokens"].as_slice(),
@@ -283,6 +317,15 @@ pub(super) fn success(
             .collect();
         return Json(if provider == "ollama" { json!({"model":input["model"],"embeddings":vectors,"prompt_eval_count":tokens}) } else { json!({"object":"list","data":vectors.iter().enumerate().map(|(i,v)| json!({"object":"embedding","index":i,"embedding":v})).collect::<Vec<_>>(),"model":input["model"],"usage":{"prompt_tokens":tokens,"total_tokens":tokens}}) }).into_response();
     }
+    if provider == "openrouter" && scenario == "unknown-model" {
+        // Form laut Beobachtung 24.11.2026 (Q00-N3): HTTP 400, `error.code` als Zahl, ohne `type` und `metadata`.
+        let model = input["model"].as_str().unwrap_or("");
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"error":{"code":400,"message":format!("{model} is not a valid model ID")},"user_id":q00::MOCK_USER})),
+        )
+            .into_response();
+    }
     let refusal = matches!(scenario, "refusal" | "refusal-filter-only");
     let task = input
         .get("task")
@@ -299,24 +342,108 @@ pub(super) fn success(
     } else {
         output.chars().count().div_ceil(4)
     };
+    // Nachtrag Q00: Reasoning-Tokens (`reasoning=<n>`) und Abbruch an der Ausgabegrenze.
+    let n = q00::reasoning_tokens(scenario);
+    let answer_tokens = out_tokens as u64;
+    let abort = if refusal {
+        None
+    } else {
+        q00::abort(
+            scenario,
+            q00::sent_limit(provider, path, input),
+            answer_tokens,
+            n,
+        )
+    };
+    let (output_tokens, reasoning) = match abort {
+        Some(a) => (a.limit, a.reasoning),
+        None if refusal => (answer_tokens, 0),
+        None => (answer_tokens + n, n),
+    };
+    let truncated = abort.map(|a| q00::truncate(&output, a.limit));
     let mut result = match provider {
         "anthropic" => {
-            json!({"id":"msg_mock","type":"message","role":"assistant","model":input["model"],"content":[{"type":"text","text":if refusal { "Fixture refusal" } else { &output }}],"stop_reason":if refusal {"refusal"} else if scenario == "max-tokens" {"max_tokens"} else {"end_turn"},"usage":{"input_tokens":tokens,"output_tokens":out_tokens,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}})
+            let thinking = json!({"type":"thinking","thinking":q00::REASONING_TEXT,"signature":q00::SIGNATURE});
+            let content = match (&abort, &truncated) {
+                (Some(a), _) if a.reasoning > 0 => vec![thinking],
+                (Some(_), Some(text)) => vec![json!({"type":"text","text":text})],
+                _ => {
+                    let text = json!({"type":"text","text":if refusal { "Fixture refusal" } else { &output }});
+                    if reasoning > 0 {
+                        vec![thinking, text]
+                    } else {
+                        vec![text]
+                    }
+                }
+            };
+            let stop = if refusal {
+                "refusal"
+            } else if abort.is_some() || scenario == "max-tokens" {
+                "max_tokens"
+            } else {
+                "end_turn"
+            };
+            json!({"id":"msg_mock","type":"message","role":"assistant","model":input["model"],"content":content,"stop_reason":stop,"usage":{"input_tokens":tokens,"output_tokens":output_tokens,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens_details":{"thinking_tokens":reasoning}}})
         }
         "openrouter" => {
-            let message = if refusal {
+            let mut message = if refusal {
                 if scenario == "refusal-filter-only" {
                     json!({"role":"assistant","content":null})
                 } else {
                     json!({"role":"assistant","content":null,"refusal":"Fixture refusal"})
                 }
             } else {
-                json!({"role":"assistant","content":output})
+                match (&abort, &truncated) {
+                    (Some(a), _) if a.reasoning > 0 => json!({"role":"assistant","content":null}),
+                    (Some(_), Some(text)) => json!({"role":"assistant","content":text}),
+                    _ => json!({"role":"assistant","content":output}),
+                }
             };
-            json!({"id":"chatcmpl_mock","object":"chat.completion","model":input["model"],"choices":[{"index":0,"message":message,"finish_reason":if refusal {"content_filter"} else {"stop"}}],"usage":{"prompt_tokens":tokens,"completion_tokens":out_tokens,"total_tokens":tokens+out_tokens}})
+            if reasoning > 0 {
+                message["reasoning"] = json!(q00::REASONING_TEXT);
+                message["reasoning_details"] =
+                    json!([{"type":"reasoning.encrypted","data":q00::ENCRYPTED}]);
+            }
+            let finish = if refusal {
+                "content_filter"
+            } else if abort.is_some() {
+                "length"
+            } else {
+                "stop"
+            };
+            let mut usage = json!({"prompt_tokens":tokens,"completion_tokens":output_tokens,"total_tokens":tokens as u64 + output_tokens,"completion_tokens_details":{"reasoning_tokens":reasoning}});
+            let default_catalog;
+            let catalog = match custom_models {
+                Some(catalog) => catalog,
+                None => {
+                    default_catalog = models(provider, host);
+                    &default_catalog
+                }
+            };
+            let computed = q00::openrouter_cost_pico(
+                catalog,
+                input["model"].as_str().unwrap_or(""),
+                tokens as u64,
+                output_tokens,
+                q00::image_parts(input),
+            );
+            q00::apply_openrouter_cost(&mut usage, scenario, computed);
+            json!({"id":"chatcmpl_mock","object":"chat.completion","model":input["model"],"choices":[{"index":0,"message":message,"finish_reason":finish}],"usage":usage})
         }
         "ollama" => {
-            json!({"model":input["model"],"message":{"role":"assistant","content":if refusal { "Fixture refusal" } else { &output }},"done":true,"prompt_eval_count":tokens,"eval_count":out_tokens})
+            let limited = scenario == "output-limit";
+            let content = if refusal {
+                "Fixture refusal".to_string()
+            } else if limited {
+                q00::truncate(&output, q00::FORCED_LIMIT)
+            } else {
+                output.clone()
+            };
+            let mut body = json!({"model":input["model"],"message":{"role":"assistant","content":content},"done":true,"prompt_eval_count":tokens,"eval_count":if limited { q00::FORCED_LIMIT } else { out_tokens as u64 }});
+            if limited {
+                body["done_reason"] = json!("length");
+            }
+            body
         }
         _ if path.ends_with("decisions") => {
             let questions = input
@@ -376,21 +503,34 @@ pub(super) fn success(
                     a["id"] = json!(name);
                     a
                 }).collect();
-            json!({"id":"decision_mock","answers":answers,"usage":{"input_tokens":tokens,"output_tokens":out_tokens}})
+            json!({"answers":answers,"model":input["model"],"usage":{"input_tokens":q00::decisions_input_tokens(input),"output_tokens":0,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}})
         }
         _ => {
-            json!({"id":"resp_mock","object":"response","status":"completed","model":input["model"],"output":[{"type":"message","role":"assistant","content":[if refusal { json!({"type":"refusal","refusal":"Fixture refusal"}) } else { json!({"type":"output_text","text":output}) }]}],"usage":{"input_tokens":tokens,"output_tokens":out_tokens,"input_tokens_details":{"cached_tokens":0}}})
+            let reasoning_item =
+                json!({"type":"reasoning","summary":[],"encrypted_content":q00::ENCRYPTED});
+            let message = |text: &str| json!({"type":"message","role":"assistant","content":[json!({"type":"output_text","text":text})]});
+            let items = if refusal {
+                vec![
+                    json!({"type":"message","role":"assistant","content":[json!({"type":"refusal","refusal":"Fixture refusal"})]}),
+                ]
+            } else {
+                match (&abort, &truncated) {
+                    (Some(a), _) if a.reasoning > 0 => vec![reasoning_item],
+                    (Some(_), Some(text)) => vec![message(text)],
+                    _ if reasoning > 0 => vec![reasoning_item, message(&output)],
+                    _ => vec![message(&output)],
+                }
+            };
+            let mut body = json!({"id":"resp_mock","object":"response","status":"completed","model":input["model"],"output":items,"usage":{"input_tokens":tokens,"output_tokens":output_tokens,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":reasoning}}});
+            if abort.is_some() {
+                body["status"] = json!("incomplete");
+                body["incomplete_details"] = json!({"reason":"max_output_tokens"});
+            }
+            body
         }
     };
-    if path.ends_with("decisions") {
-        result["usage"]["output_tokens"] =
-            json!(result["answers"].to_string().chars().count().div_ceil(4));
-    }
     if scenario == "missing-usage" {
         result.as_object_mut().unwrap().remove("usage");
     }
-    let mut r = Json(result).into_response();
-    r.headers_mut()
-        .insert("x-request-id", "mock-request".parse().unwrap());
-    r
+    Json(result).into_response()
 }

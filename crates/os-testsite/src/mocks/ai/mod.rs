@@ -1,6 +1,7 @@
 //! Offline AI fixtures (08, Konventionen). No provider connections are made.
 mod answers;
 mod batch;
+mod q00;
 mod response;
 
 use super::MockApi;
@@ -22,6 +23,7 @@ use std::{
 };
 
 pub use answers::{embedding, token_count, AnswerBook};
+pub use q00::{decisions_input_tokens, ENCRYPTED, REASONING_TEXT, SIGNATURE};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RequestRecord {
@@ -41,6 +43,8 @@ struct Data {
     files: HashMap<String, String>,
     models: HashMap<String, Value>,
     next_id: usize,
+    /// Laufende Nummer der Anbieter-Requests für die Request-IDs (Nachtrag Q00-N2, N6).
+    request_seq: usize,
 }
 #[derive(Clone)]
 pub struct AiMock {
@@ -151,7 +155,7 @@ async fn handle(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
-    {
+    let seq = {
         let redacted = headers
             .iter()
             .map(|(k, v)| {
@@ -165,7 +169,8 @@ async fn handle(
                 )
             })
             .collect();
-        mock.data.lock().unwrap().log.push(RequestRecord {
+        let mut data = mock.data.lock().unwrap();
+        data.log.push(RequestRecord {
             timestamp_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -176,7 +181,11 @@ async fn handle(
             headers: redacted,
             body: text.clone(),
         });
-    }
+        if provider != "__mock" {
+            data.request_seq += 1;
+        }
+        data.request_seq
+    };
     if provider == "__mock" {
         return match (method, uri.path()) {
             (Method::GET, "/log") => Json(json!(mock.requests())).into_response(),
@@ -201,6 +210,20 @@ async fn handle(
             _ => response::error(provider, 404, "not_found", "Unknown control", None),
         };
     }
+    let response = respond(mock, provider, method, uri, headers, body, text, host).await;
+    q00::finish(provider, seq, response).await
+}
+#[allow(clippy::too_many_arguments)]
+async fn respond(
+    mock: AiMock,
+    provider: &str,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+    text: String,
+    host: String,
+) -> Response {
     let input: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
     let (scenario, attempt) = {
         let mut d = mock.data.lock().unwrap();
@@ -232,12 +255,13 @@ async fn handle(
     if let Some(r) = response::scenario(provider, &host, &scenario, attempt).await {
         return r;
     }
+    let custom_models = mock.data.lock().unwrap().models.get(provider).cloned();
     if method == Method::GET
         && (uri.path().ends_with("/models") || uri.path().ends_with("/tags"))
         && scenario != "empty"
     {
-        if let Some(models) = mock.data.lock().unwrap().models.get(provider).cloned() {
-            return Json(models).into_response();
+        if let Some(models) = &custom_models {
+            return Json(models.clone()).into_response();
         }
     }
     if let Some(r) = batch::handle(
@@ -259,5 +283,6 @@ async fn handle(
         uri.path(),
         &input,
         &scenario,
+        custom_models.as_ref(),
     )
 }
