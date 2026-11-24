@@ -202,6 +202,8 @@
    "crates/os-ai/src/adapters/{anthropic,openrouter}/**",
    "crates/os-ai/tests/adapter_{anthropic,openrouter}*.rs",
    "tests/fixtures/ai/mock-answers.d/k01.json",
+   "crates/os-ai/tests/pending_m4_k01.rs",
+   "Abnahmetests (Testagent): crates/os-ai/tests/acceptance_k01_{anthropic,openrouter}.rs, crates/os-ai/tests/acceptance_k01_support/**",
    "crates/os-ai/Cargo.toml und Cargo.lock (nur die Zeile `os-testsite.workspace = true` unter [dev-dependencies] für Tests gegen ai-mock; wortgleich in K01, K02, K07; Orchestrator-Entscheidung 24.11.2026)"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Alle Kriterien von AI-002 und AI-005 gegen ai-mock, inkl. Kontingent-Szenarien der Tabelle (insufficient-quota, spend-limit-user/-workspace, 402-billing, 429-spend-cap ohne retry-after, 529; OpenRouter 402-credits/-key-limit/-weight/-in-flight, 403-guardrail, refusal, refusal-filter-only, refusal-403), Fähigkeiten der Anthropic-Modelle live aus `GET /v1/models`. Kein Backoff bei Verweigerung.",
@@ -228,6 +230,8 @@
    "crates/os-ai/src/adapters/{openai_responses,openai_decisions}/**",
    "crates/os-ai/tests/adapter_openai*.rs",
    "tests/fixtures/ai/mock-answers.d/k02.json",
+   "crates/os-ai/tests/pending_m4_k02.rs",
+   "Abnahmetests (Testagent): crates/os-ai/tests/acceptance_k02_{responses,decisions}.rs, crates/os-ai/tests/acceptance_k02_support/**, tests/fixtures/ai/k02-acceptance/**",
    "crates/os-ai/Cargo.toml und Cargo.lock (nur die Zeile `os-testsite.workspace = true` unter [dev-dependencies] für Tests gegen ai-mock; wortgleich in K01, K02, K07; Orchestrator-Entscheidung 24.11.2026)"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Kriterien AI-003/AI-004 gegen ai-mock; Decisions-Grenzen als OS-Festlegung (≤ 10 Fragen je Request, V-A1 bis GA offen), fehlendes `usage` → Tokenfelder null, `Price Source = estimate`; `confidence` = höchste Einzelwahrscheinlichkeit. EU-Basis-URL nur über die Richtlinie aus K07 (hier nur Parameter). E-3 a: Der Adapter wird gebaut; ob Decisions oder der Ersatzweg (AI-034) Standardweg ist, legt der Orchestrator nach der Live-Probe M4-Q00 fest.",
@@ -417,6 +421,10 @@
    "resources/ai/provider-policies.json",
    "crates/os-ai/tests/policy_*.rs",
    "tests/fixtures/ai/policy/**",
+   "crates/os-ai/Cargo.toml und Cargo.lock (nur die Zeile `fancy-regex.workspace = true` unter [dependencies] für eigene Schwärzungs-Muster, AI-024; Orchestrator-Entscheidung 24.11.2026)",
+   "tests/fixtures/ai/site/{fields,pii}.html (neu, Testfixtures aus AI-018/AI-024; Orchestrator-Entscheidung 24.11.2026)",
+   "crates/os-ai/tests/pending_m4_k07.rs",
+   "Abnahmetests (Testagent): crates/os-ai/tests/acceptance_k07_{consent,policies,redaction}.rs, crates/os-ai/tests/acceptance_k07_support/**, tests/fixtures/ai/k07-acceptance/**",
    "crates/os-ai/Cargo.toml und Cargo.lock (nur die Zeile `os-testsite.workspace = true` unter [dev-dependencies] für Tests gegen ai-mock; wortgleich in K01, K02, K07; Orchestrator-Entscheidung 24.11.2026)"
   ],
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Einwilligung je (Anbieter, Aufgabentyp, Feldmenge), ohne sie null Requests und Status `Pending (consent)`; EU-Richtlinie mit region-denied/region-no-endpoint → `Skipped (policy)`; Nur-lokal → nur Ollama; Schwärzung lokal vor dem Senden mit festen Mustern (Impressum/Kontakt der Fixture-Site). Dialog-UI macht M4-U01; hier Kern, Commands-Rumpf in `crates/os-app/src/commands/ai_consent.rs` nur über E3. E-1 b: In der 1.1-Etappe nur die IDs aus release_split[\"1.1\"] bauen; die übrigen IDs dieses Pakets folgen in einer 1.2-Etappe nach Neuschnitt durch den Planer (K4-18).",
@@ -1563,7 +1571,7 @@
   "owns": [
    "docs/plan/M4-acceptance/live/probe-1/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Ausnahme von E6 nur für diese Probe: Live-Aufrufe mit `OPENSPIDER_LIVE_API_TESTS=1` und Schlüsseln, die der Nutzer selbst im Schlüsselbund hinterlegt (Agent sieht keine Werte). Gesamtbudget etwa 20 USD; Konten Anthropic, OpenAI (Responses, Decisions), OpenRouter; EU-Wege nur im Mock. Ergebnis: je Anbieter Abweichungen gegen 08 (Endpunkte, Feldnamen, Fehlerformen, Modell-IDs, Preise) und die ausdrückliche Feststellung, ob die Decisions API und `gpt-6-luna` noch wie spezifiziert existieren. Danach legt der Orchestrator nach E-3 a fest, ob Decisions (AI-003) oder der Ersatzweg über strukturierte Ausgabe (AI-034) Standardweg ist; Spec-Abweichungen gehen als Vorschlag an den Planer (08 „Vor Umsetzung zu verifizieren“). Keine Code-Änderung.",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Ausnahme von E6 nur für diese Probe: Live-Aufrufe mit `OPENSPIDER_LIVE_API_TESTS=1` und Schlüsseln, die der Nutzer selbst im Schlüsselbund hinterlegt (Agent sieht keine Werte). Gesamtbudget etwa 20 USD; Konten Anthropic, OpenAI (Responses, Decisions), OpenRouter; EU-Wege nur im Mock. Ergebnis: je Anbieter Abweichungen gegen 08 (Endpunkte, Feldnamen, Fehlerformen, Modell-IDs, Preise) und die ausdrückliche Feststellung, ob die Decisions API und `gpt-6-luna` noch wie spezifiziert existieren. Danach legt der Orchestrator nach E-3 a fest, ob Decisions (AI-004, Engine AI-033) oder der Ersatzweg über strukturierte Ausgabe (AI-034) Standardweg ist; Spec-Abweichungen gehen als Vorschlag an den Planer (08 „Vor Umsetzung zu verifizieren“). Keine Code-Änderung.",
   "release": "1.1"
  },
  {
