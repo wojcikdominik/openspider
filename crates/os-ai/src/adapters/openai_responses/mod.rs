@@ -16,14 +16,16 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 
+use crate::adapters::anthropic::reasoning;
 use crate::limits::{AttemptFailure, FinalError, Limiter, RequestSpec};
 use crate::provider::{
-    AiProvider, Capabilities, CapabilitySource, Input, Model, ProviderError, ProviderFuture,
-    Request, Response, Usage,
+    resolve_reasoning_level, AiProvider, Capabilities, CapabilitySource, Input, Model,
+    ProviderError, ProviderFuture, ReasoningLevel, Request, Response, Usage,
 };
 use crate::schema::{
     run_with_repair, RawAnswer, RepairAttempts, RepairRequest, ResponseSchema, StructuredRun,
 };
+use os_model::ai::AiStatus;
 
 pub use client::{
     parse_usage, ApiKey, HttpReply, OpenAiAccount, OpenAiConfig, OpenAiHttp, QuotaStop,
@@ -50,6 +52,13 @@ pub const RESPONSES_CAPABILITIES: Capabilities = Capabilities {
 /// Fähigkeiten je Modell-ID aus dem Modellkatalog (AI-010, M4-K04). `None` = unbekannt → keine Fähigkeit.
 pub type CapabilityLookup = Arc<dyn Fn(&str) -> Option<Capabilities> + Send + Sync>;
 
+/// Verfügbare Reasoning-Stufen je Modell-ID aus `reasoning_efforts` des Modellkatalogs (AI-010, Nachtrag; M4-K04,
+/// `none` → `off`), aufsteigend; leer = kein `reasoning_efforts` (nur `model-default`).
+pub type ReasoningLookup = Arc<dyn Fn(&str) -> Vec<ReasoningLevel> + Send + Sync>;
+
+/// `incomplete_details.reason` des Abbruchs an der Ausgabegrenze (AI-003, Nachtrag Q00-H1).
+pub const OUTPUT_LIMIT_REASON: &str = "max_output_tokens";
+
 /// Was der Anbieter als Ausgabe geliefert hat.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponsesOutput {
@@ -57,8 +66,12 @@ pub enum ResponsesOutput {
     Text(String),
     /// Ausgabeteil `refusal` mit seinem Text.
     Refusal(String),
-    /// Antwort abgebrochen (`status = "incomplete"`, z. B. `max_output_tokens`): wird nie teilweise übernommen.
+    /// Antwort abgebrochen (`status = "incomplete"` mit anderem Grund als `max_output_tokens`): wird nie teilweise
+    /// übernommen; unlesbar mit Reparaturversuch (K02-Auslegung 9).
     Incomplete(String),
+    /// Abbruch an der Ausgabegrenze (`incomplete_details.reason = "max_output_tokens"`, Nachtrag Q00-H1): kein
+    /// Teilergebnis, kein Reparaturversuch; Grund = `Error Code`.
+    OutputLimit(String),
     /// Antwort nicht lesbar (kein JSON, keine Ausgabe).
     Unparsable(String),
 }
@@ -82,6 +95,9 @@ impl ResponsesReply {
             ResponsesOutput::Incomplete(reason) => RawAnswer::Unparsable {
                 detail: format!("response incomplete ({reason})"),
             },
+            ResponsesOutput::OutputLimit(reason) => RawAnswer::Unparsable {
+                detail: format!("output limit reached ({reason})"),
+            },
             ResponsesOutput::Unparsable(detail) => RawAnswer::Unparsable {
                 detail: detail.clone(),
             },
@@ -93,6 +109,25 @@ impl ResponsesReply {
             _ => None,
         }
     }
+    /// Grund des Abbruchs an der Ausgabegrenze, falls die Antwort dort endete.
+    pub fn output_limit(&self) -> Option<&str> {
+        match &self.output {
+            ResponsesOutput::OutputLimit(reason) => Some(reason),
+            _ => None,
+        }
+    }
+}
+
+/// Endgültiger Fehler eines Abbruchs an der Ausgabegrenze bis M4-K10: vorhandener Fehlerweg `Error: Invalid output`,
+/// nicht wiederholbar, `HTTP Status` der Antwort, `Error Code` = Grund (AI-014, Nachtrag).
+pub fn output_limit_error(reason: &str, http_status: u16) -> FinalError {
+    FinalError {
+        error: ProviderError::InvalidOutput,
+        status: AiStatus::InvalidOutput,
+        http_status: Some(http_status),
+        error_code: Some(reason.to_string()),
+        message: format!("output limit reached ({reason})"),
+    }
 }
 
 /// Fehlgeschlagener Request innerhalb von [`OpenAiResponses::run_structured`].
@@ -103,7 +138,9 @@ pub struct RequestFailure {
 }
 
 /// Request-Body für `POST /responses`. Bei einer Reparatur (AI-021) folgt der Eingabe ein weiterer Textteil mit der
-/// Meldung des Validators.
+/// Meldung des Validators. Immer `"store": false` (AI-003, Nachtrag Q00-H2; auch Reparaturversuche); die
+/// Reasoning-Stufe als `reasoning: {"effort": …}` nach den Stufen in `request.model.reasoning_levels` (Katalog
+/// `reasoning_efforts`); kein `prompt_cache_retention` (V-A8).
 pub fn responses_body(
     request: &Request,
     schema_name: &str,
@@ -126,7 +163,12 @@ pub fn responses_body(
     let mut body = json!({
         "model": request.model.id,
         "input": [{"role": "user", "content": content}],
+        "store": false,
     });
+    let effective = resolve_reasoning_level(request.reasoning, &request.model.reasoning_levels);
+    if let Some(reasoning) = reasoning::reasoning_object(effective) {
+        body["reasoning"] = reasoning;
+    }
     if !request.instructions.trim().is_empty() {
         body["instructions"] = json!(request.instructions);
     }
@@ -148,7 +190,8 @@ pub fn responses_body(
 }
 
 /// Liest eine Responses-Antwort: `output[]` → Nachrichten → Teile `output_text` bzw. `refusal`; `usage` nach
-/// [`parse_usage`]. Unbekannte Felder und Ausgabetypen (z. B. `reasoning`) werden ignoriert.
+/// [`parse_usage`]. Unbekannte Felder und Ausgabetypen werden ignoriert; Elemente vom Typ `reasoning` werden verworfen
+/// (AI-001, Nachtrag).
 pub fn parse_responses(reply: &HttpReply) -> ResponsesReply {
     let body: Value = match serde_json::from_slice(&reply.body) {
         Ok(v) => v,
@@ -184,12 +227,15 @@ pub fn parse_responses(reply: &HttpReply) -> ResponsesReply {
     let output = if !refusals.is_empty() {
         ResponsesOutput::Refusal(refusals.join("\n"))
     } else if body["status"] == "incomplete" {
-        ResponsesOutput::Incomplete(
-            body["incomplete_details"]["reason"]
-                .as_str()
-                .unwrap_or("incomplete")
-                .to_string(),
-        )
+        let reason = body["incomplete_details"]["reason"]
+            .as_str()
+            .unwrap_or("incomplete")
+            .to_string();
+        if reason == OUTPUT_LIMIT_REASON {
+            ResponsesOutput::OutputLimit(reason)
+        } else {
+            ResponsesOutput::Incomplete(reason)
+        }
     } else if texts.is_empty() {
         ResponsesOutput::Unparsable("response contains no output_text".into())
     } else {
@@ -211,6 +257,7 @@ pub fn parse_responses(reply: &HttpReply) -> ResponsesReply {
 pub struct OpenAiResponses {
     http: OpenAiHttp,
     capabilities: CapabilityLookup,
+    reasoning_levels: ReasoningLookup,
     schema_name: String,
 }
 
@@ -230,11 +277,18 @@ impl OpenAiResponses {
         Self {
             http,
             capabilities: Arc::new(|_| None),
+            reasoning_levels: Arc::new(|_| Vec::new()),
             schema_name: DEFAULT_SCHEMA_NAME.to_string(),
         }
     }
     pub fn with_capabilities(mut self, lookup: CapabilityLookup) -> Self {
         self.capabilities = lookup;
+        self
+    }
+    /// Reasoning-Stufen je Modell aus dem Katalog (M4-K04); [`OpenAiResponses::list_models`] trägt sie in
+    /// [`Model::reasoning_levels`] ein. Der Request-Body richtet sich nach dem Modell im Request.
+    pub fn with_reasoning_levels(mut self, lookup: ReasoningLookup) -> Self {
+        self.reasoning_levels = lookup;
         self
     }
     /// Name des Antwortschemas (`^[a-zA-Z0-9_-]{1,64}$` laut Anbieter).
@@ -285,6 +339,10 @@ impl OpenAiResponses {
         );
         if let Ok(reply) = &exec.result {
             meta.refusal_reason = reply.refusal_text();
+            if let Some(reason) = reply.output_limit() {
+                meta.error_code = Some(reason.to_string());
+                meta.error_message = Some(format!("output limit reached ({reason})"));
+            }
         }
         (exec.result, meta)
     }
@@ -319,6 +377,14 @@ impl OpenAiResponses {
                 .run_once(limiter, request, repair.as_ref(), estimated_input_tokens)
                 .await;
             match result {
+                // Abbruch an der Ausgabegrenze: Eintrag endet ohne Reparaturversuch (AI-021, Nachtrag Q00-H1).
+                Ok(reply) if reply.output_limit().is_some() => Err(RequestFailure {
+                    error: output_limit_error(
+                        reply.output_limit().unwrap_or(OUTPUT_LIMIT_REASON),
+                        reply.http_status,
+                    ),
+                    meta,
+                }),
                 Ok(reply) => Ok((reply.raw_answer(), meta)),
                 Err(error) => Err(RequestFailure { error, meta }),
             }
@@ -326,9 +392,13 @@ impl OpenAiResponses {
         .await
     }
 
-    /// Modellliste `GET <basis>/models`; Fähigkeiten aus dem Katalog.
+    /// Modellliste `GET <basis>/models`; Fähigkeiten und Reasoning-Stufen aus dem Katalog.
     pub async fn list_models(&self) -> Result<Vec<Model>, AttemptFailure> {
-        list_models(&self.http, ENDPOINT, &self.capabilities).await
+        let mut models = list_models(&self.http, ENDPOINT, &self.capabilities).await?;
+        for model in &mut models {
+            model.reasoning_levels = (self.reasoning_levels)(&model.id);
+        }
+        Ok(models)
     }
 }
 
@@ -385,9 +455,9 @@ impl AiProvider for OpenAiResponses {
                     false,
                 ),
                 ResponsesOutput::Text(text) => (Some(Value::String(text.clone())), false),
-                ResponsesOutput::Incomplete(_) | ResponsesOutput::Unparsable(_) => {
-                    return Err(ProviderError::InvalidOutput)
-                }
+                ResponsesOutput::Incomplete(_)
+                | ResponsesOutput::OutputLimit(_)
+                | ResponsesOutput::Unparsable(_) => return Err(ProviderError::InvalidOutput),
             };
             Ok(Response {
                 content,
