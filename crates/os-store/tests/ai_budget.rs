@@ -386,3 +386,85 @@ fn calibration_samples_are_the_last_200_estimated_requests_of_a_model() {
     let all = list(f.conn(), &RequestFilter::default()).unwrap();
     assert_eq!(all[0].record.estimated_input_tokens, Some(100));
 }
+
+// spec: AI-013
+#[test]
+fn over_reservation_halt_survives_reopen_until_a_limit_is_raised() {
+    use os_store::ai::budget::{load_over_reservation_acks, open_ledger, raise_limits};
+    let dir = tempfile::tempdir().unwrap();
+    let path = fresh(dir.path());
+    let scope = || BudgetScope::task(AREA_AI, "decision");
+    let halted = |l: &CrawlBudgetLedger| l.snapshot().unwrap().halted;
+    let base = BudgetLimits {
+        crawl: MicroUsd(100_000),
+        ..BudgetLimits::default()
+    };
+    // Lauf 1: Ist 6.000 über der Reservierung 4.000 → Zeile mit over_reservation, Ledger gesperrt.
+    {
+        let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        save_limits(f.conn(), &base).unwrap();
+        let ledger = open_ledger(f.conn(), BudgetLimits::default(), &[]).unwrap();
+        assert!(!halted(&ledger));
+        let r = ledger.reserve(scope(), MicroUsd(4_000)).unwrap();
+        let mut rec = row("decision", "mock-claude", 1_000, 1_000, 6_000);
+        rec.reservation = MicroUsd(4_000);
+        rec.over_reservation = true;
+        insert(f.conn(), &rec).unwrap();
+        assert!(
+            ledger
+                .settle(r.id, MicroUsd(6_000))
+                .unwrap()
+                .over_reservation
+        );
+        assert!(halted(&ledger));
+    }
+    // Neuöffnen ohne Erhöhung: weiterhin gesperrt; Beträge 0 laufen.
+    {
+        let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        let ledger = open_ledger(f.conn(), BudgetLimits::default(), &[]).unwrap();
+        assert!(halted(&ledger), "Sperre nach Neuöffnen aktiv");
+        assert_eq!(
+            ledger.reserve(scope(), MicroUsd(1)),
+            Err(BudgetError::Exceeded(BudgetLevel::Halted))
+        );
+        let free = ledger.reserve(scope(), MicroUsd(0)).unwrap();
+        ledger.settle(free.id, MicroUsd(0)).unwrap();
+        // Speichern derselben oder niedrigerer Grenzen hebt nichts auf.
+        assert!(!raise_limits(f.conn(), &ledger, base.clone()).unwrap());
+        assert!(halted(&ledger));
+        // Erhöhung: frei.
+        let raised = BudgetLimits {
+            crawl: MicroUsd(200_000),
+            ..base.clone()
+        };
+        assert!(raise_limits(f.conn(), &ledger, raised.clone()).unwrap());
+        assert!(!halted(&ledger));
+        let r = ledger.reserve(scope(), MicroUsd(4_000)).unwrap();
+        ledger.release(r.id).unwrap();
+        assert_eq!(
+            load_over_reservation_acks(f.conn()).unwrap(),
+            BTreeMap::from([(AREA_AI.to_string(), 1)])
+        );
+        assert_eq!(load_limits(f.conn()).unwrap(), Some(raised));
+    }
+    // Nach Erhöhung und Neuöffnen weiterhin frei; Speichern der Grenzwerte behält die Quittung.
+    {
+        let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        let ledger = open_ledger(f.conn(), BudgetLimits::default(), &[]).unwrap();
+        assert!(!halted(&ledger), "alte Überschreitung sperrt nicht wieder");
+        assert_eq!(ledger.snapshot().unwrap().spent, MicroUsd(6_000));
+        let r = ledger.reserve(scope(), MicroUsd(4_000)).unwrap();
+        ledger.release(r.id).unwrap();
+        save_limits(f.conn(), &load_limits(f.conn()).unwrap().unwrap()).unwrap();
+        assert_eq!(load_over_reservation_acks(f.conn()).unwrap().len(), 1);
+        // Eine neue Überschreitung sperrt nach Neuöffnen wieder.
+        let mut rec = row("decision", "mock-claude", 1_000, 1_000, 6_000);
+        rec.reservation = MicroUsd(4_000);
+        rec.over_reservation = true;
+        insert(f.conn(), &rec).unwrap();
+    }
+    let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    assert!(halted(
+        &open_ledger(f.conn(), BudgetLimits::default(), &[]).unwrap()
+    ));
+}

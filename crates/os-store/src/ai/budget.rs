@@ -4,8 +4,9 @@
 //! (`<bereich>`, `<aufgabe>`) Aufgaben-Teilbudget. `limit_microusd IS NULL` in der Crawl-Zeile = „Unbegrenzt“.
 //! Die Tabelle enthält nur Grenzwerte; der Verbrauch kommt aus den Protokollen (`ai_requests`, ab M5
 //! `dfs_cost_log`).
+use super::requests::{latest_over_reservation, AiRequestsSpend};
 use crate::StoreError;
-use os_model::budget::{BudgetLimits, MicroUsd};
+use os_model::budget::{BudgetLimits, CrawlBudgetLedger, MicroUsd, SpendSource, AREA_AI};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::BTreeMap;
 
@@ -21,7 +22,8 @@ fn from_sql(v: i64) -> Result<MicroUsd, StoreError> {
         .map_err(|_| StoreError::InvalidInput(format!("negative budget {v}")))
 }
 
-/// Speichert alle Grenzwerte (ersetzt den bisherigen Inhalt in einer Transaktion).
+/// Speichert alle Grenzwerte (ersetzt die bisherigen Grenzwerte in einer Transaktion; quittierte Überschreitungen
+/// bleiben erhalten).
 pub fn save_limits(conn: &Connection, limits: &BudgetLimits) -> Result<(), StoreError> {
     if limits.warning_percent > 100 {
         return Err(StoreError::InvalidInput(format!(
@@ -41,6 +43,7 @@ pub fn save_limits(conn: &Connection, limits: &BudgetLimits) -> Result<(), Store
     {
         return Err(StoreError::InvalidInput("empty budget task".into()));
     }
+    let acks = load_over_reservation_acks(conn)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute("DELETE FROM api_budget", [])?;
     let warn = i64::from(limits.warning_percent);
@@ -62,8 +65,91 @@ pub fn save_limits(conn: &Connection, limits: &BudgetLimits) -> Result<(), Store
         }
     }
     drop(insert);
+    for (area, ack) in &acks {
+        write_ack(&tx, area, *ack, warn)?;
+    }
     tx.commit()?;
     Ok(())
+}
+
+fn write_ack(conn: &Connection, area: &str, ack: u64, warn: i64) -> Result<(), StoreError> {
+    conn.execute(
+        "INSERT INTO api_budget(area, task, limit_microusd, warning_percent, over_reservation_ack)
+         VALUES(?1, '', NULL, ?2, ?3)
+         ON CONFLICT(area, task) DO UPDATE SET over_reservation_ack = excluded.over_reservation_ack",
+        params![area, warn, to_sql(MicroUsd(ack))?],
+    )?;
+    Ok(())
+}
+
+/// Quittierte Überschreitungs-Kennungen je Bereich (AI-013).
+pub fn load_over_reservation_acks(conn: &Connection) -> Result<BTreeMap<String, u64>, StoreError> {
+    let mut st = conn.prepare(
+        "SELECT area, over_reservation_ack FROM api_budget
+         WHERE area <> '' AND task = '' AND over_reservation_ack IS NOT NULL",
+    )?;
+    let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+    let mut acks = BTreeMap::new();
+    for row in rows {
+        let (area, ack) = row?;
+        acks.insert(area, from_sql(ack)?.0);
+    }
+    Ok(acks)
+}
+
+/// Quittiert alle bisher protokollierten Überschreitungen eines Bereichs bis einschließlich `ack`.
+pub fn save_over_reservation_ack(
+    conn: &Connection,
+    area: &str,
+    ack: u64,
+) -> Result<(), StoreError> {
+    if area.is_empty() {
+        return Err(StoreError::InvalidInput("empty budget area".into()));
+    }
+    let warn: i64 = conn
+        .query_row(
+            "SELECT warning_percent FROM api_budget WHERE area = '' AND task = ''",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or(80);
+    write_ack(conn, area, ack, warn)
+}
+
+/// Ledger einer geöffneten Crawl-Datei mit dem Bereich KI: Grenzwerte aus `api_budget` (sonst `fallback`, z. B. aus
+/// dem Profil), Verbrauch aus `ai_requests`, Sperre nach einer nicht quittierten Überschreitung. M5 ergänzt seinen
+/// Bereich über `extra` (z. B. eine Quelle über `dfs_cost_log`).
+pub fn open_ledger(
+    conn: &Connection,
+    fallback: BudgetLimits,
+    extra: &[&dyn SpendSource],
+) -> Result<CrawlBudgetLedger, StoreError> {
+    let limits = load_limits(conn)?.unwrap_or(fallback);
+    let acks = load_over_reservation_acks(conn)?;
+    let ai = AiRequestsSpend(conn);
+    let mut sources: Vec<&dyn SpendSource> = vec![&ai];
+    sources.extend_from_slice(extra);
+    CrawlBudgetLedger::open_acknowledged(limits, &acks, &sources)
+        .map_err(|e| StoreError::InvalidInput(e.to_string()))
+}
+
+/// „Budget erhöhen und fortsetzen“: setzt und speichert neue Grenzwerte. Hebt das eine Sperre nach Überschreitung auf
+/// (eine Grenze wurde angehoben), werden die bisher protokollierten Überschreitungen quittiert, damit sie nach
+/// Neuöffnen nicht wieder sperren. Rückgabe: Sperre aufgehoben.
+pub fn raise_limits(
+    conn: &Connection,
+    ledger: &CrawlBudgetLedger,
+    limits: BudgetLimits,
+) -> Result<bool, StoreError> {
+    save_limits(conn, &limits)?;
+    let lifted = ledger.apply_limits(limits);
+    if lifted {
+        if let Some(ack) = latest_over_reservation(conn)? {
+            save_over_reservation_ack(conn, AREA_AI, ack)?;
+        }
+    }
+    Ok(lifted)
 }
 
 /// Lädt die Grenzwerte; `None`, wenn die Crawl-Datei noch keine gespeichert hat (Aufrufer nimmt dann das Profil).
