@@ -16,7 +16,7 @@
     },
     "openrouter": {
       "training_use": "depends",
-      "summary": "OpenRouter itself uses inputs only if the account enables it (off by default); routed providers may capture data for training according to their own policies, which OpenRouter lists per provider.",
+      "summary": "OpenRouter's own use of inputs and outputs is an account setting that is off by default. For the providers a request is routed to, the page only refers to separate information; it does not state their training use.",
       "source_url": "https://openrouter.ai/docs/guides/privacy/data-collection",
       "verified_at": "2026-11-24"
     },
@@ -28,8 +28,8 @@
     },
     "ollama": {
       "training_use": "no",
-      "summary": "Ollama model server under the user's control; no provider-side training. With the default server URL (localhost) requests stay on this computer; another server URL sends data to that machine.",
-      "source_url": null,
+      "summary": "Local operation: Ollama itself does not see prompts or data; inputs stay on this computer or on the Ollama server set in the settings, and no provider uses them for training.",
+      "source_url": "https://docs.ollama.com/faq",
       "verified_at": "2026-11-24"
     }
   }

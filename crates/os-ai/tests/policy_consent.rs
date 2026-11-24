@@ -254,13 +254,19 @@ fn provider_policies_have_source_and_check_date() {
             .unwrap_or_else(|| panic!("{provider} missing"));
         assert_ne!(p.training_use, TrainingUse::Unknown);
         assert_eq!(p.verified_at.len(), 10);
-        if provider != "ollama" {
-            assert!(
-                p.source_url.as_deref().unwrap().starts_with("https://"),
-                "{provider}"
-            );
-        }
+        assert!(
+            p.source_url.as_deref().unwrap().starts_with("https://"),
+            "{provider}: source is required for every provider"
+        );
+        assert!(p.cell().contains(p.source_url.as_deref().unwrap()));
     }
+    assert_eq!(
+        embedded.get("ollama").unwrap().source_url.as_deref(),
+        Some("https://docs.ollama.com/faq")
+    );
+    // an entry without source is rejected
+    let without_source = r#"{"format_version":1,"providers":{"x":{"training_use":"no","summary":"s","source_url":null,"verified_at":"2026-11-24"}}}"#;
+    assert!(ProviderPolicies::from_json(without_source).is_err());
     let unknown = embedded.training_use("someone-else");
     assert_eq!(unknown.training_use, TrainingUse::Unknown);
     assert_eq!(unknown.cell(), "unknown");

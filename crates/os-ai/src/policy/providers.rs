@@ -120,6 +120,15 @@ impl ProviderPolicies {
                     "{id}: training_use must be documented"
                 )));
             }
+            if !p
+                .source_url
+                .as_deref()
+                .is_some_and(|u| u.starts_with("https://"))
+            {
+                return Err(PolicyFileError::Invalid(format!(
+                    "{id}: source_url (https) is required for every provider"
+                )));
+            }
             if p.summary.trim().is_empty() {
                 return Err(PolicyFileError::Invalid(format!("{id}: empty summary")));
             }
