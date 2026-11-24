@@ -967,12 +967,13 @@ fn open<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a
             if let Some(built) = tab.cached(app).await? {
                 tab.rebind(id.clone());
                 let h = if v.spec == args.spec && v.columns == args.columns {
-                    tab_handle(id.clone(), &args.spec, built)
+                    with_crawl(tab_handle(id.clone(), &args.spec, built), &s.key.0)
                 } else {
                     settle(
                         app,
                         &id,
                         &args.spec,
+                        s.key.0.clone(),
                         start_build(app, tab, s.clone(), args.spec.clone(), args.columns.clone()),
                     )
                     .await?
@@ -1002,7 +1003,7 @@ fn open<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a
                 args.spec.clone(),
                 args.columns.clone(),
             );
-            let h = settle(app, &id, &args.spec, built).await?;
+            let h = settle(app, &id, &args.spec, s.key.0.clone(), built).await?;
             insert(
                 app,
                 id,
@@ -1030,7 +1031,7 @@ fn open<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a
         )
         .await?;
         let initial = Arc::new(Mutex::new(links.as_ref().map(|_| p.clone())));
-        let mut h = handle(id.clone(), p);
+        let mut h = with_crawl(handle(id.clone(), p), &s.key.0);
         let opened = OpenView {
             owner: ctx.window,
             session: s,
@@ -1119,16 +1120,17 @@ async fn settle(
     app: &App,
     id: &str,
     spec: &ViewSpec,
+    crawl: String,
     (mut task, token): (Building, os_model::CancelToken),
 ) -> Result<ViewHandle, CmdError> {
     match tokio::time::timeout(SYNC_BUILD, &mut task).await {
         Ok(joined) => {
             let built = joined
                 .map_err(|e| crate::runtime::error::internal("view.build", e.to_string()))??;
-            Ok(tab_handle(id.to_string(), spec, built))
+            Ok(with_crawl(tab_handle(id.to_string(), spec, built), &crawl))
         }
         Err(_) => {
-            let (view_id, spec) = (id.to_string(), spec.clone());
+            let (view_id, spec, owner) = (id.to_string(), spec.clone(), crawl.clone());
             let op = app.ops().spawn("view-build", true, move |cancel, _| {
                 Box::pin(async move {
                     let forward = token.clone();
@@ -1139,7 +1141,7 @@ async fn settle(
                     let built = task.await.map_err(|e| {
                         crate::runtime::error::internal("view.build", e.to_string())
                     })??;
-                    to_json(&tab_handle(view_id, &spec, built))
+                    to_json(&with_crawl(tab_handle(view_id, &spec, built), &owner))
                 })
             });
             Ok(ViewHandle {
@@ -1151,9 +1153,15 @@ async fn settle(
                 state: ViewState::Building,
                 op: Some(op),
                 empty_state: None,
+                crawl_id: Some(crawl),
             })
         }
     }
+}
+/// The crawl whose rows the view shows (fix-sel, UI-018).
+fn with_crawl(mut h: ViewHandle, crawl: &str) -> ViewHandle {
+    h.crawl_id = Some(crawl.to_string());
+    h
 }
 fn tab_handle(view_id: String, spec: &ViewSpec, built: Built) -> ViewHandle {
     let searching = matches!(
@@ -1172,6 +1180,7 @@ fn tab_handle(view_id: String, spec: &ViewSpec, built: Built) -> ViewHandle {
         columns: built.meta,
         state: ViewState::Ready,
         op: None,
+        crawl_id: None,
     }
 }
 fn handle(view_id: String, p: DataPage) -> ViewHandle {
@@ -1184,6 +1193,7 @@ fn handle(view_id: String, p: DataPage) -> ViewHandle {
         state: ViewState::Ready,
         op: None,
         empty_state: p.empty,
+        crawl_id: None,
     }
 }
 fn update<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a, CmdResult> {
@@ -1213,7 +1223,14 @@ fn update<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<
                 args.spec.clone(),
                 v.columns.clone(),
             );
-            settle(app, &args.view_id, &args.spec, built).await?
+            settle(
+                app,
+                &args.view_id,
+                &args.spec,
+                v.session.key.0.clone(),
+                built,
+            )
+            .await?
         } else {
             let p = detail_page(
                 app,
@@ -1226,7 +1243,7 @@ fn update<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<
             if links.is_some() {
                 initial = Some(p.clone());
             }
-            handle(args.view_id.clone(), p)
+            with_crawl(handle(args.view_id.clone(), p), &v.session.key.0)
         };
         let state = registry(app);
         let mut entries = state.entries.lock().unwrap_or_else(|p| p.into_inner());

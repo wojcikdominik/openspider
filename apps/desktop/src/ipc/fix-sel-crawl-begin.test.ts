@@ -2,7 +2,7 @@
 // der Antwort. Ihr Fehler geht den üblichen Weg der Oberfläche (Ereignis `error`, das installGlobalErrorLogging protokolliert).
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { client, createClient, setClient } from "./client";
-import { crawlBegin } from "./crawlBegin";
+import { crawlBegin } from "./begin/crawlBegin";
 import { IpcError, localError } from "./errors";
 import { MockCore } from "./transport/mock";
 

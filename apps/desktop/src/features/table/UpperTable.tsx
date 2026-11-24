@@ -36,7 +36,7 @@ import { ColumnsMenu } from "./ColumnsMenu";
 import { confirmsRemoval } from "./RemovalConfirmationSettings";
 import { saveTableState } from "../../state/tabs";
 import { TableController } from "./controller";
-import { crawlBegin } from "../../ipc/crawlBegin";
+import { crawlBegin } from "../../ipc/begin/crawlBegin";
 import { setDetailSelection } from "../detail/frame/selection";
 import { useSidebarNavigation } from "../sidebar/frame/state";
 import { openExport as openExportDialog, registerExportContext } from "../export/model";
@@ -195,7 +195,8 @@ function RegularUpperTable() {
     if (!source || !count || busy) return;
     const selection = controller.selection.forVersion(source.viewId, source.version);
     const total = selection.count(source.total); if (!total) return;
-    const result = await crawl[action]({ selection: selection.value });
+    // CRAWL-131, UI-018 (fix-sel): the core refuses the action if it no longer holds the crawl the rows came from.
+    const result = await crawl[action]({ selection: selection.value, ...(source.crawlId ? { crawlId: source.crawlId } : {}) });
     setOperation({ id: result.opId, total, action }); setStale(true); setRemove(false); setContext(undefined);
   };
   const requestRemoval = async (fromKeyboard = false) => {
@@ -215,7 +216,8 @@ function RegularUpperTable() {
   };
   // OUT-006/UI-015: every table export goes through the shared export dialog (format choice, suggested name, status);
   // the same snapshot backs the toolbar button, the large export button and Mod+E (A01-14).
-  const exportView = source ? { kind: "view" as const, tab: tabs.active, filter: query.filter, viewId: source.viewId, version: source.version, columns: exportColumns(columns) } : null;
+  // fix-sel: hidden rows (old content after a begin) are not exported either.
+  const exportView = source && !hidden ? { kind: "view" as const, tab: tabs.active, filter: query.filter, viewId: source.viewId, version: source.version, columns: exportColumns(columns) } : null;
   const exportKey = JSON.stringify(exportView);
   useEffect(() => exportView ? registerExportContext("view", exportView) : undefined, [exportKey]);
   const openExport = (spec?: ViewSpec) => {
@@ -333,7 +335,7 @@ function RegularUpperTable() {
       <div className="u34-split">
         <Button onPress={() => openExport()} isDisabled={!source || hidden}><Upload size={16} aria-hidden />{t("u10-export")}</Button>
         <Menu label={t("u34-export-more")} entries={[
-          { id: "export-view", label: t("u34-export-view"), isDisabled: !source, onAction: () => openExport() },
+          { id: "export-view", label: t("u34-export-view"), isDisabled: !source || hidden, onAction: () => openExport() },
           { id: "export-multi", label: t("u34-export-multi"), onAction: () => { runAction("export.multi"); } },
         ]} trigger={<IconButton label={t("u34-export-more")} icon={<ChevronDown size={14} />} />} />
       </div>

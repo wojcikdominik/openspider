@@ -6,3 +6,4 @@ err-fallback = Der Vorgang konnte nicht abgeschlossen werden.
 err-range-export = Dieser Bereich umfasst mehr als 20.000 Zeilen. Nutzen Sie den Tabellenexport, um die aktuelle Ansicht zu exportieren.
 err-io = Ein Dateivorgang ist fehlgeschlagen.
 err-file-not-found = Die Datei wurde nicht gefunden: { $path }
+err-selection-other-crawl = Die markierten Zeilen gehören zu einem Crawl, der nicht mehr geöffnet ist. Es wurde nichts geändert.
