@@ -241,20 +241,28 @@ fn resource_schema_fixtures_validate_without_remote_reference_resolution() {
     ))
     .unwrap();
     let validator = jsonschema::validator_for(&pricing).unwrap();
-    let mut entry = json!({"provider":"anthropic","model":"mock","endpoint":"messages","input_per_million":1,"output_per_million":5,"cache_read_per_million":0,"cache_write_per_million":0,"batch_discount":0.5,"regional_uplift_percent":0,"per_request":0,"per_image":0,"image_tokens":85,"valid_from":"2026-11-09","source_url":"https://mock.test/pricing","verified_at":"2026-11-09"});
-    assert!(validator.is_valid(&json!([entry.clone()])));
+    let mut entry = json!({"provider":"anthropic","model":"mock","endpoint":"messages","input_per_million":1,"output_per_million":5,"cache_read_per_million":0,"cache_write_per_million":0,"batch_discount":0.5,"regional_surcharge":{"eu":0},"per_request":0,"per_image":0,"image_tokens":85,"valid_from":"2026-11-09","source_url":"https://mock.test/pricing","verified_at":"2026-11-09"});
+    assert!(validator.is_valid(&json!({"prices": [entry.clone()]})));
     entry["vision"] = json!(true);
-    assert!(!validator.is_valid(&json!([entry.clone()])));
+    assert!(!validator.is_valid(&json!({"prices": [entry.clone()]})));
     entry.as_object_mut().unwrap().remove("vision");
     entry["input_per_million"] = json!(-1);
-    assert!(!validator.is_valid(&json!([entry])));
+    assert!(!validator.is_valid(&json!({"prices": [entry]})));
     let defaults: serde_json::Value = serde_json::from_str(include_str!(
         "../../../resources/ai/schemas/task-defaults.schema.json"
     ))
     .unwrap();
     let validator = jsonschema::validator_for(&defaults).unwrap();
-    assert!(validator.is_valid(&json!({"decision":{"model":{"provider":"openai","model":"mock","endpoint":"decisions"},"fallback":[]}})));
-    assert!(!validator.is_valid(&json!({"decision":{"fallback":[]}})));
+    let mut doc: serde_json::Value =
+        serde_json::from_str(include_str!("../../../resources/ai/task-defaults.json")).unwrap();
+    doc["tasks"]["decision"]["model"] =
+        json!({"provider":"openai","model":"mock","endpoint":"decisions"});
+    assert!(validator.is_valid(&doc));
+    doc["tasks"]["decision"]
+        .as_object_mut()
+        .unwrap()
+        .remove("model");
+    assert!(!validator.is_valid(&doc));
 }
 
 // spec: AI-001

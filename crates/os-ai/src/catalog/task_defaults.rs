@@ -15,8 +15,9 @@ use super::pricing::{PriceKey, PriceTable};
 use super::reasoning::AnswerTokens;
 use super::{CatalogError, CivilDate, Endpoint};
 
-/// JSON-Schema der Datei (CI-Test AI-011); liegt bei K04 (siehe Bericht, fremde Datei `resources/ai/schemas/`).
-pub const TASK_DEFAULTS_SCHEMA: &str = include_str!("schemas/task-defaults.schema.json");
+/// JSON-Schema der Datei (CI-Test AI-011), `resources/ai/schemas/task-defaults.schema.json`.
+pub const TASK_DEFAULTS_SCHEMA: &str =
+    include_str!("../../../../resources/ai/schemas/task-defaults.schema.json");
 /// Ausgelieferte Standardwerte.
 pub const BUNDLED_TASK_DEFAULTS: &str = include_str!("../../../../resources/ai/task-defaults.json");
 

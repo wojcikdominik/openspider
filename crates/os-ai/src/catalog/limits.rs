@@ -5,8 +5,9 @@ use serde_json::Value;
 
 use super::{CatalogError, CivilDate, Endpoint};
 
-/// JSON-Schema der Datei.
-pub const PROVIDER_LIMITS_SCHEMA: &str = include_str!("schemas/provider-limits.schema.json");
+/// JSON-Schema der Datei, `resources/ai/schemas/provider-limits.schema.json`.
+pub const PROVIDER_LIMITS_SCHEMA: &str =
+    include_str!("../../../../resources/ai/schemas/provider-limits.schema.json");
 /// Ausgelieferte Datei.
 pub const BUNDLED_PROVIDER_LIMITS: &str =
     include_str!("../../../../resources/ai/provider-limits.json");

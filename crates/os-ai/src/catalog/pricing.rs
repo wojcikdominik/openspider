@@ -14,9 +14,9 @@ use crate::provider::{Capabilities, ReasoningLevel};
 
 use super::{CatalogError, CivilDate, Endpoint};
 
-/// JSON-Schema der Preistabelle (CI-Test AI-010). Liegt bei K04, weil `resources/ai/schemas/` nicht zum Paket gehört
-/// (Bericht K04, Tabelle fremder Dateien).
-pub const PRICING_SCHEMA: &str = include_str!("schemas/pricing.schema.json");
+/// JSON-Schema der Preistabelle (CI-Test AI-010), `resources/ai/schemas/pricing.schema.json`.
+pub const PRICING_SCHEMA: &str =
+    include_str!("../../../../resources/ai/schemas/pricing.schema.json");
 /// Ausgelieferte Preistabelle.
 pub const BUNDLED_PRICING: &str = include_str!("../../../../resources/ai/pricing.json");
 /// Umgebungsvariable für eine Testpreisdatei (nur Test- bzw. Debug-Builds, 08 Konventionen).
