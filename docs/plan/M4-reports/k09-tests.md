@@ -1,6 +1,6 @@
 # M4-K09 – Unabhängige Abnahmetests (Q00-Nachträge AI-001 … AI-006, ai-mock)
 
-Stand 24.11.2026, Zweig `ai/k09-tests` auf Bauer-Stand `2e15c009`. Erwartungen allein aus `docs/spec/08-ai.md`
+Stand 24.11.2026, Zweig `ai/k09-tests`; erste Abnahme auf Bauer-Stand `2e15c009`, Wiederholung nach Merge von `ai/k09` (Endstand `edca3073`, Nacharbeit zu B1-1) – siehe Abschnitt „Nachtrag: Wiederholung auf `edca3073`“. Erwartungen allein aus `docs/spec/08-ai.md`
 (Nachträge „24.11.2026, Q00“ an AI-001 … AI-006 und „Konventionen“, jeweils mit dem ursprünglichen Eintrag; Regel der
 effektiven Stufe aus AI-011, Nachtrag) und `docs/plan/M4.md` Abschnitt 7 („Auftragskern K09“, Zeilen K09 der Tabelle
 „Q00-Nachträge → Paket“). Bericht, neue Tests und Commit-Nachrichten des Bauers nicht gelesen; Produktcode nur für die
@@ -29,6 +29,7 @@ Testmittel: ai-mock (`AiMock::fixtures()`), eigener Testserver auf `127.0.0.1`. 
 |---|---|---|---|---|
 | 1 | `81045723` | grün | grün | 42 grün, 3 rot (2 davon Testfehler, s. u.), 0 ignoriert |
 | 2 | `bdbcaaad` | grün | grün | **44 grün, 1 rot (B1-1), 0 ignoriert** (45 Tests) |
+| 3 (Bauer `edca3073`, gemergt) | `efec8be1` | grün | grün, dazu `cargo check --locked --workspace --all-targets` grün | **62 grün, 0 rot, 0 ignoriert** |
 
 Lauf 1: Die beiden Prüfungen „Bildrequest im Log“ (`store_false_in_every_responses_request`,
 `decisions_requests_never_carry_store_or_reasoning`) suchten `input_image` als JSON-Schlüssel statt als `type`-Wert –
@@ -51,7 +52,7 @@ Fehler im Test, in `bdbcaaad` korrigiert (keine Lockerung: die Prüfung auf `sto
 | AI-002/AI-001: `thinking_tokens` → `reasoning_tokens`, `Output Tokens` = Antwort + 40, `thinking`-Block verworfen, gleiches Ergebnis | `thinking_tokens_become_reasoning_tokens_and_thinking_is_discarded`, `missing_thinking_tokens_stay_null` | grün |
 | AI-002: `output-limit` Schema- und Freitext-Aufgabe → eigene Antwortklasse, Grund `max_tokens`, HTTP 200, 1 Request, `Output Tokens` = `max_tokens`, kein Teilergebnis | `output_limit_is_its_own_class_without_repair`, `truncated_answers_are_never_partial_results` | grün |
 | AI-001/AI-002: Request-ID = Header `request-id`, nie `msg_…` | `request_id_is_the_header_never_the_message_id` | grün |
-| AI-001/AI-002: Fehlerantwort ohne Header, `request_id` im Körper → dieser Wert | `error_request_id_falls_back_to_the_body` | **rot – Befund B1-1** |
+| AI-001/AI-002: Fehlerantwort ohne Header, `request_id` im Körper → dieser Wert | `error_request_id_falls_back_to_the_body` | rot auf `2e15c009` (B1-1), **grün auf `edca3073`** |
 | AI-003: `store: false` in jedem Responses-Request (Freitext, Schema, Reparatur nach `malformed-json`, Bild, Refusal, Abbruch, 429-Wiederholung, `AiProvider`), nie `prompt_cache_retention`/`previous_response_id` | `store_false_in_every_responses_request`, `other_incomplete_reasons_keep_the_repair_attempt` | grün |
 | AI-003: `reasoning.effort` nur mit Katalogstufen (`off`→`none`, `high`, `max`→`high`, ohne Katalog / `model-default` kein Schlüssel, ohne `none` → niedrigste) | `reasoning_effort_only_with_catalog_levels`, `reasoning_values_are_always_catalog_values`, `model_list_carries_the_catalog_levels` | grün |
 | AI-003: `output-limit` → `Error Code = max_output_tokens`, 1 Request, `max_output_tokens` gesendet; automatische Abbruchform | `output_limit_ends_the_entry_without_repair` | grün |
@@ -165,3 +166,38 @@ sachlich durch den neuen Prüfwert gedeckt.
   `reasoning_efforts`/`task-defaults.json` – K04/U01.
 - „Fehlerform unbekanntes Modell je Anbieter“ außer OpenRouter – die Spec legt nur OpenRouter fest (N3).
 - Live-Formen (V-A6, V-A8) – Q00b.
+
+## Nachtrag: Wiederholung auf `edca3073`
+
+`ai/k09` (Endstand `edca3073`: Request-ID im Fehlerweg als Feld `provider_request_id` in `AttemptFailure`/`FinalError`
+für Anthropic, OpenAI Responses/Decisions und OpenRouter sowie beim Abbruch an der Ausgabegrenze; Zähler
+`reasoning_skipped_without_model_list` für OpenRouter) in `ai/k09-tests` gemergt (`a45a6537`). Gelesen wurde dafür nur
+das Diff der öffentlichen Schnittstelle, nicht die Tests oder der Bericht des Bauers.
+
+Entscheidungen des Orchestrators: B2-1 `rank` 0 … 6 (nur Reihenfolge maßgeblich, Plantext wird korrigiert);
+B2-2 Fallback allein nach `resolve_reasoning_level` (AI-002 wird angeglichen); B2-3 Ablaufdaten am Systemdatum
+akzeptiert. Damit sind B2-1 … B2-3 geschlossen. B1-1 ist behoben.
+
+Neue bzw. geänderte Tests (Commit `efec8be1`):
+
+| Kriterium | Test | Ergebnis |
+|---|---|---|
+| AI-001/AI-002: Fehlerergebnis trägt `request_id` aus dem Körper (B1-1, jetzt über das Feld statt Debug-Text) | `error_request_id_falls_back_to_the_body` | grün |
+| AI-001/AI-002: Fehlerweg mit Header `request-id` (Vorrang vor Körper), ai-mock `401` → `req_mock_<n>`, Abbruch an der Ausgabegrenze mit Request-ID | `error_and_output_limit_results_carry_the_request_id` | grün |
+| AI-002/AI-011 (B2-2): `minimal` auf A → `thinking: disabled` ohne Aufwand; ausdrückliche Stufe gewinnt über `Request.effort` | `minimal_on_a_falls_back_to_off_and_level_beats_legacy_effort` | grün |
+| AI-001/AI-003: Fehlerantwort mit `x-request-id` → `FinalError` und `RequestMeta`; ai-mock `401`; Abbruch an der Ausgabegrenze | `error_results_carry_x_request_id` (Responses) | grün |
+| AI-001/AI-004 (N6): Fehlerantwort mit `x-request-id` → `AttemptFailure` und Protokolldaten von `decide`; ai-mock `401` | `error_results_carry_x_request_id` (Decisions) | grün |
+| AI-001/AI-005: Fehlerantwort mit `x-generation-id`; ai-mock `unknown-model` → `gen-mock-<n>`; Abbruch an der Ausgabegrenze | `error_results_carry_the_generation_id` | grün |
+| AI-005 (B3-4): ohne ladbare Modellliste kein erfundenes `reasoning`, Fall wird gezählt; mit Liste Zähler 0 | `missing_model_list_is_counted` | grün |
+| AI-001/AI-006: Ollama ohne Request-ID auch im Fehlerweg | `ollama_errors_have_no_request_id` | grün |
+
+Testzahlen Lauf 3 (Prüfzeile `PRUEF Tester efec8be1 BAUER=edca3073`): anthropic 14, contract 2, decisions 6, mock 10,
+ollama 4, openrouter 11, reasoning_level 6, responses 9 – **62 grün, 0 rot, 0 ignoriert**; `cargo fmt --all --check`,
+`cargo clippy --locked -p os-ai -p os-testsite --all-targets -- -D warnings` und
+`cargo check --locked --workspace --all-targets` grün.
+
+Offen bleiben nur Hinweise: B3-1 teilweise (mit `model-default` und gesetztem `Request.effort` geht weiter
+`output_config.effort` hinaus; nicht entschieden), B3-2 (fester Ersatzwert 4096 ohne `max_tokens`), B3-3 (Zählungen der
+OpenRouter-Mock-Liste, vor K09). Die Request-ID im Fehlerweg nennt die Spec ausdrücklich nur für Anthropic
+(`request_id` im Körper); für OpenAI und OpenRouter wurde die jeweils im Nachtrag genannte Header-Quelle auch im
+Fehlerweg geprüft.
