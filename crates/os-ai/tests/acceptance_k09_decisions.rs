@@ -137,7 +137,9 @@ async fn decisions_requests_never_carry_store_or_reasoning() {
     }
     let bodies = mock.bodies(DECISIONS);
     assert!(bodies.len() >= 16, "{}", bodies.len());
-    assert!(bodies.iter().any(|b| contains_key(b, "input_image")));
+    assert!(bodies
+        .iter()
+        .any(|b| b.to_string().contains("\"input_image\"")));
     assert_no_store_or_reasoning(&bodies);
 }
 

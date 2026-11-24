@@ -108,7 +108,9 @@ async fn store_false_in_every_responses_request() {
         bodies.len()
     );
     assert_store_false_everywhere(&bodies);
-    assert!(bodies.iter().any(|b| contains_key(b, "input_image")));
+    assert!(bodies
+        .iter()
+        .any(|b| b.to_string().contains("\"input_image\"")));
     assert!(bodies.iter().any(|b| b.pointer("/text/format").is_some()));
 }
 
