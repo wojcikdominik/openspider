@@ -41,6 +41,65 @@ fn fixed_patterns_match_the_fixture_cases() {
 }
 
 // spec: AI-024
+// Härtungen nach der Abnahme (Orchestrator-Festlegung 24.11.2026, Nachtrag zu AI-024): IBAN unabhängig von Groß-/
+// Kleinschreibung mit Leerzeichen (auch mehrere, auch geschützte) und Bindestrichen als eine Ersetzung; falsche
+// Prüfziffer bleibt ganz stehen; Telefon mit ` / `, `+` mit Punkten, führende `0 `; E-Mail mit Umlaut-Domain.
+#[test]
+fn hardened_iban_phone_and_email_cases() {
+    let redactor = Redactor::default();
+    let cases = fixture("patterns.json");
+    let cases = cases["hardening_24_11"]["cases"].as_array().unwrap();
+    assert!(cases.len() >= 15);
+    for case in cases {
+        let text = case["text"].as_str().unwrap();
+        let (out, counts) = redactor.redact_text(text);
+        assert_eq!(out, case["redact"].as_str().unwrap(), "input: {text:?}");
+        let expected: Vec<u64> = case["counts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n.as_u64().unwrap())
+            .collect();
+        assert_eq!(
+            vec![
+                u64::from(counts.email),
+                u64::from(counts.phone),
+                u64::from(counts.iban)
+            ],
+            expected,
+            "counts for {text:?}"
+        );
+    }
+}
+
+// spec: AI-024
+#[test]
+fn iban_variants_never_leak_a_part_as_phone() {
+    let redactor = Redactor::default();
+    let canonical = "DE77100100100123456789";
+    for iban in [
+        "DE77 1001 0010 0123 4567 89",
+        "de77 1001 0010 0123 4567 89",
+        "de77-1001-0010-0123-4567-89",
+        "DE77  1001  0010  0123  4567  89",
+        "DE77\u{a0}1001\u{a0}0010\u{a0}0123\u{a0}4567\u{a0}89",
+        "de77100100100123456789",
+    ] {
+        let text = format!("Bank: {iban}, danke");
+        let (out, counts) = redactor.redact_text(&text);
+        assert_eq!(out, "Bank: [IBAN], danke", "{iban:?}");
+        assert_eq!(
+            (counts.iban, counts.phone, counts.total()),
+            (1, 0, 1),
+            "{iban:?}"
+        );
+        let digits: String = out.chars().filter(char::is_ascii_digit).collect();
+        assert!(digits.is_empty(), "{iban:?}: {out}");
+    }
+    assert!(iban_is_valid(canonical));
+}
+
+// spec: AI-024
 #[test]
 fn pii_page_has_three_placeholders_and_three_redactions() {
     let page = site_page("pii.html");
