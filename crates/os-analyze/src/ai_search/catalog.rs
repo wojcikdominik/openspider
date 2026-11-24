@@ -665,6 +665,13 @@ fn check_entry_values(index: usize, e: &CrawlerEntry, errors: &mut Vec<CatalogEr
             value: e.token.clone(),
         });
     }
+    // `ua_pattern`: Schlüssel Pflicht, Wert nicht leer oder `null` (Festlegung Orchestrator 24.11.2026).
+    if e.ua_pattern.as_deref().is_some_and(|p| p.trim().is_empty()) {
+        errors.push(CatalogError::Empty {
+            index,
+            field: "ua_pattern",
+        });
+    }
     if e.operator.trim().is_empty() {
         errors.push(CatalogError::Empty {
             index,

@@ -212,7 +212,7 @@ fn shipped_catalog_passes_validation_and_matches_the_schema() {
 #[test]
 fn invalid_catalogs_are_rejected_with_the_expected_error() {
     type Check = fn(&CatalogError) -> bool;
-    let cases: [(&str, Check); 12] = [
+    let cases: [(&str, Check); 13] = [
         ("missing-field", |e| {
             matches!(
                 e,
@@ -257,6 +257,15 @@ fn invalid_catalogs_are_rejected_with_the_expected_error() {
             "wrong-type",
             |e| matches!(e, CatalogError::WrongType { field, .. } if field == "deprecated"),
         ),
+        ("ua-pattern-empty", |e| {
+            matches!(
+                e,
+                CatalogError::Empty {
+                    field: "ua_pattern",
+                    ..
+                }
+            )
+        }),
         ("schema-version", |e| {
             matches!(e, CatalogError::SchemaVersion(_))
         }),
