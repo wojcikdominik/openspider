@@ -709,7 +709,7 @@ async fn imported_cache_from_other_file_is_read_only_and_recrawl_requests_only_c
         st.iter().filter(|s| **s == AiStatus::SuccessCached).count(),
         19
     );
-    drop(cache);
+    // Zieldatei schließen (`cache` leiht nur deren Verbindung).
     drop(new);
     assert_eq!(hash_file(&old_path), before, "Quelle bleibt byte-identisch");
     assert_eq!(
