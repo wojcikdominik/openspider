@@ -78,7 +78,7 @@ async fn every_tool_in_tools_list_carries_title_read_only_and_destructive_hints(
     ];
     let client = connect(server(all, dir.path())).await;
     let listed = client.list_all_tools().await.unwrap();
-    // Volle Freigabe, Schalter „KI (Vorschau)“ ein (`tools::all`): alle Werkzeuge, auch die KI-Werkzeuge.
+    // Volle Freigabe (`tools::all`): alle Werkzeuge aller Klassen.
     assert_eq!(listed.len(), tools::all().len());
     for tool in &listed {
         let wire = serde_json::to_value(tool).unwrap();

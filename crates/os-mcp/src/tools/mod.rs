@@ -64,26 +64,10 @@ const fn hints(title: &'static str, read_only: bool, destructive: bool) -> ToolH
     }
 }
 
-/// Annotationen aller Werkzeuge aus [`all`] (auch der KI-Werkzeuge hinter dem Schalter „KI (Vorschau)“).
+/// Annotationen aller Werkzeuge aus [`all`] (1.0-Linie: ohne KI-Werkzeuge).
 /// `destructive` nur, wenn das Werkzeug etwas unwiderruflich beendet, löscht oder überschreibt: `stop_crawl`
 /// beendet endgültig; `export` legt bei vorhandener Zieldatei einen neuen Namen an und überschreibt nie.
-pub const HINTS: [(&str, ToolHints); 21] = [
-    (
-        "run_decisions",
-        hints("Run AI decision questions", false, false),
-    ),
-    (
-        "suggest_metadata",
-        hints("Suggest metadata (AI)", false, false),
-    ),
-    (
-        "redirect_mapping",
-        hints("Map redirects (AI)", false, false),
-    ),
-    (
-        "internal_link_suggestions",
-        hints("Suggest internal links (AI)", false, false),
-    ),
+pub const HINTS: [(&str, ToolHints); 17] = [
     (
         "fetch_link_metrics",
         hints("Fetch link metrics", false, false),
