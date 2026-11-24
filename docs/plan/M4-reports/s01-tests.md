@@ -1,6 +1,6 @@
 # M4-S01 – Unabhängige Abnahmetests
 
-Zweig `ai/s01-tests` ab Bauer-Stand `ee20f467`; Wiederholung nach Nacharbeit gegen `e0fb5042` (Merge `fa162c64`). Erwartungen nur aus `docs/spec/08-ai.md` (AI-120, AI-121), `docs/spec/01-crawl.md` (CRAWL-098 … 100, CRAWL-114 [M4]) und den Festlegungen des Orchestrators (`ua_pattern` = Teilzeichenkette ohne Groß-/Kleinschreibung und Pflichtfeld; Grundmenge `Blocked %` = gecrawlte interne HTML-URLs des Hosts; `Host` = Schema+Host+Port; 5xx → `robots.txt Error`; Kontroll-Tokens wie Crawler). Bauer-Bericht, Bauer-Tests und Commit-Texte wurden nicht gelesen; vom Produktcode nur Signaturen und Doc-Kommentare. Jeder Test trägt `// spec: <ID>` und `// acceptance: independent`.
+Zweig `ai/s01-tests` ab Bauer-Stand `ee20f467`; Wiederholung nach Nacharbeit gegen `e0fb5042` (Merge `fa162c64`); Endabnahme gegen Bauer-Endstand `437a155f` (Merge `fae693ad`). Erwartungen nur aus `docs/spec/08-ai.md` (AI-120, AI-121), `docs/spec/01-crawl.md` (CRAWL-098 … 100, CRAWL-114 [M4]) und den Festlegungen des Orchestrators (`ua_pattern` = Teilzeichenkette ohne Groß-/Kleinschreibung und Pflichtfeld; Grundmenge `Blocked %` = gecrawlte interne HTML-URLs des Hosts; `Host` = Schema+Host+Port; 5xx → `robots.txt Error`; Kontroll-Tokens wie Crawler). Bauer-Bericht, Bauer-Tests und Commit-Texte wurden nicht gelesen; vom Produktcode nur Signaturen und Doc-Kommentare. Jeder Test trägt `// spec: <ID>` und `// acceptance: independent`.
 
 ## Dateien
 
@@ -11,6 +11,10 @@ Zweig `ai/s01-tests` ab Bauer-Stand `ee20f467`; Wiederholung nach Nacharbeit geg
 - Fixtures `tests/fixtures/ai/s01-acceptance/`: `catalog-minimum.json` (eigene Abschrift der Tabelle AI-120), `valid-base.json`, `valid-edge.json`, `invalid/*.json` (21 Negativfälle), Benutzerkataloge, Erweiterungseinträge, `robots/*.txt` (18 robots.txt-Varianten, u. a. die sechs Hosts aus der AI-121-Testfixture)
 
 ## Ergebnis
+
+### Endabnahme gegen `437a155f` (Lauf `run4`)
+
+`ai/s01` (`437a155f`) in `ai/s01-tests` gemergt (`fae693ad`), vollständig wiederholt. Prüfzeile im Log: `PRUEF Bauer 437a155f Zweig MERGE` (Platzhalter; der Merge ist `fae693ad`). `cargo fmt --all --check` grün, `cargo clippy --locked -p os-analyze -p os-fetch --all-targets -D warnings` grün, `cargo check --locked --workspace --all-targets` grün. **73 Tests: 73 grün, 0 rot, 0 ignoriert** (catalog 28, robots 24, presets 10, robots_ai_tokens 11). Keine neuen Befunde.
 
 ### Wiederholung gegen `e0fb5042` (Lauf `run3`)
 
