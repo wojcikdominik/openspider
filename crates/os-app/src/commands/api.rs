@@ -995,6 +995,7 @@ fn set_settings<'a>(
                         ApiFetchArgs {
                             kinds: Some(vec![args.kind]),
                             scope: ApiFetchScope::All,
+                            crawl_id: None,
                         },
                     ),
                 );
@@ -1397,6 +1398,8 @@ async fn fetch_now(
         .sessions()
         .current(&ctx.window)
         .ok_or_else(|| CmdError::new(ErrorCode::NoCrawl, "err-no-crawl"))?;
+    // fix-sel: the session the fetch works on must be the crawl the selection came from.
+    super::crawl::ensure_selection_crawl(args.crawl_id.as_deref(), &session.key.0)?;
     if !session.writable {
         return Err(CmdError::new(ErrorCode::Permission, "err-crawl-readonly"));
     }
@@ -1643,6 +1646,10 @@ async fn fetch_now(
 fn fetch<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a, CmdResult> {
     Box::pin(async move {
         let args: ApiFetchArgs = parse_args(args)?;
+        // UI-018 (fix-sel): refused at once, before an operation, a cost estimate or any paid request exists.
+        if let Some(session) = app.sessions().current(&ctx.window) {
+            super::crawl::ensure_selection_crawl(args.crawl_id.as_deref(), &session.key.0)?;
+        }
         to_json(&spawn_long(
             app,
             "op-api-fetch",

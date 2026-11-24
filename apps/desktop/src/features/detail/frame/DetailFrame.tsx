@@ -174,7 +174,7 @@ function RegularDetailFrame(props: DetailFrameProps) {
       <Select label={t("detail-export-format")} value={format} onChange={value => setFormat(value as ExportFormatDto)} options={[{ value: "csv", label: "CSV" }, { value: "xlsx", label: "XLSX" }]} />
       <Button isDisabled={!path.trim() || exportBusy} onPress={() => {
         if (!exporting) return; setExportBusy(true);
-        void exportApi.detail({ ...exporting, path, format }).then(handle => { setExportOp(handle.opId); setExporting(undefined); }).catch(setError).finally(() => setExportBusy(false));
+        void exportApi.detail({ ...exporting, path, format, ...(selection.crawlId ? { crawlId: selection.crawlId } : {}) }).then(handle => { setExportOp(handle.opId); setExporting(undefined); }).catch(setError).finally(() => setExportBusy(false));
       }}>{t("detail-export")}</Button>
     </Dialog>
   </section>;

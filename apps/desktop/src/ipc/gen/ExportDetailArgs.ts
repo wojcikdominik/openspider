@@ -22,4 +22,9 @@ path: string,
 /**
  * Format.
  */
-format: ExportFormatDto, };
+format: ExportFormatDto, 
+/**
+ * Crawl, aus dessen Ansicht die Auswahl stammt (UI-018, fix-sel). Ist er gesetzt und nicht der Crawl der Sitzung,
+ * lehnt der Kern ab (`err-selection-other-crawl`) und schreibt keine Datei; fehlt er, gilt das bisherige Verhalten.
+ */
+crawlId?: string, };
