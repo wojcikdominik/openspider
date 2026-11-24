@@ -83,6 +83,7 @@ function RegularUpperTable() {
   const source = controller.source;
   // fix-sel (UI-018, UI-114): rows of content the core may no longer hold are hidden and cannot be selected.
   const hidden = source !== undefined && !controller.shows;
+  const sourceCrawl = source?.crawlId;
   const grid = useRef<GridController | null>(null);
   const search = useRef<HTMLDivElement>(null); const filterRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState(query.search);
@@ -144,8 +145,10 @@ function RegularUpperTable() {
   const selected = controller.selection;
   useEffect(() => {
     const ids = selected.value.kind === "ids" ? selected.value.ids : selected.focus !== undefined ? [selected.focus] : [];
-    setDetailSelection({ urlIds: ids, ...(selected.focus !== undefined ? { focus: selected.focus } : {}), topTab: tabs.active, ...(crawlId ? { crawlId } : {}) });
-  }, [selected, tabs.active, crawlId]);
+    // fix-sel: the crawl of the rows the selection was made in (the window's crawl for views without that name).
+    const selectionCrawl = sourceCrawl ?? crawlId;
+    setDetailSelection({ urlIds: ids, ...(selected.focus !== undefined ? { focus: selected.focus } : {}), topTab: tabs.active, ...(selectionCrawl ? { crawlId: selectionCrawl } : {}) });
+  }, [selected, tabs.active, crawlId, sourceCrawl]);
   useEffect(() => () => setDetailSelection({ urlIds: [] }), []);
   useEffect(() => {
     void columnState.load(tabs.active).catch(fail);
@@ -222,7 +225,7 @@ function RegularUpperTable() {
   useEffect(() => exportView ? registerExportContext("view", exportView) : undefined, [exportKey]);
   const openExport = (spec?: ViewSpec) => {
     setContext(undefined);
-    if (spec) openExportDialog({ kind: "detail", spec, selection: controller.selection.value });
+    if (spec) openExportDialog({ kind: "detail", spec, selection: controller.selection.value, ...(sourceCrawl ? { crawlId: sourceCrawl } : {}) });
     else if (exportView) openExportDialog(exportView);
   };
   useAction("search.focus", () => search.current?.querySelector("input")?.focus());

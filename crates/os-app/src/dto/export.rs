@@ -150,6 +150,11 @@ pub struct ExportDetailArgs {
     pub path: String,
     /// Format.
     pub format: ExportFormatDto,
+    /// Crawl, aus dessen Ansicht die Auswahl stammt (UI-018, fix-sel). Ist er gesetzt und nicht der Crawl der Sitzung,
+    /// lehnt der Kern ab (`err-selection-other-crawl`) und schreibt keine Datei; fehlt er, gilt das bisherige Verhalten.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crawl_id: Option<String>,
 }
 
 /// Argument von `export.bulk` und `export.report` (OUT-030 ff., OUT-080 ff.).

@@ -174,6 +174,20 @@ fn recrawl<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture
 }
 /// `crawl.recrawl`/`crawl.remove`: the selection names a crawl other than the one of the session (fix-sel).
 pub const ERR_SELECTION_OTHER_CRAWL: &str = "err-selection-other-crawl";
+/// UI-018, CRAWL-131 (fix-sel): a selection that names its crawl (`crawlId`) is only applied to that crawl. `None`
+/// (older callers) keeps the previous behaviour. Used by every command that applies URL ids of a selection.
+pub(crate) fn ensure_selection_crawl(
+    expected: Option<&str>,
+    current: &str,
+) -> Result<(), CmdError> {
+    match expected {
+        Some(id) if id != current => Err(CmdError::new(
+            ErrorCode::NotFound,
+            ERR_SELECTION_OTHER_CRAWL,
+        )),
+        _ => Ok(()),
+    }
+}
 fn remove<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture<'a, CmdResult> {
     mutate(app, ctx, args, true)
 }
@@ -188,12 +202,7 @@ fn mutate<'a>(
         let s = session::current(app, &ctx.window)?;
         // UI-018, CRAWL-131 (fix-sel): URL ids belong to one crawl. A selection taken from another crawl's view is
         // rejected before anything is changed; the operation below works on exactly this session.
-        if a.crawl_id.as_deref().is_some_and(|id| id != s.key.0) {
-            return Err(CmdError::new(
-                ErrorCode::NotFound,
-                ERR_SELECTION_OTHER_CRAWL,
-            ));
-        }
+        ensure_selection_crawl(a.crawl_id.as_deref(), &s.key.0)?;
         control::ensure_idle(app, &s).await?;
         let app = app.clone();
         let ops = app.ops().clone();

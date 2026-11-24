@@ -129,3 +129,57 @@ async fn view_handles_name_the_crawl_they_show() {
     .unwrap();
     assert_eq!(updated.crawl_id.as_deref(), Some(crawl.as_str()));
 }
+
+// spec: UI-018
+// spec: OUT-021
+#[tokio::test]
+async fn a_detail_export_of_another_crawls_selection_writes_no_file() {
+    let site = os_testsite::TestSite::start_dir(fixture(), 0)
+        .await
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let app = app(dir.path());
+    cfg().save_default(&app.config().paths.settings).unwrap();
+    for _ in 0..2 {
+        call(
+            &app,
+            "crawl.start",
+            serde_json::to_value(request(site.url("/"))).unwrap(),
+        )
+        .await;
+        completed(&app).await;
+    }
+    let current = key(&app).0;
+    let args = |path: &std::path::Path, crawl: Option<&str>| {
+        let mut a = json!({
+            "spec":{"kind":"outlinks","urlIds":[1],"filter":{"id":"All"},"search":null,"sort":[]},
+            "selection":{"kind":"ids","ids":[1]},
+            "path":path,
+            "format":"csv"
+        });
+        if let Some(id) = crawl {
+            a["crawlId"] = json!(id);
+        }
+        a
+    };
+    let refused = dir.path().join("refused.csv");
+    let err = app
+        .dispatch(
+            ctx(),
+            "export.detail",
+            args(&refused, Some("another-crawl")),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, os_app::ErrorCode::NotFound);
+    assert_eq!(err.message_key, "err-selection-other-crawl");
+    assert!(!refused.exists());
+
+    // The crawl of the session, and no crawl id (older callers): as before.
+    for (name, crawl) in [("same.csv", Some(current.as_str())), ("none.csv", None)] {
+        let path = dir.path().join(name);
+        let result = operation(&app, "export.detail", args(&path, crawl)).await;
+        assert_eq!(result.state, OpState::Done, "{name}: {:?}", result.error);
+        assert!(path.exists(), "{name}");
+    }
+}

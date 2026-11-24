@@ -515,6 +515,8 @@ fn export_detail<'a>(
         let args: ExportDetailArgs = parse_args(args)?;
         let fmt = format(args.format)?;
         let s = catalog::session(app, &ctx)?;
+        // fix-sel: URL ids of another crawl's selection are refused before any file is written.
+        super::crawl::ensure_selection_crawl(args.crawl_id.as_deref(), &s.key.0)?;
         let app = app.clone();
         let worker = app.clone();
         let op = app
