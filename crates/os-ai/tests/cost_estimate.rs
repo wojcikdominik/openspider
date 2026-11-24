@@ -341,3 +341,19 @@ fn token_estimate_is_chars_over_3_5_plus_images_and_instructions() {
     assert_eq!(char_count("äöü"), 3, "Zeichen, nicht Bytes");
     assert_eq!(estimate_input_tokens(35, 2, 85, 30), 10 + 170 + 30);
 }
+
+// spec: AI-012 [M5]
+#[test]
+#[ignore = "M5: gemeinsamer Dialog Kostenvoranschlag mit Abschnitt DataForSEO gegen ai-mock und DataForSEO-Mock (M5-K03)"]
+fn one_dialog_with_ai_and_dataforseo_sections_and_summary_row() {
+    // Prüfwerte KI low/high 0,0300/0,0500 USD, DFS Cost Min/Max 0,1200/0,2400 USD → Summe 0,1500/0,2900 USD;
+    // vor „Starten“ zählen beide Mocks 0 kostenpflichtige Requests. Rechenregel: combined_summary_row_adds_dataforseo_min_and_max.
+    let ai = EstimateTotals {
+        low: MicroUsd(30_000),
+        expected: MicroUsd(40_000),
+        high: MicroUsd(50_000),
+    }
+    .with_dataforseo(MicroUsd(120_000), MicroUsd(240_000));
+    assert_eq!((ai.low, ai.high), (MicroUsd(150_000), MicroUsd(290_000)));
+    unimplemented!("M5-K03: Dialog und DataForSEO-Mock");
+}
