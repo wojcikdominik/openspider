@@ -107,7 +107,10 @@ fn bundled_task_defaults_validate_against_schema_file_in_resources() {
     let schema = resource_json("schemas/task-defaults.schema.json");
     let validator = jsonschema::validator_for(&schema).expect("Schema kompiliert");
     let doc = resource_json("task-defaults.json");
-    let errors: Vec<String> = validator.iter_errors(&doc).map(|e| e.to_string()).collect();
+    let errors: Vec<String> = match validator.validate(&doc) {
+        Ok(()) => Vec::new(),
+        Err(errs) => errs.map(|e| e.to_string()).collect(),
+    };
     assert!(errors.is_empty(), "{errors:?}");
     let filled = fixture_json("task-defaults-filled.json");
     assert!(validator.is_valid(&filled));
@@ -376,7 +379,10 @@ fn provider_limits_validate_against_schema_file_and_reject_bad_values() {
     let schema = resource_json("schemas/provider-limits.schema.json");
     let validator = jsonschema::validator_for(&schema).expect("Schema kompiliert");
     let doc = resource_json("provider-limits.json");
-    let errors: Vec<String> = validator.iter_errors(&doc).map(|e| e.to_string()).collect();
+    let errors: Vec<String> = match validator.validate(&doc) {
+        Ok(()) => Vec::new(),
+        Err(errs) => errs.map(|e| e.to_string()).collect(),
+    };
     assert!(errors.is_empty(), "{errors:?}");
     // jeder Wert mit source_url und verified_at
     for field in ["source_url", "verified_at"] {

@@ -41,7 +41,7 @@ fn plan(
     plan_task(task, settings, &filled(), &providers(keys))
 }
 
-fn on_model(task: TaskType, provider: &str, model: &str, endpoint: Endpoint) -> TaskSettings {
+fn on_model(_task: TaskType, provider: &str, model: &str, endpoint: Endpoint) -> TaskSettings {
     TaskSettings {
         model: Some(ModelRef::new(provider, model, endpoint)),
         ..TaskSettings::default()

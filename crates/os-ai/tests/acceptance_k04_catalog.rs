@@ -88,7 +88,10 @@ fn bundled_pricing_validates_against_schema_file_in_resources() {
     let schema = resource_json("schemas/pricing.schema.json");
     let validator = jsonschema::validator_for(&schema).expect("Schema kompiliert");
     let doc = resource_json("pricing.json");
-    let errors: Vec<String> = validator.iter_errors(&doc).map(|e| e.to_string()).collect();
+    let errors: Vec<String> = match validator.validate(&doc) {
+        Ok(()) => Vec::new(),
+        Err(errs) => errs.map(|e| e.to_string()).collect(),
+    };
     assert!(errors.is_empty(), "{errors:?}");
     // Anthropic mit Fähigkeitsfeld ist auch gegen die Schemadatei ungültig
     let bad = doc_with(json!({
