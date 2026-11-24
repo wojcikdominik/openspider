@@ -269,3 +269,52 @@ fn refusal_reason_is_truncated_to_500_chars() {
     );
     assert_eq!(rows[1].record.refusal_reason.as_deref(), Some("kurz"));
 }
+
+// spec: AI-013
+// acceptance: independent
+// Auslegung (a): Nach einer Ist-Antwort über ihrer Reservierung nimmt der Ledger crawl-weit keine bezahlte
+// Reservierung mehr an, bis das Budget erhöht wird. Ein Neustart (Schließen, Neuöffnen, „Fortsetzen“) ist keine
+// Budgeterhöhung: Der Eintrag mit `over_reservation = true` steht im Protokoll, die Sperre muss weiter gelten.
+#[test]
+fn halt_after_over_reservation_survives_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = create(dir.path());
+    {
+        let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        save_limits(f.conn(), &BudgetLimits::default()).unwrap();
+        let ledger = CrawlBudgetLedger::open(
+            load_limits(f.conn()).unwrap().unwrap(),
+            &[&AiRequestsSpend(f.conn())],
+        )
+        .unwrap();
+        let r = ledger
+            .reserve(BudgetScope::task(AREA_AI, "decision"), MicroUsd(2_000))
+            .unwrap();
+        let mut row = record("decision", 9_000, 0, 0);
+        row.reservation = MicroUsd(2_000);
+        row.over_reservation = true;
+        insert(f.conn(), &row).unwrap();
+        assert!(
+            ledger
+                .settle(r.id, MicroUsd(9_000))
+                .unwrap()
+                .over_reservation
+        );
+        assert!(matches!(
+            ledger.reserve(BudgetScope::task(AREA_AI, "decision"), MicroUsd(1)),
+            Err(BudgetError::Exceeded(_))
+        ));
+    }
+    let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    let ledger = CrawlBudgetLedger::open(
+        load_limits(f.conn()).unwrap().unwrap(),
+        &[&AiRequestsSpend(f.conn())],
+    )
+    .unwrap();
+    assert_eq!(ledger.snapshot().unwrap().spent, MicroUsd(9_000));
+    let r = ledger.reserve(BudgetScope::task(AREA_AI, "decision"), MicroUsd(1));
+    assert!(
+        matches!(r, Err(BudgetError::Exceeded(_))),
+        "nach Neuöffnen ohne Budgeterhöhung darf keine bezahlte Reservierung durchgehen: {r:?}"
+    );
+}
