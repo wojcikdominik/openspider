@@ -1,0 +1,39 @@
+{
+  "k02a-valid": {
+    "default": {"page_type": "product"}
+  },
+  "k02a-shop": {
+    "default": {"page_type": "shop"}
+  },
+  "k02a-score": {
+    "s150": {"type": "score", "score": 1.5, "probabilities": [
+      {"value": 0, "label": "a", "probability": 0.1},
+      {"value": 1, "label": "b", "probability": 0.3},
+      {"value": 2, "label": "c", "probability": 0.6}], "confidence": 0.6},
+    "s149": {"type": "score", "score": 1.49, "probabilities": [
+      {"value": 0, "label": "a", "probability": 0.11},
+      {"value": 1, "label": "b", "probability": 0.29},
+      {"value": 2, "label": "c", "probability": 0.6}], "confidence": 0.6},
+    "s100": {"type": "score", "score": 1.0, "probabilities": [
+      {"value": 0, "label": "a", "probability": 0.45},
+      {"value": 1, "label": "b", "probability": 0.10},
+      {"value": 2, "label": "c", "probability": 0.45}], "confidence": 0.45}
+  },
+  "k02a-confidence": {
+    "c070": {"type": "choice", "choice": "product", "probabilities": [
+      {"value": "product", "probability": 0.80},
+      {"value": "category", "probability": 0.15},
+      {"value": "article", "probability": 0.05}], "confidence": 0.70},
+    "c080": {"type": "choice", "choice": "product", "probabilities": [
+      {"value": "product", "probability": 0.80},
+      {"value": "category", "probability": 0.15},
+      {"value": "article", "probability": 0.05}], "confidence": 0.80}
+  },
+  "k02a-refusal-q2": {
+    "q2": {"type": "refusal", "refusal": "Fixture refusal for question 2"}
+  },
+  "k02a-forward": {
+    "extra": {"type": "predicate", "probability": 0.4, "explanation": "future beta field", "calibration": {"version": 2, "notes": ["a", "b"]}},
+    "unknown": {"type": "ranking", "rank": 1, "probability": 0.5}
+  }
+}
