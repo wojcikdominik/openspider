@@ -78,6 +78,21 @@ impl Calibration {
             calibrated: true,
         }
     }
+    /// Korrekturfaktor eines Modells aus dem Protokoll `ai_requests` der Crawl-Datei: Median Ist/Schätzung der
+    /// letzten 200 Requests mit Schätzung und gemeldeten Eingabe-Tokens, ab 20 (sonst unkalibriert).
+    pub fn from_log(
+        file: &os_store::CrawlFile,
+        provider: &str,
+        model: &str,
+    ) -> Result<Self, os_store::StoreError> {
+        os_store::ai::requests::calibration_samples(
+            file.conn(),
+            provider,
+            model,
+            CALIBRATION_WINDOW,
+        )
+        .map(Self::from_samples)
+    }
     /// Korrigierte Tokenzahl (aufgerundet).
     pub fn apply(&self, tokens: u64) -> u64 {
         u64::try_from((u128::from(tokens) * u128::from(self.factor_ppm)).div_ceil(u128::from(PPM)))

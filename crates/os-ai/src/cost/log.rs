@@ -50,6 +50,8 @@ pub struct RequestOutcome {
     pub provider_request_id: Option<String>,
     pub retries: u32,
     pub confidence_mismatch: bool,
+    /// Geschätzte Eingabe-Tokens vor dem Korrekturfaktor (`tokens::estimate_input_tokens`), für die Kalibrierung.
+    pub estimated_input_tokens: Option<u64>,
 }
 
 impl RequestOutcome {
@@ -68,7 +70,13 @@ impl RequestOutcome {
             provider_request_id: None,
             retries: 0,
             confidence_mismatch: false,
+            estimated_input_tokens: None,
         }
+    }
+    /// Mit der Schätzung, die der Reservierung zugrunde lag (Spalte `estimated_input_tokens`).
+    pub fn with_estimate(mut self, estimated_input_tokens: u64) -> Self {
+        self.estimated_input_tokens = Some(estimated_input_tokens);
+        self
     }
 }
 
@@ -141,6 +149,7 @@ pub fn request_record(
         retries: outcome.retries,
         over_reservation: c.cost > reservation,
         confidence_mismatch: outcome.confidence_mismatch,
+        estimated_input_tokens: outcome.estimated_input_tokens,
     }
 }
 
@@ -179,5 +188,6 @@ pub fn cache_hit_record(ctx: &LogContext, source: PriceSource, images: u32) -> R
         retries: 0,
         over_reservation: false,
         confidence_mismatch: false,
+        estimated_input_tokens: None,
     }
 }
