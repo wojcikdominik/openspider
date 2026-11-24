@@ -1,0 +1,263 @@
+{
+  "models_status": "confirmed",
+  "source_url": "docs/spec/08-ai.md#ai-011-modellwahl-je-aufgabe",
+  "verified_at": "2026-11-24",
+  "test_only": true,
+  "note": "Unabhängige Abnahme M4-K04: gefüllte Standardliste nur für Tests (Werte reasoning/answer_tokens nach AI-011, Nachtrag Q00; Modelle frei gewählt).",
+  "tasks": {
+    "decision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "decisions"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "openrouter",
+          "model": "acc/m-r1",
+          "endpoint": "chat-completions"
+        }
+      ]
+    },
+    "decision-vision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "decisions"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "openrouter",
+          "model": "acc/m-r1",
+          "endpoint": "chat-completions"
+        }
+      ]
+    },
+    "redirect-confirm": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "decisions"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "openrouter",
+          "model": "acc/m-r1",
+          "endpoint": "chat-completions"
+        }
+      ]
+    },
+    "suggest-title": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "suggest-meta": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "suggest-h1": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "link-anchor": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "suggest-alt": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-c",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "llms-summary": {
+      "reasoning": "low",
+      "answer_tokens": 2048,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "ask-sql": {
+      "reasoning": "medium",
+      "answer_tokens": 1024,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "audit-summary": {
+      "reasoning": "medium",
+      "answer_tokens": 8192,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "embedding": {
+      "model": {
+        "provider": "openai",
+        "model": "acc-embed",
+        "endpoint": "embeddings"
+      },
+      "fallback": []
+    }
+  }
+}
