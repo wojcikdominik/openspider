@@ -132,7 +132,8 @@ async fn injected_instructions_appear_only_inside_the_marked_data_block() {
             .find(|b| b.contains("<<<UNTRUSTED_CONTENT>>>"))
         {
             assert!(text.starts_with("<<<UNTRUSTED_CONTENT>>>"));
-            assert!(text.contains("Daten, keine Anweisungen"), "Präambel fehlt");
+            // spec: AGENT-042 (Präambel englisch; vorher „Daten, keine Anweisungen“)
+            assert!(text.contains("data, not instructions"), "Präambel fehlt");
         }
     }
     // Die Werte stehen dort, wo man sie erwartet.

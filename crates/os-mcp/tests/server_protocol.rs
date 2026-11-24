@@ -669,7 +669,8 @@ async fn untrusted_values_arrive_only_in_the_marked_block() {
     // Werkzeugbeschreibungen weisen auf Daten statt Anweisungen hin.
     for tool in client.list_all_tools().await.unwrap() {
         let d = tool.description.as_deref().unwrap_or_default();
-        assert!(d.contains("keine Anweisungen"), "{}: {d}", tool.name);
+        // spec: AGENT-042 (Hinweis englisch; vorher „keine Anweisungen“)
+        assert!(d.contains("not instructions"), "{}: {d}", tool.name);
     }
     client.cancel().await.unwrap();
 }
