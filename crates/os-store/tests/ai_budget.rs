@@ -12,8 +12,8 @@ use os_model::time::{IdSource, SeededIds};
 use os_model::{CrawlConfig, CrawlMode, Timestamp};
 use os_store::ai::budget::{load_limits, save_limits};
 use os_store::ai::requests::{
-    insert, list, spent_by_task, total_cost, totals_by_task_and_model, AiRequestsSpend,
-    PriceSource, RequestFilter, RequestRecord,
+    calibration_samples, insert, list, spent_by_task, total_cost, totals_by_task_and_model,
+    AiRequestsSpend, PriceSource, RequestFilter, RequestRecord,
 };
 use os_store::{CrawlFile, CrawlInit, OpenMode, StorageProfile, StoreError};
 
@@ -75,6 +75,7 @@ fn row(task: &str, model: &str, input: u64, output: u64, cost: u64) -> RequestRe
         retries: 0,
         over_reservation: false,
         confidence_mismatch: false,
+        estimated_input_tokens: Some(input),
     }
 }
 
@@ -344,4 +345,44 @@ fn four_workers_writing_200_log_rows_stay_within_the_budget_and_match_the_ledger
         .unwrap();
     assert_eq!(rows as u64 + exceeded, 200);
     assert!(exceeded > 0, "Budget begrenzt den Lauf");
+}
+
+// spec: AI-012
+#[test]
+fn calibration_samples_are_the_last_200_estimated_requests_of_a_model() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = fresh(dir.path());
+    let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    // 250 Requests mock-claude: Schätzung 100 + i, Ist 80 + i.
+    for i in 0..250u64 {
+        let mut r = row("decision", "mock-claude", 80 + i, 10, 100);
+        r.estimated_input_tokens = Some(100 + i);
+        insert(f.conn(), &r).unwrap();
+    }
+    // Nicht verwertbar: Cache-Treffer, ohne Schätzung, ohne gemeldete Tokens, anderes Modell.
+    let mut hit = row("decision", "mock-claude", 1, 1, 0);
+    hit.cache_hit = true;
+    insert(f.conn(), &hit).unwrap();
+    let mut no_est = row("decision", "mock-claude", 1, 1, 0);
+    no_est.estimated_input_tokens = None;
+    insert(f.conn(), &no_est).unwrap();
+    let mut no_usage = row("decision", "mock-claude", 1, 1, 0);
+    no_usage.input_tokens = None;
+    no_usage.price_source = PriceSource::Estimate;
+    insert(f.conn(), &no_usage).unwrap();
+    insert(f.conn(), &row("decision", "other-model", 5, 1, 0)).unwrap();
+
+    let samples = calibration_samples(f.conn(), "anthropic", "mock-claude", 200).unwrap();
+    assert_eq!(samples.len(), 200);
+    assert_eq!(samples[0], (150, 130), "älteste der letzten 200 zuerst");
+    assert_eq!(samples[199], (349, 329));
+    assert_eq!(
+        calibration_samples(f.conn(), "anthropic", "other-model", 200).unwrap(),
+        vec![(5, 5)]
+    );
+    assert!(calibration_samples(f.conn(), "openai", "mock-claude", 200)
+        .unwrap()
+        .is_empty());
+    let all = list(f.conn(), &RequestFilter::default()).unwrap();
+    assert_eq!(all[0].record.estimated_input_tokens, Some(100));
 }

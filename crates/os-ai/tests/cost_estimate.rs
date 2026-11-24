@@ -357,3 +357,63 @@ fn one_dialog_with_ai_and_dataforseo_sections_and_summary_row() {
     assert_eq!((ai.low, ai.high), (MicroUsd(150_000), MicroUsd(290_000)));
     unimplemented!("M5-K03: Dialog und DataForSEO-Mock");
 }
+
+// spec: AI-012
+#[test]
+fn calibration_read_from_the_request_log_brings_the_estimate_within_5_percent() {
+    use os_ai::cost::{request_record, LogContext, RequestOutcome};
+    use os_ai::provider::Usage;
+    let items = items_for_scope();
+    let rates = test_rates("openai", "gpt-6-luna", "decisions", false);
+    let dir = support::TempDir::new("calibration");
+    let f = support::crawl_file(&dir.0);
+    let instr = text_tokens(char_count(INSTRUCTIONS));
+    let ctx = LogContext {
+        run_id: 1,
+        timestamp: "2026-11-24T11:00:00Z".into(),
+        task: "decision".into(),
+        provider: "openai".into(),
+        model: "gpt-6-luna".into(),
+        endpoint: "decisions".into(),
+        url_id: None,
+        definition_version: Some("page-type@1".into()),
+        batch_id: None,
+        redactions: 0,
+    };
+    // Die ersten 20 Requests protokollieren: Schätzung (ohne Faktor) und Ist-Tokens wie ai-mock.
+    let log = |item: &EstimateItem| {
+        let est = estimate_input_tokens(item.input_chars, 0, rates.image_token_estimate, instr);
+        let actual = mock_input_tokens(item.input_chars + char_count(INSTRUCTIONS), 0);
+        let usage = Usage {
+            input_tokens: Some(actual),
+            output_tokens: Some(20),
+            cached_input_tokens: None,
+            cache_write_tokens: None,
+        };
+        let outcome = RequestOutcome::success(usage, 0, 3).with_estimate(est);
+        let rec = request_record(&ctx, &rates, MicroUsd(1_000), &outcome);
+        assert_eq!(rec.estimated_input_tokens, Some(est));
+        os_store::ai::requests::insert(f.conn(), &rec).unwrap();
+    };
+    for item in &items[..19] {
+        log(item);
+    }
+    let cal = Calibration::from_log(&f, "openai", "gpt-6-luna").unwrap();
+    assert!(!cal.calibrated, "19 Requests reichen nicht");
+    log(&items[19]);
+    let cal = Calibration::from_log(&f, "openai", "gpt-6-luna").unwrap();
+    assert!(cal.calibrated);
+    assert!(
+        !Calibration::from_log(&f, "anthropic", "gpt-6-luna")
+            .unwrap()
+            .calibrated
+    );
+
+    let (actual, _) = mock_actual(&items, &rates);
+    let est = estimate_task(&decision_input(&items, Some(&rates), cal), &NoCache);
+    let deviation = (est.expected.unwrap().0 as f64 - actual as f64).abs() / actual as f64;
+    assert!(deviation <= 0.05, "kalibriert {deviation:.3} > 5 %");
+    let (lo, hi) = (est.low.unwrap().0 as f64, est.high.unwrap().0 as f64);
+    assert!((lo / est.expected.unwrap().0 as f64 - 0.9).abs() < 0.01);
+    assert!((hi / est.expected.unwrap().0 as f64 - 1.1).abs() < 0.01);
+}
