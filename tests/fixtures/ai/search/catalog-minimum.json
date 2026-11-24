@@ -1,0 +1,252 @@
+{
+  "_comment": "Maschinenlesbare Kopie der Mindestliste aus docs/spec/08-ai.md AI-120 (Stand 2026-10). docs_note_required: docs_note muss nicht leer sein. respects_robots nur, wo die Spec den Wert festlegt.",
+  "entries": [
+    {
+      "token": "GPTBot",
+      "operator": "OpenAI",
+      "category": "training",
+      "docs_url": "https://platform.openai.com/docs/bots",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "OAI-SearchBot",
+      "operator": "OpenAI",
+      "category": "search",
+      "docs_url": "https://platform.openai.com/docs/bots",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "ChatGPT-User",
+      "operator": "OpenAI",
+      "category": "user-fetch",
+      "docs_url": "https://platform.openai.com/docs/bots",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "ClaudeBot",
+      "operator": "Anthropic",
+      "category": "training",
+      "docs_url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Claude-SearchBot",
+      "operator": "Anthropic",
+      "category": "search",
+      "docs_url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Claude-User",
+      "operator": "Anthropic",
+      "category": "user-fetch",
+      "docs_url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "anthropic-ai",
+      "operator": "Anthropic",
+      "category": "training",
+      "docs_url": "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+      "deprecated": true,
+      "replaced_by": "ClaudeBot",
+      "docs_note_required": true
+    },
+    {
+      "token": "PerplexityBot",
+      "operator": "Perplexity",
+      "category": "search",
+      "docs_url": "https://docs.perplexity.ai/guides/bots",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Perplexity-User",
+      "operator": "Perplexity",
+      "category": "user-fetch",
+      "docs_url": "https://docs.perplexity.ai/guides/bots",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Google-Extended",
+      "operator": "Google",
+      "category": "control-token",
+      "docs_url": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Google-CloudVertexBot",
+      "operator": "Google",
+      "category": "user-fetch",
+      "docs_url": "https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false,
+      "respects_robots": "yes"
+    },
+    {
+      "token": "Google-GeminiNotebook",
+      "operator": "Google",
+      "category": "user-fetch",
+      "docs_url": "https://developers.google.com/search/docs/crawling-indexing/google-user-triggered-fetchers",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false,
+      "respects_robots": "no"
+    },
+    {
+      "token": "Google-NotebookLM",
+      "operator": "Google",
+      "category": "user-fetch",
+      "docs_url": "https://developers.google.com/search/docs/crawling-indexing/google-user-triggered-fetchers",
+      "deprecated": true,
+      "replaced_by": "Google-GeminiNotebook",
+      "docs_note_required": false,
+      "respects_robots": "no"
+    },
+    {
+      "token": "Google-Agent",
+      "operator": "Google",
+      "category": "user-fetch",
+      "docs_url": "https://developers.google.com/search/docs/crawling-indexing/google-user-triggered-fetchers",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false,
+      "respects_robots": "no"
+    },
+    {
+      "token": "Applebot",
+      "operator": "Apple",
+      "category": "search",
+      "docs_url": "https://support.apple.com/en-us/119829",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Applebot-Extended",
+      "operator": "Apple",
+      "category": "control-token",
+      "docs_url": "https://support.apple.com/en-us/119829",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "CCBot",
+      "operator": "Common Crawl",
+      "category": "training",
+      "docs_url": "https://commoncrawl.org/ccbot",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Bytespider",
+      "operator": "ByteDance",
+      "category": "training",
+      "docs_url": null,
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": true
+    },
+    {
+      "token": "Meta-ExternalAgent",
+      "operator": "Meta",
+      "category": "training",
+      "docs_url": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Meta-ExternalFetcher",
+      "operator": "Meta",
+      "category": "user-fetch",
+      "docs_url": "https://developers.facebook.com/docs/sharing/webmasters/web-crawlers",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Amazonbot",
+      "operator": "Amazon",
+      "category": "search",
+      "docs_url": "https://developer.amazon.com/amazonbot",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "DuckAssistBot",
+      "operator": "DuckDuckGo",
+      "category": "search",
+      "docs_url": "https://duckduckgo.com/duckduckgo-help-pages/results/duckassistbot",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "MistralAI-User",
+      "operator": "Mistral AI",
+      "category": "user-fetch",
+      "docs_url": "https://docs.mistral.ai/robots",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "cohere-ai",
+      "operator": "Cohere",
+      "category": "training",
+      "docs_url": null,
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": true
+    },
+    {
+      "token": "YouBot",
+      "operator": "You.com",
+      "category": "search",
+      "docs_url": "https://about.you.com/youbot/",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "AI2Bot",
+      "operator": "Allen Institute for AI",
+      "category": "training",
+      "docs_url": "https://allenai.org/crawler",
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": false
+    },
+    {
+      "token": "Diffbot",
+      "operator": "Diffbot",
+      "category": "training",
+      "docs_url": null,
+      "deprecated": false,
+      "replaced_by": null,
+      "docs_note_required": true
+    }
+  ]
+}

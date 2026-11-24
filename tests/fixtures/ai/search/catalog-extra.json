@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "crawlers": [
+    {
+      "token": "Example-SearchBot",
+      "operator": "Beispiel",
+      "category": "search",
+      "ua_pattern": "Example-SearchBot",
+      "ua_example": "Mozilla/5.0 (compatible; Example-SearchBot/1.0; +https://example.test/bot)",
+      "respects_robots": "unknown",
+      "docs_url": "https://example.test/bot",
+      "docs_note": null,
+      "verified_at": "2026-11-24",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "Example-Fetcher",
+      "operator": "Beispiel",
+      "category": "user-fetch",
+      "ua_pattern": null,
+      "ua_example": "Example-Fetcher/2.0",
+      "respects_robots": "unknown",
+      "docs_url": "https://example.test/bot",
+      "docs_note": null,
+      "verified_at": "2026-11-24",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "Example-TrainBot",
+      "operator": "Beispiel",
+      "category": "training",
+      "ua_pattern": null,
+      "ua_example": "Example-TrainBot/1.0",
+      "respects_robots": "unknown",
+      "docs_url": "https://example.test/bot",
+      "docs_note": null,
+      "verified_at": "2026-11-24",
+      "deprecated": false,
+      "replaced_by": null
+    },
+    {
+      "token": "Example-OldSearch",
+      "operator": "Beispiel",
+      "category": "search",
+      "ua_pattern": null,
+      "ua_example": "Example-OldSearch/1.0",
+      "respects_robots": "unknown",
+      "docs_url": "https://example.test/bot",
+      "docs_note": null,
+      "verified_at": "2026-11-24",
+      "deprecated": true,
+      "replaced_by": "Example-SearchBot"
+    }
+  ]
+}

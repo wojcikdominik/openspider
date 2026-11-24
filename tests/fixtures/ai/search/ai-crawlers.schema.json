@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openspider.de/schemas/ai/ai-crawlers.schema.json",
+  "title": "AI-Crawler-Katalog (AI-120)",
+  "description": "Datendatei resources/ai/ai-crawlers.json. Eindeutigkeit der Tokens ohne Rücksicht auf Groß-/Kleinschreibung und Verweise von replaced_by prüft os_analyze::ai_search::catalog (JSON-Schema kann beides nicht ausdrücken). Vorgesehener Ort: resources/ai/schemas/ai-crawlers.schema.json (Datendatei-Schema, nicht strikt).",
+  "type": "object",
+  "required": ["schema_version", "crawlers"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "crawlers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/crawler" }
+    }
+  },
+  "$defs": {
+    "crawler": {
+      "type": "object",
+      "required": [
+        "token",
+        "operator",
+        "category",
+        "ua_pattern",
+        "ua_example",
+        "respects_robots",
+        "docs_url",
+        "verified_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+        "operator": { "type": "string", "minLength": 1 },
+        "category": { "enum": ["training", "search", "user-fetch", "control-token"] },
+        "ua_pattern": { "type": ["string", "null"] },
+        "ua_example": { "type": ["string", "null"] },
+        "respects_robots": { "enum": ["yes", "partial", "no", "unknown"] },
+        "docs_url": {
+          "anyOf": [
+            { "type": "string", "pattern": "^https://[^/?#\\s]+[^\\s]*$" },
+            { "type": "null" }
+          ]
+        },
+        "docs_note": { "type": ["string", "null"] },
+        "verified_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "deprecated": { "type": "boolean" },
+        "replaced_by": { "type": ["string", "null"] },
+        "renders_js": { "type": ["boolean", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "docs_url": { "type": "null" } }, "required": ["docs_url"] },
+          "then": {
+            "required": ["docs_note"],
+            "properties": { "docs_note": { "type": "string", "pattern": "\\S" } }
+          }
+        },
+        {
+          "if": { "properties": { "replaced_by": { "type": "string" } }, "required": ["replaced_by"] },
+          "then": { "required": ["deprecated"], "properties": { "deprecated": { "const": true } } }
+        }
+      ]
+    }
+  }
+}
