@@ -264,3 +264,51 @@ async fn oai_searchbot_preset_selects_its_robots_group() {
         assert_eq!(check.decision, RobotsDecision::Allowed, "{path}");
     }
 }
+
+// spec: CRAWL-114 [M4]
+// Voreinstellung ohne `ua_example` im Katalog: sendet den OpenSpider-Standard-User-Agent und wertet robots.txt unter
+// ihrem Token aus; bestehende feste Voreinstellungen (ClaudeBot) behalten den User-Agent aus `user-agents.toml`
+// (Festlegung Orchestrator 24.11.2026).
+#[test]
+fn presets_without_ua_example_send_the_default_or_keep_the_fixed_user_agent() {
+    let catalog = parse_ai_catalog(embedded_ai_catalog()).unwrap();
+    let fixed = os_fetch::user_agents::parse_presets(PRESETS_TOML).unwrap();
+    let mut checked_new = 0;
+    for c in catalog
+        .iter()
+        .filter(|c| c.is_preset() && c.ua_example.is_none())
+    {
+        let id = fixed
+            .iter()
+            .find(|f| f.robots_token.eq_ignore_ascii_case(&c.token))
+            .map_or_else(|| c.token.to_ascii_lowercase(), |f| f.id.clone());
+        let r = resolve(&crawl_with_preset(&id).user_agent);
+        assert_eq!(r.robots_token, c.token, "{id}");
+        assert_eq!(r.warning, None, "{id}");
+        match fixed
+            .iter()
+            .find(|f| f.id == id)
+            .and_then(|f| f.user_agent.clone())
+        {
+            Some(ua) => assert_eq!(r.http, ua, "{id}: fester User-Agent bleibt"),
+            None => {
+                assert_eq!(r.http, os_fetch::user_agents::default_user_agent(), "{id}");
+                checked_new += 1;
+            }
+        }
+    }
+    assert!(
+        checked_new >= 4,
+        "Claude-SearchBot, Claude-User, Google-CloudVertexBot, YouBot, Google-Extended"
+    );
+    let claude = resolve(&crawl_with_preset("claudebot").user_agent);
+    let toml_ua = fixed
+        .iter()
+        .find(|f| f.id == "claudebot")
+        .and_then(|f| f.user_agent.clone());
+    assert_eq!(Some(claude.http), toml_ua);
+    assert_eq!(claude.robots_token, "ClaudeBot");
+    let search = resolve(&crawl_with_preset("claude-searchbot").user_agent);
+    assert_eq!(search.http, os_fetch::user_agents::default_user_agent());
+    assert_eq!(search.robots_token, "Claude-SearchBot");
+}
