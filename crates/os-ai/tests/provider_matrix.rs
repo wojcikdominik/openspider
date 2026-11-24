@@ -51,6 +51,7 @@ fn request(model: Model) -> Request {
         max_tokens: Some(10),
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 // spec: AI-001

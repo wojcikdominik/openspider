@@ -402,6 +402,7 @@ impl OllamaAdapter {
             endpoint: ENDPOINT.into(),
             capabilities: self.capabilities_of(name),
             capability_source: CapabilitySource::ModelCatalog,
+            reasoning_levels: Vec::new(),
         }
     }
 
@@ -804,6 +805,7 @@ pub fn usage_from_json(body: &Value) -> Usage {
         output_tokens: opt_u64(body.get("eval_count")),
         cached_input_tokens: None,
         cache_write_tokens: None,
+        reasoning_tokens: None,
     }
 }
 

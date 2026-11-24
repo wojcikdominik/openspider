@@ -170,6 +170,7 @@ pub fn model(provider: &str, id: &str, capabilities: Capabilities) -> Model {
         } else {
             CapabilitySource::OpenRouterModels
         },
+        reasoning_levels: Vec::new(),
     }
 }
 
@@ -207,6 +208,7 @@ pub fn text_request(model: Model, text: &str) -> Request {
         max_tokens: Some(256),
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 

@@ -367,6 +367,7 @@ pub fn parse_usage(body: &Value) -> Option<Usage> {
             .and_then(|d| d.get("cached_tokens"))
             .and_then(Value::as_u64),
         cache_write_tokens: None,
+        reasoning_tokens: None,
     })
 }
 

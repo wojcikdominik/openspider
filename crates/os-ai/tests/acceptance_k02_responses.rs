@@ -21,6 +21,7 @@ fn model() -> Model {
         endpoint: "responses".into(),
         capabilities: RESPONSES_CAPABILITIES,
         capability_source: CapabilitySource::ModelCatalog,
+        reasoning_levels: Vec::new(),
     }
 }
 
@@ -35,6 +36,7 @@ fn request(input: Vec<Input>) -> Request {
         max_tokens: None,
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 
@@ -310,6 +312,7 @@ async fn k3_usage_fields_are_transferred() {
         output_tokens: Some(56),
         cached_input_tokens: Some(789),
         cache_write_tokens: None,
+        reasoning_tokens: None,
     };
     assert_eq!(meta.usage, Some(expected.clone()));
     let mut req = request(vec![text("x")]);

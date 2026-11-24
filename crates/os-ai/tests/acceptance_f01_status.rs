@@ -198,6 +198,7 @@ fn usage_has_the_four_spec_fields_and_missing_means_null() {
         output_tokens: Some(0),
         cached_input_tokens: None,
         cache_write_tokens: None,
+        reasoning_tokens: None,
     };
     let v = serde_json::to_value(&partial).unwrap();
     assert_eq!(v["input_tokens"], 1000);

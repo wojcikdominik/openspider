@@ -389,6 +389,7 @@ fn calibration_read_from_the_request_log_brings_the_estimate_within_5_percent() 
             output_tokens: Some(20),
             cached_input_tokens: None,
             cache_write_tokens: None,
+            reasoning_tokens: None,
         };
         let outcome = RequestOutcome::success(usage, 0, 3).with_estimate(est);
         let rec = request_record(&ctx, &rates, MicroUsd(1_000), &outcome);

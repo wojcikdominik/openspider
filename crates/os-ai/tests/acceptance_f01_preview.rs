@@ -109,6 +109,7 @@ fn model(provider: &str, caps: Capabilities) -> Model {
         endpoint: "messages".into(),
         capabilities: caps,
         capability_source: CapabilitySource::ModelCatalog,
+        reasoning_levels: Vec::new(),
     }
 }
 
@@ -128,6 +129,7 @@ fn text_request(model: Model) -> Request {
         max_tokens: Some(64),
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 
@@ -139,6 +141,7 @@ fn ok_response() -> Response {
             output_tokens: Some(3),
             cached_input_tokens: None,
             cache_write_tokens: None,
+            reasoning_tokens: None,
         },
         refusal: false,
         provider_request_id: Some("req_1".into()),

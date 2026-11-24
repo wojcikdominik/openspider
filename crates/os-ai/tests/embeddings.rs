@@ -452,6 +452,7 @@ async fn anthropic_is_not_offered_for_embeddings() {
             ..Capabilities::default()
         },
         capability_source: CapabilitySource::ModelCatalog,
+        reasoning_levels: Vec::new(),
     };
     let mut models = vec![
         model("anthropic", "mock-claude", true),

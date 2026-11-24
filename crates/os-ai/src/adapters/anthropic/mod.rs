@@ -183,6 +183,7 @@ impl AnthropicModel {
             endpoint: ENDPOINT.into(),
             capabilities: self.capabilities(),
             capability_source: CapabilitySource::AnthropicModels,
+            reasoning_levels: Vec::new(),
         }
     }
 
@@ -593,6 +594,7 @@ pub fn usage_from_json(usage: Option<&Value>) -> Usage {
         output_tokens: field("output_tokens"),
         cached_input_tokens: cached,
         cache_write_tokens: written,
+        reasoning_tokens: None,
     }
 }
 

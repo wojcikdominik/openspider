@@ -352,6 +352,7 @@ pub(crate) async fn list_models(
             endpoint: endpoint.to_string(),
             capabilities: lookup(id).unwrap_or_default(),
             capability_source: CapabilitySource::ModelCatalog,
+            reasoning_levels: Vec::new(),
         })
         .collect())
 }
