@@ -47,9 +47,87 @@ pub fn all() -> Vec<Box<dyn Tool>> {
     ]
 }
 
+/// MCP-Annotationen eines Werkzeugs (AGENT-042, Nachtrag 24.11.2026): englischer Anzeigename, nur lesend,
+/// zerstörerisch. Je Werkzeug ausdrücklich festgelegt, unabhängig von der Freigabeklasse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolHints {
+    pub title: &'static str,
+    pub read_only: bool,
+    pub destructive: bool,
+}
+
+const fn hints(title: &'static str, read_only: bool, destructive: bool) -> ToolHints {
+    ToolHints {
+        title,
+        read_only,
+        destructive,
+    }
+}
+
+/// Annotationen aller Werkzeuge aus [`all`] (auch der KI-Werkzeuge hinter dem Schalter „KI (Vorschau)“).
+/// `destructive` nur, wenn das Werkzeug etwas unwiderruflich beendet, löscht oder überschreibt: `stop_crawl`
+/// beendet endgültig; `export` legt bei vorhandener Zieldatei einen neuen Namen an und überschreibt nie.
+pub const HINTS: [(&str, ToolHints); 21] = [
+    (
+        "run_decisions",
+        hints("Run AI decision questions", false, false),
+    ),
+    (
+        "suggest_metadata",
+        hints("Suggest metadata (AI)", false, false),
+    ),
+    (
+        "redirect_mapping",
+        hints("Map redirects (AI)", false, false),
+    ),
+    (
+        "internal_link_suggestions",
+        hints("Suggest internal links (AI)", false, false),
+    ),
+    (
+        "fetch_link_metrics",
+        hints("Fetch link metrics", false, false),
+    ),
+    ("compare_crawls", hints("Compare crawls", true, false)),
+    ("list_crawls", hints("List crawls", true, false)),
+    ("crawl_overview", hints("Crawl overview", true, false)),
+    ("query_urls", hints("Query URLs", true, false)),
+    ("url_details", hints("URL details", true, false)),
+    ("list_issues", hints("List issues", true, false)),
+    ("sql_query", hints("Run read-only SQL query", true, false)),
+    ("start_crawl", hints("Start crawl", false, false)),
+    ("crawl_status", hints("Crawl status", true, false)),
+    ("pause_crawl", hints("Pause crawl", false, false)),
+    ("stop_crawl", hints("Stop crawl", false, true)),
+    ("resume_crawl", hints("Resume crawl", false, false)),
+    ("export", hints("Export to file", false, false)),
+    ("list_catalog", hints("List catalog names", true, false)),
+    ("url_content", hints("URL content", true, false)),
+    ("url_screenshot", hints("URL screenshot", true, false)),
+];
+
+/// Annotationen eines Werkzeugs nach [`HINTS`]; `None` für fremde Werkzeuge (z. B. Testattrappen).
+pub fn hints_for(name: &str) -> Option<ToolHints> {
+    HINTS.iter().find(|(n, _)| *n == name).map(|(_, h)| *h)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::tool::ToolClass;
+
+    // spec: AGENT-042
+    #[test]
+    fn every_registered_tool_has_explicit_hints_and_no_stale_entries() {
+        let names: Vec<&str> = super::all().iter().map(|t| t.name()).collect();
+        for name in &names {
+            assert!(super::hints_for(name).is_some(), "{name}");
+        }
+        for (name, hints) in super::HINTS {
+            assert!(names.contains(&name), "{name}");
+            assert!(!hints.title.is_empty() && hints.title.is_ascii(), "{name}");
+            assert!(!(hints.read_only && hints.destructive), "{name}");
+        }
+    }
 
     // spec: AGENT-010, AGENT-011, AGENT-012, AGENT-013
     // spec: AGENT-020, AGENT-003
