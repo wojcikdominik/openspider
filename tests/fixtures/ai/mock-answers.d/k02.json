@@ -1,0 +1,80 @@
+{
+  "k02-responses": {
+    "default": {
+      "page_type": "product",
+      "in_stock": true
+    }
+  },
+  "k02-levels": {
+    "level_a": {
+      "type": "score",
+      "score": 1.5,
+      "probabilities": [
+        {"value": 0, "label": "a", "probability": 0.2},
+        {"value": 1, "label": "b", "probability": 0.1},
+        {"value": 2, "label": "c", "probability": 0.7}
+      ],
+      "confidence": 0.7
+    },
+    "level_b": {
+      "type": "score",
+      "score": 1.49,
+      "probabilities": [
+        {"value": 0, "label": "a", "probability": 0.21},
+        {"value": 1, "label": "b", "probability": 0.09},
+        {"value": 2, "label": "c", "probability": 0.7}
+      ],
+      "confidence": 0.7
+    },
+    "level_c": {
+      "type": "score",
+      "score": 1.0,
+      "probabilities": [
+        {"value": 0, "label": "a", "probability": 0.45},
+        {"value": 1, "label": "b", "probability": 0.1},
+        {"value": 2, "label": "c", "probability": 0.45}
+      ],
+      "confidence": 0.45
+    }
+  },
+  "k02-confidence": {
+    "mismatch": {
+      "type": "choice",
+      "choice": "product",
+      "probabilities": [
+        {"value": "product", "probability": 0.8},
+        {"value": "category", "probability": 0.15},
+        {"value": "other", "probability": 0.05}
+      ],
+      "confidence": 0.7
+    },
+    "match": {
+      "type": "choice",
+      "choice": "product",
+      "probabilities": [
+        {"value": "product", "probability": 0.8},
+        {"value": "category", "probability": 0.15},
+        {"value": "other", "probability": 0.05}
+      ],
+      "confidence": 0.8
+    }
+  },
+  "k02-refusal-q2": {
+    "q2_choice": {
+      "type": "refusal",
+      "refusal": "Fixture refusal for question 2"
+    }
+  },
+  "k02-forward": {
+    "extra_fields": {
+      "type": "predicate",
+      "probability": 0.4,
+      "explanation": "fields unknown to OpenSpider are ignored",
+      "calibration": {"method": "beta", "version": 2}
+    },
+    "unknown_type": {
+      "type": "verdict",
+      "verdict": "yes"
+    }
+  }
+}
