@@ -1,87 +1,101 @@
-# OpenSpider for Claude Code
+# OpenSpider plugin for Claude
 
-This plugin bundles an OpenSpider skill, three audit commands and a local STDIO MCP
-connection. Requirements: Claude Code with plugin support, **Node.js 22+** (`node` in
-PATH), and an installed OpenSpider CLI. The Node launcher adds useful installation
-errors while keeping stdout reserved for MCP. No background HTTP server is required.
+OpenSpider is an open-source desktop SEO crawler for macOS and Windows. This plugin
+connects Claude to the OpenSpider program installed on your computer, so Claude can
+read your saved crawls, explain and prioritize technical SEO issues, compare two
+crawls and, if you allow it in OpenSpider, start and monitor new crawls.
 
-## Install from the repository marketplace (macOS and Windows)
+The plugin contains:
 
-In a terminal at the OpenSpider checkout root, install the CLI from source:
+- a local MCP server entry that starts `openspider mcp` on your computer
+  (through the small launcher `scripts/launch.mjs`),
+- skills: `technical-seo-audit`, `issue-triage`, `crawl-comparison`,
+  `crawl-monitoring`, and the general `openspider` skill with tool references,
+- commands: `/openspider:openspider-audit`, `/openspider:openspider-issues`,
+  `/openspider:openspider-compare`.
 
-```sh
-cargo install --path crates/os-cli --locked
-openspider --version
-node --version
-```
+## Requirements
 
-Rust/Cargo is needed for this source installation only. Cargo puts the binary in its
-configured bin directory. Ensure that directory is on PATH (usually `$HOME/.cargo/bin`
-on macOS, `$env:USERPROFILE\.cargo\bin` in PowerShell), then restart Claude Code.
-For an already installed CLI, no source build is necessary. The executable is
-`openspider` on macOS and `openspider.exe` on Windows. `OPENSPIDER_BINARY` may instead
-point to the absolute executable path; use no surrounding quote characters in the
-variable value. Paths with spaces work. Never set it to a shell command plus flags.
+- **OpenSpider 1.0 or later**, installed from
+  [GitHub Releases](https://github.com/wojcikdominik/openspider/releases/latest) or
+  [openspider.de](https://openspider.de): macOS DMG or Homebrew cask, Windows setup or MSI.
+  The plugin does not install OpenSpider and does not download anything.
+- **Node.js 22 or later** (`node` on PATH) to run the launcher.
+- A Claude app that runs local MCP servers: **Claude Code** (macOS, Windows, Linux with
+  the OpenSpider CLI) and **Cowork when the session runs on your computer**. In Claude
+  chat (web, desktop and mobile) the MCP server is ignored, so the skills have no data
+  to work with there.
 
-Inside Claude Code, from the checkout root:
+## Setup
 
-```text
-/plugin marketplace add ./integrations
-/plugin install openspider@openspider-marketplace
-```
+1. Install OpenSpider (no further setup in the app is needed for reading crawls).
+2. Install this plugin and restart Claude (or reload plugins).
+3. Ask, for example: "List my OpenSpider crawls", "Audit my latest crawl of
+   example.com", "What should I fix first?", "Compare the last two crawls".
 
-Alternatively, use `claude plugin marketplace add ./integrations` and
-`claude plugin install openspider@openspider-marketplace` in a terminal. These commands
-are the same on both platforms; a checkout elsewhere can be added by its absolute
-`integrations` directory. Restart the session or reload plugins, then check `/mcp`.
-The marketplace is inside the repository's `integrations/` directory; adding the
-repository root as a marketplace would not find this manifest.
+The launcher looks for the OpenSpider program in this order: the `OPENSPIDER_BINARY`
+environment variable (absolute path to the executable), every folder on PATH, then the
+default install locations:
 
-## Commands
+| Installation | Program path |
+| --- | --- |
+| macOS DMG | `/Applications/OpenSpider.app/Contents/MacOS/openspider` (also `~/Applications`) |
+| macOS Homebrew cask | same app; the cask also links `openspider` into Homebrew's `bin` |
+| Windows setup (per user) | `%LOCALAPPDATA%\OpenSpider\openspider.exe` (also added to PATH) |
+| Windows MSI (per machine) | `%ProgramFiles%\OpenSpider\openspider.exe` |
 
-Claude Code namespaces plugin commands. The files implementing the spec's
-`/openspider-audit`, `/openspider-compare` and `/openspider-issues` appear as:
+If nothing is found, the MCP server fails to start and the error (visible in Claude
+Code under `/mcp`) names the download page, the searched paths and how to set
+`OPENSPIDER_BINARY`.
 
-```text
-/openspider:openspider-audit https://example.com/
-/openspider:openspider-compare <previous-crawl-id> <current-crawl-id>
-/openspider:openspider-issues <crawl-id> de
-```
+## Permissions
 
-The client may display a different qualified form; use its command picker. For the
-unqualified spellings, you can create project commands in `.claude/commands/` using
-the three `commands/*.md` files as templates. Replace `${CLAUDE_PLUGIN_ROOT}` in those
-copies with the actual plugin directory: project commands have no plugin root variable.
-The plugin does not write those files automatically. The `openspider` skill can also
-be selected directly.
+The plugin starts `openspider mcp` without extra flags, so OpenSpider's own settings
+decide what Claude may do. Out of the box only **read** tools are enabled. Crawl tools
+(`start_crawl`, `crawl_status`, `pause_crawl`, `resume_crawl`, `stop_crawl`) appear only
+after you tick "Agent may start crawls" in OpenSpider's MCP menu (or add `crawl` to
+`classes` in OpenSpider's `mcp.toml`). Export (`write`) and paid provider calls (`cost`)
+need their own classes, which the plugin's skills do not use. The plugin never changes
+these settings. Private and local network targets stay blocked unless you allow them
+in OpenSpider.
 
-Start with saved crawls. The server invokes **`openspider mcp`** without additional
-class grants; by default only `read` is enabled. To allow a requested new crawl, the
-operator can enable `classes = ["read", "crawl"]` in OpenSpider's `mcp.toml` and restart
-the MCP connection. Export additionally needs `write`. Paid operations need `cost`;
-the bundled workflows do not require it. Existing `[tools]` and domain restrictions
-still apply. The plugin never edits these permissions. Keep private-target access
-disabled for public-site audits.
+## What this plugin runs, sends and fetches
 
-OpenSpider reads its standard crawl folder, or `<OPENSPIDER_HOME>/crawls` when that
-variable is set. Keep the same home for CLI crawls and the MCP process. To print an
-equivalent direct client configuration, run `openspider mcp --print-config claude-code`.
-You can use that to connect the binary directly if you do not want the Node launcher.
+- **Runs:** `node scripts/launch.mjs`, which starts the installed program as
+  `openspider mcp` (MCP over STDIO, no shell, no extra arguments) and passes its
+  input and output through. The launcher only checks whether files exist at the paths
+  listed above; it opens no network connection and writes no files.
+- **Reads:** the OpenSpider MCP server reads your saved crawl files (`.ospider`) from
+  OpenSpider's data folder and its settings (`mcp.toml`, crawl profiles).
+- **Fetches:** only when crawl tools are enabled and Claude calls `start_crawl` or
+  `resume_crawl`, OpenSpider sends HTTP requests from your computer to the website being
+  crawled (and to the sites it links to, within the crawl's scope and limits). Crawled
+  data is saved locally in a new crawl file. The read tools never fetch anything.
+- **Sends to Claude:** tool results (crawl data such as URLs, status codes, titles,
+  headers, issue lists and, on request, saved page text, HTML or screenshots) go to the
+  Claude model as part of your conversation. Content that comes from crawled websites is
+  returned inside a block marked `<<<UNTRUSTED_CONTENT>>>`; the server and the skills
+  tell Claude to treat it as data, never as instructions.
+- **Third parties:** the plugin itself sends no data to anyone else and contains no
+  analytics or telemetry. OpenSpider's own optional features (update check, paid
+  integrations) are configured in OpenSpider and are not used by this plugin.
+- **Credentials:** none. The plugin asks for no keys or passwords.
 
-If the binary is absent the launch error includes the source-install command, PATH
-and `OPENSPIDER_BINARY` instructions. If `node` itself is absent, install Node.js 22+
-or use the direct binary configuration. In either case restart the client after
-changing environment variables. No audit has run until tool calls succeed.
+## Troubleshooting
 
-Snapshot comparisons use the installed server's available read tools. This version
-does not assume a dedicated comparison tool. It reports count/URL evidence and the
-limits of differing crawl coverage and configuration.
+- `/mcp` in Claude Code shows the server as failed: open the error; usually OpenSpider
+  is not installed or not found. Set `OPENSPIDER_BINARY` to the full path of the
+  executable and restart Claude.
+- "node: not found": install Node.js 22 or later, or connect OpenSpider directly with
+  OpenSpider's menu "MCP" -> "Connect Claude Code..." instead of this plugin.
+- No crawls listed: OpenSpider reads its standard data folder, or
+  `<OPENSPIDER_HOME>/crawls` when `OPENSPIDER_HOME` is set. Claude and the OpenSpider app
+  must use the same folder.
+- Crawl tools missing: enable "Agent may start crawls" in OpenSpider, then restart the
+  MCP connection.
 
-## Format sources
+## License and support
 
-- [Claude Code plugin manifests](https://code.claude.com/docs/en/plugins-reference)
-- [Local marketplace installation](https://code.claude.com/docs/en/plugin-marketplaces)
-- [Agent Skills format](https://agentskills.io/specification)
-
-The repo's `integrations/scripts/validate.mjs` checks the supported manifest schema
-subset, local skill links and the tool catalog against `os-mcp::tools::all()`.
+Apache-2.0, same as OpenSpider (see `LICENSE` in the repository root). Source and
+issues: [github.com/wojcikdominik/openspider](https://github.com/wojcikdominik/openspider).
+Privacy notice: [openspider.de/en/privacy](https://openspider.de/en/privacy/).

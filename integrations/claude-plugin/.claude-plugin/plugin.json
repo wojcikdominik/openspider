@@ -1,8 +1,8 @@
 {
   "name": "openspider",
-  "version": "0.1.0",
-  "description": "OpenSpider MCP connection, SEO audit skill and audit, compare and issues commands.",
+  "version": "1.0.1",
+  "description": "Technical SEO audits with the local OpenSpider crawler: query saved crawls, prioritize issues, compare crawls and run new crawls through OpenSpider's MCP server.",
   "author": { "name": "OpenSpider contributors" },
   "license": "Apache-2.0",
-  "keywords": ["seo", "crawl", "audit", "mcp"]
+  "keywords": ["seo", "technical-seo", "crawler", "site-audit", "mcp"]
 }
