@@ -269,6 +269,11 @@ Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, ST
 - **Akzeptanzkriterien:**
   - [ ] Installation per Marketplace-Befehl auf macOS und Windows; Plugin findet die installierte Binary oder gibt eine klare Installationsanleitung aus.
 - **Testfixture:** Installationstest in der CI-Matrix (macOS, Windows) aus einem lokalen Marketplace-Verzeichnis; einmal mit `openspider` im `PATH` (Slash-Befehl `/openspider-issues` gegen einen Crawl von `out-basic-site`), einmal ohne Binary (Anleitung erscheint).
+- **Nachtrag 24.11.2026 (OS-Festlegung, Listung im Plugin-Verzeichnis von Claude):** Zweiter Verteilweg neben dem Marketplace im Repo ist das Plugin-Verzeichnis von Anthropic; derselbe Ordner `integrations/claude-plugin/` wird dort als Plugin-Bundle eingereicht (Einreichung durch den Eigentümer). Dafür gilt zusätzlich:
+  - [ ] Das Plugin enthält neben dem allgemeinen Skill die Skills `technical-seo-audit`, `issue-triage`, `crawl-comparison` und `crawl-monitoring`; jeder Skill nennt nur Werkzeuge und Felder, die der Server anbietet, und behandelt Inhalte gecrawlter Seiten als Daten.
+  - [ ] Der Starter (`scripts/launch.mjs`, lesbarer Quelltext, keine Shell, kein Netzwerkzugriff, schreibt keine Dateien) sucht das Programm in dieser Reihenfolge: Umgebungsvariable `OPENSPIDER_BINARY`, `PATH`, Standardorte der Installer (macOS: `/Applications` und `~/Applications`, Homebrew; Windows: `%LOCALAPPDATA%\OpenSpider`, `%ProgramFiles%\OpenSpider`); findet er nichts, nennt die Fehlermeldung Bezugsquelle, gesuchte Pfade und die Umgebungsvariable.
+  - [ ] Die README des Plugins legt offen, was das Plugin ausführt, liest, abruft und an das Modell gibt, und in welchen Claude-Apps lokale MCP-Server laufen; `claude plugin validate --strict` besteht.
+  - [ ] Der MCP-Server gibt für jedes Werkzeug die Annotationen `title`, `readOnlyHint` und `destructiveHint` an: alle nur lesenden Werkzeuge (auch `crawl_status`) mit `readOnlyHint = true`; `destructiveHint = true` mindestens für `stop_crawl` und für `export`, soweit es vorhandene Dateien überschreiben kann. Werkzeugbeschreibungen und Server-Hinweise sind englisch. (Fix-Paket am Server, noch nicht gebaut.)
 
 ### AGENT-043 Einbindung in der Desktop-App
 - **Priorität:** P1
