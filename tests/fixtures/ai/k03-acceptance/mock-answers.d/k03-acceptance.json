@@ -1,0 +1,7 @@
+{
+  "k03acc-raw-a": {"embedding": [3.0, 4.0, 0.0, 0.0]},
+  "k03acc-raw-b": {"embedding": [10.0, 10.0, 10.0, 10.0]},
+  "k03acc-raw-c": {"embedding": [0.001, -0.002, 0.002, 0.0]},
+  "k03acc-raw-d": {"embedding": [-7.5, 0.0, 2.5, 1250.0]},
+  "k03acc-zero": {"embedding": [0.0, 0.0, 0.0, 0.0]}
+}
