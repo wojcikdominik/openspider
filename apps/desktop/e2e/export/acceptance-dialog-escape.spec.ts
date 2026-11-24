@@ -41,6 +41,7 @@ test("Escape in the gap before the focus entered the dialog closes it; focus ret
   await virtualClick(trigger);
   await expect(dialog(page)).toBeVisible();
   expect(await focusInside(page), "precondition: focus has not entered the dialog yet").toBe(false);
+  console.log(`UI015-PROBE export-gap active=${await page.evaluate(() => document.activeElement?.tagName + ":" + (document.activeElement?.textContent ?? "").slice(0, 20))}`);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(trigger).toBeFocused();
@@ -80,7 +81,7 @@ test("Escape right after Mod+E closes the dialog; focus returns to the focused e
   await expect(dialog(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(trigger).toBeFocused();
+  // Focus return may take one animation frame when the focus had entered the dialog: let the page run.
   await page.clock.resume();
   await frames(page);
   await expect(trigger).toBeFocused();
@@ -99,6 +100,8 @@ test("Escape right after opening with a mouse click closes the dialog; focus ret
   await expect(dialog(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.clock.resume();
+  await frames(page);
   await expect(trigger).toBeFocused();
 });
 

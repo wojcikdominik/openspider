@@ -33,6 +33,8 @@ const confirm = (page: Page) => page.getByRole("dialog", { name: "Delete task", 
 
 async function openScheduling(page: Page) {
   const trigger = page.getByRole("button", { name: "Scheduling", exact: true });
+  // The harness trigger is a plain <button>; WebKit does not focus it on click, so focus it first (as a keyboard user).
+  await trigger.focus();
   await trigger.click();
   await expect(scheduling(page)).toBeVisible();
   await scheduling(page).getByRole("checkbox", { name: "Select Nightly" }).check();
@@ -98,6 +100,7 @@ test("nested question opening while the focus is still in the outer dialog: Esca
   await expect(confirm(page)).toBeVisible();
   const where = await focusPlace(page);
   test.info().annotations.push({ type: "focus-before-escape", description: where });
+  console.log(`UI015-PROBE tasks-nested-gap focus=${where} active=${await page.evaluate(() => document.activeElement?.tagName + ":" + (document.activeElement?.textContent ?? "").slice(0, 20))}`);
   expect(where, "precondition: focus has not entered the question").not.toBe("topmost");
   await page.keyboard.press("Escape");
   await expect(confirm(page)).toHaveCount(0);
@@ -142,6 +145,7 @@ test("unchanged: Enter on the destructive question does not delete; Cancel retur
 test("Settings → Email: Escape in a text field and with the focus on body closes the account dialog; focus returns", async ({ page }) => {
   const add = page.getByRole("button", { name: "Add SMTP account", exact: true });
   const account = page.getByRole("dialog", { name: "Add SMTP account", exact: true });
+  await add.focus();
   await add.click();
   await expect(account).toBeVisible();
   await account.getByRole("textbox", { name: "Account label" }).fill("Office");
