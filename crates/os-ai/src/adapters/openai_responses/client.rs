@@ -259,7 +259,10 @@ impl OpenAiHttp {
                 .or(self.limiter())
                 .map(|l| l.clock().wall_unix_millis())
                 .unwrap_or_else(wall_now_millis);
-            return Err(self.classify_error(status, &headers, &body, now));
+            // Request-ID auch bei Fehlern (AI-001/AI-003/AI-004, Nachtrag Q00-N2, N6: Header `x-request-id`).
+            return Err(self
+                .classify_error(status, &headers, &body, now)
+                .with_request_id(header_text(&headers, "x-request-id")));
         }
         Ok(HttpReply {
             status,
@@ -400,6 +403,13 @@ impl RequestMeta {
     ) -> Self {
         let (http_status, usage, request_id, received) = match (&exec.result, reply) {
             (Ok(_), Some((status, usage, id))) => (Some(status), usage, id, true),
+            // Fehlerantwort: Request-ID der letzten Antwort (M4-K09, Befund B1).
+            (Err(error), _) => (
+                exec.http_status(),
+                None,
+                error.provider_request_id.clone(),
+                false,
+            ),
             _ => (exec.http_status(), None, None, false),
         };
         Self {

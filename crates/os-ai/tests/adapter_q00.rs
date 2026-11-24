@@ -1063,3 +1063,216 @@ async fn ollama_output_limit_is_length_with_zero_cost() {
         serde_json::from_str::<Value>(&mock.requests_to(OLLAMA_CHAT).pop().unwrap().body).unwrap();
     assert!(!contains_key(&body, "reasoning") && !contains_key(&body, "think"));
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Nacharbeit nach der Abnahme (Befund B1 und Entscheidungen des Orchestrators, 24.11.2026)
+
+async fn global_scenario(mock: &Mock, provider: &str, scenario: &str, count: usize) {
+    let r = client()
+        .post(format!("{}/scenario", mock.server.base_url("__mock")))
+        .header("content-type", "application/json")
+        .body(json!({"provider": provider, "scenario": scenario, "count": count}).to_string())
+        .send()
+        .await
+        .unwrap();
+    assert!(r.status().is_success());
+}
+
+// spec: AI-001 [M4]
+// Befund B1: Auch Fehlerantworten tragen die Anbieter-Request-ID bis ins Fehlerergebnis eines Versuchs bzw. Eintrags –
+// Anthropic Header `request-id`, OpenAI Responses und Decisions `x-request-id`, OpenRouter `x-generation-id`.
+#[tokio::test]
+async fn error_results_carry_the_provider_request_id() {
+    let mock = Mock::start().await;
+    let a = model("anthropic", "mock-claude", "messages", Vec::new());
+    let failure = mock
+        .anthropic()
+        .send(
+            &request(a, "MOCK-SCENARIO:401 x", None, ReasoningLevel::ModelDefault),
+            None,
+        )
+        .await
+        .unwrap_err();
+    let id = failure
+        .provider_request_id
+        .clone()
+        .expect("Anthropic-Request-ID");
+    assert!(id.starts_with("req_mock_"), "{id}");
+
+    let failure = mock
+        .openrouter()
+        .send(
+            &request(
+                router("mock/text"),
+                "MOCK-SCENARIO:402-credits x",
+                None,
+                ReasoningLevel::ModelDefault,
+            ),
+            None,
+        )
+        .await
+        .unwrap_err();
+    let id = failure
+        .provider_request_id
+        .clone()
+        .expect("OpenRouter-Request-ID");
+    assert!(id.starts_with("gen-mock-"), "{id}");
+
+    // OpenAI Responses über den Limiter: Fehlerergebnis und Protokolldaten tragen `x-request-id`.
+    let responses = OpenAiResponses::new(mock.openai_http());
+    let (result, meta) = responses
+        .run(
+            &limiter(),
+            &request(
+                luna(Vec::new()),
+                "MOCK-SCENARIO:401 x",
+                None,
+                ReasoningLevel::ModelDefault,
+            ),
+            10,
+        )
+        .await;
+    let error = result.unwrap_err();
+    let id = error
+        .provider_request_id
+        .clone()
+        .expect("Responses-Request-ID");
+    assert!(id.starts_with("req_mock_"), "{id}");
+    assert_eq!(meta.provider_request_id, Some(id));
+
+    // Decisions (Q00-N6): Antwort ohne `id`, Kennung allein aus `x-request-id`.
+    let run = OpenAiDecisions::new(mock.openai_http())
+        .decide(
+            &limiter(),
+            &DecisionInput::text("MOCK-SCENARIO:401 Seite"),
+            &[Question::predicate("q1", "Is it a product page?")],
+            &DecideOptions::default(),
+        )
+        .await;
+    let id = run.requests[0]
+        .meta
+        .provider_request_id
+        .clone()
+        .expect("Decisions-Request-ID");
+    assert!(id.starts_with("req_mock_"), "{id}");
+}
+
+// spec: AI-002 [M4]
+// spec: AI-003 [M4]
+// spec: AI-005 [M4]
+// Altes Feld `Request.effort` und ausdrückliche Reasoning-Stufe: die Stufe gewinnt, es entstehen nie widersprüchliche
+// Parameter; ohne Stufe wirkt `effort` bei Anthropic wie bisher, OpenAI und OpenRouter senden es nie.
+#[tokio::test]
+async fn explicit_reasoning_level_wins_over_the_old_effort_field() {
+    let mock = Mock::start().await;
+    let anthropic = mock.anthropic();
+    let models = anthropic.list_models().await.unwrap();
+    let a = models
+        .iter()
+        .find(|m| m.id == "mock-claude")
+        .unwrap()
+        .to_model();
+    let mut req = request(a.clone(), "MOCK-ID:home e1", None, ReasoningLevel::Low);
+    req.effort = Some("max".into());
+    anthropic.send(&req, None).await.unwrap();
+    let body = mock.bodies(MESSAGES).pop().unwrap();
+    assert_eq!(
+        anthropic_params(&body),
+        (Some("adaptive".into()), Some("low".into()))
+    );
+    let mut req = request(a.clone(), "MOCK-ID:home e2", None, ReasoningLevel::Off);
+    req.effort = Some("high".into());
+    anthropic.send(&req, None).await.unwrap();
+    let body = mock.bodies(MESSAGES).pop().unwrap();
+    assert_eq!(anthropic_params(&body), (Some("disabled".into()), None));
+    let mut req = request(a, "MOCK-ID:home e3", None, ReasoningLevel::ModelDefault);
+    req.effort = Some("high".into());
+    anthropic.send(&req, None).await.unwrap();
+    let body = mock.bodies(MESSAGES).pop().unwrap();
+    assert_eq!(anthropic_params(&body), (None, Some("high".into())));
+
+    let mut req = request(
+        luna(catalog_levels()),
+        "MOCK-ID:home e4",
+        None,
+        ReasoningLevel::Low,
+    );
+    req.effort = Some("high".into());
+    OpenAiResponses::new(mock.openai_http())
+        .send(&req, None, None)
+        .await
+        .unwrap();
+    let body = mock.bodies(RESPONSES).pop().unwrap();
+    assert_eq!(body["reasoning"], json!({"effort": "low"}));
+    assert!(body.get("effort").is_none() && body.get("reasoning_effort").is_none());
+
+    let mut req = request(
+        router("mock/text-small"),
+        "MOCK-ID:home e5",
+        None,
+        ReasoningLevel::Low,
+    );
+    req.effort = Some("high".into());
+    mock.openrouter().send(&req, None).await.unwrap();
+    let body = mock.bodies(CHAT).pop().unwrap();
+    assert_eq!(body["reasoning"], json!({"effort": "low"}));
+    assert!(body.get("effort").is_none() && body.get("reasoning_effort").is_none());
+}
+
+// spec: AI-005 [M4]
+// OpenRouter ohne geladene Modellliste: kein `reasoning`-Parameter (konservativ), aber nicht still – der Zähler
+// `reasoning_skipped_without_model_list` steigt (Ersatz für die Debug-Logzeile; schreibt der Aufrufer ins Log).
+#[tokio::test]
+async fn openrouter_counts_requests_sent_without_reasoning_for_lack_of_a_model_list() {
+    let mock = Mock::start().await;
+    let adapter = mock.openrouter();
+    // Die erste Anfrage (Modellliste) scheitert, der eigentliche Request geht danach normal hinaus.
+    global_scenario(&mock, "openrouter", "500-always", 1).await;
+    adapter
+        .send(
+            &request(
+                router("mock/text-small"),
+                "MOCK-ID:home s",
+                None,
+                ReasoningLevel::Off,
+            ),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(adapter.reasoning_skipped_without_model_list(), 1);
+    let body = mock.bodies(CHAT).pop().unwrap();
+    assert!(body.get("reasoning").is_none());
+    // Ohne ausdrückliche Stufe wird nichts gezählt.
+    adapter
+        .send(
+            &request(
+                router("mock/text-small"),
+                "MOCK-ID:home t",
+                None,
+                ReasoningLevel::ModelDefault,
+            ),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(adapter.reasoning_skipped_without_model_list(), 1);
+    // Mit geladener Liste geht `reasoning` hinaus, der Zähler bleibt.
+    adapter
+        .send(
+            &request(
+                router("mock/text-small"),
+                "MOCK-ID:home u",
+                None,
+                ReasoningLevel::Off,
+            ),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        mock.bodies(CHAT).pop().unwrap()["reasoning"],
+        json!({"effort": "none"})
+    );
+    assert_eq!(adapter.reasoning_skipped_without_model_list(), 1);
+}

@@ -124,7 +124,7 @@ impl OutputLimitReached {
     pub fn attempt_failure(&self) -> AttemptFailure {
         let mut failure = AttemptFailure::from(self.provider_error()).with_error_code(&self.reason);
         failure.http_status = Some(self.http_status);
-        failure
+        failure.with_request_id(self.provider_request_id.clone())
     }
 }
 
