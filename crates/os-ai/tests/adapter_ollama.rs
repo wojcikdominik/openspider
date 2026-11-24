@@ -288,9 +288,11 @@ async fn cost_log_shows_zero_cost_and_the_eval_counts() {
 
 // spec: AI-006
 // spec: AI-020
-// Nicht erreichbarer Server (kein Mock-Port): alle offenen Ollama-Einträge erhalten `Error: <Meldung aus INTEG-160>`
-// mit URL – gleicher Text wie der Verbindungsstatus; nach dem ersten endgültig gescheiterten Eintrag (Wiederholungen
-// nach INTEG-005) geht kein weiterer Ollama-Request hinaus. Andere Anbieter laufen weiter.
+// Nicht erreichbarer Server (kein Mock-Port): alle offenen Ollama-Einträge erhalten `Error: Connection failed`,
+// `Error Code = transport/connect` und als Zusatztext die kanonische Meldung `Server not reachable (<URL>)` mit der URL
+// als eigenem Feld – derselbe Text wie der Verbindungsstatus (Orchestrator 24.11.2026 zu AI-006/K4-15). Nach dem
+// ersten endgültig gescheiterten Eintrag (Wiederholungen nach INTEG-005) geht kein weiterer Ollama-Request hinaus.
+// Andere Anbieter laufen weiter.
 #[tokio::test]
 async fn unreachable_server_fails_all_open_ollama_entries_while_others_continue() {
     let mock = Mock::start().await;
@@ -307,7 +309,7 @@ async fn unreachable_server_fails_all_open_ollama_entries_while_others_continue(
 
     // Verbindungsstatus nach INTEG-160.
     let connection = adapter.connect().await.unwrap_err();
-    let expected = format!("Server nicht erreichbar ({url})");
+    let expected = format!("Server not reachable ({url})");
     assert_eq!(
         connection,
         ConnectionError::Unreachable {
@@ -343,8 +345,14 @@ async fn unreachable_server_fails_all_open_ollama_entries_while_others_continue(
         assert_eq!(error.message, expected);
         assert_eq!(error.http_status, None);
         assert_eq!(error.error_code.as_deref(), Some("transport/connect"));
-        assert_eq!(adapter.status_text(error), format!("Error: {expected}"));
-        assert_eq!(adapter.status_text(error), format!("Error: {connection}"));
+        assert_eq!(error.status.to_string(), "Error: Connection failed");
+        let notice = adapter.unreachable_notice(error).unwrap();
+        assert_eq!(notice.url, url);
+        assert_eq!(notice.message, connection.to_string());
+        assert_eq!(
+            adapter.status_text(error),
+            format!("Error: Connection failed: {expected}")
+        );
     }
     assert!(adapter.unreachable().is_tripped());
     assert_eq!(status(&d, None), AiStatus::Success);
@@ -354,7 +362,7 @@ async fn unreachable_server_fails_all_open_ollama_entries_while_others_continue(
     assert_eq!(later.attempts, 0);
     assert_eq!(
         adapter.status_text(later.result.as_ref().unwrap_err()),
-        format!("Error: {expected}")
+        format!("Error: Connection failed: {expected}")
     );
     let embeddings = embed_texts(
         &adapter,
@@ -367,7 +375,9 @@ async fn unreachable_server_fails_all_open_ollama_entries_while_others_continue(
     .unwrap();
     assert!(embeddings.requests.is_empty());
     let error = embeddings.results[0].error.as_ref().unwrap();
-    assert_eq!(adapter.status_text(error), format!("Error: {expected}"));
+    assert_eq!(error.status, AiStatus::ConnectionFailed);
+    assert_eq!(error.error_code.as_deref(), Some("transport/connect"));
+    assert_eq!(adapter.unreachable_notice(error).unwrap().message, expected);
     assert_eq!(
         adapter.execute(requests[1].clone()).await,
         Err(ProviderError::Transport {
@@ -411,10 +421,7 @@ async fn server_url_comes_from_the_shared_ollama_setting() {
     // Die Meldung bei nicht erreichbarem Server nennt die geänderte URL.
     assert_eq!(
         adapter.unreachable_message(),
-        format!(
-            "Server nicht erreichbar ({})",
-            mock.server.base_url("ollama")
-        )
+        format!("Server not reachable ({})", mock.server.base_url("ollama"))
     );
 
     // Leere Angabe = Standard.
@@ -559,4 +566,254 @@ async fn server_errors_map_to_http_status_without_retry_for_404() {
     assert_eq!(adapter.status_text(&error), error.status.to_string());
     assert!(!adapter.unreachable().is_tripped());
     assert_eq!(server.requests(), 1);
+}
+
+/// Haken der Testuhr: läuft nach der n-ten Wartezeit.
+type Hook = (usize, Box<dyn FnOnce() + Send>);
+
+/// Testuhr mit Aufzeichnung der virtuellen Wartezeiten (Backoff) und einem Haken, der nach der n-ten Wartezeit läuft.
+/// Wartezeiten ab 100 s sind Request-Timeouts und vergehen echt (sie werden in diesen Tests nie erreicht).
+struct HookClock {
+    now: std::sync::Mutex<Duration>,
+    sleeps: std::sync::Mutex<Vec<Duration>>,
+    hook: std::sync::Mutex<Option<Hook>>,
+}
+
+impl HookClock {
+    fn new(hook: Option<Hook>) -> Arc<Self> {
+        Arc::new(Self {
+            now: std::sync::Mutex::new(Duration::ZERO),
+            sleeps: std::sync::Mutex::new(Vec::new()),
+            hook: std::sync::Mutex::new(hook),
+        })
+    }
+
+    fn sleeps(&self) -> usize {
+        self.sleeps.lock().unwrap().len()
+    }
+}
+
+impl os_ai::limits::LimitClock for HookClock {
+    fn now(&self) -> Duration {
+        *self.now.lock().unwrap()
+    }
+
+    fn wall_unix_millis(&self) -> i64 {
+        WALL + i64::try_from(self.now().as_millis()).unwrap()
+    }
+
+    fn sleep(
+        &self,
+        duration: Duration,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+        if duration >= Duration::from_secs(100) {
+            return Box::pin(tokio::time::sleep(duration));
+        }
+        *self.now.lock().unwrap() += duration;
+        let count = {
+            let mut sleeps = self.sleeps.lock().unwrap();
+            sleeps.push(duration);
+            sleeps.len()
+        };
+        let mut hook = self.hook.lock().unwrap();
+        if hook.as_ref().is_some_and(|(n, _)| *n == count) {
+            let (_, run) = hook.take().unwrap();
+            run();
+        }
+        Box::pin(tokio::task::yield_now())
+    }
+}
+
+/// Limiter mit den Standardwerten (Ollama: 1 gleichzeitige Anfrage) und der Testuhr `clock`.
+fn hook_limiter(clock: Arc<HookClock>) -> Limiter {
+    Limiter::with_jitter(LimitsConfig::default(), clock, Arc::new(FixedJitter(0.5)))
+}
+
+/// Beantwortet ab jetzt jede Anfrage auf `addr` mit einer gültigen Ollama-Antwort (Chat bzw. Embeddings) und zählt die
+/// Anfragen.
+fn serve_ollama_on(addr: std::net::SocketAddr, seen: Arc<std::sync::atomic::AtomicUsize>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = std::net::TcpListener::bind(addr).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                loop {
+                    let n = stream.read(&mut chunk).await.unwrap_or(0);
+                    if n == 0 {
+                        return;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                    let Some(end) = buf.windows(4).position(|w| w == b"\r\n\r\n") else {
+                        continue;
+                    };
+                    let head = String::from_utf8_lossy(&buf[..end]).to_ascii_lowercase();
+                    let length = head
+                        .lines()
+                        .find_map(|l| l.strip_prefix("content-length:"))
+                        .and_then(|v| v.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+                    if buf.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+                seen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let body = json!({
+                    "model": "mock-llama",
+                    "message": {"role": "assistant", "content": "ok"},
+                    "done": true,
+                    "prompt_eval_count": 3,
+                    "eval_count": 1,
+                    "embeddings": [[1.0, 0.0]],
+                })
+                .to_string();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.shutdown().await;
+            });
+        }
+    });
+}
+
+// spec: AI-006
+// Gleichzeitig gestartete Einträge bei Standardeinstellung (1 gleichzeitige Anfrage) und nicht erreichbarem Server:
+// Solange der erste Eintrag nach dem Verbindungsfehler wiederholt, stellen die übrigen keine eigenen
+// Verbindungsversuche an. Insgesamt 1 + 5 Versuche und 5 Wartezeiten (INTEG-005), unabhängig von der Zahl der
+// wartenden Einträge; alle scheitern mit `Error: Connection failed`. Ebenso für gleichzeitig laufende
+// Embedding-Bündel.
+#[tokio::test]
+async fn concurrent_entries_make_one_retry_sequence_against_an_unreachable_server() {
+    for waiting in [3usize, 7] {
+        let url = closed_port_url();
+        let adapter = OllamaAdapter::new(
+            reqwest::Client::new(),
+            OllamaConfig::new().with_base_url(url.clone()),
+        );
+        let clock = HookClock::new(None);
+        let limiter = hook_limiter(clock.clone());
+        let requests: Vec<_> = (0..=waiting)
+            .map(|i| text_request(ollama_model(), &format!("Gleichzeitig {i}")))
+            .collect();
+        let mut set = Vec::new();
+        for request in &requests {
+            set.push(adapter.run(&limiter, request, None, 10));
+        }
+        let executions = join_all(set).await;
+        let attempts: Vec<u32> = executions.iter().map(|e| e.attempts).collect();
+        assert_eq!(attempts.iter().sum::<u32>(), 6, "{attempts:?}");
+        assert_eq!(
+            attempts.iter().filter(|a| **a > 0).count(),
+            1,
+            "{attempts:?}"
+        );
+        assert_eq!(clock.sleeps(), 5);
+        for execution in &executions {
+            let error = execution.result.as_ref().unwrap_err();
+            assert_eq!(error.status, AiStatus::ConnectionFailed);
+            assert_eq!(error.error_code.as_deref(), Some("transport/connect"));
+            assert_eq!(adapter.unreachable_notice(error).unwrap().url, url);
+        }
+    }
+
+    // Embeddings: zwei gleichzeitig laufende Bündel (zwei Läufe auf demselben Adapter).
+    let url = closed_port_url();
+    let adapter = OllamaAdapter::new(
+        reqwest::Client::new(),
+        OllamaConfig::new().with_base_url(url.clone()),
+    );
+    let clock = HookClock::new(None);
+    let limiter = hook_limiter(clock.clone());
+    let settings = EmbeddingSettings::new("mock-embed");
+    let first = ["Bündel A".to_string()];
+    let second = ["Bündel B".to_string()];
+    let (a, b) = tokio::join!(
+        embed_texts(&adapter, &limiter, &NoEmbeddingCache, &settings, &first),
+        embed_texts(&adapter, &limiter, &NoEmbeddingCache, &settings, &second),
+    );
+    let (a, b) = (a.unwrap(), b.unwrap());
+    assert_eq!(clock.sleeps(), 5);
+    let logged: Vec<u32> = a
+        .requests
+        .iter()
+        .chain(&b.requests)
+        .map(|r| r.attempts)
+        .collect();
+    assert_eq!(logged, vec![6], "eine Protokollzeile mit 1 + 5 Versuchen");
+    for result in a.results.iter().chain(&b.results) {
+        assert_eq!(result.status, AiStatus::ConnectionFailed);
+    }
+}
+
+// spec: AI-006
+// Gelingt eine Wiederholung des prüfenden Eintrags (Server nach zwei Fehlversuchen wieder da), laufen die wartenden
+// Einträge normal weiter: je genau ein Request, alle `Success`; der Merker bleibt offen.
+#[tokio::test]
+async fn waiting_entries_continue_when_a_retry_succeeds() {
+    let addr = {
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        listener.local_addr().unwrap()
+    };
+    let seen = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let served = seen.clone();
+    let hook: Box<dyn FnOnce() + Send> = Box::new(move || serve_ollama_on(addr, served));
+    let clock = HookClock::new(Some((2, hook)));
+    let limiter = hook_limiter(clock.clone());
+    let adapter = OllamaAdapter::new(
+        reqwest::Client::new(),
+        OllamaConfig::new().with_base_url(format!("http://{addr}")),
+    );
+    let requests: Vec<_> = (0..4)
+        .map(|i| text_request(ollama_model(), &format!("Erholt {i}")))
+        .collect();
+    let executions = join_all(
+        requests
+            .iter()
+            .map(|r| adapter.run(&limiter, r, None, 10))
+            .collect(),
+    )
+    .await;
+    let mut attempts: Vec<u32> = executions.iter().map(|e| e.attempts).collect();
+    attempts.sort_unstable();
+    assert_eq!(attempts, vec![1, 1, 1, 3]);
+    for execution in &executions {
+        assert!(execution.result.is_ok(), "{:?}", execution.result);
+    }
+    assert_eq!(clock.sleeps(), 2);
+    assert_eq!(seen.load(std::sync::atomic::Ordering::SeqCst), 4);
+    assert!(!adapter.unreachable().is_tripped());
+    assert!(!adapter.unreachable().is_probing());
+}
+
+/// Wartet auf alle Zukünfte (ohne zusätzliche Abhängigkeit); sie laufen gleichzeitig auf dem Test-Runtime.
+async fn join_all<F: std::future::Future>(futures: Vec<F>) -> Vec<F::Output> {
+    let mut futures: Vec<_> = futures.into_iter().map(Box::pin).collect();
+    let mut outputs: Vec<Option<F::Output>> = futures.iter().map(|_| None).collect();
+    std::future::poll_fn(|cx| {
+        let mut pending = false;
+        for (future, output) in futures.iter_mut().zip(outputs.iter_mut()) {
+            if output.is_none() {
+                match future.as_mut().poll(cx) {
+                    std::task::Poll::Ready(value) => *output = Some(value),
+                    std::task::Poll::Pending => pending = true,
+                }
+            }
+        }
+        if pending {
+            std::task::Poll::Pending
+        } else {
+            std::task::Poll::Ready(())
+        }
+    })
+    .await;
+    outputs.into_iter().map(Option::unwrap).collect()
 }

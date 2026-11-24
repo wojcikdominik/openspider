@@ -11,16 +11,23 @@
 //! Kosten sind 0 ([`rates`]); Tokens werden trotzdem protokolliert (`prompt_eval_count` → Eingabe, `eval_count` →
 //! Ausgabe). Server-URL: die gemeinsame Einstellung des Ollama-Kontos ([`OllamaConfig::from_app_settings`], INTEG-160);
 //! Standard 1 gleichzeitige Anfrage und 300 s Timeout (INTEG-005, INTEG-179) liefern die App-Einstellungen bzw.
-//! [`default_limits`]. Ist der Server nicht erreichbar, erhalten der betroffene und alle weiteren Einträge dieses
-//! Adapters `Error: <Meldung aus INTEG-160>` ([`unreachable_message`], [`OllamaAdapter::status_text`]); andere
-//! Anbieter laufen weiter.
+//! [`default_limits`].
+//!
+//! **Nicht erreichbarer Server (AI-006, AI-020, K4-15):** Scheitert ein Versuch mit einem Verbindungsfehler, übernimmt
+//! dieser Eintrag die Prüfung des Servers; alle übrigen Ollama-Einträge (Chat und Embeddings) senden in dieser Zeit
+//! nichts und warten auf seinen Ausgang. Endet er nach 1 + 5 Versuchen (INTEG-005) endgültig mit dem Verbindungsfehler,
+//! scheitern alle offenen und weiteren Einträge des Laufs ohne Request mit `Error: Connection failed`,
+//! `Error Code = transport/connect`; Zusatztext ist die kanonische Meldung `Server not reachable (<URL>)` mit der URL als
+//! eigenem Feld ([`UnreachableNotice`], Anzeige nach INTEG-160 über i18n der Oberfläche). Gelingt eine Wiederholung,
+//! laufen die wartenden Einträge normal weiter. Andere Anbieter laufen in jedem Fall weiter.
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use reqwest::header::HeaderMap;
 use serde_json::{json, Map, Value};
+use tokio::sync::watch;
 
 use crate::adapters::anthropic::shared::{elapsed_ms, http_failure, opt_u64, raw_from_text};
 pub use crate::adapters::anthropic::shared::{image_input, AdapterReply};
@@ -54,12 +61,28 @@ pub const DEFAULT_TIMEOUT_SECONDS: u16 = 300;
 /// Fehlercode eines Eintrags, der wegen eines bereits als nicht erreichbar erkannten Servers nicht gesendet wurde.
 pub const UNREACHABLE_CODE: &str = "transport/connect";
 
-/// Meldung bei nicht erreichbarem Server nach INTEG-160 (ohne das sprachabhängige Präfix „Fehler:“ bzw. „Error:“).
+/// Kanonische Meldung bei nicht erreichbarem Server (englisch, ohne Präfix „Error:“): `Server not reachable (<URL>)`.
+/// Die sprachabhängige Anzeige nach INTEG-160 übernimmt die Oberfläche (i18n) anhand von [`UnreachableNotice::url`].
 pub fn unreachable_message(base_url: &str) -> String {
-    format!(
-        "Server nicht erreichbar ({})",
-        base_url.trim_end_matches('/')
-    )
+    format!("Server not reachable ({})", base_url.trim_end_matches('/'))
+}
+
+/// Zusatztext zu `Error: Connection failed`, wenn der Ollama-Server nicht erreichbar ist.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnreachableNotice {
+    /// Server-URL (ohne abschließenden Schrägstrich).
+    pub url: String,
+    /// Kanonische Meldung [`unreachable_message`].
+    pub message: String,
+}
+
+impl UnreachableNotice {
+    fn new(base_url: &str) -> Self {
+        Self {
+            url: base_url.trim_end_matches('/').to_string(),
+            message: unreachable_message(base_url),
+        }
+    }
 }
 
 /// Grenzen nach INTEG-005/INTEG-179: 1 gleichzeitige Anfrage, 300 s Timeout. Dieselben Werte setzt
@@ -186,24 +209,57 @@ impl std::fmt::Display for ConnectionError {
     }
 }
 
-/// Merker „Server nicht erreichbar“ eines Adapters für einen Lauf: Nach dem ersten endgültig gescheiterten Eintrag
-/// geht kein weiterer Ollama-Request hinaus; alle offenen Einträge erhalten dieselbe Meldung (AI-006).
-#[derive(Debug, Default, Clone)]
-pub struct UnreachableLatch(Arc<Mutex<Option<String>>>);
+/// Zustand der Erreichbarkeit eines Adapters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Gate {
+    /// Keine bekannte Störung.
+    Open,
+    /// Der Eintrag mit dieser Nummer wiederholt nach einem Verbindungsfehler; alle anderen warten.
+    Probing(u64),
+    /// Server nicht erreichbar: für den Rest des Laufs kein Request.
+    Closed,
+}
+
+/// Merker „Server nicht erreichbar“ eines Adapters für einen Lauf (AI-006): Während ein Eintrag nach einem
+/// Verbindungsfehler wiederholt, senden die anderen nichts; nach seinem endgültigen Verbindungsfehler geht kein
+/// weiterer Ollama-Request hinaus, und alle offenen Einträge erhalten denselben Zusatztext.
+#[derive(Debug, Clone)]
+pub struct UnreachableLatch(Arc<LatchInner>);
+
+#[derive(Debug)]
+struct LatchInner {
+    notice: Mutex<Option<UnreachableNotice>>,
+    gate: watch::Sender<Gate>,
+}
+
+impl Default for UnreachableLatch {
+    fn default() -> Self {
+        Self(Arc::new(LatchInner {
+            notice: Mutex::new(None),
+            gate: watch::Sender::new(Gate::Open),
+        }))
+    }
+}
 
 impl UnreachableLatch {
-    fn lock(&self) -> std::sync::MutexGuard<'_, Option<String>> {
-        self.0.lock().unwrap_or_else(|p| p.into_inner())
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<UnreachableNotice>> {
+        self.0.notice.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Setzt den Merker; eine frühere Meldung bleibt erhalten.
-    pub fn trip(&self, message: String) {
-        self.lock().get_or_insert(message);
+    /// Setzt den Merker; ein früherer Zusatztext bleibt erhalten. Wartende Einträge scheitern ohne Request.
+    pub fn trip(&self, notice: UnreachableNotice) {
+        self.lock().get_or_insert(notice);
+        self.0.gate.send_replace(Gate::Closed);
     }
 
-    /// Die Meldung, falls gesetzt.
-    pub fn message(&self) -> Option<String> {
+    /// Der Zusatztext, falls gesetzt.
+    pub fn notice(&self) -> Option<UnreachableNotice> {
         self.lock().clone()
+    }
+
+    /// Die kanonische Meldung, falls gesetzt.
+    pub fn message(&self) -> Option<String> {
+        self.notice().map(|n| n.message)
     }
 
     /// Ob gesetzt.
@@ -211,9 +267,62 @@ impl UnreachableLatch {
         self.lock().is_some()
     }
 
+    /// Ob gerade ein Eintrag den Server nach einem Verbindungsfehler prüft (die anderen warten).
+    pub fn is_probing(&self) -> bool {
+        matches!(*self.0.gate.borrow(), Gate::Probing(_))
+    }
+
     /// Hebt den Merker auf (neuer Lauf, Server wieder gestartet).
     pub fn reset(&self) {
         *self.lock() = None;
+        self.0.gate.send_replace(Gate::Open);
+    }
+
+    fn gate(&self) -> Gate {
+        *self.0.gate.borrow()
+    }
+
+    /// Eintrag `entry` übernimmt die Prüfung, falls niemand prüft und der Server nicht als gesperrt gilt.
+    fn start_probe(&self, entry: u64) {
+        self.0.gate.send_if_modified(|gate| {
+            if *gate == Gate::Open {
+                *gate = Gate::Probing(entry);
+                true
+            } else {
+                false
+            }
+        });
+    }
+
+    /// Eintrag `entry` beendet seine Prüfung ohne Sperre (Antwort erhalten oder anderer Fehler).
+    fn end_probe(&self, entry: u64) {
+        self.0.gate.send_if_modified(|gate| {
+            if *gate == Gate::Probing(entry) {
+                *gate = Gate::Open;
+                true
+            } else {
+                false
+            }
+        });
+    }
+
+    /// Wartet, bis keine Prüfung mehr läuft.
+    async fn settled(&self) {
+        let mut rx = self.0.gate.subscribe();
+        let _ = rx.wait_for(|gate| !matches!(gate, Gate::Probing(_))).await;
+    }
+}
+
+/// Beendet beim Verlassen eines Eintrags (auch bei Abbruch) eine noch offene Prüfung dieses Eintrags, damit wartende
+/// Einträge nicht hängen bleiben.
+struct ProbeGuard<'a> {
+    latch: &'a UnreachableLatch,
+    entry: u64,
+}
+
+impl Drop for ProbeGuard<'_> {
+    fn drop(&mut self) {
+        self.latch.end_probe(self.entry);
     }
 }
 
@@ -223,6 +332,7 @@ pub struct OllamaAdapter {
     config: OllamaConfig,
     capabilities: BTreeMap<String, Capabilities>,
     latch: UnreachableLatch,
+    next_entry: AtomicU64,
 }
 
 impl std::fmt::Debug for OllamaAdapter {
@@ -242,6 +352,7 @@ impl OllamaAdapter {
             config,
             capabilities: BTreeMap::new(),
             latch: UnreachableLatch::default(),
+            next_entry: AtomicU64::new(1),
         }
     }
 
@@ -262,9 +373,14 @@ impl OllamaAdapter {
         &self.latch
     }
 
-    /// Meldung nach INTEG-160 für die Server-URL dieses Adapters.
+    /// Kanonische Meldung `Server not reachable (<URL>)` für die Server-URL dieses Adapters.
     pub fn unreachable_message(&self) -> String {
         unreachable_message(&self.config.base_url)
+    }
+
+    /// Nummer eines neuen Eintrags (für die Prüfung nach Verbindungsfehlern).
+    fn begin_entry(&self) -> u64 {
+        self.next_entry.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Fähigkeiten eines Modells.
@@ -449,10 +565,43 @@ impl OllamaAdapter {
             .then(|| AttemptFailure::from(ProviderError::Policy).with_error_code(LATCHED_SENTINEL))
     }
 
+    /// Versuch eines Eintrags, der wartet, weil ein anderer Eintrag gerade den Server prüft: nicht gesendet, nicht
+    /// wiederholbar; der Aufrufer wartet auf den Ausgang der Prüfung und beginnt den Eintrag neu.
+    fn deferred_failure() -> AttemptFailure {
+        AttemptFailure::from(ProviderError::Policy).with_error_code(DEFERRED_SENTINEL)
+    }
+
+    /// Ein Versuch des Eintrags `entry` mit Merker und Prüfung: gesperrt → nicht gesendet; ein anderer Eintrag prüft →
+    /// zurückgestellt; sonst gesendet (`sent` zählt mit). Ein Verbindungsfehler macht diesen Eintrag zum prüfenden,
+    /// jede andere Antwort beendet seine Prüfung.
+    async fn guarded<T, Fut>(
+        &self,
+        entry: u64,
+        sent: &AtomicU32,
+        attempt: Fut,
+    ) -> Result<T, AttemptFailure>
+    where
+        Fut: std::future::Future<Output = Result<T, AttemptFailure>>,
+    {
+        if let Some(failure) = self.latched_failure() {
+            return Err(failure);
+        }
+        if matches!(self.latch.gate(), Gate::Probing(owner) if owner != entry) {
+            return Err(Self::deferred_failure());
+        }
+        sent.fetch_add(1, Ordering::Relaxed);
+        let result = attempt.await;
+        match &result {
+            Err(failure) if is_unreachable(failure) => self.latch.start_probe(entry),
+            _ => self.latch.end_probe(entry),
+        }
+        result
+    }
+
     /// Endgültiger Fehler eines Eintrags: Ein nicht erreichbarer Server (Verbindung abgelehnt bzw. Name nicht
     /// auflösbar, nach allen Wiederholungen) setzt den Merker; dieser und alle weiteren Einträge erhalten
-    /// `Error: Connection failed` (AI-020) mit der Meldung nach INTEG-160 und `Error Code = transport/connect` bzw.
-    /// `transport/dns`.
+    /// `Error: Connection failed` (AI-020) mit der Meldung [`unreachable_message`] und `Error Code = transport/connect`
+    /// bzw. `transport/dns`.
     pub fn finalize(&self, error: FinalError) -> FinalError {
         let latched = error.error_code.as_deref() == Some(LATCHED_SENTINEL);
         let unreachable = matches!(error.error, ProviderError::Transport { .. })
@@ -463,8 +612,9 @@ impl OllamaAdapter {
         if !latched && !unreachable {
             return error;
         }
-        let message = self.unreachable_message();
-        self.latch.trip(message.clone());
+        let notice = UnreachableNotice::new(&self.config.base_url);
+        let message = notice.message.clone();
+        self.latch.trip(notice);
         FinalError {
             error: ProviderError::Transport {
                 message: message.clone(),
@@ -485,20 +635,28 @@ impl OllamaAdapter {
         error.status == AiStatus::ConnectionFailed && error.message == self.unreachable_message()
     }
 
-    /// Text der Statusspalte eines endgültigen Fehlers: bei nicht erreichbarem Server
-    /// `Error: Server nicht erreichbar (<URL>)` (AI-006, gleicher Text wie der Verbindungsstatus nach INTEG-160),
-    /// sonst der Status nach AI-020.
+    /// Zusatztext eines endgültigen Fehlers bei nicht erreichbarem Server (Meldung und URL); sonst `None`.
+    pub fn unreachable_notice(&self, error: &FinalError) -> Option<UnreachableNotice> {
+        self.is_unreachable_error(error)
+            .then(|| UnreachableNotice::new(&self.config.base_url))
+    }
+
+    /// Kanonische Textzeile eines endgültigen Fehlers für Protokoll und Tooltip: Statuswert nach AI-020, bei nicht
+    /// erreichbarem Server mit Zusatztext (`Error: Connection failed: Server not reachable (<URL>)`). Die Statusspalte
+    /// selbst trägt nur den Statuswert (`error.status`); die sprachabhängige Anzeige nach INTEG-160 baut die Oberfläche
+    /// aus [`OllamaAdapter::unreachable_notice`].
     pub fn status_text(&self, error: &FinalError) -> String {
-        if self.is_unreachable_error(error) {
-            format!("Error: {}", error.message)
-        } else {
-            error.status.to_string()
+        match self.unreachable_notice(error) {
+            Some(notice) => format!("{}: {}", error.status, notice.message),
+            None => error.status.to_string(),
         }
     }
 
     /// Ein Eintrag mit allen Versuchen über den Limiter (INTEG-005, INTEG-179): Ist der Server bereits als nicht
-    /// erreichbar erkannt, geht kein Request hinaus. Die Antwort validiert der Aufrufer
-    /// ([`AdapterReply::into_response`] bzw. [`crate::schema::run_with_repair`] mit `repair`).
+    /// erreichbar erkannt, geht kein Request hinaus; prüft gerade ein anderer Eintrag den Server nach einem
+    /// Verbindungsfehler, wartet dieser Eintrag ohne Request auf dessen Ausgang. `attempts` zählt nur tatsächlich
+    /// gesendete Requests. Die Antwort validiert der Aufrufer ([`AdapterReply::into_response`] bzw.
+    /// [`crate::schema::run_with_repair`] mit `repair`).
     pub async fn run(
         &self,
         limiter: &Limiter,
@@ -511,28 +669,33 @@ impl OllamaAdapter {
             request.model.id.clone(),
             estimated_input_tokens,
         );
+        let entry = self.begin_entry();
+        let _guard = ProbeGuard {
+            latch: &self.latch,
+            entry,
+        };
         let sent = AtomicU32::new(0);
-        let mut execution = limiter
-            .run(&spec, |_| {
-                let sent = &sent;
-                async move {
-                    if let Some(failure) = self.latched_failure() {
-                        return Err(failure);
-                    }
-                    sent.fetch_add(1, Ordering::Relaxed);
-                    self.send(request, repair).await
-                }
-            })
-            .await;
-        if let Err(error) = execution.result {
+        loop {
+            let mut execution = limiter
+                .run(&spec, |_| {
+                    self.guarded(entry, &sent, self.send(request, repair))
+                })
+                .await;
+            let Err(error) = execution.result else {
+                return execution;
+            };
+            if is_deferred(&error) {
+                self.latch.settled().await;
+                continue;
+            }
             execution.result = Err(self.finalize(error));
-            // Versuche, die wegen des Merkers nicht hinausgingen, zählen nicht als Request (Protokollspalte `Retries`).
+            // Versuche, die wegen Merker oder Prüfung nicht hinausgingen, zählen nicht als Request (`Retries`).
             let sent = sent.load(Ordering::Relaxed);
             let sent_usize = usize::try_from(sent).unwrap_or(usize::MAX);
             execution.attempts = sent;
             execution.attempt_starts.truncate(sent_usize);
+            return execution;
         }
-        execution
     }
 
     /// Request-Körper für `POST /api/embed`.
@@ -553,9 +716,6 @@ impl OllamaAdapter {
         texts: &[String],
         dimensions: Option<u32>,
     ) -> Result<EmbeddingBatchReply, AttemptFailure> {
-        if let Some(failure) = self.latched_failure() {
-            return Err(failure);
-        }
         let started = Instant::now();
         let response = self
             .client
@@ -603,6 +763,12 @@ impl OllamaAdapter {
 /// Fehlercode-Markierung eines wegen des Merkers nicht gesendeten Eintrags (nur intern zwischen Versuch und
 /// [`OllamaAdapter::finalize`]).
 const LATCHED_SENTINEL: &str = "ollama/unreachable-latched";
+/// Fehlercode-Markierung eines zurückgestellten Versuchs (ein anderer Eintrag prüft den Server).
+const DEFERRED_SENTINEL: &str = "ollama/deferred";
+
+fn is_deferred(error: &FinalError) -> bool {
+    error.error_code.as_deref() == Some(DEFERRED_SENTINEL)
+}
 
 fn is_unreachable(failure: &AttemptFailure) -> bool {
     matches!(failure.error, ProviderError::Transport { .. })
@@ -697,6 +863,11 @@ impl AiProvider for OllamaAdapter {
             if let Some(message) = self.latch.message() {
                 return Err(ProviderError::Transport { message });
             }
+            // Ohne Limiter keine Wiederholung: ein zurückgestellter Versuch wartet auf die laufende Prüfung.
+            self.latch.settled().await;
+            if let Some(message) = self.latch.message() {
+                return Err(ProviderError::Transport { message });
+            }
             let reply = self
                 .send(&request, None)
                 .await
@@ -721,7 +892,38 @@ impl EmbeddingProvider for OllamaAdapter {
         texts: &'a [String],
         dimensions: Option<u32>,
     ) -> EmbedFuture<'a> {
-        Box::pin(self.embed_once(model, texts, dimensions))
+        let entry = self.begin_entry();
+        self.embed_entry(entry, model, texts, dimensions)
+    }
+
+    fn begin_entry(&self) -> u64 {
+        OllamaAdapter::begin_entry(self)
+    }
+
+    fn embed_entry<'a>(
+        &'a self,
+        entry: u64,
+        model: &'a str,
+        texts: &'a [String],
+        dimensions: Option<u32>,
+    ) -> EmbedFuture<'a> {
+        Box::pin(async move {
+            let sent = AtomicU32::new(0);
+            self.guarded(entry, &sent, self.embed_once(model, texts, dimensions))
+                .await
+        })
+    }
+
+    fn end_entry(&self, entry: u64) {
+        self.latch.end_probe(entry);
+    }
+
+    fn is_deferred(&self, error: &FinalError) -> bool {
+        is_deferred(error)
+    }
+
+    fn settled(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(self.latch.settled())
     }
 
     fn was_sent(&self, error: &FinalError) -> bool {
@@ -733,15 +935,18 @@ impl EmbeddingProvider for OllamaAdapter {
     }
 
     fn blocked(&self) -> Option<FinalError> {
-        self.latch.message().map(|message| FinalError {
-            error: ProviderError::Transport {
-                message: message.clone(),
-            },
-            status: AiStatus::ConnectionFailed,
-            http_status: None,
-            error_code: Some(UNREACHABLE_CODE.into()),
-            message,
-        })
+        self.latch
+            .notice()
+            .map(|notice| notice.message)
+            .map(|message| FinalError {
+                error: ProviderError::Transport {
+                    message: message.clone(),
+                },
+                status: AiStatus::ConnectionFailed,
+                http_status: None,
+                error_code: Some(UNREACHABLE_CODE.into()),
+                message,
+            })
     }
 
     fn rates(&self) -> Option<Rates> {
@@ -757,7 +962,7 @@ mod tests {
     fn unreachable_message_names_the_url_without_trailing_slash() {
         assert_eq!(
             unreachable_message("http://localhost:11434/"),
-            "Server nicht erreichbar (http://localhost:11434)"
+            "Server not reachable (http://localhost:11434)"
         );
     }
 
