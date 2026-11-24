@@ -42,7 +42,9 @@ CREATE TABLE ai_requests (
  duration_ms INTEGER NOT NULL CHECK(duration_ms >= 0), provider_request_id TEXT,
  retries INTEGER NOT NULL DEFAULT 0 CHECK(retries >= 0),
  over_reservation INTEGER NOT NULL DEFAULT 0 CHECK(over_reservation IN (0,1)),
- confidence_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(confidence_mismatch IN (0,1))
+ confidence_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(confidence_mismatch IN (0,1)),
+ -- AI-012: geschätzte Eingabe-Tokens vor Korrekturfaktor (Kalibrierung Ist/Schätzung); NULL z. B. bei Cache-Treffern.
+ estimated_input_tokens INTEGER CHECK(estimated_input_tokens >= 0)
 );
 CREATE INDEX ai_requests_task ON ai_requests(task, model, timestamp);
 CREATE INDEX ai_requests_run ON ai_requests(run_id);

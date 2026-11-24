@@ -81,6 +81,8 @@ pub struct RequestRecord {
     pub retries: u32,
     pub over_reservation: bool,
     pub confidence_mismatch: bool,
+    /// Geschätzte Eingabe-Tokens vor dem Korrekturfaktor (AI-012, Kalibrierung); `None` z. B. bei Cache-Treffern.
+    pub estimated_input_tokens: Option<u64>,
 }
 
 /// Gelesene Zeile mit Kennung und Adresse (aus `urls`).
@@ -154,9 +156,9 @@ pub fn insert(conn: &Connection, r: &RequestRecord) -> Result<i64, StoreError> {
            reservation_microusd, redactions, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens,
            images, token_cost_microusd, fixed_fees_microusd, regional_uplift_microusd, cost_microusd, price_source,
            batch_id, cache_hit, status, http_status, error_code, error_message, refusal_reason, duration_ms,
-           provider_request_id, retries, over_reservation, confidence_mismatch)
+           provider_request_id, retries, over_reservation, confidence_mismatch, estimated_input_tokens)
          VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-           ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)",
+           ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33)",
         params![
             r.run_id,
             r.timestamp,
@@ -190,6 +192,7 @@ pub fn insert(conn: &Connection, r: &RequestRecord) -> Result<i64, StoreError> {
             r.retries,
             r.over_reservation,
             r.confidence_mismatch,
+            opt_i64(r.estimated_input_tokens, "estimated_input_tokens")?,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -244,6 +247,7 @@ fn read_row(row: &Row<'_>) -> rusqlite::Result<LoggedRequest> {
             retries: row.get("retries")?,
             over_reservation: row.get("over_reservation")?,
             confidence_mismatch: row.get("confidence_mismatch")?,
+            estimated_input_tokens: opt_u64(row, "estimated_input_tokens")?,
         },
     })
 }
@@ -318,6 +322,33 @@ pub fn total_cost(conn: &Connection) -> Result<MicroUsd, StoreError> {
         |r| r.get(0),
     )?;
     Ok(MicroUsd(u64::try_from(v).unwrap_or(0)))
+}
+
+/// Paare (geschätzte, tatsächliche Eingabe-Tokens) der letzten `limit` protokollierten Requests eines Modells,
+/// älteste zuerst – Grundlage des Korrekturfaktors (AI-012). Es zählen nur Zeilen mit Schätzung > 0 und gemeldeten
+/// Eingabe-Tokens (keine Cache-Treffer, keine Zeilen ohne `usage`); Gebühren spielen keine Rolle.
+pub fn calibration_samples(
+    conn: &Connection,
+    provider: &str,
+    model: &str,
+    limit: usize,
+) -> Result<Vec<(u64, u64)>, StoreError> {
+    let mut st = conn.prepare(
+        "SELECT estimated_input_tokens, input_tokens FROM ai_requests
+         WHERE provider = ?1 AND model = ?2 AND cache_hit = 0
+           AND estimated_input_tokens > 0 AND input_tokens IS NOT NULL
+         ORDER BY id DESC LIMIT ?3",
+    )?;
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = st.query_map(params![provider, model, limit], |r| {
+        Ok((
+            u64::try_from(r.get::<_, i64>(0)?).unwrap_or(0),
+            u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
+        ))
+    })?;
+    let mut samples: Vec<(u64, u64)> = rows.collect::<Result<_, _>>()?;
+    samples.reverse();
+    Ok(samples)
 }
 
 /// Anmeldung des Bereichs `ai` beim `BudgetLedger`: Verbrauch = Summe aus `ai_requests`.
