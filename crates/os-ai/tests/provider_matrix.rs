@@ -82,7 +82,8 @@ async fn identical_parsed_contract_for_all_stub_providers() {
         ));
         assert_eq!(
             serde_json::to_value(response.usage).unwrap(),
-            json!({"input_tokens":null,"output_tokens":null,"cached_input_tokens":null,"cache_write_tokens":null})
+            // AI-001 Nachtrag 24.11.2026 (Q00): `usage` um `reasoning_tokens` erweitert.
+            json!({"input_tokens":null,"output_tokens":null,"cached_input_tokens":null,"cache_write_tokens":null,"reasoning_tokens":null})
         );
         assert_eq!(stub.calls.load(Ordering::SeqCst), 1);
     }

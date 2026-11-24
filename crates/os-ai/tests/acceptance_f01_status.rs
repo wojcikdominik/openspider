@@ -186,7 +186,9 @@ fn usage_has_the_four_spec_fields_and_missing_means_null() {
             "cache_write_tokens",
             "cached_input_tokens",
             "input_tokens",
-            "output_tokens"
+            "output_tokens",
+            // AI-001 Nachtrag 24.11.2026 (Q00): `usage` um `reasoning_tokens` erweitert – jetzt fünf Felder.
+            "reasoning_tokens"
         ]
     );
     for (k, v) in obj {
