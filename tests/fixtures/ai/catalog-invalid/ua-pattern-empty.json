@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "crawlers": [
+    {
+      "token": "ABot",
+      "operator": "Beispiel",
+      "category": "search",
+      "ua_pattern": "",
+      "ua_example": "ABot/1.0",
+      "respects_robots": "unknown",
+      "docs_url": "https://example.test/bot",
+      "docs_note": null,
+      "verified_at": "2026-11-24",
+      "deprecated": false,
+      "replaced_by": null
+    }
+  ]
+}

@@ -31,7 +31,9 @@
         "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
         "operator": { "type": "string", "minLength": 1 },
         "category": { "enum": ["training", "search", "user-fetch", "control-token"] },
-        "ua_pattern": { "type": ["string", "null"] },
+        "ua_pattern": {
+          "anyOf": [{ "type": "string", "minLength": 1, "pattern": "\\S" }, { "type": "null" }]
+        },
         "ua_example": { "type": ["string", "null"] },
         "respects_robots": { "enum": ["yes", "partial", "no", "unknown"] },
         "docs_url": {

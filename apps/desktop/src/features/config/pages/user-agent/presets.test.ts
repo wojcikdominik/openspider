@@ -42,4 +42,16 @@ describe("User-Agent-Voreinstellungen", () => {
     const ua = catalog.find((c) => c.token === "OAI-SearchBot")?.ua_example;
     expect(resolveUa({ preset: "oai-searchbot" }, "1.0")).toEqual({ http: ua, token: "OAI-SearchBot", missingToken: false });
   });
+
+  // spec: CRAWL-114 [M4]
+  it("ohne ua_example: Standard-User-Agent und eigenes Token; ClaudeBot behält den User-Agent aus user-agents.toml", () => {
+    const standard = resolveUa({ preset: "openspider" }, "1.0").http;
+    for (const id of ["claude-searchbot", "claude-user", "google-cloudvertexbot", "youbot"]) {
+      const token = UA_PRESETS.find((p) => p.id === id)?.robotsToken;
+      expect(token, id).toBeTruthy();
+      expect(resolveUa({ preset: id }, "1.0"), id).toEqual({ http: standard, token, missingToken: false });
+    }
+    const claude = parsePresetToml(uaToml).find((p) => p.id === "claudebot");
+    expect(resolveUa({ preset: "claudebot" }, "1.0")).toEqual({ http: claude?.userAgent, token: "ClaudeBot", missingToken: false });
+  });
 });
