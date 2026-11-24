@@ -147,6 +147,7 @@ fn handle(id: String, v: &View) -> ViewHandle {
         state: ViewState::Ready,
         op: None,
         empty_state: None,
+        crawl_id: None,
     }
 }
 fn get(app: &App, ctx: &CallCtx, id: &str) -> Result<View, CmdError> {

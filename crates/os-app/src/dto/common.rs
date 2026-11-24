@@ -137,6 +137,12 @@ pub struct UrlIdArgs {
 pub struct SelectionArgs {
     /// Auswahl.
     pub selection: Selection,
+    /// Crawl, aus dessen Ansicht die Auswahl stammt (UI-018, CRAWL-131, fix-sel). Ist er gesetzt und nicht der Crawl der
+    /// Sitzung, lehnt der Kern ab (`err-selection-other-crawl`), ohne etwas zu ändern; fehlt er, gilt das bisherige
+    /// Verhalten.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crawl_id: Option<String>,
 }
 
 /// Argument: ein Name.

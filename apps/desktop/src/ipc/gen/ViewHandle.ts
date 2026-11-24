@@ -40,4 +40,9 @@ emptyState?: EmptyState | null,
 /**
  * Optionales erstes, begrenztes Zeilenfenster ohne zweiten IPC-Umlauf (UI-145).
  */
-initialRows?: RowWindow | null, };
+initialRows?: RowWindow | null, 
+/**
+ * Crawl, dessen Daten die View zeigt (UI-018, fix-sel): Zeilenschlüssel gelten nur in diesem Crawl. Fehlt bei
+ * Vergleichs- und Stub-Views.
+ */
+crawlId?: string | null, };

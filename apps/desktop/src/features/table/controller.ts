@@ -13,7 +13,7 @@ import { SelectionModel } from "../../state/selection";
 import type { TabQuery } from "../../state/tabs";
 import type { SegmentFilter } from "../../ipc/gen/SegmentFilter";
 import { useSegments } from "../table-advanced/stores";
-import { crawlBegin, type CrawlBegin } from "../../ipc/crawlBegin";
+import { crawlBegin, type CrawlBegin } from "../../ipc/begin/crawlBegin";
 
 export function tabSpec(tab: string, query: TabQuery, segment: SegmentFilter | null = useSegments.getState().filter): ViewSpec {
   const search = query.rules ? { kind: "rules" as const, tree: query.rules.tree, caseSensitive: query.rules.caseSensitive }
@@ -94,6 +94,8 @@ export class TableController {
     if (!this.source) return false;
     const begin = crawlBegin.get(); const origin = this.openedAt;
     if (begin.revision === 0) return true;
+    // A view that names its crawl shows the answered crawl, or it does not.
+    if (crawlBegin.settled() && typeof begin.crawlId === "string" && this.source.crawlId === begin.crawlId) return true;
     return origin !== undefined && origin.revision === begin.revision && (origin.settled || origin.proof);
   }
   /**
@@ -118,8 +120,8 @@ export class TableController {
       else if (this.current) void this.open(this.current.tab, this.current.query);
       return;
     }
-    const trusted = this.source !== undefined && origin !== undefined && origin.revision === begin.revision
-      && (origin.settled || (begin.crawlId !== null && origin.crawl === begin.crawlId));
+    const trusted = this.source !== undefined && ((begin.crawlId !== null && this.source.crawlId === begin.crawlId)
+      || (origin !== undefined && origin.revision === begin.revision && (origin.settled || (begin.crawlId !== null && origin.crawl === begin.crawlId))));
     if (trusted || !this.current) { this.emit(); return; }
     const discarded = this.source ? origin : this.inflight;
     if (discarded && discarded.revision === begin.revision && !discarded.settled) this.doubt = begin.revision;
@@ -136,6 +138,9 @@ export class TableController {
     if (previous === next) { if (next !== undefined) this.consumed = begin.revision; return false; }
     if (!crawlBegin.settled()) this.proof = begin.revision;
     const first = this.consumed !== begin.revision; this.consumed = begin.revision;
+    // A view that names its crawl decides by that name: its rows (and the selection in them, see `otherCrawl`) belong to
+    // the arriving crawl or they do not. Only views without that name fall back to the begin rules below.
+    if (this.source?.crawlId !== undefined) return this.source.crawlId === next;
     return first && this.doubt !== begin.revision && this.source !== undefined && continuesCrawl(next, begin, this.openedAt);
   }
   setSelection = (selection: SelectionModel) => { this.selection = selection; useTableSelection.setState({ selection, viewId: this.source?.viewId, version: this.source?.version }); this.emit(); };
@@ -182,6 +187,8 @@ export class TableController {
         } finally { if (this.inflight === requested) this.inflight = undefined; }
         if (!handle || generation !== this.generation || this.disposed) { await view.close({ viewId: opened.viewId }); return; }
         const source = this.adopt(handle, query);
+        // URL ids of one crawl mean other URLs in another: a view of another crawl starts without selection.
+        if (otherCrawl(previous, source)) this.setSelection(SelectionModel.empty());
         this.source = source; this.openedAt = requested; this.unsubscribe = source.subscribe(() => this.emit());
         useTableSelection.setState({ selection: this.selection, viewId: source.viewId, version: source.version });
         this.pending = false; this.emit();
@@ -276,7 +283,8 @@ export class TableController {
     this.unsubscribe?.();
     this.source = source; this.openedAt = openedAt; this.unsubscribe = source.subscribe(() => this.emit());
     this.pending = false;
-    if (this.selection.value.kind === "all") this.setSelection(SelectionModel.empty());
+    // A silent replacement may come from content that replaced the crawl meanwhile (another window, CLI/MCP, scheduler).
+    if (this.selection.value.kind === "all" || otherCrawl(released, source)) this.setSelection(SelectionModel.empty());
     else useTableSelection.setState({ selection: this.selection, viewId: source.viewId, version: source.version });
     if (isViewGone(this.error)) this.error = null;
     this.emit();
@@ -402,6 +410,10 @@ export interface ViewOrigin {
 export function continuesCrawl(next: string | undefined, begin: CrawlBegin, origin: ViewOrigin | undefined): boolean {
   return next !== undefined && origin !== undefined && begin.revision > 0 && origin.revision === begin.revision
     && origin.settled && begin.crawlId === next && origin.answer === next;
+}
+/** Both views name their crawl and the crawls differ (fix-sel, UI-018). */
+function otherCrawl(before: ViewDataSource | undefined, after: ViewDataSource): boolean {
+  return before?.crawlId !== undefined && after.crawlId !== undefined && before.crawlId !== after.crawlId;
 }
 /** All rows of the inclusive window are in memory (an empty view has none to load). */
 function loaded(source: ViewDataSource, first: number, last: number): boolean {

@@ -1,7 +1,7 @@
 // Ein Client, drei Transporte (Tauri, Bridge, Mock) hinter einer Schnittstelle (docs/plan/M2.md 3.8).
 // Aufgaben über den Transport hinaus: Fehler → IpcError, AbortSignal → `op.cancel`, Verwerfen veralteter Antworten.
 import commands from "./commands.json";
-import { trackBegin } from "./crawlBegin";
+import { trackBegin } from "./begin/crawlBegin";
 import { IpcError, localError, toIpcError } from "./errors";
 import type { OpHandle } from "./gen/OpHandle";
 import { createBridgeTransport } from "./transport/bridge";

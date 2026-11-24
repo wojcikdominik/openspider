@@ -1,4 +1,5 @@
 // fix-sel (UI-018): this window replaces the crawl it shows – `crawl.start`, `crawl.open`, `crawl.clear` sent from here.
+// Not a core command: kept outside the wrapper layer `src/ipc/*.ts` that the IPC contract test reads.
 // Content that arrives from elsewhere (another window, CLI/MCP writer, scheduler) has no such signal.
 
 /** Commands with which this window begins new content; every call through `client.invoke` is noted. */
