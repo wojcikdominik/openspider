@@ -1,6 +1,9 @@
 //! AI-018 und AI-024 gegen ai-mock (Mock-Zähler und Volltextsuche im Request-Log). Die Requests sendet ein
 //! schlanker Testadapter über HTTP an den Mock (die Produktivadapter liefern K01–K03); geprüft wird der
-//! Datenschutz-Wächter `os_ai::policy::guard`, der vor jedem Adapter liegt.
+//! Datenschutz-Wächter `os_ai::policy::guard`, der vor jedem Adapter liegt. Seiten: `tests/fixtures/ai/site/`
+//! (`fields.html` mit Feldmarkern, `pii.html`, Kontakt und Impressum).
+#[path = "policy_html.rs"]
+mod policy_html;
 use os_ai::{
     policy::{
         guard::{self, PreparedInput},
@@ -17,16 +20,10 @@ use os_testsite::mocks::{
     ai::{AiMock, RequestRecord},
     MockServer,
 };
+use policy_html::{repo, site_page};
 use serde_json::{json, Value};
-use std::path::PathBuf;
 
 const T0: i64 = 1_796_083_200_000;
-
-fn repo(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../")
-        .join(name)
-}
 
 fn fixture(name: &str) -> Value {
     serde_json::from_str(
@@ -35,17 +32,42 @@ fn fixture(name: &str) -> Value {
     .unwrap()
 }
 
-fn values(json: &Value) -> FieldValues {
-    let mut out = FieldValues::new();
-    for (id, value) in json.as_object().unwrap() {
-        let field = InputField::from_id(id).unwrap();
-        let value = match value {
-            Value::String(s) => FieldValue::Text(s.clone()),
-            other => serde_json::from_value(json!({"kind": "image", "value": other})).unwrap(),
-        };
-        out.insert(field, value);
-    }
-    out
+/// Markers of `site/fields.html` per field; `word_count` and `page_type` are derived values (word count, result of
+/// another question) and get their marker here.
+const MARKERS: [(InputField, &str); 14] = [
+    (InputField::Url, "MARK-URL"),
+    (InputField::Title, "MARK-TITLE"),
+    (InputField::MetaDescription, "MARK-META"),
+    (InputField::H1, "MARK-H1"),
+    (InputField::H2, "MARK-H2"),
+    (InputField::PageText, "MARK-TEXT"),
+    (InputField::WordCount, "MARK-WORDS"),
+    (InputField::HtmlLang, "MARK-LANG"),
+    (InputField::HreflangSelf, "MARK-HREFLANG"),
+    (InputField::StructuredDataTypes, "MARK-SD"),
+    (InputField::PageType, "MARK-PAGETYPE"),
+    (InputField::Image, "TUFSSy1JTUFHRQ"),
+    (InputField::Alt, "MARK-ALT"),
+    (InputField::ImageContext, "MARK-CONTEXT"),
+];
+
+fn fields_page() -> FieldValues {
+    let mut page = site_page("fields.html");
+    page.insert(
+        InputField::Url,
+        FieldValue::Text("http://ai.test:8080/fields?MARK-URL".into()),
+    );
+    page.insert(InputField::WordCount, FieldValue::Text("MARK-WORDS".into()));
+    page.insert(
+        InputField::PageType,
+        FieldValue::Text("MARK-PAGETYPE".into()),
+    );
+    assert_eq!(
+        page.fields(),
+        FieldSet::new(InputField::ALL),
+        "fields.html carries every field"
+    );
+    page
 }
 
 fn flows() -> Vec<TaskDataFlow> {
@@ -193,7 +215,7 @@ async fn send(
 async fn without_consent_no_request_and_pending_consent() {
     let (mock, server) = start().await;
     let openai = MockHttp::new(&server, "openai");
-    let page = values(&fixture("fields.json")["values"]);
+    let page = fields_page();
     let gate = ConsentGate::dialog(ConsentBook::new());
     for flow in flows() {
         let input = PreparedInput::new(&page, &flow.fields, &Redactor::default());
@@ -226,7 +248,7 @@ async fn without_consent_no_request_and_pending_consent() {
 async fn adding_page_text_to_title_suggestions_asks_again_before_next_request() {
     let (mock, server) = start().await;
     let openai = MockHttp::new(&server, "openai");
-    let page = values(&fixture("fields.json")["values"]);
+    let page = fields_page();
     let gate = ConsentGate::dialog(ConsentBook::new());
     let policies = ProviderPolicies::embedded();
     let mut title = flows()
@@ -270,9 +292,7 @@ async fn adding_page_text_to_title_suggestions_asks_again_before_next_request() 
 async fn shown_fields_are_exactly_the_sent_fields() {
     let (mock, server) = start().await;
     let openai = MockHttp::new(&server, "openai");
-    let fixture = fixture("fields.json");
-    let page = values(&fixture["values"]);
-    let markers = fixture["markers"].as_object().unwrap();
+    let page = fields_page();
     let gate = ConsentGate::cli(true);
     let policies = ProviderPolicies::embedded();
     let mut sets: Vec<FieldSet> = flows().into_iter().map(|f| f.fields).collect();
@@ -298,8 +318,7 @@ async fn shown_fields_are_exactly_the_sent_fields() {
         };
         let row = &DataFlowOverview::build(&[flow], &policies, &gate, true).rows[0];
         assert_eq!(&row.fields_sent, set);
-        for field in InputField::ALL {
-            let marker = markers[field.id()].as_str().unwrap();
+        for (field, marker) in MARKERS {
             assert_eq!(
                 body.contains(marker),
                 set.contains(field),
@@ -318,7 +337,7 @@ async fn revocation_stops_open_entries_of_that_provider_immediately() {
     let (mock, server) = start().await;
     let openai = MockHttp::new(&server, "openai");
     let ollama = MockHttp::new(&server, "ollama");
-    let page = values(&fixture("fields.json")["values"]);
+    let page = fields_page();
     let fields = FieldSet::new([InputField::Url, InputField::Title]);
     let input = PreparedInput::new(&page, &fields, &Redactor::default());
     let gate = ConsentGate::dialog(ConsentBook::new());
@@ -370,7 +389,7 @@ async fn revocation_stops_open_entries_of_that_provider_immediately() {
 async fn cli_without_consent_switch_runs_no_ai_task() {
     let (mock, server) = start().await;
     let openai = MockHttp::new(&server, "openai");
-    let page = values(&fixture("fields.json")["values"]);
+    let page = fields_page();
     let gate = ConsentGate::cli(false);
     for flow in flows() {
         let input = PreparedInput::new(&page, &flow.fields, &Redactor::default());
@@ -391,7 +410,7 @@ async fn cli_without_consent_switch_runs_no_ai_task() {
 async fn preview_switch_off_sends_nothing_even_with_consent() {
     let (mock, server) = start().await;
     let openai = MockHttp::new(&server, "openai");
-    let page = values(&fixture("fields.json")["values"]);
+    let page = fields_page();
     let input = PreparedInput::new(&page, &page.fields(), &Redactor::default());
     let out = guard::execute(
         PreviewSwitch::OFF,
@@ -412,60 +431,27 @@ async fn preview_switch_off_sends_nothing_even_with_consent() {
 async fn pii_request_contains_placeholders_not_values() {
     let (mock, server) = start().await;
     let openai = MockHttp::new(&server, "openai");
-    let pii = fixture("pii.json");
-    let page = values(&pii["values"]);
+    let page = site_page("pii.html");
     let input = PreparedInput::new(&page, &page.fields(), &Redactor::default());
     let out = send(&ConsentGate::cli(true), &openai, "page-type", &input).await;
     assert!(out.sent);
     assert_eq!(out.redactions, 3, "Redactions = 3");
     let log = provider_requests(&mock);
     assert_eq!(log.len(), 1);
-    for original in pii["originals"].as_array().unwrap() {
-        assert!(
-            !log[0].body.contains(original.as_str().unwrap()),
-            "{original}"
-        );
+    for original in [
+        "max@example.com",
+        "+49 30 1234567",
+        "DE89 3704 0044 0532 0130 00",
+        "DE89370400440532013000",
+    ] {
+        assert!(!log[0].body.contains(original), "{original}");
     }
+    // article number in IBAN shape with wrong check digits stays (AI-024)
+    assert!(log[0].body.contains("DE12 3456 7890 1234 5678 90"));
     for placeholder in ["[EMAIL]", "[PHONE]", "[IBAN]"] {
         assert!(log[0].body.contains(placeholder), "{placeholder}");
     }
     server.stop().await;
-}
-
-/// Field values of the simple fixture pages (title, meta description, h1, text of `<main>`).
-fn site_page(file: &str) -> FieldValues {
-    let html = std::fs::read_to_string(repo(&format!("tests/fixtures/ai/site/{file}"))).unwrap();
-    let between = |a: &str, b: &str| -> String {
-        let start = html.find(a).unwrap() + a.len();
-        let end = start + html[start..].find(b).unwrap();
-        html[start..end].to_string()
-    };
-    let main = between("<main>", "</main>");
-    let mut text = String::new();
-    let mut in_tag = false;
-    for c in main.chars() {
-        match c {
-            '<' => {
-                in_tag = true;
-                text.push(' ');
-            }
-            '>' => in_tag = false,
-            c if !in_tag => text.push(c),
-            _ => {}
-        }
-    }
-    FieldValues::new()
-        .with_text(InputField::Url, format!("http://ai.test:8080/{file}"))
-        .with_text(InputField::Title, between("<title>", "</title>"))
-        .with_text(
-            InputField::MetaDescription,
-            between("name=\"description\" content=\"", "\""),
-        )
-        .with_text(InputField::H1, between("<h1>", "</h1>"))
-        .with_text(
-            InputField::PageText,
-            text.split_whitespace().collect::<Vec<_>>().join(" "),
-        )
 }
 
 const SITE_PII: [&str; 7] = [

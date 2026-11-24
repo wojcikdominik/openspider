@@ -1,40 +1,32 @@
 //! AI-024 Schwärzung personenbezogener Daten vor dem Senden – Bibliotheksebene (feste Muster, IBAN-Prüfziffer,
-//! eigene Muster, Feldauswahl, Cache-Schlüssel). Die Prüfung gegen ai-mock steht in `policy_mock.rs`.
+//! eigene Muster, Feldauswahl, Cache-Schlüssel). Seite `tests/fixtures/ai/site/pii.html`; die Prüfung gegen ai-mock
+//! steht in `policy_mock.rs`.
+#[path = "policy_html.rs"]
+mod policy_html;
 use os_ai::{
     cache::input_hash,
     policy::{
         fields::{FieldSet, FieldValue, FieldValues, InputField},
         guard::PreparedInput,
-        redact::{
-            iban_is_valid, CompiledPattern, NoRegexEngine, PatternEngine, PatternList,
-            PatternSyntaxError, RedactionSettings, Redactor,
-        },
+        redact::{iban_is_valid, PatternList, RedactionSettings, Redactor},
     },
 };
 use os_model::config::AiAppSettings;
+use policy_html::{repo, site_page};
 use serde_json::Value;
-use std::{ops::Range, path::PathBuf};
 
 fn fixture(name: &str) -> Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/ai/policy")
-        .join(name);
+    let path = repo(&format!("tests/fixtures/ai/policy/{name}"));
     serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
 }
 
-fn values(json: &Value) -> FieldValues {
-    let mut out = FieldValues::new();
-    for (id, value) in json.as_object().unwrap() {
-        let field = InputField::from_id(id).unwrap_or_else(|| panic!("unknown field {id}"));
-        let value = match value {
-            Value::String(s) => FieldValue::Text(s.clone()),
-            other => serde_json::from_value(serde_json::json!({"kind": "image", "value": other}))
-                .unwrap(),
-        };
-        out.insert(field, value);
-    }
-    out
-}
+const PII_ORIGINALS: [&str; 4] = [
+    "max@example.com",
+    "+49 30 1234567",
+    "DE89 3704 0044 0532 0130 00",
+    "DE89370400440532013000",
+];
+const ARTICLE_NUMBER: &str = "DE12 3456 7890 1234 5678 90";
 
 // spec: AI-024
 #[test]
@@ -51,17 +43,14 @@ fn fixed_patterns_match_the_fixture_cases() {
 // spec: AI-024
 #[test]
 fn pii_page_has_three_placeholders_and_three_redactions() {
-    let pii = fixture("pii.json");
-    let page = values(&pii["values"]);
+    let page = site_page("pii.html");
     let fields = page.fields();
     let prepared = PreparedInput::new(&page, &fields, &Redactor::default());
     let text = prepared.values.text_block();
-    for original in pii["originals"].as_array().unwrap() {
-        assert!(
-            !text.contains(original.as_str().unwrap()),
-            "{original} in {text}"
-        );
+    for original in PII_ORIGINALS {
+        assert!(!text.contains(original), "{original} in {text}");
     }
+    assert!(text.contains(ARTICLE_NUMBER), "article number stays");
     for placeholder in ["[EMAIL]", "[PHONE]", "[IBAN]"] {
         assert_eq!(
             text.matches(placeholder).count(),
@@ -83,12 +72,11 @@ fn pii_page_has_three_placeholders_and_three_redactions() {
 // spec: AI-024
 #[test]
 fn iban_shape_with_wrong_check_digits_is_not_replaced() {
-    let pii = fixture("pii.json");
-    let text = pii["article_number_text"].as_str().unwrap();
+    let text = "Artikelnummer DE12 3456 7890 1234 5678 90 ist lieferbar.";
     let (out, counts) = Redactor::default().redact_text(text);
     assert_eq!(out, text);
     assert_eq!(counts.total(), 0);
-    let compact = pii["article_number"].as_str().unwrap().replace(' ', "");
+    let compact = ARTICLE_NUMBER.replace(' ', "");
     assert!(!iban_is_valid(&compact));
     assert!(iban_is_valid("DE89370400440532013000"));
     assert!(iban_is_valid("GB82WEST12345698765432"));
@@ -102,16 +90,15 @@ fn iban_shape_with_wrong_check_digits_is_not_replaced() {
 // spec: AI-024
 #[test]
 fn redaction_off_keeps_original_values() {
-    let pii = fixture("pii.json");
-    let page = values(&pii["values"]);
+    let page = site_page("pii.html");
     let prepared = PreparedInput::new(
         &page,
         &page.fields(),
         &Redactor::new(RedactionSettings::off()),
     );
     let text = prepared.values.text_block();
-    for original in pii["originals"].as_array().unwrap().iter().take(3) {
-        assert!(text.contains(original.as_str().unwrap()));
+    for original in PII_ORIGINALS.iter().take(3) {
+        assert!(text.contains(original), "{original}");
     }
     assert_eq!(prepared.redactions.total(), 0);
 }
@@ -122,17 +109,9 @@ fn redaction_is_on_by_default_and_follows_app_settings() {
     assert!(RedactionSettings::default().enabled);
     assert!(Redactor::default().is_enabled());
     let mut app = AiAppSettings::default();
-    assert!(
-        RedactionSettings::from_app_settings(&app, &NoRegexEngine)
-            .unwrap()
-            .enabled
-    );
+    assert!(RedactionSettings::from_app_settings(&app).unwrap().enabled);
     app.redact_personal_data = false;
-    assert!(
-        !RedactionSettings::from_app_settings(&app, &NoRegexEngine)
-            .unwrap()
-            .enabled
-    );
+    assert!(!RedactionSettings::from_app_settings(&app).unwrap().enabled);
 }
 
 // spec: AI-024
@@ -198,69 +177,61 @@ fn cache_key_input_is_the_redacted_text() {
     assert_ne!(input_hash(&a.inputs()), input_hash(&b.inputs()));
 }
 
-/// Test engine: literal patterns; an unbalanced `(` is a syntax error at its position.
-struct LiteralEngine;
-struct Literal(String);
-impl CompiledPattern for Literal {
-    fn find_all(&self, text: &str) -> Vec<Range<usize>> {
-        text.match_indices(&self.0)
-            .map(|(i, m)| i..i + m.len())
-            .collect()
-    }
-}
-impl PatternEngine for LiteralEngine {
-    fn compile(&self, pattern: &str) -> Result<Box<dyn CompiledPattern>, PatternSyntaxError> {
-        if let Some(pos) = pattern.chars().position(|c| c == '(') {
-            if !pattern.contains(')') {
-                return Err(PatternSyntaxError {
-                    position: pos + 1,
-                    message: "unclosed group".into(),
-                });
-            }
-        }
-        Ok(Box::new(Literal(pattern.to_string())))
-    }
-}
-
 // spec: AI-024
 #[test]
-fn invalid_custom_pattern_is_rejected_with_line_and_position() {
-    let err = PatternList::parse("KD-\n\nab(c", &LiteralEngine).unwrap_err();
-    assert_eq!((err.line, err.position), (3, 3));
-    assert_eq!(err.to_string(), "line 3, position 3: unclosed group");
+fn invalid_custom_regex_is_rejected_with_line_and_position() {
+    // trailing backslash at the 4th character of line 3; the empty line 2 is ignored but counted
+    let err = PatternList::parse("KD-\\d+\n\nabc\\").unwrap_err();
+    assert_eq!((err.line, err.position), (3, 4), "{err}");
+    assert!(err.to_string().starts_with("line 3, position 4: "), "{err}");
+    // position counts characters, not bytes
+    let err = PatternList::parse("äö\\").unwrap_err();
+    assert_eq!((err.line, err.position), (1, 3), "{err}");
+    // unclosed group: rejected with a position inside or right after the pattern
+    let err = PatternList::parse("ok\nab(c").unwrap_err();
+    assert_eq!(err.line, 2);
+    assert!((1..=5).contains(&err.position), "{err}");
+    assert!(!err.message.is_empty());
+    // app settings: entry n is line n
     let app = AiAppSettings {
-        redaction_patterns: vec!["ok".into(), "(x".into()],
+        redaction_patterns: vec!["KD-\\d+".into(), String::new(), "x\\".into()],
         ..AiAppSettings::default()
     };
-    let err = RedactionSettings::from_app_settings(&app, &LiteralEngine).unwrap_err();
-    assert_eq!((err.line, err.position), (2, 1));
+    let err = RedactionSettings::from_app_settings(&app).unwrap_err();
+    assert_eq!((err.line, err.position), (3, 2), "{err}");
 }
 
 // spec: AI-024
 #[test]
-fn custom_patterns_are_applied_after_fixed_patterns() {
-    let custom = PatternList::parse("KD-4711", &LiteralEngine).unwrap();
+fn custom_regex_patterns_run_after_fixed_patterns_and_count() {
+    let custom =
+        PatternList::parse("KD-\\d{4}\n\n(?i)kundennr\\.?\\s*\\d+\nexample\\.com").unwrap();
+    assert_eq!(custom.sources().len(), 3, "empty line ignored");
     let redactor = Redactor::new(RedactionSettings {
         enabled: true,
         custom,
     });
-    let (out, counts) = redactor.redact_text("Kunde KD-4711, max@example.com");
-    assert_eq!(out, "Kunde [REDACTED], [EMAIL]");
-    assert_eq!((counts.custom, counts.email, counts.total()), (1, 1, 2));
+    let (out, counts) = redactor.redact_text("Kunde KD-4711, KUNDENNR. 99, max@example.com");
+    // the e-mail is replaced by the fixed pattern first, so `example\.com` finds nothing left
+    assert_eq!(out, "Kunde [REDACTED], [REDACTED], [EMAIL]");
+    assert_eq!((counts.custom, counts.email, counts.total()), (2, 1, 3));
 }
 
 // spec: AI-024
 #[test]
-fn without_regex_engine_custom_patterns_are_rejected_not_ignored() {
+fn custom_patterns_from_app_settings_count_in_request_redactions() {
     let app = AiAppSettings {
-        redaction_patterns: vec!["\\d+".into()],
+        redaction_patterns: vec!["Artikelnummer DE\\d\\d".into()],
         ..AiAppSettings::default()
     };
-    let err = RedactionSettings::from_app_settings(&app, &NoRegexEngine).unwrap_err();
-    assert_eq!(err.line, 1);
-    assert!(PatternList::parse("\n  \n", &NoRegexEngine)
-        .unwrap()
-        .is_empty());
+    let settings = RedactionSettings::from_app_settings(&app).unwrap();
+    assert!(settings.enabled);
+    let page = site_page("pii.html");
+    let prepared = PreparedInput::new(&page, &page.fields(), &Redactor::new(settings));
+    assert_eq!(prepared.redactions.total(), 4, "3 fixed + 1 custom");
+    assert_eq!(prepared.redactions.custom, 1);
+    assert!(prepared.values.text_block().contains("[REDACTED] 3456"));
+    assert!(PatternList::parse("\n  \n").unwrap().is_empty());
 }
 
 // spec: AI-024

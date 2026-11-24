@@ -12,6 +12,7 @@ os-model.workspace = true
 # C13: K04 must use the shared SecretStoreMut instead of opening keyring directly.
 os-fetch.workspace = true
 os-store.workspace = true
+fancy-regex.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 keyring.workspace = true
 serde.workspace = true

@@ -16,6 +16,6 @@ pub use fields::{FieldSet, FieldValue, FieldValues, InputField};
 pub use guard::{GuardedOutcome, PreparedInput};
 pub use providers::{ProviderPolicies, ProviderPolicy, TrainingUse};
 pub use redact::{
-    InvalidPattern, NoRegexEngine, PatternEngine, PatternList, RedactionCounts, RedactionSettings,
-    Redactor,
+    FancyRegexEngine, InvalidPattern, PatternEngine, PatternList, RedactionCounts,
+    RedactionSettings, Redactor,
 };

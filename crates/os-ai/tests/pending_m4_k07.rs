@@ -34,7 +34,7 @@ fn cli_ai_consent_switch_end_to_end() {
 
 // spec: AI-018
 // Mock-Zähler 0 und Feldmarker für einen echten Aufgabenlauf über die Produktivadapter (Fixture-Site mit
-// `tests/fixtures/ai/site/fields.html`; der Kern ist mit `tests/fixtures/ai/policy/fields.json` geprüft).
+// `tests/fixtures/ai/site/fields.html`; der Kern ist mit derselben Seite in policy_mock.rs geprüft).
 #[test]
 #[ignore = "wartet auf M4-D01: Aufgabenlauf über os-ai::decisions mit policy::guard vor jedem Adapter"]
 fn consent_and_field_markers_in_a_real_task_run() {
@@ -59,10 +59,11 @@ fn redactions_column_in_request_log() {
 }
 
 // spec: AI-024
-// Eine ungültige eigene Regex wird beim Speichern abgelehnt (Zeile und Position) – mit der echten Regex-Engine.
-// `os-ai` hat keine Regex-Abhängigkeit; Kern mit injizierter Engine in policy_redaction.rs geprüft.
+// Eine ungültige eigene Regex wird beim Speichern in den Einstellungen abgelehnt (Zeile und Position). Die Prüfung
+// selbst (`PatternList::parse`, `RedactionSettings::from_app_settings`, fancy-regex) ist in policy_redaction.rs
+// geprüft; offen ist nur der Speichern-Weg in der Oberfläche.
 #[test]
-#[ignore = "wartet auf M4-U01: Speichern der Musterliste; Regex-Engine für os-ai braucht Freigabe des Orchestrators"]
+#[ignore = "wartet auf M4-U01: Speichern der Musterliste in den KI-Einstellungen"]
 fn invalid_custom_regex_rejected_on_save() {
-    panic!("PatternEngine über fancy-regex; Zeile/Position aus dem Parser-Fehler");
+    panic!("Einstellungsdialog ruft PatternList::parse auf und zeigt Zeile/Position; Kern: policy_redaction.rs");
 }

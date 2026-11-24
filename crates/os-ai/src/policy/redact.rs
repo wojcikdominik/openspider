@@ -2,8 +2,8 @@
 //!
 //! Fixed patterns, implemented without a regex engine: e-mail addresses → `[EMAIL]`, telephone numbers → `[PHONE]`,
 //! IBANs with ISO 13616 check digits (mod 97) → `[IBAN]`. A string in IBAN shape with wrong check digits (e.g. an
-//! article number) is left untouched and is also protected from the telephone pattern. Custom patterns are applied
-//! through a [`PatternEngine`]; `os-ai` has no regex dependency yet, so the engine is injected (see report M4-K07).
+//! article number) is left untouched and is also protected from the telephone pattern. Custom patterns (one regex
+//! per line, `fancy-regex` via [`FancyRegexEngine`]) run after the fixed patterns and are replaced by `[REDACTED]`.
 //!
 //! All fixed patterns are ASCII, so byte positions of matches are always UTF-8 character boundaries.
 use super::fields::FieldValues;
@@ -72,13 +72,58 @@ pub trait CompiledPattern: Send + Sync {
     fn find_all(&self, text: &str) -> Vec<Range<usize>>;
 }
 
-/// Regex engine for custom patterns (to be backed by the workspace regex crate once `os-ai` may depend on it).
+/// Regex engine for custom patterns; [`FancyRegexEngine`] is the default, tests may inject another one.
 pub trait PatternEngine: Send + Sync {
     fn compile(&self, pattern: &str) -> Result<Box<dyn CompiledPattern>, PatternSyntaxError>;
 }
 
+/// Default engine: the workspace regex crate `fancy-regex` (same syntax as the other pattern settings).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FancyRegexEngine;
+
+struct FancyPattern(fancy_regex::Regex);
+
+impl CompiledPattern for FancyPattern {
+    fn find_all(&self, text: &str) -> Vec<Range<usize>> {
+        // A runtime error (e.g. backtrack limit) ends the search for this pattern; matches found so far count.
+        self.0
+            .find_iter(text)
+            .map_while(Result::ok)
+            .map(|m| m.start()..m.end())
+            .collect()
+    }
+}
+
+impl PatternEngine for FancyRegexEngine {
+    fn compile(&self, pattern: &str) -> Result<Box<dyn CompiledPattern>, PatternSyntaxError> {
+        match fancy_regex::Regex::new(pattern) {
+            Ok(regex) => Ok(Box::new(FancyPattern(regex))),
+            Err(error) => {
+                // Parse errors carry a byte offset; compile errors of the inner engine carry none (position 1).
+                let position = match &error {
+                    fancy_regex::Error::ParseError(offset, _) => char_position(pattern, *offset),
+                    _ => 1,
+                };
+                Err(PatternSyntaxError {
+                    position,
+                    message: error.to_string(),
+                })
+            }
+        }
+    }
+}
+
+/// 1-based character position of a byte offset (clamped to the pattern, rounded down to a character boundary).
+fn char_position(pattern: &str, offset: usize) -> usize {
+    let mut offset = offset.min(pattern.len());
+    while !pattern.is_char_boundary(offset) {
+        offset -= 1;
+    }
+    pattern[..offset].chars().count() + 1
+}
+
 /// Custom pattern list, one pattern per line; blank lines are ignored. Parsing validates every line (AI-024:
-/// an invalid pattern is rejected on save with line and position).
+/// an invalid pattern is rejected on check/save with line and position).
 #[derive(Clone, Default)]
 pub struct PatternList {
     sources: Vec<String>,
@@ -94,9 +139,22 @@ impl fmt::Debug for PatternList {
 }
 
 impl PatternList {
-    pub fn parse(text: &str, engine: &dyn PatternEngine) -> Result<Self, InvalidPattern> {
+    /// Check a pattern list with the default engine (`fancy-regex`).
+    pub fn parse(text: &str) -> Result<Self, InvalidPattern> {
+        Self::parse_with(text, &FancyRegexEngine)
+    }
+
+    pub fn parse_with(text: &str, engine: &dyn PatternEngine) -> Result<Self, InvalidPattern> {
+        Self::from_lines_with(text.lines(), engine)
+    }
+
+    /// Lines given separately (e.g. `AiAppSettings::redaction_patterns`); entry n is line n.
+    pub fn from_lines_with<'a>(
+        lines: impl IntoIterator<Item = &'a str>,
+        engine: &dyn PatternEngine,
+    ) -> Result<Self, InvalidPattern> {
         let mut list = Self::default();
-        for (index, line) in text.lines().enumerate() {
+        for (index, line) in lines.into_iter().enumerate() {
             let pattern = line.trim_end_matches('\r');
             if pattern.trim().is_empty() {
                 continue;
@@ -137,29 +195,24 @@ impl Default for RedactionSettings {
     }
 }
 
-/// Engine used until `os-ai` may depend on a regex crate: rejects every custom pattern, so a configured pattern is
-/// never silently ignored (see report M4-K07).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoRegexEngine;
-
-impl PatternEngine for NoRegexEngine {
-    fn compile(&self, _pattern: &str) -> Result<Box<dyn CompiledPattern>, PatternSyntaxError> {
-        Err(PatternSyntaxError {
-            position: 1,
-            message: "custom patterns need a regex engine, which os-ai does not provide yet".into(),
-        })
-    }
-}
-
 impl RedactionSettings {
     /// From the app settings (`redact_personal_data`, `redaction_patterns`; entry n = line n of the list).
     pub fn from_app_settings(
+        settings: &os_model::config::AiAppSettings,
+    ) -> Result<Self, InvalidPattern> {
+        Self::from_app_settings_with(settings, &FancyRegexEngine)
+    }
+
+    pub fn from_app_settings_with(
         settings: &os_model::config::AiAppSettings,
         engine: &dyn PatternEngine,
     ) -> Result<Self, InvalidPattern> {
         Ok(Self {
             enabled: settings.redact_personal_data,
-            custom: PatternList::parse(&settings.redaction_patterns.join("\n"), engine)?,
+            custom: PatternList::from_lines_with(
+                settings.redaction_patterns.iter().map(String::as_str),
+                engine,
+            )?,
         })
     }
 

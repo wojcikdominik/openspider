@@ -5336,6 +5336,7 @@ dependencies = [
 name = "os-ai"
 version = "0.1.0"
 dependencies = [
+ "fancy-regex 0.19.2",
  "jsonschema",
  "keyring",
  "os-fetch",
