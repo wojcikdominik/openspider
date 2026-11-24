@@ -65,19 +65,28 @@ export class TableController {
   };
   setSelection = (selection: SelectionModel) => { this.selection = selection; useTableSelection.setState({ selection, viewId: this.source?.viewId, version: this.source?.version }); this.emit(); };
   activate() { this.disposed = false; }
-  resetCrawl() { this.countsEpoch++; this.countsRequest++; this.countsTick = -1; this.counts = { version: -1, filters: [] }; this.setSelection(SelectionModel.empty()); }
+  /**
+   * The window's crawl changed. `keepSelection`: the table already shows this crawl (see `continuesCrawl`), so the
+   * selection stays (UI-018); only the counts start over.
+   */
+  resetCrawl(keepSelection = false) {
+    this.countsEpoch++; this.countsRequest++; this.countsTick = -1; this.counts = { version: -1, filters: [] };
+    if (!keepSelection) this.setSelection(SelectionModel.empty());
+  }
   /**
    * Opens a view for tab and query. With `keepRows` (same view, new crawl) the rows on screen stay until the new view
-   * has delivered its visible rows (UI-142); otherwise the table shows the loading state meanwhile.
+   * has delivered its visible rows (UI-142); otherwise the table shows the loading state meanwhile. With `continues`
+   * as well, the new view continues the one on screen like a silent replacement: selection, focus row and position stay
+   * (UI-018); used when the session only learns the identity of the crawl the table already shows.
    */
-  async open(tab: string, query: TabQuery, options: { keepRows?: boolean } = {}): Promise<void> {
+  async open(tab: string, query: TabQuery, options: { keepRows?: boolean; continues?: boolean } = {}): Promise<void> {
     const generation = ++this.generation;
     this.current = { tab, query }; this.clearTimers();
     this.abortBuild?.();
     const previous = this.source;
     if (options.keepRows && previous) {
       this.error = null; this.emit();
-      this.opening = this.replace(previous, true);
+      this.opening = this.replace(previous, true, false, options.continues === true);
       await this.opening;
       return;
     }
@@ -131,8 +140,9 @@ export class TableController {
    * the visible window; a replacement that is released or outdated itself is dropped and tried again, up to
    * `REPLACE_ATTEMPTS` times per round with rounds `REPLACE_PAUSE_MS` apart. A tab switch or a new crawl in the meantime
    * wins. `opening`: called from `open` for a new crawl, where an error is shown like the error of a plain open.
+   * `continues`: with `opening`, the crawl is not new to the table (see `continuesCrawl`); the new view continues the old one.
    */
-  private async replace(released: ViewDataSource, opening = false, resumed = false): Promise<void> {
+  private async replace(released: ViewDataSource, opening = false, resumed = false, continues = false): Promise<void> {
     const target = this.current;
     const generation = this.generation;
     if (this.disposed || released !== this.source || !target) return;
@@ -154,7 +164,7 @@ export class TableController {
           const handle = await this.built(opened, generation);
           if (!handle || !live()) { await view.close({ viewId: opened.viewId }).catch(() => undefined); return; }
           // A silent replacement continues the released view (selection, focus row, position); a new crawl does not (UI-018).
-          source = this.adopt(handle, target.query, opening ? undefined : released);
+          source = this.adopt(handle, target.query, opening && !continues ? undefined : released);
         } catch (error) {
           if (!live()) return;
           if (isViewGone(error)) continue;
@@ -173,7 +183,7 @@ export class TableController {
         return;
       }
       // No replacement delivered rows: the old rows stay, the next round follows after a pause.
-      if (live()) this.retryTimer = setTimeout(() => { this.retryTimer = undefined; void this.replace(released, opening, true); }, REPLACE_PAUSE_MS);
+      if (live()) this.retryTimer = setTimeout(() => { this.retryTimer = undefined; void this.replace(released, opening, true, continues); }, REPLACE_PAUSE_MS);
     } finally {
       if (this.replacing === token) this.replacing = undefined;
     }
@@ -287,6 +297,14 @@ export class TableController {
     void this.source?.dispose().catch(() => undefined); this.source = undefined;
     useTableSelection.setState({ selection: SelectionModel.empty(), viewId: undefined, version: undefined });
   }
+}
+/**
+ * UI-018: the window learns a crawl's id from its status, which can arrive after the table already opened a view and the
+ * user selected rows in it (a short crawl reports its status first with its end and the automatic analysis). With no crawl
+ * known before and a view on screen, that view shows this crawl: the change of `crawlId` is no new crawl for the table.
+ */
+export function continuesCrawl(previous: string | undefined, next: string | undefined, hasView: boolean): boolean {
+  return previous === undefined && next !== undefined && hasView;
 }
 /** All rows of the inclusive window are in memory (an empty view has none to load). */
 function loaded(source: ViewDataSource, first: number, last: number): boolean {
