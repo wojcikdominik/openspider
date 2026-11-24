@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "note": "Training use of API inputs according to each provider's public documentation (AI-018). Own wording, no quotes. EU processing details (AI-019) follow in release 1.2.",
+  "providers": {
+    "anthropic": {
+      "training_use": "no",
+      "summary": "Inputs and outputs of commercial products such as the API are not used for model training by default.",
+      "source_url": "https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training",
+      "verified_at": "2026-11-24"
+    },
+    "openai": {
+      "training_use": "no",
+      "summary": "Data sent to the API is not used for training unless the organisation opts in to data sharing.",
+      "source_url": "https://developers.openai.com/api/docs/guides/your-data",
+      "verified_at": "2026-11-24"
+    },
+    "openrouter": {
+      "training_use": "depends",
+      "summary": "OpenRouter itself uses inputs only if the account enables it (off by default); routed providers may capture data for training according to their own policies, which OpenRouter lists per provider.",
+      "source_url": "https://openrouter.ai/docs/guides/privacy/data-collection",
+      "verified_at": "2026-11-24"
+    },
+    "gemini": {
+      "training_use": "depends",
+      "summary": "Paid services: prompts and responses are not used to improve products. Unpaid services: content may be used to improve products and machine learning technologies, including human review.",
+      "source_url": "https://aistudio.google.com/docs/terms",
+      "verified_at": "2026-11-24"
+    },
+    "ollama": {
+      "training_use": "no",
+      "summary": "Ollama model server under the user's control; no provider-side training. With the default server URL (localhost) requests stay on this computer; another server URL sends data to that machine.",
+      "source_url": null,
+      "verified_at": "2026-11-24"
+    }
+  }
+}
