@@ -15,8 +15,9 @@ use std::sync::Arc;
 
 use os_fetch::robots::{RobotsDecision, RobotsGate, RobotsGateConfig};
 use os_fetch::user_agents::{
-    embedded_ai_catalog, parse_ai_catalog, parse_presets, presets, presets_with_catalogs, resolve,
-    resolve_with, AiCatalogCrawler, UserAgentPreset, AI_PRESET_GROUP,
+    default_user_agent, embedded_ai_catalog, parse_ai_catalog, parse_presets, presets,
+    presets_with_catalogs, resolve, resolve_with, AiCatalogCrawler, UserAgentPreset,
+    AI_PRESET_GROUP,
 };
 use os_fetch::{FetchConfig, HttpFetcher, MemorySecretStore};
 use os_model::{CrawlConfig, SystemClock, UserAgentConfig};
@@ -431,4 +432,142 @@ async fn oai_searchbot_preset_sends_ua_example_and_uses_its_robots_group() {
         .last_request("/robots.txt")
         .expect("robots.txt abgerufen");
     assert_eq!(robots_req.header("user-agent"), Some(ua.as_str()));
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Voreinstellungen ohne `ua_example` (Festlegung Orchestrator): neue Voreinstellung sendet den OpenSpider-Standard-
+// User-Agent und wertet robots.txt unter ihrem Token aus; feste Voreinstellungen behalten den User-Agent aus der
+// Voreinstellungsdatei.
+
+fn preset_config(token: &str) -> CrawlConfig {
+    let preset = presets()
+        .iter()
+        .find(|p| p.robots_token == token)
+        .unwrap_or_else(|| panic!("Voreinstellung {token}"));
+    CrawlConfig {
+        user_agent: UserAgentConfig {
+            preset: preset.id.clone(),
+            http: None,
+            robots_token: None,
+        },
+        ..CrawlConfig::default()
+    }
+}
+
+// spec: CRAWL-114
+// acceptance: independent
+// Alle KI-Voreinstellungen ohne `ua_example`: nicht feste senden den Standard-User-Agent, feste den aus der
+// Voreinstellungsdatei; das robots-Token ist immer das Katalog-Token.
+#[test]
+fn presets_without_ua_example_resolve_per_decision() {
+    let crawlers = shipped_crawlers();
+    let fixed = parse_presets(&presets_toml()).expect("Voreinstellungsdatei");
+    let mut new_checked = 0;
+    let mut fixed_checked = 0;
+    for c in crawlers
+        .iter()
+        .filter(|c| c.ua_example.is_none() && expected_tokens(&crawlers).contains(&c.token))
+    {
+        let p = presets()
+            .iter()
+            .find(|p| p.robots_token == c.token)
+            .unwrap_or_else(|| panic!("{}", c.token));
+        let r = resolve(&UserAgentConfig {
+            preset: p.id.clone(),
+            http: None,
+            robots_token: None,
+        });
+        assert_eq!(r.robots_token, c.token);
+        match fixed
+            .iter()
+            .find(|f| f.robots_token.eq_ignore_ascii_case(&c.token))
+        {
+            Some(f) => {
+                let want = f.user_agent.clone().unwrap_or_else(default_user_agent);
+                assert_eq!(
+                    r.http, want,
+                    "{}: User-Agent der Voreinstellungsdatei",
+                    c.token
+                );
+                fixed_checked += 1;
+            }
+            None => {
+                assert_eq!(
+                    r.http,
+                    default_user_agent(),
+                    "{}: Standard-User-Agent",
+                    c.token
+                );
+                new_checked += 1;
+            }
+        }
+    }
+    // laut Katalog mindestens Claude-SearchBot/Claude-User (neu) und ClaudeBot (fest)
+    assert!(new_checked >= 2, "neu: {new_checked}");
+    assert!(fixed_checked >= 1, "fest: {fixed_checked}");
+}
+
+// spec: CRAWL-114
+// acceptance: independent
+// Ende-zu-Ende: Voreinstellung Claude-SearchBot (ohne `ua_example`) sendet den Standard-User-Agent und wertet
+// `User-agent: Claude-SearchBot` aus; feste Voreinstellung ClaudeBot sendet ihren User-Agent aus der
+// Voreinstellungsdatei und wertet `User-agent: ClaudeBot` aus.
+#[tokio::test]
+async fn presets_without_ua_example_end_to_end() {
+    let robots_txt = fixture("robots/ai-no-example.txt");
+    let server = MiniServer::start(move |req| {
+        if req.path() == "/robots.txt" {
+            ok_text(&robots_txt)
+        } else {
+            ok_text(req.header("user-agent").unwrap_or(""))
+        }
+    })
+    .await;
+    let fixed_ua = parse_presets(&presets_toml())
+        .expect("Voreinstellungsdatei")
+        .into_iter()
+        .find(|p| p.robots_token == "ClaudeBot")
+        .and_then(|p| p.user_agent)
+        .expect("feste Voreinstellung ClaudeBot mit User-Agent");
+    for (token, want_ua, blocked, free) in [
+        (
+            "Claude-SearchBot",
+            default_user_agent(),
+            "/privat/x",
+            "/nur-claudebot/x",
+        ),
+        ("ClaudeBot", fixed_ua, "/nur-claudebot/x", "/privat/x"),
+    ] {
+        let cfg = preset_config(token);
+        let fetcher = HttpFetcher::new(
+            FetchConfig::from_crawl_config(&cfg, &MemorySecretStore::new(), Arc::new(SystemClock))
+                .expect("Konfiguration"),
+        )
+        .expect("Abrufer");
+        let resp = expect_response(get(&fetcher, server.url("/echo-headers")).await);
+        assert_eq!(String::from_utf8_lossy(&resp.body), want_ua, "{token}");
+
+        let gate_cfg = RobotsGateConfig::from_crawl_config(&cfg);
+        assert_eq!(gate_cfg.token, token);
+        let gate = RobotsGate::new(gate_cfg);
+        let d = gate.check(&fetcher, &server.url(blocked)).await.decision;
+        assert!(
+            matches!(d, RobotsDecision::Blocked { .. }),
+            "{token} {blocked}: {d:?}"
+        );
+        let d = gate.check(&fetcher, &server.url(free)).await.decision;
+        assert_eq!(
+            d,
+            RobotsDecision::Allowed,
+            "{token} {free}: `*` darf nicht greifen"
+        );
+        let robots_req = server
+            .last_request("/robots.txt")
+            .expect("robots.txt abgerufen");
+        assert_eq!(
+            robots_req.header("user-agent"),
+            Some(want_ua.as_str()),
+            "{token}"
+        );
+    }
 }

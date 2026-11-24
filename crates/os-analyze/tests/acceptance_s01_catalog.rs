@@ -310,50 +310,51 @@ fn is_iso_date(d: &str) -> bool {
 
 // spec: AI-120
 // acceptance: independent
-// Festlegung Orchestrator: `ua_pattern` ist Pflichtfeld (Teilzeichenkette). Geprüft für alle Einträge, die selbst
-// crawlen (Kategorien training, search, user-fetch).
+// Festlegung Orchestrator: der Schlüssel `ua_pattern` steht in jedem Eintrag; der Wert ist eine nicht leere
+// Zeichenkette oder `null` (Rohdatei, unabhängig vom Leser der Bibliothek).
 #[test]
-fn every_crawling_entry_has_a_non_empty_ua_pattern() {
-    let missing: Vec<&str> = Catalog::builtin()
-        .entries()
-        .filter(|e| e.category != Category::ControlToken)
-        .filter(|e| {
-            e.ua_pattern
-                .as_deref()
-                .map(str::trim)
-                .unwrap_or("")
-                .is_empty()
-        })
-        .map(|e| e.token.as_str())
-        .collect();
-    assert!(
-        missing.is_empty(),
-        "ua_pattern fehlt bzw. ist null/leer bei: {missing:?}"
-    );
+fn every_entry_has_ua_pattern_key_with_null_or_non_empty_string() {
+    let doc = shipped_json();
+    let mut problems = Vec::new();
+    for e in doc["crawlers"].as_array().unwrap() {
+        let token = s(e, "token").unwrap_or("?");
+        match e.get("ua_pattern") {
+            None => problems.push(format!("{token}: Schlüssel ua_pattern fehlt")),
+            Some(Value::Null) => {}
+            Some(Value::String(p)) if !p.trim().is_empty() => {}
+            Some(other) => problems.push(format!("{token}: ua_pattern {other:?}")),
+        }
+    }
+    assert!(problems.is_empty(), "Verstöße:\n{}", problems.join("\n"));
 }
 
 // spec: AI-120
 // acceptance: independent
-// Festlegung Orchestrator: `ua_pattern` ist Pflichtfeld – auch bei Kontroll-Tokens (getrennt geführt, weil
-// Kontroll-Tokens laut Spec nicht selbst crawlen).
+// Festlegung Orchestrator: `ua_pattern: null` nur, wenn der Betreiber keinen User-Agent dokumentiert, oder bei
+// Kontroll-Tokens. Ein Eintrag mit `ua_example` (dokumentierter User-Agent) braucht deshalb ein `ua_pattern`.
 #[test]
-fn control_tokens_have_a_non_empty_ua_pattern() {
-    let missing: Vec<&str> = Catalog::builtin()
+fn entries_with_ua_example_have_a_ua_pattern() {
+    let bad: Vec<&str> = Catalog::builtin()
         .entries()
-        .filter(|e| e.category == Category::ControlToken)
-        .filter(|e| {
-            e.ua_pattern
-                .as_deref()
-                .map(str::trim)
-                .unwrap_or("")
-                .is_empty()
-        })
+        .filter(|e| e.ua_example.is_some() && e.ua_pattern.is_none())
         .map(|e| e.token.as_str())
         .collect();
-    assert!(
-        missing.is_empty(),
-        "ua_pattern fehlt bzw. ist null/leer bei: {missing:?}"
-    );
+    assert!(bad.is_empty(), "ua_example ohne ua_pattern: {bad:?}");
+}
+
+// spec: AI-120
+// acceptance: independent
+// Kontroll-Tokens dürfen `ua_pattern: null` haben; ist ein Wert gesetzt, ist er nicht leer.
+#[test]
+fn control_token_ua_pattern_is_null_or_non_empty() {
+    for e in Catalog::builtin()
+        .entries()
+        .filter(|e| e.category == Category::ControlToken)
+    {
+        if let Some(p) = &e.ua_pattern {
+            assert!(!p.trim().is_empty(), "{}: leeres ua_pattern", e.token);
+        }
+    }
 }
 
 // spec: AI-120
@@ -627,20 +628,22 @@ fn missing_ua_pattern_is_rejected() {
 
 // spec: AI-120
 // acceptance: independent
-// Festlegung Orchestrator: `ua_pattern` ist Pflichtfeld (Teilzeichenkette); null oder leer erfüllt das nicht.
+// Festlegung Orchestrator: ein leerer String als `ua_pattern` ist ungültig.
 #[test]
-fn null_or_empty_ua_pattern_is_rejected() {
-    let accepted: Vec<&str> = [
-        "invalid/ua-pattern-null.json",
-        "invalid/ua-pattern-empty.json",
-    ]
-    .into_iter()
-    .filter(|f| Catalog::parse(&fixture(f)).is_ok())
-    .collect();
-    assert!(
-        accepted.is_empty(),
-        "angenommen statt abgelehnt: {accepted:?}"
-    );
+fn empty_ua_pattern_is_rejected() {
+    let _ = errors_of("invalid/ua-pattern-empty.json");
+}
+
+// spec: AI-120
+// acceptance: independent
+// Festlegung Orchestrator: `ua_pattern: null` ist zulässig (Kontroll-Token, Betreiber ohne dokumentierten
+// User-Agent).
+#[test]
+fn null_ua_pattern_is_accepted_without_documented_user_agent() {
+    let cat = Catalog::parse(&fixture("valid-ua-pattern-null.json"))
+        .unwrap_or_else(|e| panic!("abgelehnt: {e:?}"));
+    assert_eq!(cat.len(), 2);
+    assert!(cat.entries().all(|e| e.ua_pattern.is_none()));
 }
 
 // ---------------------------------------------------------------------------------------------------

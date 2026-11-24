@@ -11,6 +11,10 @@ use std::path::{Path, PathBuf};
 use os_fetch::robots::{parse, RobotsTxt};
 
 fn robots(name: &str) -> RobotsTxt {
+    parse(&raw(name))
+}
+
+fn raw(name: &str) -> String {
     let p: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
@@ -21,7 +25,7 @@ fn robots(name: &str) -> RobotsTxt {
         .join("s01-acceptance")
         .join("robots")
         .join(name);
-    parse(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
+    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
 }
 
 fn allowed(txt: &RobotsTxt, token: &str, path: &str) -> bool {
@@ -146,7 +150,14 @@ fn empty_disallow_allows_everything_for_the_ai_token() {
 // BOM, CRLF, Kommentare und Leerzeichen vor dem Doppelpunkt werden toleriert.
 #[test]
 fn bom_crlf_comments_and_spaces_with_ai_token() {
-    let txt = robots("ai-bom-crlf.txt");
+    let text = raw("ai-bom-crlf.txt");
+    assert!(text.starts_with('\u{feff}'), "Fixture beginnt mit BOM");
+    assert!(text.contains("\r\n"), "Fixture hat CRLF-Zeilenenden");
+    assert!(
+        !text.replace("\r\n", "").contains('\n'),
+        "nur CRLF, kein nacktes LF"
+    );
+    let txt = parse(&text);
     assert!(!allowed(&txt, "DuckAssistBot", "/privat/x"));
     assert!(allowed(&txt, "DuckAssistBot", "/x"));
     assert!(allowed(&txt, "GPTBot", "/privat/x"), "`*` erlaubt alles");

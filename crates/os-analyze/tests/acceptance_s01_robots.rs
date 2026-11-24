@@ -794,3 +794,124 @@ fn access_report_from_crawl_file_uses_internal_html_urls() {
     assert_eq!(blocked, (31..=40).collect::<Vec<_>>());
     assert_eq!(r.url(31).unwrap().column(Category::Training), "ClaudeBot");
 }
+
+// ---------------------------------------------------------------------------------------------------
+// Abgrenzung der Access-Werte (Festlegung Orchestrator): `Allowed` = Startseite erlaubt und keine gecrawlte interne
+// HTML-URL gesperrt; `Blocked` = Startseite gesperrt und alle gecrawlten internen HTML-URLs gesperrt (ohne HTML-URL
+// entscheidet allein die Startseite); sonst `Partially Blocked`.
+
+// spec: AI-121
+// acceptance: independent
+// Nur die Startseite gesperrt, übrige URLs erlaubt → `Partially Blocked`.
+#[test]
+fn homepage_blocked_but_other_urls_allowed_is_partially_blocked() {
+    let h = "https://ai-home.test";
+    let r = default_report(&[host_with(h, "ai-home-only.txt", forty_urls())]);
+    let g = row(&r, h, "GPTBot");
+    assert!(!g.homepage_allowed);
+    assert_eq!(g.blocked_urls, 1);
+    assert_eq!(g.blocked_pct_display(), "2.50");
+    assert_eq!(g.access, Access::PartiallyBlocked);
+}
+
+// spec: AI-121
+// acceptance: independent
+// Startseite erlaubt, aber alle gecrawlten HTML-URLs gesperrt (Startseite nicht gecrawlt) → `Partially Blocked`.
+#[test]
+fn homepage_allowed_but_all_crawled_urls_blocked_is_partially_blocked() {
+    let h = "https://ai-partial.test";
+    let urls: Vec<(i64, String)> = (1..=4).map(|i| (i, format!("/intern/{i}"))).collect();
+    let r = default_report(&[host_with(h, "ai-partial.txt", urls)]);
+    let c = row(&r, h, "ClaudeBot");
+    assert!(c.homepage_allowed);
+    assert_eq!(c.blocked_urls, 4);
+    assert_eq!(c.blocked_pct_display(), "100.00");
+    assert_eq!(c.access, Access::PartiallyBlocked);
+}
+
+// spec: AI-121
+// acceptance: independent
+// Startseite gesperrt und alle gecrawlten HTML-URLs gesperrt, Startseite selbst nicht gecrawlt → `Blocked`.
+#[test]
+fn homepage_and_all_crawled_urls_blocked_is_blocked_without_homepage_row() {
+    let h = "https://ai-gptbot.test";
+    let urls: Vec<(i64, String)> = (1..=3).map(|i| (i, format!("/a/{i}"))).collect();
+    let r = default_report(&[host_with(h, "ai-gptbot.txt", urls)]);
+    let g = row(&r, h, "GPTBot");
+    assert!(!g.homepage_allowed);
+    assert_eq!(g.blocked_urls, 3);
+    assert_eq!(g.access, Access::Blocked);
+}
+
+// spec: AI-121
+// acceptance: independent
+// Ohne gecrawlte HTML-URL entscheidet allein die Startseite.
+#[test]
+fn without_html_urls_the_homepage_decides() {
+    let h = "https://ai-leer.test";
+    let r = default_report(&[host_with(h, "ai-gptbot.txt", Vec::new())]);
+    let g = row(&r, h, "GPTBot");
+    assert_eq!(g.blocked_urls, 0);
+    assert!(!g.homepage_allowed);
+    assert_eq!(g.access, Access::Blocked);
+    let o = row(&r, h, "OAI-SearchBot");
+    assert!(o.homepage_allowed);
+    assert_eq!(o.access, Access::Allowed);
+    let r = default_report(&[host_with(h, "ai-home-only.txt", Vec::new())]);
+    assert_eq!(row(&r, h, "GPTBot").access, Access::Blocked);
+    assert_eq!(row(&r, h, "ClaudeBot").access, Access::Allowed);
+}
+
+// spec: AI-121, CRAWL-100
+// acceptance: independent
+// `robots.txt Error`: `Homepage Allowed` und Zählwerte folgen `robots.unreachable_policy` – für alle Tokens, auch für
+// einen Host ohne HTML-URL.
+#[test]
+fn robots_error_counts_follow_the_policy_for_every_token() {
+    let h = "https://ai-5xx.test";
+    for (policy, home, blocked) in [
+        (RobotsUnreachablePolicy::BlockHost, false, 40u64),
+        (RobotsUnreachablePolicy::AllowAll, true, 0u64),
+    ] {
+        for urls in [forty_urls(), Vec::new()] {
+            let n = urls.len() as u64;
+            let r = evaluate(
+                Catalog::builtin(),
+                &[HostInput {
+                    host: h.to_string(),
+                    robots: HostRobots::Error,
+                    urls,
+                }],
+                &AccessOptions {
+                    tokens: TokenSelection::NonDeprecated,
+                    unreachable_policy: policy,
+                },
+            );
+            for x in &r.rows {
+                assert_eq!(x.access, Access::RobotsTxtError, "{policy:?} {}", x.token);
+                assert_eq!(x.homepage_allowed, home, "{policy:?} {}", x.token);
+                assert_eq!(x.blocked_urls, blocked.min(n), "{policy:?} {}", x.token);
+            }
+            let expect_cats = !home && n > 0;
+            for u in &r.urls {
+                assert_eq!(!u.blocked_categories().is_empty(), expect_cats);
+            }
+        }
+    }
+}
+
+// spec: AI-121, CRAWL-100
+// acceptance: independent
+// `robots.txt Error` aus der Crawl-Datei: Policy kommt aus der Crawl-Konfiguration (`AccessOptions::from_config`).
+#[test]
+fn robots_error_policy_from_crawl_config() {
+    let mut cfg = CrawlConfig::default();
+    assert_eq!(
+        AccessOptions::from_config(&cfg).unreachable_policy,
+        RobotsUnreachablePolicy::BlockHost
+    );
+    cfg.robots.unreachable_policy = RobotsUnreachablePolicy::AllowAll;
+    let opts = AccessOptions::from_config(&cfg);
+    assert_eq!(opts.unreachable_policy, RobotsUnreachablePolicy::AllowAll);
+    assert_eq!(opts.tokens, TokenSelection::NonDeprecated);
+}
