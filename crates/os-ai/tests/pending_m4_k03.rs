@@ -4,13 +4,13 @@
 //! durch M4-N01 bzw. die Gemini-Etappe.
 
 // spec: AI-006
-// Die Statusspalten der Aufgaben zeigen bei nicht erreichbarem Server `Error: Server nicht erreichbar (<URL>)`.
-// Daten: `OllamaAdapter::status_text` (geprüft); `AiStatus` hat dafür keine eigene Variante (Endstatus bleibt
-// `Error: Connection failed`, K4-15), die Übernahme des Textes in die Spalten liegt bei der Ausführung.
+// Die Oberfläche zeigt bei nicht erreichbarem Server neben dem Statuswert `Error: Connection failed` die Meldung nach
+// INTEG-160 in der UI-Sprache (i18n) mit der Server-URL. Daten: `OllamaAdapter::unreachable_notice` (URL und
+// kanonische Meldung `Server not reachable (<URL>)`, geprüft in adapter_ollama.rs).
 #[test]
-#[ignore = "wartet auf M4-D01: Statusspalte übernimmt OllamaAdapter::status_text bzw. eine AiStatus-Variante in os-model"]
+#[ignore = "wartet auf M4-D01: Zusatztext aus OllamaAdapter::unreachable_notice in Statusspalte/Tooltip übernehmen"]
 fn status_columns_show_the_integ_160_message_for_an_unreachable_ollama_server() {
-    panic!("Statusspalte einer Decision-/Vorschlagsaufgabe mit Ollama bei geschlossenem Port");
+    panic!("Statusspalte und Zusatztext einer Aufgabe mit Ollama bei geschlossenem Port");
 }
 
 // spec: INTEG-005 [M4]

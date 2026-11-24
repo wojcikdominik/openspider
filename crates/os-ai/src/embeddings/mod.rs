@@ -152,6 +152,35 @@ pub trait EmbeddingProvider: Send + Sync {
         texts: &'a [String],
         dimensions: Option<u32>,
     ) -> EmbedFuture<'a>;
+    /// Nummer eines neuen Eintrags (ein Bündel bzw. Einzelversuch mit allen Wiederholungen); Standard 0.
+    fn begin_entry(&self) -> u64 {
+        0
+    }
+    /// Ein Versuch des Eintrags `entry` (Standard: [`EmbeddingProvider::embed`]). Ollama stellt Versuche zurück,
+    /// solange ein anderer Eintrag den Server nach einem Verbindungsfehler prüft (AI-006).
+    fn embed_entry<'a>(
+        &'a self,
+        entry: u64,
+        model: &'a str,
+        texts: &'a [String],
+        dimensions: Option<u32>,
+    ) -> EmbedFuture<'a> {
+        let _ = entry;
+        self.embed(model, texts, dimensions)
+    }
+    /// Ende des Eintrags `entry` (auch bei Abbruch).
+    fn end_entry(&self, entry: u64) {
+        let _ = entry;
+    }
+    /// Ob ein endgültiger Fehler nur ein zurückgestellter Versuch ist (nichts gesendet); dann wartet der Eintrag auf
+    /// [`EmbeddingProvider::settled`] und beginnt neu.
+    fn is_deferred(&self, _error: &FinalError) -> bool {
+        false
+    }
+    /// Wartet, bis zurückgestellte Einträge neu beginnen dürfen.
+    fn settled(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async {})
+    }
     /// Nachbearbeitung eines endgültigen Fehlers (z. B. Ollama: Meldung nach INTEG-160, Sperre für weitere Einträge).
     fn finalize(&self, error: FinalError) -> FinalError {
         error
@@ -543,6 +572,18 @@ pub async fn embed_texts(
     })
 }
 
+/// Ruft beim Verlassen eines Eintrags (auch bei Abbruch) [`EmbeddingProvider::end_entry`] auf.
+struct EntryGuard<'a> {
+    provider: &'a dyn EmbeddingProvider,
+    entry: u64,
+}
+
+impl Drop for EntryGuard<'_> {
+    fn drop(&mut self) {
+        self.provider.end_entry(self.entry);
+    }
+}
+
 struct Runner<'a> {
     provider: &'a dyn EmbeddingProvider,
     limiter: &'a Limiter,
@@ -601,10 +642,20 @@ impl Runner<'_> {
         let model = self.settings.model.as_str();
         let dimensions = self.settings.dimensions;
         let texts_ref = texts.as_slice();
-        let execution = self
-            .limiter
-            .run(&spec, |_| provider.embed(model, texts_ref, dimensions))
-            .await;
+        let entry = provider.begin_entry();
+        let _guard = EntryGuard { provider, entry };
+        let execution = loop {
+            let execution = self
+                .limiter
+                .run(&spec, |_| {
+                    provider.embed_entry(entry, model, texts_ref, dimensions)
+                })
+                .await;
+            match &execution.result {
+                Err(error) if provider.is_deferred(error) => provider.settled().await,
+                _ => break execution,
+            }
+        };
         let duration_ms = execution.duration_ms();
         let attempts = execution.attempts;
         let reply = match execution.result {
