@@ -1,0 +1,15 @@
+{
+  "test_only": true,
+  "source_url": "docs/spec/08-ai.md#konventionen-für-diesen-bereich",
+  "note": "M4-K05: OpenRouter-Preise im Format der Modellliste (USD je Token bzw. je Request/Bild), Werte aus 08 AI-012/AI-013 (Vision-Modell 0.001 je Request, 0.002 je Bild).",
+  "data": [
+    {
+      "id": "mock/text",
+      "pricing": { "prompt": "0.000001", "completion": "0.000005", "request": "0", "image": "0" }
+    },
+    {
+      "id": "mock/vision",
+      "pricing": { "prompt": "0.000001", "completion": "0.000005", "request": "0.001", "image": "0.002" }
+    }
+  ]
+}
