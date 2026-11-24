@@ -117,8 +117,8 @@ pub struct BudgetSnapshot {
     pub remaining: Option<MicroUsd>,
     /// Warnschwelle erreicht (Verbrauch + offene Reservierungen ≥ `warning_percent` % des Crawl-Budgets).
     pub warning: bool,
-    /// Nach einer Ist-Antwort über ihrer Reservierung startet keine bezahlte Anfrage mehr (bis neue Grenzwerte
-    /// gesetzt werden, „Budget erhöhen und fortsetzen“).
+    /// Nach einer Ist-Antwort über ihrer Reservierung startet keine bezahlte Anfrage mehr, auch nach Neuöffnen, bis
+    /// eine Grenze angehoben wird („Budget erhöhen und fortsetzen“).
     pub halted: bool,
 }
 impl BudgetSnapshot {
@@ -197,6 +197,32 @@ pub trait SpendSource {
     fn area(&self) -> &str;
     /// Bisheriger Verbrauch je Aufgabe (leerer Schlüssel = ohne Aufgabe).
     fn spent_by_task(&self) -> Result<BTreeMap<String, MicroUsd>, BudgetError>;
+    /// Monoton steigende Kennung der letzten protokollierten Überschreitung einer Reservierung in diesem Bereich
+    /// (KI: größte `ai_requests.id` mit `over_reservation = 1`); `None` = keine. Liegt sie über der quittierten
+    /// Kennung (siehe [`CrawlBudgetLedger::open_acknowledged`]), startet der Ledger gesperrt – die Sperre überdauert
+    /// so Schließen und Neuöffnen der Crawl-Datei.
+    fn latest_over_reservation(&self) -> Result<Option<u64>, BudgetError> {
+        Ok(None)
+    }
+}
+
+/// Hebt `new` gegenüber `old` mindestens eine Grenze an (Crawl-Budget, „Unbegrenzt“, Bereichs- oder
+/// Aufgaben-Teilbudget angehoben oder entfernt)? Nur das beendet die Sperre nach einer Überschreitung.
+pub fn limits_raised(old: &BudgetLimits, new: &BudgetLimits) -> bool {
+    let crawl = !old.unlimited && (new.unlimited || new.crawl > old.crawl);
+    let areas = old
+        .areas
+        .iter()
+        .any(|(a, l)| new.areas.get(a).is_none_or(|n| n > l));
+    let tasks = old.tasks.iter().any(|(a, tasks)| {
+        tasks.iter().any(|(t, l)| {
+            new.tasks
+                .get(a)
+                .and_then(|n| n.get(t))
+                .is_none_or(|n| n > l)
+        })
+    });
+    crawl || areas || tasks
 }
 
 #[derive(Debug, Default)]
@@ -207,6 +233,8 @@ struct State {
     open: BTreeMap<ReservationId, Reservation>,
     next_id: u64,
     halted: bool,
+    /// Bereich → quittierte Kennung der letzten Überschreitung (gespeichert in `api_budget`).
+    acks: BTreeMap<String, u64>,
 }
 
 fn task_key(scope: &BudgetScope) -> &str {
@@ -354,7 +382,17 @@ impl CrawlBudgetLedger {
     /// Ledger nach dem Öffnen einer Crawl-Datei: Grenzwerte plus bisheriger Verbrauch aller angemeldeten Bereiche
     /// (nach Neustart und „Fortsetzen“ gilt der bisherige Verbrauch weiter).
     pub fn open(limits: BudgetLimits, sources: &[&dyn SpendSource]) -> Result<Self, BudgetError> {
+        Self::open_acknowledged(limits, &BTreeMap::new(), sources)
+    }
+    /// Wie [`Self::open`], mit den quittierten Überschreitungs-Kennungen je Bereich: Hat ein Bereich eine
+    /// protokollierte Überschreitung nach seiner Quittung, startet der Ledger gesperrt.
+    pub fn open_acknowledged(
+        limits: BudgetLimits,
+        acks: &BTreeMap<String, u64>,
+        sources: &[&dyn SpendSource],
+    ) -> Result<Self, BudgetError> {
         let ledger = Self::new(limits);
+        ledger.lock().acks = acks.clone();
         for source in sources {
             ledger.load_area(*source)?;
         }
@@ -369,6 +407,7 @@ impl CrawlBudgetLedger {
     /// Verweigert, solange in diesem Bereich Reservierungen offen sind, damit nichts doppelt zählt.
     pub fn load_area(&self, source: &dyn SpendSource) -> Result<(), BudgetError> {
         let by_task = source.spent_by_task()?;
+        let marker = source.latest_over_reservation()?;
         let area = source.area().to_string();
         let mut st = self.lock();
         if st.open.values().any(|r| r.scope.area == area) {
@@ -379,8 +418,23 @@ impl CrawlBudgetLedger {
             .values()
             .try_fold(0u64, |a, v| a.checked_add(*v))
             .ok_or(BudgetError::Overflow)?;
+        if marker.is_some_and(|m| st.acks.get(&area).is_none_or(|a| m > *a)) {
+            st.halted = true;
+        }
         st.spent.insert(area, tasks);
         Ok(())
+    }
+    /// Setzt neue Grenzwerte. Eine Sperre nach Überschreitung endet nur, wenn dabei eine Grenze angehoben wird
+    /// ([`limits_raised`]); Rückgabe `true`, wenn eine Sperre aufgehoben wurde. Der Aufrufer quittiert dann die
+    /// bisherigen Überschreitungen in der Crawl-Datei (`os_store::ai::budget::raise_limits`).
+    pub fn apply_limits(&self, limits: BudgetLimits) -> bool {
+        let mut st = self.lock();
+        let lifted = st.halted && limits_raised(&st.limits, &limits);
+        if lifted {
+            st.halted = false;
+        }
+        st.limits = limits;
+        lifted
     }
     /// Passt ein Betrag derzeit in alle betroffenen Grenzen? (Vorabprüfung ohne Reservierung.)
     pub fn would_fit(&self, scope: &BudgetScope, maximum: MicroUsd) -> Result<(), BudgetError> {
@@ -455,9 +509,7 @@ impl BudgetLedger for CrawlBudgetLedger {
         self.lock().snapshot()
     }
     fn set_limits(&self, limits: BudgetLimits) -> Result<(), BudgetError> {
-        let mut st = self.lock();
-        st.limits = limits;
-        st.halted = false;
+        self.apply_limits(limits);
         Ok(())
     }
 }
@@ -744,5 +796,85 @@ mod tests {
             assert!(sum <= snap.limits.crawl.0, "Ist {sum} > Budget");
             assert!(sent >= 62, "Budget wurde genutzt: {sent} Requests");
         }
+    }
+
+    struct Marked(Option<u64>);
+    impl SpendSource for Marked {
+        fn area(&self) -> &str {
+            AREA_AI
+        }
+        fn spent_by_task(&self) -> Result<BTreeMap<String, MicroUsd>, BudgetError> {
+            Ok(BTreeMap::from([("decision".to_string(), MicroUsd(3_000))]))
+        }
+        fn latest_over_reservation(&self) -> Result<Option<u64>, BudgetError> {
+            Ok(self.0)
+        }
+    }
+
+    // spec: AI-013
+    #[test]
+    fn halt_survives_reopen_and_ends_only_when_a_limit_is_raised() {
+        let halted = |l: &CrawlBudgetLedger| l.snapshot().unwrap().halted;
+        // Protokollierte Überschreitung (Kennung 7), nicht quittiert → gesperrt.
+        let l = CrawlBudgetLedger::open(limits(10_000), &[&Marked(Some(7))]).unwrap();
+        assert!(halted(&l));
+        assert_eq!(
+            l.reserve(ai("decision"), MicroUsd(1)),
+            Err(BudgetError::Exceeded(BudgetLevel::Halted))
+        );
+        assert!(
+            l.reserve(ai("decision"), MicroUsd(0)).is_ok(),
+            "Beträge 0 laufen"
+        );
+        // Gleiche oder niedrigere Grenzen heben die Sperre nicht auf.
+        assert!(!l.apply_limits(limits(10_000)));
+        assert!(!l.apply_limits(limits(9_000)));
+        assert!(halted(&l));
+        // Anheben hebt sie auf.
+        assert!(l.apply_limits(limits(20_000)));
+        assert!(!halted(&l));
+        // Quittiert bis 7 → nach Neuöffnen frei; eine spätere Überschreitung (8) sperrt wieder.
+        let acks = BTreeMap::from([(AREA_AI.to_string(), 7)]);
+        let l = CrawlBudgetLedger::open_acknowledged(limits(20_000), &acks, &[&Marked(Some(7))])
+            .unwrap();
+        assert!(!halted(&l));
+        let l = CrawlBudgetLedger::open_acknowledged(limits(20_000), &acks, &[&Marked(Some(8))])
+            .unwrap();
+        assert!(halted(&l));
+        assert!(
+            !CrawlBudgetLedger::open(limits(1), &[&Marked(None)])
+                .unwrap()
+                .snapshot()
+                .unwrap()
+                .halted
+        );
+    }
+
+    // spec: AI-013
+    #[test]
+    fn raising_means_any_limit_goes_up_or_is_removed() {
+        let mut base = limits(10_000);
+        base.areas.insert(AREA_AI.into(), MicroUsd(8_000));
+        base.tasks.insert(
+            AREA_AI.into(),
+            BTreeMap::from([("suggest-title".to_string(), MicroUsd(4_000))]),
+        );
+        assert!(!limits_raised(&base, &base));
+        let mut up = base.clone();
+        up.crawl = MicroUsd(10_001);
+        assert!(limits_raised(&base, &up));
+        let mut un = base.clone();
+        un.unlimited = true;
+        assert!(limits_raised(&base, &un));
+        let mut area = base.clone();
+        area.areas.insert(AREA_AI.into(), MicroUsd(9_000));
+        assert!(limits_raised(&base, &area));
+        let mut gone = base.clone();
+        gone.tasks.clear();
+        assert!(limits_raised(&base, &gone));
+        let mut down = base.clone();
+        down.crawl = MicroUsd(5_000);
+        down.areas.insert("dataforseo".into(), MicroUsd(1));
+        assert!(!limits_raised(&base, &down));
     }
 }
