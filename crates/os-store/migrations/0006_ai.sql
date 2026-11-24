@@ -11,6 +11,9 @@ CREATE TABLE api_budget (
  area TEXT NOT NULL, task TEXT NOT NULL DEFAULT '',
  limit_microusd INTEGER CHECK(limit_microusd >= 0),
  warning_percent INTEGER NOT NULL DEFAULT 80 CHECK(warning_percent BETWEEN 0 AND 100),
+ -- AI-013: in der Bereichszeile (area, '') die quittierte Kennung der letzten Überschreitung einer Reservierung;
+ -- spätere Überschreitungen im Protokoll sperren den Ledger auch nach Neuöffnen (bis eine Grenze angehoben wird).
+ over_reservation_ack INTEGER CHECK(over_reservation_ack >= 0),
  PRIMARY KEY(area, task)
 ) WITHOUT ROWID;
 CREATE TABLE ai_batches (

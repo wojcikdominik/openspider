@@ -361,6 +361,19 @@ impl SpendSource for AiRequestsSpend<'_> {
     fn spent_by_task(&self) -> Result<BTreeMap<String, MicroUsd>, BudgetError> {
         spent_by_task(self.0).map_err(|e| BudgetError::Storage(e.to_string()))
     }
+    fn latest_over_reservation(&self) -> Result<Option<u64>, BudgetError> {
+        latest_over_reservation(self.0).map_err(|e| BudgetError::Storage(e.to_string()))
+    }
+}
+
+/// Kennung (`id`) der letzten Zeile mit `over_reservation = 1`; `None`, wenn es keine gibt (AI-013).
+pub fn latest_over_reservation(conn: &Connection) -> Result<Option<u64>, StoreError> {
+    let v: Option<i64> = conn.query_row(
+        "SELECT max(id) FROM ai_requests WHERE over_reservation = 1",
+        [],
+        |r| r.get(0),
+    )?;
+    Ok(v.map(|v| u64::try_from(v).unwrap_or(0)))
 }
 
 #[cfg(test)]
