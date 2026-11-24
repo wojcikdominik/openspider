@@ -1,0 +1,13 @@
+{
+  "k01-structured": {
+    "default": {
+      "ok": true,
+      "label": "k01"
+    }
+  },
+  "k01-contract": {
+    "default": {
+      "ok": true
+    }
+  }
+}
