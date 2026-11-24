@@ -156,6 +156,14 @@ jobs:
             sudo nohup rm -rf "$app" > /dev/null 2>&1 &
           done
           sudo nohup rm -rf "$HOME/Library/Android" > /dev/null 2>&1 &
+          # 24.11.2026: Nach den Rust-Tests waren nur noch 13 GB frei; die Speicher-Tests scheiterten mit "disk I/O error"
+          # und SIGBUS. Simulator-Laufzeiten, .NET und nicht genutzte Werkzeuge des Runner-Images braucht dieser Job nicht.
+          xcrun simctl runtime list 2> /dev/null | head -n 20 || true
+          sudo nohup xcrun simctl runtime delete all > /dev/null 2>&1 &
+          for dir in "$HOME/.dotnet" "$HOME/hostedtoolcache/CodeQL" "$HOME/hostedtoolcache/go" \
+                     "$HOME/hostedtoolcache/PyPy" "$HOME/hostedtoolcache/Ruby"; do
+            [ -e "$dir" ] && sudo nohup rm -rf "$dir" > /dev/null 2>&1 &
+          done
           sleep 1
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
@@ -393,6 +401,14 @@ jobs:
             sudo nohup rm -rf "$app" > /dev/null 2>&1 &
           done
           sudo nohup rm -rf "$HOME/Library/Android" > /dev/null 2>&1 &
+          # 24.11.2026: Nach den Rust-Tests waren nur noch 13 GB frei; die Speicher-Tests scheiterten mit "disk I/O error"
+          # und SIGBUS. Simulator-Laufzeiten, .NET und nicht genutzte Werkzeuge des Runner-Images braucht dieser Job nicht.
+          xcrun simctl runtime list 2> /dev/null | head -n 20 || true
+          sudo nohup xcrun simctl runtime delete all > /dev/null 2>&1 &
+          for dir in "$HOME/.dotnet" "$HOME/hostedtoolcache/CodeQL" "$HOME/hostedtoolcache/go" \
+                     "$HOME/hostedtoolcache/PyPy" "$HOME/hostedtoolcache/Ruby"; do
+            [ -e "$dir" ] && sudo nohup rm -rf "$dir" > /dev/null 2>&1 &
+          done
           sleep 1
 
 
