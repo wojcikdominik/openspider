@@ -683,3 +683,67 @@ fn plan_endpoint_selects_the_price_key() {
     let t = table.get(&key(&title)).unwrap().rates(None).unwrap();
     assert_eq!((d.output_pico, t.output_pico), (0, 500_000));
 }
+
+fn filled_defaults() -> TaskDefaults {
+    TaskDefaults::from_json_str(&fixture("task-defaults-filled.json").to_string()).unwrap()
+}
+
+// spec: AI-011
+// spec: AI-010
+// Bestätigte Liste (Testdaten in der späteren Form): mit allen Schlüsseln läuft jede Aufgabe über ihr Standardmodell;
+// fallen Anbieter aus, greift die Ersatzliste in Reihenfolge. Ein Modell ohne Preiseintrag ist wählbar, sein Preis
+// bleibt unbekannt (Executable/„Preis unbekannt“ entscheidet der Voranschlag).
+#[test]
+fn confirmed_list_uses_defaults_then_fallbacks_including_unpriced_models() {
+    let defaults = filled_defaults();
+    let all = providers(&[("anthropic", all_anthropic()), ("openai", all_openai())]);
+    for task in TaskType::ALL {
+        let p = plan_task(task, &TaskSettings::default(), &defaults, &all).unwrap();
+        assert_eq!(p.candidate_index, 0, "{task}");
+        assert_eq!(
+            Some(&p.model_ref),
+            defaults.get(task).model.as_ref(),
+            "{task}"
+        );
+    }
+    // Nur Anthropic: Entscheidungen und Vorschläge über A (Ersatzweg), Embeddings ohne Schlüssel.
+    let only_anthropic = providers(&[("anthropic", all_anthropic())]);
+    for task in [TaskType::Decision, TaskType::SuggestTitle, TaskType::AskSql] {
+        let p = plan_task(task, &TaskSettings::default(), &defaults, &only_anthropic).unwrap();
+        assert_eq!((p.model_ref.clone(), p.candidate_index), (a(), 1), "{task}");
+    }
+    assert_eq!(
+        plan_task(
+            TaskType::Embedding,
+            &TaskSettings::default(),
+            &defaults,
+            &only_anthropic
+        ),
+        Err(AiStatus::MissingApiKey)
+    );
+    // Nur OpenAI, `mock-reasoning` fehlt in der Live-Liste: `ask-sql` landet auf dem unbepreisten Modell.
+    let mut openai = all_openai();
+    openai.models.retain(|m| m.model.id != "mock-reasoning");
+    let mut unpriced = openai.models[0].clone();
+    unpriced.model.id = "mock-unpriced".into();
+    unpriced.model.reasoning_levels = vec![Off, Low, Medium];
+    openai.models.push(unpriced);
+    let p = plan_task(
+        TaskType::AskSql,
+        &TaskSettings::default(),
+        &defaults,
+        &providers(&[("openai", openai)]),
+    )
+    .unwrap();
+    assert_eq!(
+        (p.model_ref.clone(), p.candidate_index),
+        (
+            ModelRef::new("openai", "mock-unpriced", Endpoint::Responses),
+            2
+        )
+    );
+    assert_eq!(p.output_limit(None).unwrap().value, 6_144);
+    let catalog = os_ai::catalog::PriceCatalog::new(pricing());
+    let key = PriceKey::new("openai", "mock-unpriced", Endpoint::Responses);
+    assert!(catalog.resolve(&key, None).unwrap().is_none());
+}

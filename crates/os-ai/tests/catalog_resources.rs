@@ -259,3 +259,68 @@ fn bundled_provider_limits_carry_the_q00_values() {
     )
     .is_err());
 }
+
+// spec: AI-011
+// Vorbereitung E-4 b / K4-20: Das Eintragen der bestätigten Standardmodelle ist eine reine Datenänderung. Eine Liste in
+// der späteren Form (Standard plus Ersatzliste je Aufgabe) in die ausgelieferte Datei übernommen besteht Schema und
+// Regeln, ändert `reasoning`/`answer_tokens` nicht, und genau das Modell ohne Preiseintrag fällt in der Prüfung gegen
+// `pricing.json` auf (OpenRouter und Ollama sind ausgenommen).
+#[test]
+fn filling_in_confirmed_models_is_a_pure_data_change() {
+    let filled: Value = serde_json::from_str(&read(&[
+        "tests",
+        "fixtures",
+        "ai",
+        "k04",
+        "task-defaults-filled.json",
+    ]))
+    .unwrap();
+    let mut doc: Value =
+        serde_json::from_str(&read(&["resources", "ai", "task-defaults.json"])).unwrap();
+    // Ohne Modelle darf der Status nicht `confirmed` sein.
+    let mut premature = doc.clone();
+    premature["models_status"] = "confirmed".into();
+    let errors = validate_task_defaults(&premature).unwrap_err();
+    assert_eq!(errors.len(), TaskType::ALL.len(), "{errors:?}");
+    for task in TaskType::ALL {
+        let t = task.as_str();
+        assert!(!filled["tasks"][t]["model"].is_null(), "{t}");
+        assert!(
+            !filled["tasks"][t]["fallback"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "{t}"
+        );
+        doc["tasks"][t]["model"] = filled["tasks"][t]["model"].clone();
+        doc["tasks"][t]["fallback"] = filled["tasks"][t]["fallback"].clone();
+    }
+    doc["models_status"] = "confirmed".into();
+    assert_eq!(validate_task_defaults(&doc), Ok(()));
+    let confirmed = TaskDefaults::from_json_str(&doc.to_string()).unwrap();
+    let bundled = TaskDefaults::bundled().unwrap();
+    for task in TaskType::ALL {
+        assert_eq!(confirmed.get(task).reasoning, bundled.get(task).reasoning);
+        assert_eq!(
+            confirmed.get(task).answer_tokens,
+            bundled.get(task).answer_tokens
+        );
+    }
+    let pricing = PriceTable::from_json_str(&read(&[
+        "tests",
+        "fixtures",
+        "ai",
+        "k04",
+        "pricing-catalog.json",
+    ]))
+    .unwrap();
+    let errors = confirmed.check_against_pricing(&pricing);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].contains("ask-sql[2]") && errors[0].contains("openai/mock-unpriced/responses"),
+        "{errors:?}"
+    );
+    // Die Fixture selbst lädt ebenso.
+    let fixture = TaskDefaults::from_json_str(&filled.to_string()).unwrap();
+    assert_eq!(fixture.check_against_pricing(&pricing), errors);
+}
