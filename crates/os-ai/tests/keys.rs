@@ -8,7 +8,8 @@ use os_ai::catalog::choice::{settings_to_profile, TaskSettings};
 use os_ai::catalog::Endpoint;
 use os_ai::catalog::{ModelRef, TaskType};
 use os_ai::keys::{
-    AiKeyProvider, AiKeyStore, KeyError, KeySource, KeyStatus, SaveOutcome, KEYCHAIN_SERVICE,
+    AiKeyProvider, AiKeyStore, EnvLookup, KeyError, KeySource, KeyStatus, SaveOutcome,
+    KEYCHAIN_SERVICE,
 };
 use os_fetch::secrets::{
     MemorySecretStore, SecretBackend, SecretError, SecretStore, SecretStoreMut,
@@ -17,14 +18,11 @@ use os_model::ai::AiStatus;
 
 const KEY: &str = "sk-TEST-AI-009-abcd";
 
-fn no_env() -> Arc<dyn Fn(&str) -> Option<String> + Send + Sync> {
+fn no_env() -> EnvLookup {
     Arc::new(|_: &str| None)
 }
 
-fn env_with(
-    name: &'static str,
-    value: &'static str,
-) -> Arc<dyn Fn(&str) -> Option<String> + Send + Sync> {
+fn env_with(name: &'static str, value: &'static str) -> EnvLookup {
     Arc::new(move |n: &str| (n == name).then(|| value.to_string()))
 }
 
