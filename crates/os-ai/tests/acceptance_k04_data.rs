@@ -6,7 +6,8 @@
 //! Formel-Kennung `decision-w`), AI-012 (Nachtrag: `decisions_question_overhead_tokens` = 100 mit Quelle
 //! „Live-Probe Q00“ und `verified_at` 2026-11-24; `schema_overhead_tokens` Anthropic 350, OpenAI Responses 80,
 //! OpenRouter `openai/*` 80, sonst 0), `docs/spec/04-custom-integrations.md` INTEG-162 (Nachtrag: min(2 × 1.024 +
-//! 4.096, Modellgrenze), höchstens 6.144) und `docs/plan/M4.md` (E-4 b: Standardmodelle noch nicht bestätigt).
+//! 4.096, Modellgrenze), höchstens 6.144) und `docs/plan/M4.md` (E-4 b; seit K4-20 bestätigte Standardmodelle, AI-011
+//! Nachtrag 25.11.2026 – der Zustand ohne Standardmodelle wird gegen eine Fixture geprüft).
 // acceptance: independent
 
 mod acceptance_k04_support;
@@ -260,16 +261,24 @@ fn filled_defaults() -> TaskDefaults {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Platzhalterzustand der ausgelieferten Datei (E-4 b)
+// Datei ohne Standardmodelle (E-4 b). Seit K4-20 (AI-011, Nachtrag 25.11.2026) ist die ausgelieferte Datei bestätigt;
+// das Kriterium „Aufgabe ohne Kandidaten“ gilt für eine Datei ohne Standardmodelle (Fixture).
+
+/// `task-defaults.json` ohne Standardmodelle (Stand vor K4-20).
+fn placeholder_defaults_text() -> String {
+    let path = repo_root().join("tests/fixtures/ai/k04/task-defaults-placeholder.json");
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
 
 // spec: AI-011
 // acceptance: independent
 #[test]
-fn bundled_defaults_have_no_models_until_confirmed() {
-    // Festgehaltener Zustand: Standardmodelle noch nicht bestätigt (K4-20); Stufen und Antwortanteile sind gesetzt.
-    let doc = resource_json("task-defaults.json");
+fn placeholder_defaults_have_no_models_until_confirmed() {
+    // Datei ohne bestätigte Standardmodelle: keine Modelle, leere Ersatzlisten; Stufen und Antwortanteile gesetzt.
+    let text = placeholder_defaults_text();
+    let doc: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(doc["models_status"], "pending-confirmation");
-    let defaults = TaskDefaults::bundled().unwrap();
+    let defaults = TaskDefaults::from_json_str(&text).unwrap();
     for task in TaskType::ALL {
         assert_eq!(defaults.get(task).model, None, "{task}");
         assert!(defaults.get(task).fallback.is_empty(), "{task}");
@@ -308,8 +317,8 @@ fn bundled_placeholder_with_user_chosen_model_works() {
 fn bundled_placeholder_without_model_and_all_keys_is_not_missing_api_key() {
     // AI-011: `Error: Missing API key` nur bei fehlendem Schlüssel, `Skipped (no capable model)` bei vorhandenem
     // Schlüssel ohne geeignetes Modell. Mit der ausgelieferten Datei (keine Standardmodelle) und Schlüsseln für alle
-    // Anbieter fehlt kein Schlüssel.
-    let defaults = TaskDefaults::bundled().unwrap();
+    // Anbieter fehlt kein Schlüssel. Seit K4-20 gegen die Datei ohne Standardmodelle (Fixture), AI-011 Nachtrag 25.11.2026.
+    let defaults = TaskDefaults::from_json_str(&placeholder_defaults_text()).unwrap();
     let all = providers(&["anthropic", "openai", "openrouter"]);
     let mut observed = BTreeMap::new();
     for task in TaskType::ALL {

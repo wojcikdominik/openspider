@@ -1,0 +1,90 @@
+{
+  "_comment": "Unabhängige Abnahme K4-20: Anthropic-Modellliste mit den Modellen der bestätigten Tabelle (AI-011, Nachtrag 25.11.2026); Form nach AI-002.",
+  "data": [
+    {
+      "id": "claude-haiku-5-5",
+      "display_name": "Haiku",
+      "max_tokens": 64000,
+      "capabilities": {
+        "effort": {
+          "supported": true,
+          "low": {
+            "supported": true
+          },
+          "medium": {
+            "supported": true
+          },
+          "high": {
+            "supported": true
+          }
+        },
+        "thinking": {
+          "supported": true,
+          "types": {
+            "adaptive": {
+              "supported": true
+            },
+            "disabled": {
+              "supported": true
+            },
+            "enabled": {
+              "supported": false
+            }
+          }
+        },
+        "structured_outputs": {
+          "supported": true
+        },
+        "image_input": {
+          "supported": true
+        },
+        "batch": {
+          "supported": true
+        }
+      }
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "display_name": "Sonnet",
+      "max_tokens": 64000,
+      "capabilities": {
+        "effort": {
+          "supported": true,
+          "low": {
+            "supported": true
+          },
+          "medium": {
+            "supported": true
+          },
+          "high": {
+            "supported": true
+          }
+        },
+        "thinking": {
+          "supported": true,
+          "types": {
+            "adaptive": {
+              "supported": true
+            },
+            "disabled": {
+              "supported": true
+            },
+            "enabled": {
+              "supported": false
+            }
+          }
+        },
+        "structured_outputs": {
+          "supported": true
+        },
+        "image_input": {
+          "supported": true
+        },
+        "batch": {
+          "supported": true
+        }
+      }
+    }
+  ],
+  "has_more": false
+}

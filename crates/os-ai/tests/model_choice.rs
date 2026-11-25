@@ -749,12 +749,15 @@ fn confirmed_list_uses_defaults_then_fallbacks_including_unpriced_models() {
 }
 
 // spec: AI-011
-// Festlegung des Orchestrators (25.11.2026, Befund B1 der Abnahme): Aufgabe ohne jeden Kandidaten (ausgelieferte
-// `task-defaults.json` im Platzhalterzustand, keine Wahl im Profil) → `Skipped (no capable model)`, sobald ein
-// Anbieter einen Schlüssel hat; nur ohne jeden Schlüssel `Error: Missing API key`.
+// Festlegung des Orchestrators (25.11.2026, Befund B1 der Abnahme): Aufgabe ohne jeden Kandidaten (`task-defaults.json`
+// ohne Standardmodelle – seit K4-20 die Fixture `task-defaults-placeholder.json` statt der ausgelieferten Datei –, keine
+// Wahl im Profil) → `Skipped (no capable model)`, sobald ein Anbieter einen Schlüssel hat; nur ohne jeden Schlüssel
+// `Error: Missing API key`.
 #[test]
 fn task_without_any_candidate_depends_on_any_key() {
-    let bundled = TaskDefaults::bundled().unwrap();
+    let placeholder =
+        TaskDefaults::from_json_str(&fixture("task-defaults-placeholder.json").to_string())
+            .unwrap();
     let keyed = |ids: &[&str]| -> BTreeMap<String, ProviderState> {
         ids.iter()
             .map(|id| {
@@ -769,11 +772,16 @@ fn task_without_any_candidate_depends_on_any_key() {
             .collect()
     };
     for task in TaskType::ALL {
-        let none = plan_task(task, &TaskSettings::default(), &bundled, &providers(&[]));
+        let none = plan_task(
+            task,
+            &TaskSettings::default(),
+            &placeholder,
+            &providers(&[]),
+        );
         assert_eq!(none, Err(AiStatus::MissingApiKey), "{task}");
         let without_key = providers(&[("openai", ProviderState::default())]);
         assert_eq!(
-            plan_task(task, &TaskSettings::default(), &bundled, &without_key),
+            plan_task(task, &TaskSettings::default(), &placeholder, &without_key),
             Err(AiStatus::MissingApiKey),
             "{task}"
         );
@@ -783,7 +791,7 @@ fn task_without_any_candidate_depends_on_any_key() {
             &["anthropic", "openai", "openrouter"][..],
         ] {
             assert_eq!(
-                plan_task(task, &TaskSettings::default(), &bundled, &keyed(set)),
+                plan_task(task, &TaskSettings::default(), &placeholder, &keyed(set)),
                 Err(AiStatus::SkippedNoCapableModel),
                 "{task} {set:?}"
             );
@@ -795,7 +803,7 @@ fn task_without_any_candidate_depends_on_any_key() {
         plan_task(
             TaskType::SuggestTitle,
             &TaskSettings::default(),
-            &bundled,
+            &placeholder,
             &all
         ),
         Err(AiStatus::SkippedNoCapableModel)

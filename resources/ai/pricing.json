@@ -1,6 +1,6 @@
 {
   "currency": "USD",
-  "note": "Preistabelle AI-010. Nur Werte aus docs/spec/08-ai.md (AI-010) oder belegt durch die Live-Probe Q00 (docs/plan/M4-acceptance/live/probe-1). Vor dem Release prüfen (K4-06, M4-Q02, AI-025); Einträge für Anthropic- und weitere OpenAI-Modelle fehlen, bis Werte aus der öffentlichen Preisdoku vorliegen (Bericht M4-K04).",
+  "note": "Preistabelle AI-010/AI-025. Je Eintrag Werte aus der öffentlichen Preisdokumentation des Anbieters, abgerufen am 25.11.2026 (source_url); OpenRouter-Modelle stehen nicht in der Tabelle (Preis aus der Modellliste bzw. usage.cost, AI-005). Abweichungen von der Spec und nicht belegte Werte: docs/plan/M4-reports/k4-20.md.",
   "prices": [
     {
       "provider": "openai",
@@ -17,10 +17,19 @@
         "output_factor": 1.5,
         "cache_read_factor": 2
       },
-      "regional_surcharge": { "eu": 0.1 },
-      "source_url": "docs/spec/08-ai.md#ai-010-modellkatalog-und-preise",
-      "verified_at": "2026-11-24",
-      "reasoning_efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+      "regional_surcharge": {
+        "eu": 0.1
+      },
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25",
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
       "max_output_tokens": 128000,
       "capabilities": {
         "text": true,
@@ -28,7 +37,7 @@
         "vision": true,
         "batch": true
       },
-      "note": "Eingabe/Ausgabe/Cache-Lesen/Batch/Langkontext/EU-Zuschlag aus AI-010. Cache-Schreiben 0,125 (Langkontext 0,25 = Faktor 2), reasoning_efforts und max_output_tokens nur aus der OpenRouter-Liste für openai/gpt-6-luna (Live-Probe Q00, docs/plan/M4-acceptance/live/probe-1/probe/results/openrouter.json); gegen die öffentliche OpenAI-Doku vor dem Release prüfen (V-A6)."
+      "note": "Preisseite (Standard, Short/Long context, Batch 50 %): 0,10/0,50, Cached input 0,01, 30m cache write 0,125; Long context (Seite: >272K Eingabe; Schwelle 272.000 nach AI-010, Abweichung um 1 Token im Bericht K4-20) 0,20/0,75/0,02/0,25. Regionalzuschlag 10 % für Modelle ab 05.03.2026 (Wissensstand 18.05.2026 laut Modellseite). reasoning_efforts, max_output_tokens, Fähigkeiten: https://developers.openai.com/api/docs/models/gpt-6-luna."
     },
     {
       "provider": "openai",
@@ -36,15 +45,105 @@
       "endpoint": "decisions",
       "input_per_million": 0.1,
       "output_per_million": 0,
-      "cache_read_per_million": 0,
-      "cache_write_per_million": 0,
-      "regional_surcharge": { "eu": 0.1 },
-      "source_url": "docs/spec/08-ai.md#ai-010-modellkatalog-und-preise",
-      "verified_at": "2026-11-24",
+      "cache_read_per_million": 0.01,
+      "cache_write_per_million": 0.125,
+      "long_context": {
+        "threshold_input_tokens": 272000,
+        "input_factor": 2,
+        "output_factor": 1.5,
+        "cache_read_factor": 2
+      },
+      "regional_surcharge": {
+        "eu": 0.1
+      },
+      "source_url": "https://developers.openai.com/api/docs/guides/decisions",
+      "verified_at": "2026-11-25",
       "capabilities": {
         "decisions": true
       },
-      "note": "AI-010: über decisions nur Eingabe 0,10, alle anderen Positionen 0. Regionalzuschlag nach AI-010 (OpenAI-Endpunkte mit Datenresidenz +10 %)."
+      "note": "Decisions-Leitfaden: ungecachte Eingabe 0,10; Cache-Lesen und -Schreiben zu den Standardpreisen von gpt-6-luna (0,01 / 0,125 laut Preisseite); Ausgabe nicht berechnet; Regionalzuschlag und Langkontext-Faktoren gelten (wie responses, Schwelle 272.000). Kein Batch. AI-010, Nachtrag 25.11.2026 „Preise der Decisions API“."
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-sol",
+      "endpoint": "responses",
+      "input_per_million": 2,
+      "output_per_million": 10,
+      "cache_read_per_million": 0.2,
+      "cache_write_per_million": 2.5,
+      "batch_discount": 0.5,
+      "long_context": {
+        "threshold_input_tokens": 272000,
+        "input_factor": 2,
+        "output_factor": 1.5,
+        "cache_read_factor": 2
+      },
+      "regional_surcharge": {
+        "eu": 0.1
+      },
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25",
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "max_output_tokens": 128000,
+      "capabilities": {
+        "text": true,
+        "structured_output": true,
+        "vision": true,
+        "batch": true
+      },
+      "note": "Preisseite: 2,00/10,00, Cached input 0,20, 30m cache write 2,50; Long context 4,00/15,00/0,40/5,00; Batch 1,00/5,00 (50 %). Regionalzuschlag 10 % (Wissensstand 20.04.2026 laut Modellseite, also nach dem 05.03.2026 erschienen). reasoning_efforts, max_output_tokens, Fähigkeiten: https://developers.openai.com/api/docs/models/gpt-6-sol. Langkontext-Schwelle 272.000 nach AI-010 (Seite: >272K)."
+    },
+    {
+      "provider": "openai",
+      "model": "text-embedding-3-small",
+      "endpoint": "embeddings",
+      "input_per_million": 0.02,
+      "output_per_million": 0,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-25",
+      "capabilities": {
+        "embeddings": true
+      },
+      "note": "Preisseite, Specialized models / Embedding: Eingabe 0,02; Ausgabe und Cache ohne Preis (-). Kein Batch-Preis und kein Regionalzuschlag genannt, daher nicht eingetragen."
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-haiku-5-5",
+      "endpoint": "messages",
+      "input_per_million": 0.1,
+      "output_per_million": 0.5,
+      "cache_read_per_million": 0.01,
+      "cache_write_per_million": 0.125,
+      "batch_discount": 0.5,
+      "long_context": {
+        "threshold_input_tokens": 100001,
+        "input_factor": 5,
+        "output_factor": 5,
+        "cache_read_factor": 5
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-25",
+      "note": "Model pricing: bis 100.000 Tokens 0,10/0,50, 5m cache write 0,125, Cache hits 0,01; über 100.000 Tokens 0,50/2,50, 0,625, 0,05 (Faktor 5). Batch 50 %. Datenresidenz (inference_geo us, 1,1x) nicht verwendet."
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "endpoint": "messages",
+      "input_per_million": 2,
+      "output_per_million": 10,
+      "cache_read_per_million": 0.1,
+      "cache_write_per_million": 2.5,
+      "batch_discount": 0.5,
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-25",
+      "note": "Model pricing: 2/10, 5m cache write 2,50, Cache hits 0,10 (0,05x); volles Kontextfenster zum Standardpreis; Batch 50 % (1/5)."
     }
   ]
 }

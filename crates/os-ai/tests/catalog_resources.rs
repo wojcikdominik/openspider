@@ -62,7 +62,7 @@ fn bundled_luna_prices_match_the_spec() {
         (100_000, 500_000, 10_000)
     );
     assert_eq!(r.batch_discount_ppm, 500_000);
-    let lc = r.long_context.unwrap();
+    let lc = r.long_context.clone().unwrap();
     assert_eq!(
         (
             lc.threshold_input_tokens,
@@ -89,8 +89,11 @@ fn bundled_luna_prices_match_the_spec() {
             d.cache_read_pico,
             d.cache_write_pico
         ),
-        (100_000, 0, 0, 0)
+        (100_000, 0, 10_000, 125_000)
     );
+    // AI-010, Nachtrag 25.11.2026 „Preise der Decisions API“: Cache und Langkontext wie `responses`, kein Batch.
+    assert_eq!(d.long_context, r.long_context);
+    assert_eq!(d.batch_discount_ppm, 0);
 }
 
 // spec: AI-011
@@ -275,8 +278,15 @@ fn filling_in_confirmed_models_is_a_pure_data_change() {
         "task-defaults-filled.json",
     ]))
     .unwrap();
-    let mut doc: Value =
-        serde_json::from_str(&read(&["resources", "ai", "task-defaults.json"])).unwrap();
+    // Ausgangspunkt: Datei ohne Standardmodelle (Stand vor K4-20, Fixture); die ausgelieferte Datei ist bestätigt.
+    let mut doc: Value = serde_json::from_str(&read(&[
+        "tests",
+        "fixtures",
+        "ai",
+        "k04",
+        "task-defaults-placeholder.json",
+    ]))
+    .unwrap();
     // Ohne Modelle darf der Status nicht `confirmed` sein.
     let mut premature = doc.clone();
     premature["models_status"] = "confirmed".into();

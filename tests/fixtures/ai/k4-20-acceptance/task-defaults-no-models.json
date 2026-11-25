@@ -1,0 +1,79 @@
+{
+  "models_status": "pending-confirmation",
+  "source_url": "docs/spec/08-ai.md#ai-011-modellwahl-je-aufgabe",
+  "verified_at": "2026-11-25",
+  "note": "Unabhängige Abnahme K4-20: ausgelieferte Stufen/Antwortanteile ohne Standardmodelle (Nachtrag 25.11.2026 „Aufgabe ohne Kandidaten“).",
+  "tasks": {
+    "decision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": null,
+      "fallback": []
+    },
+    "decision-vision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": null,
+      "fallback": []
+    },
+    "redirect-confirm": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": null,
+      "fallback": []
+    },
+    "suggest-title": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "suggest-meta": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "suggest-h1": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "suggest-alt": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "link-anchor": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": null,
+      "fallback": []
+    },
+    "ask-sql": {
+      "reasoning": "medium",
+      "answer_tokens": 1024,
+      "model": null,
+      "fallback": []
+    },
+    "audit-summary": {
+      "reasoning": "medium",
+      "answer_tokens": 8192,
+      "model": null,
+      "fallback": []
+    },
+    "llms-summary": {
+      "reasoning": "low",
+      "answer_tokens": 2048,
+      "model": null,
+      "fallback": []
+    },
+    "embedding": {
+      "model": null,
+      "fallback": []
+    }
+  },
+  "test_only": true
+}
