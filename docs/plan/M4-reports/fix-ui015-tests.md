@@ -166,3 +166,47 @@ Einstellungsdialog als eigenes Overlay vorliegt, prüfe ich den Fall dort erneut
 |---|---|---|
 | a1: Typecheck, Vitest, Playwright ×1 | f3154021 | TC 0, Vitest 17/17, Playwright 46/48 (Fehler im Test: Crawls-Vorbedingung, siehe oben) |
 | a2: Typecheck, Vitest, Playwright `--repeat-each=3` | c21f748d | TC 0, Vitest 17/17, Playwright 144/144 |
+
+## Endlauf gegen den Endstand `ef2af6f2`
+
+Neu im Endstand ist der gemeinsame Hook `useTopmostEscape`. Ihn nutzt auch der Konfigurationsdialog, der ein eigenes
+Overlay hat. `fix/ui146-svg-export` ist gemergt (`4e66b04b`).
+
+Neue Datei: `apps/desktop/e2e/config/acceptance-dialog-escape.spec.ts`, Konfigurationsdialog mit der Rückfrage
+„Reset default?“ der Profilseite. Die Spec `e2e/config/escape-topmost.spec.ts` des Bauers habe ich nicht gelesen.
+Geprüft werden:
+- Escape mit Fokus in der Rückfrage: Erst schließt nur die Rückfrage und der Fokus geht an „Reset default“, dann
+  schließt die Konfiguration und der Fokus geht an den Auslöser.
+- Escape mit Ziel noch im Konfigurationsdialog (Uhr angehalten, Rückfrage programmatisch geöffnet): Es schließt nur die
+  Rückfrage. Das ist deterministisch.
+- Escape über die Tastatur nach programmatischem Öffnen: Der Fokus lag laut Probe auf `body`, es schließt nur die
+  Rückfrage.
+- Escape mit Ziel `body`: Es schließt nur die Rückfrage.
+- Konfiguration allein mit Escape-Ziel `body`: Sie schließt ohne `config.set`, und der Fokus geht an den Auslöser.
+- Suchfeld „Search settings“ mit Text: Escape leert das Feld, der Dialog bleibt; das nächste Escape schließt ihn.
+- Offene Profilauswahl: Das erste Escape schließt nur die Liste, das zweite den Dialog.
+
+Zum Einstellungsfenster: Laut Hinweis des Bauers ist „Settings → Email“ ein eigenes Fenster ohne Modal. Die Fälle in
+`settings-sections/` bleiben als Prüfung des Baustein-Dialogs über dem Einstellungsrahmen bestehen.
+
+| Lauf (Prüfzeile `TEST=0d7ae17b BAUER=ef2af6f2`) | Ergebnis |
+|---|---|
+| Typecheck | 0 |
+| Vitest, eigene Datei | 17/17 |
+| Vitest, ganzer Lauf (`npm run test`) | 149 Dateien, 1 280 Tests grün |
+| Bridge-Bau (eigenes `CARGO_TARGET_DIR`) | 0 |
+| Playwright `e2e/config/` einmal, Chromium + WebKit (mit Bridge) | 56/56 |
+| Playwright, eigene 31 Fälle × 2 Engines × `--repeat-each=20` | 1 240/1 240 |
+
+Vorlauf f1 (`e2e/config/` ohne Bridge): 14 Fälle aus `bridge.spec.ts` brachen mit „real os-app bridge required“ ab.
+Das lag an der Umgebung; mit gebauter Bridge sind sie grün.
+
+### Stand der Befunde
+
+- B1-1 (verschachtelt, Fokus im äußeren Dialog): **behoben.** Es gibt einen deterministischen Test an Scheduling, am
+  Konfigurationsdialog und in Vitest; in allen Wiederholungen grün.
+- B2-1, B2-2: durch die Festlegungen vom 25.11. geklärt und getestet. `isKeyboardDismissDisabled` lässt den Dialog bei
+  Escape offen, mit Fokus innen und außen, auch als oberster Pflichtdialog über einem anderen.
+- B3-1: „Manage crawls“ übernimmt den Fokus synchron und holt ihn beim `blur()` sofort zurück. Der Fall „Fokus auf body“
+  wird dort mit dem Escape-Ziel `body` geprüft.
+- Neue Abweichungen vom Sollverhalten: keine.
