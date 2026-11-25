@@ -52,7 +52,9 @@ jobs:
     # Pull-Requests von m2/*-Zweigen überspringen den Job: derselbe Stand läuft schon über den Push-Lauf (K2-67).
     if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'm2/') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 25.11.2026: 60 statt 45 min. Der Schritt „Rust-Tests“ brauchte zuletzt allein 39–41 min (Läufe 45525004706 grün mit
+    # 39 min Jobzeit, 45564571196 und 45566403349 im vitest-Schritt am Job-Limit abgebrochen). Testbudgets bleiben (K2-63).
+    timeout-minutes: 60
     # 04.11.2026 (Läufe 41807021445, 41826776086): Workspace-Testbau lief trotz line-tables-only voll
     # (ld „Bus error“, „No space left on device“). Wie ci.yml ohne Debuginfo bauen.
     env:
@@ -173,10 +175,18 @@ jobs:
             browsers: chromium
             shard: 2/2
           # Getrennt wie ui-e2e.yml: beide Engines nacheinander überschreiten 60 min (Lauf 41183672386).
-          - name: linux-chromium
+          # Seit Welle 5a (M4) in zwei Shards wie ui-e2e.yml: der Job lief ins Schritt-Limit von 50 min (Lauf 45566403349).
+          - name: linux-chromium-1
             os: ubuntu-latest
             projects: chromium
             browsers: chromium
+            shard: 1/2
+            perf: true
+          - name: linux-chromium-2
+            os: ubuntu-latest
+            projects: chromium
+            browsers: chromium
+            shard: 2/2
           # UI-146: Der Runner schafft unter WebKit 11–13 fps (Grenze in CI 15). Die fps-Grenze warnt hier nur; die
           # übrigen Budgets bleiben hart, verbindlich ist der strenge Lauf je Kandidat (docs/release/checkliste-release.md).
           # linux-webkit lief ungeteilt mit 701 Tests in das Schritt-Limit von 50 min, deshalb wie macOS zwei Shards
