@@ -212,6 +212,7 @@ pub fn model(provider: &str, id: &str, endpoint: &str, source: CapabilitySource)
             ..Capabilities::default()
         },
         capability_source: source,
+        reasoning_levels: Vec::new(),
     }
 }
 
@@ -227,6 +228,7 @@ pub fn request(model: Model, text: &str, schema: Option<Value>) -> Request {
         max_tokens: Some(256),
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 

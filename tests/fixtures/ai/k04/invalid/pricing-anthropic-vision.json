@@ -1,0 +1,128 @@
+{
+  "test_only": true,
+  "source_url": "docs/spec/08-ai.md#ai-010-modellkatalog-und-preise",
+  "verified_at": "2026-11-24",
+  "currency": "USD",
+  "prices": [
+    {
+      "provider": "openai",
+      "model": "mock-reasoning",
+      "endpoint": "responses",
+      "input_per_million": 0.1,
+      "output_per_million": 0.5,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24",
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ],
+      "max_output_tokens": 32000,
+      "capabilities": {
+        "text": true,
+        "structured_output": true,
+        "vision": true
+      }
+    },
+    {
+      "provider": "openai",
+      "model": "mock-plain",
+      "endpoint": "responses",
+      "input_per_million": 0.1,
+      "output_per_million": 0.5,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24",
+      "capabilities": {
+        "text": true,
+        "structured_output": true
+      }
+    },
+    {
+      "provider": "openai",
+      "model": "mock-text-only",
+      "endpoint": "responses",
+      "input_per_million": 0.1,
+      "output_per_million": 0.5,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24",
+      "capabilities": {
+        "text": true
+      }
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "endpoint": "responses",
+      "input_per_million": 0.1,
+      "output_per_million": 0.5,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24",
+      "capabilities": {
+        "text": true,
+        "structured_output": true,
+        "vision": true
+      },
+      "reasoning_efforts": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "endpoint": "decisions",
+      "input_per_million": 0.1,
+      "output_per_million": 0,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24",
+      "capabilities": {
+        "decisions": true
+      }
+    },
+    {
+      "provider": "anthropic",
+      "model": "mock-claude",
+      "endpoint": "messages",
+      "input_per_million": 1,
+      "output_per_million": 5,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24",
+      "vision": true
+    },
+    {
+      "provider": "anthropic",
+      "model": "mock-claude-b",
+      "endpoint": "messages",
+      "input_per_million": 1,
+      "output_per_million": 5,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24"
+    },
+    {
+      "provider": "anthropic",
+      "model": "mock-claude-old",
+      "endpoint": "messages",
+      "input_per_million": 1,
+      "output_per_million": 5,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-05-08"
+    },
+    {
+      "provider": "openai",
+      "model": "mock-embedding",
+      "endpoint": "embeddings",
+      "input_per_million": 0.1,
+      "output_per_million": 0,
+      "source_url": "tests/fixtures/ai/k04",
+      "verified_at": "2026-11-24",
+      "capabilities": {
+        "embeddings": true
+      }
+    }
+  ]
+}

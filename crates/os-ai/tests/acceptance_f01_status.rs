@@ -186,7 +186,9 @@ fn usage_has_the_four_spec_fields_and_missing_means_null() {
             "cache_write_tokens",
             "cached_input_tokens",
             "input_tokens",
-            "output_tokens"
+            "output_tokens",
+            // AI-001 Nachtrag 24.11.2026 (Q00): `usage` um `reasoning_tokens` erweitert – jetzt fünf Felder.
+            "reasoning_tokens"
         ]
     );
     for (k, v) in obj {
@@ -198,6 +200,7 @@ fn usage_has_the_four_spec_fields_and_missing_means_null() {
         output_tokens: Some(0),
         cached_input_tokens: None,
         cache_write_tokens: None,
+        reasoning_tokens: None,
     };
     let v = serde_json::to_value(&partial).unwrap();
     assert_eq!(v["input_tokens"], 1000);

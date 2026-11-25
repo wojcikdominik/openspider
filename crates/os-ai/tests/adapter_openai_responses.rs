@@ -32,6 +32,7 @@ fn model() -> Model {
         endpoint: "responses".into(),
         capabilities: RESPONSES_CAPABILITIES,
         capability_source: CapabilitySource::ModelCatalog,
+        reasoning_levels: Vec::new(),
     }
 }
 
@@ -49,6 +50,7 @@ fn request(text: &str) -> Request {
         max_tokens: Some(200),
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 

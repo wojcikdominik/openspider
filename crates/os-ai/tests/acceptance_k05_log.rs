@@ -462,6 +462,7 @@ proptest! {
             output_tokens: Some(output),
             cached_input_tokens: Some(cached.min(input)),
             cache_write_tokens: Some(write.min(input - cached.min(input))),
+            reasoning_tokens: None,
         };
         let mut o = RequestOutcome::success(u, images, 1);
         o.batch = batch;

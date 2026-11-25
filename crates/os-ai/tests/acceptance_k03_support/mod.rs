@@ -200,6 +200,7 @@ pub fn ollama_model(id: &str) -> Model {
             ..Capabilities::default()
         },
         capability_source: CapabilitySource::ModelCatalog,
+        reasoning_levels: Vec::new(),
     }
 }
 
@@ -219,6 +220,7 @@ pub fn request(model: Model, text: &str, schema: Option<Value>) -> Request {
         max_tokens: Some(128),
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 

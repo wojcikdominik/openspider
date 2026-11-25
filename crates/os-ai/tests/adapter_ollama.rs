@@ -46,6 +46,7 @@ fn ollama_model() -> Model {
         endpoint: ollama::ENDPOINT.into(),
         capabilities: ollama::default_capabilities(),
         capability_source: CapabilitySource::ModelCatalog,
+        reasoning_levels: Vec::new(),
     }
 }
 

@@ -118,6 +118,7 @@ impl ForwardingProvider {
                 ..Capabilities::default()
             },
             capability_source: CapabilitySource::ModelCatalog,
+            reasoning_levels: Vec::new(),
         }
     }
 
@@ -135,6 +136,7 @@ impl ForwardingProvider {
             max_tokens: None,
             temperature: None,
             effort: None,
+            reasoning: Default::default(),
         }
     }
 }

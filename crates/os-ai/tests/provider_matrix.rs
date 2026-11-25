@@ -51,6 +51,7 @@ fn request(model: Model) -> Request {
         max_tokens: Some(10),
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 // spec: AI-001
@@ -81,7 +82,8 @@ async fn identical_parsed_contract_for_all_stub_providers() {
         ));
         assert_eq!(
             serde_json::to_value(response.usage).unwrap(),
-            json!({"input_tokens":null,"output_tokens":null,"cached_input_tokens":null,"cache_write_tokens":null})
+            // AI-001 Nachtrag 24.11.2026 (Q00): `usage` um `reasoning_tokens` erweitert.
+            json!({"input_tokens":null,"output_tokens":null,"cached_input_tokens":null,"cache_write_tokens":null,"reasoning_tokens":null})
         );
         assert_eq!(stub.calls.load(Ordering::SeqCst), 1);
     }
@@ -239,20 +241,28 @@ fn resource_schema_fixtures_validate_without_remote_reference_resolution() {
     ))
     .unwrap();
     let validator = jsonschema::validator_for(&pricing).unwrap();
-    let mut entry = json!({"provider":"anthropic","model":"mock","endpoint":"messages","input_per_million":1,"output_per_million":5,"cache_read_per_million":0,"cache_write_per_million":0,"batch_discount":0.5,"regional_uplift_percent":0,"per_request":0,"per_image":0,"image_tokens":85,"valid_from":"2026-11-09","source_url":"https://mock.test/pricing","verified_at":"2026-11-09"});
-    assert!(validator.is_valid(&json!([entry.clone()])));
+    let mut entry = json!({"provider":"anthropic","model":"mock","endpoint":"messages","input_per_million":1,"output_per_million":5,"cache_read_per_million":0,"cache_write_per_million":0,"batch_discount":0.5,"regional_surcharge":{"eu":0},"per_request":0,"per_image":0,"image_tokens":85,"valid_from":"2026-11-09","source_url":"https://mock.test/pricing","verified_at":"2026-11-09"});
+    assert!(validator.is_valid(&json!({"prices": [entry.clone()]})));
     entry["vision"] = json!(true);
-    assert!(!validator.is_valid(&json!([entry.clone()])));
+    assert!(!validator.is_valid(&json!({"prices": [entry.clone()]})));
     entry.as_object_mut().unwrap().remove("vision");
     entry["input_per_million"] = json!(-1);
-    assert!(!validator.is_valid(&json!([entry])));
+    assert!(!validator.is_valid(&json!({"prices": [entry]})));
     let defaults: serde_json::Value = serde_json::from_str(include_str!(
         "../../../resources/ai/schemas/task-defaults.schema.json"
     ))
     .unwrap();
     let validator = jsonschema::validator_for(&defaults).unwrap();
-    assert!(validator.is_valid(&json!({"decision":{"model":{"provider":"openai","model":"mock","endpoint":"decisions"},"fallback":[]}})));
-    assert!(!validator.is_valid(&json!({"decision":{"fallback":[]}})));
+    let mut doc: serde_json::Value =
+        serde_json::from_str(include_str!("../../../resources/ai/task-defaults.json")).unwrap();
+    doc["tasks"]["decision"]["model"] =
+        json!({"provider":"openai","model":"mock","endpoint":"decisions"});
+    assert!(validator.is_valid(&doc));
+    doc["tasks"]["decision"]
+        .as_object_mut()
+        .unwrap()
+        .remove("model");
+    assert!(!validator.is_valid(&doc));
 }
 
 // spec: AI-001

@@ -243,6 +243,7 @@ impl OpenRouterModel {
             endpoint: ENDPOINT.into(),
             capabilities: self.capabilities(),
             capability_source: CapabilitySource::OpenRouterModels,
+            reasoning_levels: Vec::new(),
         }
     }
 
@@ -696,6 +697,7 @@ pub fn usage_from_json(usage: Option<&Value>) -> Usage {
         output_tokens: opt_u64(usage.and_then(|u| u.get("completion_tokens"))),
         cached_input_tokens: opt_u64(details.and_then(|d| d.get("cached_tokens"))),
         cache_write_tokens: opt_u64(details.and_then(|d| d.get("cache_write_tokens"))),
+        reasoning_tokens: None,
     }
 }
 

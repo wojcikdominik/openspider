@@ -36,6 +36,7 @@ fn usage(input: u64, output: u64) -> Usage {
         output_tokens: Some(output),
         cached_input_tokens: None,
         cache_write_tokens: None,
+        reasoning_tokens: None,
     }
 }
 
@@ -233,7 +234,8 @@ fn outcome_strategy() -> impl Strategy<Value = RequestOutcome> {
                 input_tokens: i,
                 output_tokens: o,
                 cached_input_tokens: c,
-                cache_write_tokens: None
+                cache_write_tokens: None,
+                reasoning_tokens: None,
             })),
         (0u64..400_000, 0u64..50_000).prop_map(|(i, o)| UsageReport::Missing {
             estimated_input_tokens: i,

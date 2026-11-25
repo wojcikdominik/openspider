@@ -1,0 +1,76 @@
+{
+  "_comment": "Unabhängige Abnahme M4-K04. Anthropic-Modellliste A–D nach docs/spec/08-ai.md AI-002 (Kriterium Modelle A–D) und Konventionen, Nachtrag 24.11.2026 Q00 (Mock-Erweiterungen: thinking, B mit max_tokens 4000).",
+  "data": [
+    {
+      "id": "mock-claude",
+      "display_name": "A",
+      "max_input_tokens": 200000,
+      "max_tokens": 8192,
+      "capabilities": {
+        "effort": {
+          "supported": true,
+          "low": { "supported": true },
+          "medium": { "supported": true },
+          "high": { "supported": true },
+          "xhigh": { "supported": true },
+          "max": { "supported": true }
+        },
+        "thinking": {
+          "supported": true,
+          "types": {
+            "adaptive": { "supported": true },
+            "disabled": { "supported": true },
+            "enabled": { "supported": false }
+          }
+        },
+        "structured_outputs": { "supported": true },
+        "image_input": { "supported": true },
+        "batch": { "supported": true }
+      }
+    },
+    {
+      "id": "mock-claude-b",
+      "display_name": "B",
+      "max_input_tokens": 200000,
+      "max_tokens": 4000,
+      "capabilities": {
+        "effort": {
+          "supported": true,
+          "low": { "supported": true },
+          "medium": { "supported": true },
+          "high": { "supported": true },
+          "xhigh": { "supported": true },
+          "max": { "supported": false }
+        },
+        "thinking": {
+          "supported": true,
+          "types": {
+            "adaptive": { "supported": true },
+            "disabled": { "supported": false },
+            "enabled": { "supported": false }
+          }
+        },
+        "structured_outputs": { "supported": true },
+        "image_input": { "supported": true },
+        "batch": { "supported": true }
+      }
+    },
+    {
+      "id": "mock-claude-c",
+      "display_name": "C",
+      "max_tokens": 8192,
+      "capabilities": {
+        "effort": { "supported": false },
+        "thinking": { "supported": false },
+        "structured_outputs": { "supported": false },
+        "image_input": { "supported": false },
+        "batch": { "supported": false }
+      }
+    },
+    {
+      "id": "mock-claude-d",
+      "display_name": "D"
+    }
+  ],
+  "has_more": false
+}

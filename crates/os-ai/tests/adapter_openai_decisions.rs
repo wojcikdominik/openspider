@@ -856,6 +856,7 @@ async fn provider_contract_with_decision_questions_and_an_image() {
         max_tokens: None,
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     };
     let Outcome::Completed(response) = execute(PreviewSwitch::ON, &adapter, request).await else {
         panic!("completed expected")

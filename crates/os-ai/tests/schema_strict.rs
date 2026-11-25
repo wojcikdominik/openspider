@@ -13,12 +13,14 @@ fn schema_dir() -> PathBuf {
     path
 }
 
-/// Schemas von **Datendateien** (Preistabelle, Aufgabenvorgaben, AI-Crawler-Katalog; AI-010/AI-011/AI-120), keine Antwortschemas einer Aufgabe.
+/// Schemas von **Datendateien** (Preistabelle, Aufgabenvorgaben, Anbietergrenzen, AI-Crawler-Katalog;
+/// AI-010/AI-011/AI-012/AI-120), keine Antwortschemas einer Aufgabe.
 /// Sie liegen im selben Ordner, beschreiben aber Dateien unter `resources/ai/` und keine Modellantworten; für sie gilt
 /// der strikte Modus der Anbieter nicht. Jede andere Datei im Ordner gilt als Aufgabenschema und muss strikt sein.
 const DATA_FILE_SCHEMAS: &[&str] = &[
     "ai-crawlers.schema.json",
     "pricing.schema.json",
+    "provider-limits.schema.json",
     "task-defaults.schema.json",
 ];
 

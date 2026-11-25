@@ -684,6 +684,7 @@ fn model(provider: &str, id: &str, embeddings: bool) -> Model {
             ..Capabilities::default()
         },
         capability_source: CapabilitySource::ModelCatalog,
+        reasoning_levels: Vec::new(),
     }
 }
 

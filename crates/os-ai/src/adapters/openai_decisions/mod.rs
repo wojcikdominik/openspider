@@ -476,6 +476,7 @@ fn combine_usage(parts: Vec<Option<Usage>>) -> Option<Usage> {
             output_tokens: add(a.output_tokens, b.output_tokens),
             cached_input_tokens: add(a.cached_input_tokens, b.cached_input_tokens),
             cache_write_tokens: add(a.cache_write_tokens, b.cache_write_tokens),
+            reasoning_tokens: add(a.reasoning_tokens, b.reasoning_tokens),
         })
     })
 }

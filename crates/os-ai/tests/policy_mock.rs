@@ -165,6 +165,7 @@ fn request(provider: &str) -> Request {
                 ..Capabilities::default()
             },
             capability_source: CapabilitySource::ModelCatalog,
+            reasoning_levels: Vec::new(),
         },
         required: Capabilities {
             text: true,
@@ -177,6 +178,7 @@ fn request(provider: &str) -> Request {
         max_tokens: None,
         temperature: None,
         effort: None,
+        reasoning: Default::default(),
     }
 }
 

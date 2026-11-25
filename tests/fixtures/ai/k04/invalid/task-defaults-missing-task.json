@@ -1,0 +1,193 @@
+{
+  "models_status": "confirmed",
+  "source_url": "tests/fixtures/ai/k04",
+  "verified_at": "2026-11-24",
+  "test_only": true,
+  "note": "Testdaten (keine Standardmodelle): Modellwahl gegen Mock-Modelle.",
+  "tasks": {
+    "decision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "decisions"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "decision-vision": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "decisions"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "redirect-confirm": {
+      "reasoning": "off",
+      "answer_tokens": "decision-w",
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "decisions"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "suggest-title": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        },
+        {
+          "provider": "anthropic",
+          "model": "mock-claude-b",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "suggest-meta": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "suggest-h1": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "suggest-alt": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "link-anchor": {
+      "reasoning": "off",
+      "answer_tokens": 512,
+      "model": {
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "ask-sql": {
+      "reasoning": "medium",
+      "answer_tokens": 1024,
+      "model": {
+        "provider": "openai",
+        "model": "mock-reasoning",
+        "endpoint": "responses"
+      },
+      "fallback": [
+        {
+          "provider": "anthropic",
+          "model": "mock-claude",
+          "endpoint": "messages"
+        }
+      ]
+    },
+    "audit-summary": {
+      "reasoning": "medium",
+      "answer_tokens": 8192,
+      "model": {
+        "provider": "anthropic",
+        "model": "mock-claude-b",
+        "endpoint": "messages"
+      },
+      "fallback": [
+        {
+          "provider": "openai",
+          "model": "gpt-6-luna",
+          "endpoint": "responses"
+        }
+      ]
+    },
+    "embedding": {
+      "model": {
+        "provider": "openai",
+        "model": "mock-embedding",
+        "endpoint": "embeddings"
+      },
+      "fallback": [
+        {
+          "provider": "ollama",
+          "model": "nomic-embed-text",
+          "endpoint": "embeddings"
+        }
+      ]
+    }
+  }
+}
