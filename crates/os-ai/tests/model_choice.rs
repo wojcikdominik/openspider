@@ -747,3 +747,84 @@ fn confirmed_list_uses_defaults_then_fallbacks_including_unpriced_models() {
     let key = PriceKey::new("openai", "mock-unpriced", Endpoint::Responses);
     assert!(catalog.resolve(&key, None).unwrap().is_none());
 }
+
+// spec: AI-011
+// Festlegung des Orchestrators (25.11.2026, Befund B1 der Abnahme): Aufgabe ohne jeden Kandidaten (ausgelieferte
+// `task-defaults.json` im Platzhalterzustand, keine Wahl im Profil) → `Skipped (no capable model)`, sobald ein
+// Anbieter einen Schlüssel hat; nur ohne jeden Schlüssel `Error: Missing API key`.
+#[test]
+fn task_without_any_candidate_depends_on_any_key() {
+    let bundled = TaskDefaults::bundled().unwrap();
+    let keyed = |ids: &[&str]| -> BTreeMap<String, ProviderState> {
+        ids.iter()
+            .map(|id| {
+                (
+                    id.to_string(),
+                    ProviderState {
+                        has_key: true,
+                        models: Vec::new(),
+                    },
+                )
+            })
+            .collect()
+    };
+    for task in TaskType::ALL {
+        let none = plan_task(task, &TaskSettings::default(), &bundled, &providers(&[]));
+        assert_eq!(none, Err(AiStatus::MissingApiKey), "{task}");
+        let without_key = providers(&[("openai", ProviderState::default())]);
+        assert_eq!(
+            plan_task(task, &TaskSettings::default(), &bundled, &without_key),
+            Err(AiStatus::MissingApiKey),
+            "{task}"
+        );
+        for set in [
+            &["anthropic"][..],
+            &["openrouter"][..],
+            &["anthropic", "openai", "openrouter"][..],
+        ] {
+            assert_eq!(
+                plan_task(task, &TaskSettings::default(), &bundled, &keyed(set)),
+                Err(AiStatus::SkippedNoCapableModel),
+                "{task} {set:?}"
+            );
+        }
+    }
+    // Mit vollständigen Live-Listen ebenso: ohne Kandidat kein Modell, aber kein fehlender Schlüssel.
+    let all = providers(&[("anthropic", all_anthropic()), ("openai", all_openai())]);
+    assert_eq!(
+        plan_task(
+            TaskType::SuggestTitle,
+            &TaskSettings::default(),
+            &bundled,
+            &all
+        ),
+        Err(AiStatus::SkippedNoCapableModel)
+    );
+}
+
+// spec: AI-011
+// Aufgabe mit Kandidaten (Auslegung K04 bleibt): `Error: Missing API key`, wenn keiner der Anbieter aus Wahl und
+// Ersatzliste einen Schlüssel hat – auch wenn ein anderer Anbieter verbunden ist; sonst `Skipped (no capable model)`.
+#[test]
+fn task_with_candidates_depends_on_candidate_providers_only() {
+    let settings = TaskSettings {
+        model: Some(c()),
+        fallback: vec![d()],
+        ..TaskSettings::default()
+    };
+    let other_only = providers(&[("openai", all_openai())]);
+    assert_eq!(
+        plan_task(TaskType::SuggestAlt, &settings, &defaults(), &other_only),
+        Err(AiStatus::MissingApiKey)
+    );
+    let with_anthropic = providers(&[("anthropic", all_anthropic()), ("openai", all_openai())]);
+    assert_eq!(
+        plan_task(
+            TaskType::SuggestAlt,
+            &settings,
+            &defaults(),
+            &with_anthropic
+        ),
+        Err(AiStatus::SkippedNoCapableModel)
+    );
+}

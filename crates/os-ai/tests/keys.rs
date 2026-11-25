@@ -321,3 +321,59 @@ fn missing_key_maps_to_missing_api_key_status() {
         Some(AiKeyProvider::OpenRouter)
     );
 }
+
+// spec: AI-009
+// Festlegung des Orchestrators (25.11.2026): Schlüssel werden am Rand von Leerraum befreit; ist danach nichts übrig,
+// gilt der Schlüssel als nicht gesetzt – für Umgebungsvariablen (leer oder nur Leerraum) und für Einträge im
+// Schlüsselbund. Vorrang: Umgebung vor Sitzung vor Schlüsselbund.
+#[test]
+fn blank_keys_count_as_unset_and_precedence_is_env_session_keychain() {
+    for blank in ["", " ", "\t\n "] {
+        let store = memory();
+        let keys = AiKeyStore::with_env(
+            store.clone(),
+            env_with("OPENSPIDER_AI_KEY_ANTHROPIC", blank),
+        );
+        assert_eq!(
+            keys.status(AiKeyProvider::Anthropic),
+            KeyStatus::Missing,
+            "{blank:?}"
+        );
+        SecretStoreMut::set(&*store, "ai.anthropic", blank).unwrap();
+        assert_eq!(
+            keys.resolve(AiKeyProvider::Anthropic),
+            Ok(None),
+            "{blank:?}"
+        );
+        assert!(!keys.has_key(AiKeyProvider::Anthropic));
+    }
+    let store = memory();
+    SecretStoreMut::set(&*store, "ai.openai", "  sk-TEST-AI-009-keychain  ").unwrap();
+    let keys = AiKeyStore::with_env(
+        store.clone(),
+        env_with("OPENSPIDER_AI_KEY_OPENAI", "  sk-TEST-AI-009-env \n"),
+    );
+    let env = keys.resolve(AiKeyProvider::OpenAi).unwrap().unwrap();
+    assert_eq!(
+        (env.source, env.secret.expose()),
+        (KeySource::Environment, "sk-TEST-AI-009-env")
+    );
+    let keys = AiKeyStore::with_env(store.clone(), no_env());
+    let chain = keys.resolve(AiKeyProvider::OpenAi).unwrap().unwrap();
+    assert_eq!(
+        (chain.source, chain.secret.expose()),
+        (KeySource::Keychain, "sk-TEST-AI-009-keychain")
+    );
+    keys.save(AiKeyProvider::OpenAi, " sk-TEST-AI-009-session ", false)
+        .unwrap();
+    SecretStoreMut::set(&*store, "ai.openai", "sk-TEST-AI-009-keychain").unwrap();
+    let session = keys.resolve(AiKeyProvider::OpenAi).unwrap().unwrap();
+    assert_eq!(
+        (session.source, session.secret.expose()),
+        (KeySource::Session, "sk-TEST-AI-009-session")
+    );
+    assert_eq!(
+        keys.save(AiKeyProvider::OpenAi, " \t ", true),
+        Err(KeyError::Empty)
+    );
+}

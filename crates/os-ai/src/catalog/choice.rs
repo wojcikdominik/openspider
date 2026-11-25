@@ -284,8 +284,10 @@ impl TaskPlan {
 
 /// Wählt das Modell einer Aufgabe: gewähltes Modell (bzw. Standard), dann die Ersatzliste in Reihenfolge; ein
 /// Kandidat zählt, wenn sein Anbieter einen Schlüssel hat, das Modell in der Live-Liste steht und die benötigten
-/// Fähigkeiten hat. Kein Kandidat → `Error: Missing API key`, wenn keinem Kandidaten-Anbieter ein Schlüssel vorliegt,
-/// sonst `Skipped (no capable model)` (AI-011).
+/// Fähigkeiten hat. Kein passender Kandidat → `Error: Missing API key`, wenn keinem Kandidaten-Anbieter ein Schlüssel
+/// vorliegt, sonst `Skipped (no capable model)` (AI-011). Hat die Aufgabe gar keinen Kandidaten (kein Standardmodell,
+/// keine Ersatzliste, keine Wahl im Profil), gilt `Skipped (no capable model)`, sobald irgendein Anbieter einen
+/// Schlüssel hat, und nur ohne jeden Schlüssel `Error: Missing API key` (Festlegung des Orchestrators, 25.11.2026).
 pub fn plan_task(
     task: TaskType,
     settings: &TaskSettings,
@@ -300,8 +302,17 @@ pub fn plan_task(
     let requested = settings
         .reasoning
         .unwrap_or_else(|| defaults.reasoning(task));
+    let candidates: Vec<&ModelRef> = primary.into_iter().chain(fallback.iter()).collect();
+    if candidates.is_empty() {
+        // Festlegung des Orchestrators (AI-011, 25.11.2026): ohne jeden Kandidaten zählt jeder verbundene Anbieter.
+        return Err(if providers.values().any(|p| p.has_key) {
+            AiStatus::SkippedNoCapableModel
+        } else {
+            AiStatus::MissingApiKey
+        });
+    }
     let mut any_key = false;
-    for (index, candidate) in primary.into_iter().chain(fallback.iter()).enumerate() {
+    for (index, candidate) in candidates.into_iter().enumerate() {
         let Some(state) = providers.get(&candidate.provider) else {
             continue;
         };
