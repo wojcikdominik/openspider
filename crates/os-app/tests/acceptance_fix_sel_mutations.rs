@@ -39,6 +39,7 @@ async fn two_crawls() -> Two {
         )
         .await;
         completed(&app).await;
+        settled(&app).await;
         let s = app.sessions().current(&window()).unwrap();
         ids.push((s.key.0.clone(), s.path.clone()));
     }
@@ -54,6 +55,35 @@ async fn two_crawls() -> Two {
         b,
         b_path,
     }
+}
+
+/// The core writes the final progress snapshot shortly after the session shows `Completed`. Every baseline of the
+/// row-wise comparison waits for that write; otherwise it lands between the two dumps on a slow machine.
+async fn settled(app: &os_app::App) {
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            let done = app
+                .read_pool()
+                .run(key(app), |f, _| {
+                    let mut stmt = f
+                        .conn()
+                        .prepare("SELECT value FROM crawl_meta WHERE key = 'progress_snapshot'")?;
+                    let rows: Vec<String> = stmt
+                        .query_map([], |r| r.get(0))?
+                        .collect::<Result<_, _>>()?;
+                    Ok(rows.iter().any(|t| t.contains("\"state\":\"Completed\"")))
+                })
+                .await
+                .unwrap();
+            if done {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("final progress snapshot of the completed crawl");
+    app.write_queue().flush().await;
 }
 
 /// Every row of every table of the session's crawl file, as text (row-wise comparison).
