@@ -10,7 +10,7 @@ import { crawl as crawlApi } from "../../../ipc/crawl";
 import { toCmdError } from "../../../ipc/errors";
 import { profile as profileApi } from "../../../ipc/profile";
 import { useSession } from "../../../state/session";
-import { Banner, Button, DialogFooter, SearchField, Select, type BannerKind } from "../../../ui/primitives";
+import { Banner, Button, DialogFooter, SearchField, Select, useTopmostEscape, type BannerKind } from "../../../ui/primitives";
 import { ConfigProvider, messageText, useConfig as useConfigContext, type ConfigContextValue } from "./context";
 import { DiffPanel } from "./DiffPanel";
 import { useConfigDraft } from "./draft";
@@ -161,10 +161,14 @@ export function ConfigDialog() {
   const deviationCount = useMemo(() => (draft.status === "ready" ? deviations(draft.cfg, draft.saved, draft.defaultRows).length : 0), [draft.status, draft.cfg, draft.saved, draft.defaultRows]);
 
   const Content = page?.Component ?? null;
+  // UI-015: Escape closes the topmost dialog, also a primitive dialog opened above this one (e.g. Email) while the focus is
+  // still here; this dialog closes on Escape when it is the topmost.
+  const dialogRef = useRef<HTMLElement>(null);
+  useTopmostEscape(dialogRef, closeConfig);
   return (
-    <ModalOverlay className="os-overlay" isOpen onOpenChange={(open) => !open && closeConfig()} isDismissable={false}>
+    <ModalOverlay className="os-overlay" isOpen onOpenChange={(open) => !open && closeConfig()} isDismissable={false} isKeyboardDismissDisabled>
       <Modal className="os-modal os-config-modal">
-        <RacDialog className="os-dialog os-config-dialog" aria-label={t("config-title")}>
+        <RacDialog ref={dialogRef} className="os-dialog os-config-dialog" aria-label={t("config-title")}>
           <header className="os-config-head">
             <Heading slot="title" className="os-dialog-title">
               {t("config-title")}

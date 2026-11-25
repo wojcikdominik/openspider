@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
-import { Dialog, dialogEscapeCloses } from "./Dialog";
+import { useRef, useState, type ReactNode } from "react";
+import { Dialog as RacDialog, Modal, ModalOverlay } from "react-aria-components";
+import { Dialog, dialogEscapeCloses, escapeTargetBelow, useTopmostEscape } from "./Dialog";
+
+/** An overlay built on ModalOverlay directly (like the settings dialog), wired to the shared Escape logic. */
+function PlainOverlay({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLElement>(null);
+  useTopmostEscape(ref, onClose);
+  return <ModalOverlay className="os-overlay" isOpen onOpenChange={open => { if (!open) onClose(); }} isKeyboardDismissDisabled>
+    <Modal className="os-modal"><RacDialog ref={ref} aria-label="Settings">{children}</RacDialog></Modal>
+  </ModalOverlay>;
+}
 
 afterEach(cleanup);
 
@@ -106,5 +116,35 @@ describe("Dialog: Escape schließt immer den obersten Dialog (UI-015)", () => {
     await flush();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(document.body);
+  });
+
+  // spec: UI-015
+  it("a primitive dialog above an overlay without the primitive closes on Escape whose target is still in that overlay", () => {
+    const settings = vi.fn();
+    const email = vi.fn();
+    const own = vi.fn();
+    const { rerender } = render(<>
+      <button>Page</button>
+      <PlainOverlay onClose={settings}><button onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); own(); } }}>Email</button></PlainOverlay>
+      <Dialog title="Add SMTP account" isOpen onOpenChange={email}><p>Body</p></Dialog>
+    </>);
+    const lower = screen.getByRole("button", { name: "Email", hidden: true });
+    const upper = screen.getByRole("dialog", { name: "Add SMTP account", hidden: true });
+    const page = screen.getByText("Page");
+    expect(escapeTargetBelow(lower, upper)).toBe(true);
+    expect(escapeTargetBelow(upper, upper)).toBe(false);
+    // The page is not a lower dialog: its handlers keep their turn (bubble phase).
+    expect(escapeTargetBelow(page, upper)).toBe(false);
+    expect(escapeTargetBelow(document.body, upper)).toBe(false);
+    // The lower overlay's own handlers (here one that would consume Escape) do not get the key.
+    fireEvent.keyDown(lower, { key: "Escape" });
+    expect(email).toHaveBeenCalledTimes(1);
+    expect(email).toHaveBeenCalledWith(false);
+    expect(settings).not.toHaveBeenCalled();
+    expect(own).not.toHaveBeenCalled();
+    // Alone, the overlay without the primitive is the topmost and closes on Escape as before.
+    rerender(<PlainOverlay onClose={settings}><button>Email</button></PlainOverlay>);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Email" }), { key: "Escape" });
+    expect(settings).toHaveBeenCalledTimes(1);
   });
 });
