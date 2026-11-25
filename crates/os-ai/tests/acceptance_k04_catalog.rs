@@ -132,7 +132,7 @@ fn bundled_gpt_6_luna_prices_match_spec() {
             .input_pico
     );
     assert_eq!(r.batch_discount_ppm, 500_000);
-    let lc = r.long_context.expect("Langkontext");
+    let lc = r.long_context.clone().expect("Langkontext");
     assert_eq!(lc.threshold_input_tokens, 272_000);
     assert_eq!(lc.input_factor_ppm, 2_000_000);
     assert_eq!(lc.output_factor_ppm, 1_500_000);
@@ -155,7 +155,8 @@ fn bundled_gpt_6_luna_prices_match_spec() {
     assert_eq!(dedup.len(), efforts.len());
     assert!(responses.max_output_tokens.unwrap_or(1) > 0);
 
-    // decisions: nur Eingabe 0,10, alle anderen Positionen 0
+    // decisions: Eingabe 0,10, Ausgabe 0; Cache-Lesen, Cache-Schreiben und Langkontext wie `responses`, kein Batch
+    // (AI-010, Nachtrag 25.11.2026 „Preise der Decisions API“; ersetzt „alle anderen Positionen 0“)
     let decisions = table
         .get(&PriceKey::new("openai", "gpt-6-luna", Endpoint::Decisions))
         .expect("gpt-6-luna über decisions")
@@ -163,8 +164,10 @@ fn bundled_gpt_6_luna_prices_match_spec() {
         .unwrap();
     assert_eq!(decisions.input_pico, r.input_pico);
     assert_eq!(decisions.output_pico, 0);
-    assert_eq!(decisions.cache_read_pico, 0);
-    assert_eq!(decisions.cache_write_pico, 0);
+    assert_eq!(decisions.cache_read_pico, r.cache_read_pico);
+    assert_eq!(decisions.cache_write_pico, r.cache_write_pico);
+    assert_eq!(decisions.long_context, r.long_context);
+    assert_eq!(decisions.batch_discount_ppm, 0);
 }
 
 // spec: AI-010

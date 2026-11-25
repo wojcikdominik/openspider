@@ -9,6 +9,7 @@ use os_ai::catalog::{
     ProviderState, TaskDefaults, TaskSettings, TaskType,
 };
 use os_ai::cost::rates::usd_per_million_to_pico;
+use os_ai::cost::{cost_of, FeeCounts, Rates, TokenCounts};
 use os_ai::provider::{Capabilities, CapabilitySource, Model, ReasoningLevel};
 use os_model::ai::AiStatus;
 
@@ -158,10 +159,10 @@ fn bundled_prices_match_the_documented_values() {
             key: k("openai", "gpt-6-luna", DECISIONS),
             input: "0.10",
             output: "0",
-            cache_read: "0",
-            cache_write: "0",
+            cache_read: "0.01",
+            cache_write: "0.125",
             batch_ppm: 0,
-            long_context: None,
+            long_context: Some((272_000, 2_000_000, 1_500_000, 2_000_000)),
             eu_uplift_ppm: 100_000,
         },
         Expected {
@@ -367,7 +368,7 @@ fn only_openai_key_uses_openai_models_of_the_list() {
 
 // spec: AI-011
 // Nur ein Anthropic-Schlüssel → `decision` und `suggest-title` über `claude-haiku-5-5`, `ask-sql` über
-// `claude-sonnet-5-5`; `embedding` erhält keinen Plan (Statuswert siehe Klärung im ignorierten Test unten).
+// `claude-sonnet-5-5`; `embedding` erhält keinen Plan (`Error: Missing API key`, Test unten).
 #[test]
 fn only_anthropic_key_uses_haiku_and_sonnet() {
     let p = only("anthropic");
@@ -379,7 +380,7 @@ fn only_anthropic_key_uses_haiku_and_sonnet() {
 
 // spec: AI-011
 // Nur ein OpenRouter-Schlüssel → `decision` über `openai/gpt-6-luna`; `suggest-title`, `ask-sql` und `embedding`
-// erhalten keinen Plan (Statuswert siehe Klärung im ignorierten Test unten).
+// erhalten keinen Plan (`Error: Missing API key`, Test unten).
 #[test]
 fn only_openrouter_key_runs_decisions_over_openrouter() {
     let p = only("openrouter");
@@ -394,17 +395,15 @@ fn only_openrouter_key_runs_decisions_over_openrouter() {
 }
 
 // spec: AI-011
-// Statuswert der Aufgaben ohne verfügbaren Kandidaten aus den drei Kriterien des Nachtrags „bestätigte
-// Standardmodelle“: dort `Skipped (no capable model)`, obwohl keiner der Kandidaten-Anbieter einen Schlüssel hat. Der
-// Nachtrag „Aufgabe ohne Kandidaten“ vom selben Tag verlangt für Aufgaben mit Kandidaten in diesem Fall
-// `Error: Missing API key` (so gebaut). Widerspruch gemeldet im Bericht K4-20.
+// Statuswert der Aufgaben ohne verfügbaren Kandidaten (AI-011, Nachtrag 25.11.2026, berichtigte Kriterien): keiner
+// der Kandidaten-Anbieter hat einen Schlüssel → `Error: Missing API key` – nur Anthropic-Schlüssel: `embedding`; nur
+// OpenRouter-Schlüssel: `suggest-title`, `ask-sql`, `embedding`.
 #[test]
-#[ignore = "Klärung K4-20: Skipped (no capable model) gegen Error: Missing API key bei Aufgabe mit Kandidaten ohne Schlüssel (AI-011, Nachträge 25.11.2026)"]
-fn tasks_without_available_candidate_are_skipped_per_confirmed_list_criteria() {
+fn tasks_without_key_for_any_candidate_get_missing_api_key() {
     let anthropic = only("anthropic");
     assert_eq!(
         chosen(TaskType::Embedding, &anthropic),
-        Err(AiStatus::SkippedNoCapableModel)
+        Err(AiStatus::MissingApiKey)
     );
     let openrouter = only("openrouter");
     for task in [
@@ -414,8 +413,84 @@ fn tasks_without_available_candidate_are_skipped_per_confirmed_list_criteria() {
     ] {
         assert_eq!(
             chosen(task, &openrouter),
-            Err(AiStatus::SkippedNoCapableModel),
+            Err(AiStatus::MissingApiKey),
             "{task}"
         );
     }
+}
+
+// spec: AI-010
+// Nachtrag 25.11.2026 „Preise der Decisions API“: 1.000.000 Eingabe-Tokens, davon 400.000 aus dem Cache gelesen →
+// 600.000 × 0,10 + 400.000 × 0,01 je 1 Mio. = 64.000 µUSD vor dem Langkontext-Faktor (nicht 0,10 USD pauschal); der
+// Request liegt über der Schwelle, mit Faktor 2 also 128.000 µUSD.
+#[test]
+fn decisions_estimate_counts_cache_reads_at_the_cache_price() {
+    let table = PriceTable::bundled().unwrap();
+    let rates = table
+        .get(&PriceKey::new("openai", "gpt-6-luna", DECISIONS))
+        .unwrap()
+        .rates(None)
+        .unwrap();
+    let tokens = TokenCounts {
+        input_tokens: 1_000_000,
+        cached_input_tokens: 400_000,
+        cache_write_tokens: 0,
+        output_tokens: 0,
+    };
+    let without_factor = Rates {
+        long_context: None,
+        ..rates.clone()
+    };
+    assert_eq!(
+        cost_of(&tokens, FeeCounts::one_request(0), &without_factor, false)
+            .cost
+            .0,
+        64_000
+    );
+    assert_ne!(
+        cost_of(&tokens, FeeCounts::one_request(0), &rates, false)
+            .cost
+            .0,
+        100_000
+    );
+    assert_eq!(
+        cost_of(&tokens, FeeCounts::one_request(0), &rates, false)
+            .cost
+            .0,
+        128_000
+    );
+}
+
+// spec: AI-010
+// Nachtrag 25.11.2026 „Preise der Decisions API“: oberhalb der Langkontext-Schwelle gilt der Eingabe-Faktor des
+// `responses`-Eintrags; die Ausgabe bleibt 0. Unterhalb der Schwelle gilt der Grundpreis.
+#[test]
+fn decisions_long_context_uses_the_responses_input_factor() {
+    let table = PriceTable::bundled().unwrap();
+    let get = |e| {
+        table
+            .get(&PriceKey::new("openai", "gpt-6-luna", e))
+            .unwrap()
+            .rates(None)
+            .unwrap()
+    };
+    let decisions = get(DECISIONS);
+    let responses = get(RESPONSES);
+    let lc = decisions.long_context.clone().unwrap();
+    assert_eq!(lc, responses.long_context.unwrap());
+    let cost = |input, output| {
+        cost_of(
+            &TokenCounts::plain(input, output),
+            FeeCounts::one_request(0),
+            &decisions,
+            false,
+        )
+        .cost
+        .0
+    };
+    // 300.000 × 0,10 × 2 = 60.000 µUSD; 1.000 Ausgabe-Tokens kosten nichts.
+    assert_eq!(cost(300_000, 1_000), 60_000);
+    assert_eq!(cost(300_000, 0), 60_000);
+    // knapp unter der Schwelle: 271.999 × 0,10 = 27.199,9 → 27.200 µUSD
+    assert_eq!(cost(lc.threshold_input_tokens - 1, 0), 27_200);
 }
