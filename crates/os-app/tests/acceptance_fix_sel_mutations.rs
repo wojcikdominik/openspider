@@ -57,8 +57,9 @@ async fn two_crawls() -> Two {
     }
 }
 
-/// The core writes the final progress snapshot shortly after the session shows `Completed`. Every baseline of the
-/// row-wise comparison waits for that write; otherwise it lands between the two dumps on a slow machine.
+/// The core keeps writing to the crawl file shortly after the session shows `Completed`: the final progress
+/// snapshot and derived view facts. Every baseline of the row-wise comparison waits for these writes; otherwise they
+/// land between the two dumps on a slow machine.
 async fn settled(app: &os_app::App) {
     tokio::time::timeout(std::time::Duration::from_secs(20), async {
         loop {
@@ -83,7 +84,25 @@ async fn settled(app: &os_app::App) {
     })
     .await
     .expect("final progress snapshot of the completed crawl");
-    app.write_queue().flush().await;
+    // Derived view facts (`view_cache`) are stored by a background task of the core once the crawl is complete.
+    // The baseline waits until the crawl file is quiet: three equal dumps in a row, 150 ms apart.
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        let mut last = dump(app).await;
+        let mut quiet = 0;
+        while quiet < 3 {
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+            app.write_queue().flush().await;
+            let now = dump(app).await;
+            if now == last {
+                quiet += 1;
+            } else {
+                quiet = 0;
+                last = now;
+            }
+        }
+    })
+    .await
+    .expect("the crawl file settles after completion");
 }
 
 /// Every row of every table of the session's crawl file, as text (row-wise comparison).
