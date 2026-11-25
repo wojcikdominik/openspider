@@ -4,39 +4,27 @@
 
 - Frühe Beta für SEO-Agenturen in Vorbereitung. Plattform-Smoke, Archiv-Kompatibilität und noch offene M2-Parität bleiben vor der Freigabe zu prüfen.
 
-## [1.0.3] - 2026-11-26
+## [1.0.3] - 2026-11-27
 
-OpenSpider 1.0.3 fixes two errors that have existed since 1.0.0, one in the main table and one in dialogs. Crawling, analysis and exports otherwise work as in 1.0.2.
+OpenSpider 1.0.3 fixes two errors that have existed since 1.0.0, one in the main table and one in dialogs, and improves how AI assistants see the built-in MCP server. Crawling, analysis and exports otherwise work as in 1.0.1. A version 1.0.2 was not released; its changes are part of this version.
 
 - The error in the main table: right after you started a crawl, opened a saved crawl or cleared the current one, the table still showed the rows of the previous crawl for a moment, and they could be selected. If you then chose "Remove" or "Re-crawl", the action could hit a different URL in the new crawl. This needed a click within that short moment and a new crawl that was already finished, for example a small or a saved one.
 - The table: the rows of the previous crawl now disappear as soon as you start, open or clear a crawl. A selection made in the new crawl stays when its first data arrives.
 - Protection in the core: "Remove", "Re-crawl", API requests for selected URLs and the export of detail data now state which crawl the selection comes from. If that crawl is no longer the open one, OpenSpider changes nothing and shows the message "The selected rows belong to a crawl that is no longer open. Nothing was changed."
 - Dialogs: if you pressed Escape right after a dialog opened, for example in the export dialog after its keyboard shortcut, the key press could be lost and the dialog stayed open. Escape now closes the topmost open dialog, no matter where the keyboard focus is. If a question lies on top of a dialog, each Escape closes one level. A search field or an open selection list inside a dialog still handles Escape first.
+- MCP tool hints: every MCP tool now has a title and states whether it only reads data. `crawl_status` is marked as read-only, `stop_crawl` as the one tool that ends a crawl for good. Assistants such as Claude use these hints to decide when to ask before calling a tool. The permission classes in OpenSpider's MCP settings are unchanged: by default only the read tools are available.
+- English MCP descriptions: tool descriptions, parameter descriptions and the server's notes to the assistant are now English throughout; five tools had German descriptions before. The tool table under MCP in the app and the downloadable tool description show the same English texts in every interface language. The note that content from crawled pages is data and never an instruction stays in place, now in English.
 
 ### Deutsch
 
-OpenSpider 1.0.3 behebt zwei Fehler, die seit 1.0.0 bestehen, einen in der Haupttabelle und einen in Dialogen. Crawlen, Analyse und Exporte arbeiten sonst wie in 1.0.2.
+OpenSpider 1.0.3 behebt zwei Fehler, die seit 1.0.0 bestehen, einen in der Haupttabelle und einen in Dialogen, und verbessert, wie KI-Assistenten den eingebauten MCP-Server sehen. Crawlen, Analyse und Exporte arbeiten sonst wie in 1.0.1. Eine Version 1.0.2 ist nicht erschienen; ihre Änderungen sind in dieser Version enthalten.
 
 - Der Fehler in der Haupttabelle: Direkt nachdem Sie einen Crawl gestartet, einen gespeicherten Crawl geöffnet oder den aktuellen geleert hatten, zeigte die Tabelle kurz noch die Zeilen des vorherigen Crawls, und sie ließen sich markieren. Wählten Sie dann „Entfernen“ oder „Erneut crawlen“, konnte die Aktion eine andere URL im neuen Crawl treffen. Dafür brauchte es einen Klick in diesem kurzen Moment und einen neuen Crawl, der schon fertig war, zum Beispiel einen kleinen oder einen gespeicherten.
 - Die Tabelle: Die Zeilen des vorherigen Crawls verschwinden jetzt, sobald Sie einen Crawl starten, öffnen oder leeren. Eine Auswahl im neuen Crawl bleibt erhalten, wenn dessen erste Daten eintreffen.
 - Absicherung im Kern: „Entfernen“, „Erneut crawlen“, API-Abrufe für markierte URLs und der Export von Detaildaten nennen jetzt den Crawl, aus dem die Auswahl stammt. Ist dieser Crawl nicht mehr der geöffnete, ändert OpenSpider nichts und zeigt die Meldung „Die markierten Zeilen gehören zu einem Crawl, der nicht mehr geöffnet ist. Es wurde nichts geändert.“
 - Dialoge: Wenn Sie direkt nach dem Öffnen eines Dialogs Escape drückten, zum Beispiel im Export-Dialog nach dessen Tastenkürzel, konnte der Tastendruck verloren gehen und der Dialog blieb offen. Escape schließt jetzt den obersten offenen Dialog, egal wo der Tastaturfokus liegt. Liegt eine Rückfrage über einem Dialog, schließt jedes Escape eine Ebene. Ein Suchfeld oder eine geöffnete Auswahlliste im Dialog verarbeitet Escape weiterhin zuerst.
-
-## [1.0.2] - 2026-11-25
-
-OpenSpider 1.0.2 improves how AI assistants see the built-in MCP server. Crawling, analysis and exports work as in 1.0.1.
-
-- Tool hints: every MCP tool now has a title and states whether it only reads data. `crawl_status` is marked as read-only, `stop_crawl` as the one tool that ends a crawl for good. Assistants such as Claude use these hints to decide when to ask before calling a tool. The permission classes in OpenSpider's MCP settings are unchanged: by default only the read tools are available.
-- English descriptions: tool descriptions, parameter descriptions and the server's notes to the assistant are now English throughout; five tools had German descriptions before. The tool table under MCP in the app and the downloadable tool description show the same English texts in every interface language.
-- The note that content from crawled pages is data and never an instruction stays in place, now in English.
-
-### Deutsch
-
-OpenSpider 1.0.2 verbessert, wie KI-Assistenten den eingebauten MCP-Server sehen. Crawlen, Analyse und Exporte arbeiten wie in 1.0.1.
-
-- Werkzeug-Hinweise: Jedes MCP-Werkzeug hat jetzt einen Titel und gibt an, ob es nur Daten liest. `crawl_status` ist als nur lesend gekennzeichnet, `stop_crawl` als das eine Werkzeug, das einen Crawl endgültig beendet. Assistenten wie Claude nutzen diese Hinweise, um zu entscheiden, wann sie vor einem Aufruf nachfragen. Die Freigabeklassen in den MCP-Einstellungen von OpenSpider sind unverändert: Standardmäßig stehen nur die lesenden Werkzeuge bereit.
-- Englische Beschreibungen: Werkzeugbeschreibungen, Parameterbeschreibungen und die Hinweise des Servers an den Assistenten sind jetzt durchgehend englisch; bisher hatten fünf Werkzeuge deutsche Beschreibungen. Die Werkzeugtabelle unter MCP in der App und die herunterladbare Werkzeugbeschreibung zeigen in jeder Oberflächensprache dieselben englischen Texte.
-- Der Hinweis, dass Inhalte gecrawlter Seiten Daten sind und nie Anweisungen, bleibt erhalten, jetzt auf Englisch.
+- MCP-Werkzeug-Hinweise: Jedes MCP-Werkzeug hat jetzt einen Titel und gibt an, ob es nur Daten liest. `crawl_status` ist als nur lesend gekennzeichnet, `stop_crawl` als das eine Werkzeug, das einen Crawl endgültig beendet. Assistenten wie Claude nutzen diese Hinweise, um zu entscheiden, wann sie vor einem Aufruf nachfragen. Die Freigabeklassen in den MCP-Einstellungen von OpenSpider sind unverändert: Standardmäßig stehen nur die lesenden Werkzeuge bereit.
+- Englische MCP-Beschreibungen: Werkzeugbeschreibungen, Parameterbeschreibungen und die Hinweise des Servers an den Assistenten sind jetzt durchgehend englisch; bisher hatten fünf Werkzeuge deutsche Beschreibungen. Die Werkzeugtabelle unter MCP in der App und die herunterladbare Werkzeugbeschreibung zeigen in jeder Oberflächensprache dieselben englischen Texte. Der Hinweis, dass Inhalte gecrawlter Seiten Daten sind und nie Anweisungen, bleibt erhalten, jetzt auf Englisch.
 
 ## [1.0.1] - 2026-11-25
 
