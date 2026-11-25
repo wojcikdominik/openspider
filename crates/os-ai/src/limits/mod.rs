@@ -248,7 +248,8 @@ pub enum BreakerEffect {
     /// Setzt die Zählung zurück (Antwort erhalten, auch Refusal).
     Reset,
     /// Weder noch: Kontingent-/Ausgabengrenze (beendet ohnehin alle offenen Einträge des Anbieters, AI-017), fehlender
-    /// Schlüssel und Richtlinie (kein Request) sowie Antwortinhalt-Fehler.
+    /// Schlüssel und Richtlinie (kein Request), Antwortinhalt-Fehler und der Abbruch an der Ausgabegrenze (AI-020,
+    /// Nachtrag Q00-H1: zählt nicht und setzt die Zählung nicht zurück).
     Neutral,
 }
 
@@ -262,7 +263,9 @@ impl BreakerEffect {
             | ProviderError::Timeout { .. }
             | ProviderError::Transport { .. } => Self::Count,
             ProviderError::Refusal => Self::Reset,
-            ProviderError::QuotaExceeded
+            // AI-020 (Nachtrag Q00-H1): Ursache ist die Einstellung, keine Störung des Anbieters.
+            ProviderError::OutputLimitReached { .. }
+            | ProviderError::QuotaExceeded
             | ProviderError::MissingApiKey
             | ProviderError::Policy
             | ProviderError::InvalidOutput
@@ -900,11 +903,17 @@ fn final_error(failure: AttemptFailure) -> FinalError {
     let error_code = failure
         .error_code
         .clone()
-        .or_else(|| failure.cause.map(|c| c.error_code().to_string()));
+        .or_else(|| failure.cause.map(|c| c.error_code().to_string()))
+        .or_else(|| match &failure.error {
+            // AI-014 (Nachtrag Q00-H1): `Error Code` = Grund des Anbieters.
+            ProviderError::OutputLimitReached { reason } => Some(reason.clone()),
+            _ => None,
+        });
     let status = failure.error.status().unwrap_or(AiStatus::ConnectionFailed);
     let message = match &failure.error {
         ProviderError::Transport { message } => message.clone(),
         ProviderError::Http { message, .. } => message.clone(),
+        ProviderError::OutputLimitReached { reason } => format!("output limit reached ({reason})"),
         other => other.to_string(),
     };
     FinalError {

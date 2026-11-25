@@ -46,6 +46,8 @@ fn spec_table() -> Vec<(AiStatus, &'static str)> {
         (AiStatus::BatchExpired, "Error: Batch expired"),
         // Nachtrag 24.11.2026 (K4-15), ergänzt von M4-K06.
         (AiStatus::ConnectionFailed, "Error: Connection failed"),
+        // Nachtrag 24.11.2026 (Q00-H1), ergänzt von M4-K10.
+        (AiStatus::OutputLimitReached, "Error: Output limit reached"),
         (
             AiStatus::HttpError {
                 code: 500,
@@ -84,6 +86,7 @@ fn table_row(s: &AiStatus) -> usize {
         AiStatus::BatchExpired => 11,
         AiStatus::HttpError { .. } => 12,
         AiStatus::ConnectionFailed => 13,
+        AiStatus::OutputLimitReached => 14,
     }
 }
 
@@ -94,17 +97,18 @@ fn every_status_value_has_the_exact_spec_text() {
     let table = spec_table();
     assert_eq!(
         table.len(),
-        24,
-        "24 Statuswerte laut Tabelle AI-020 (mit K4-15)"
+        25,
+        "25 Statuswerte laut Tabelle AI-020 (mit K4-15 und Nachtrag Q00-H1)"
     );
     for (status, text) in &table {
         assert_eq!(status.to_string(), *text);
     }
-    // Alle 14 Tabellenzeilen sind belegt (13 + `Error: Connection failed`, K4-15).
+    // Alle 15 Tabellenzeilen sind belegt (13 + `Error: Connection failed`, K4-15, + `Error: Output limit reached`,
+    // Nachtrag 24.11.2026, Q00-H1).
     let mut rows: Vec<usize> = table.iter().map(|(s, _)| table_row(s)).collect();
     rows.sort_unstable();
     rows.dedup();
-    assert_eq!(rows, (0..14).collect::<Vec<_>>());
+    assert_eq!(rows, (0..15).collect::<Vec<_>>());
     // Keine zwei Werte mit demselben Text.
     let mut texts: Vec<&str> = table.iter().map(|(_, t)| *t).collect();
     texts.sort_unstable();

@@ -1,7 +1,7 @@
 use os_ai::{provider::ProviderError, AiStatus};
 use proptest::prelude::*;
 fn fixture() -> Vec<AiStatus> {
-    serde_json::from_str(r#"["Success", "Success (cached)", "Refusal", "Pending", "Pending (batch)", "Pending (confirmation)", "Pending (consent)", "Skipped (scope)", "Skipped (segment)", "Skipped (empty input)", "Skipped (policy)", "Skipped (no capable model)", "Skipped (image too large)", "Skipped (unsupported format)", "Skipped (no declared language)", "Budget exceeded", "Quota exceeded", "Error: Missing API key", "Error: Invalid output", "Error: Missing answer", "Error: Batch expired", "Error: Connection failed"]"#).unwrap()
+    serde_json::from_str(r#"["Success", "Success (cached)", "Refusal", "Pending", "Pending (batch)", "Pending (confirmation)", "Pending (consent)", "Skipped (scope)", "Skipped (segment)", "Skipped (empty input)", "Skipped (policy)", "Skipped (no capable model)", "Skipped (image too large)", "Skipped (unsupported format)", "Skipped (no declared language)", "Budget exceeded", "Quota exceeded", "Error: Missing API key", "Error: Invalid output", "Error: Missing answer", "Error: Batch expired", "Error: Connection failed", "Error: Output limit reached"]"#).unwrap()
 }
 // spec: AI-020
 #[test]
@@ -59,6 +59,9 @@ fn documented_errors_have_canonical_statuses_without_invented_transport_codes() 
             status: 500,
             message: "fixture".into(),
         },
+        ProviderError::OutputLimitReached {
+            reason: "max_tokens".into(),
+        },
     ];
     for error in fixture {
         assert!(!error.status().unwrap().to_string().is_empty());
@@ -83,7 +86,7 @@ fn documented_errors_have_canonical_statuses_without_invented_transport_codes() 
 proptest! {
     // spec: AI-020
     #[test]
-    fn arbitrary_status_columns_use_only_canonical_values(index in 0usize..24, seconds in 0u64..3601, code in 400u16..600) {
+    fn arbitrary_status_columns_use_only_canonical_values(index in 0usize..25, seconds in 0u64..3601, code in 400u16..600) {
         let mut statuses=fixture(); statuses.push(AiStatus::Timeout { seconds });statuses.push(AiStatus::HttpError { code,message:"fixture".into() });
         let status=&statuses[index];
         let text=status.to_string();
