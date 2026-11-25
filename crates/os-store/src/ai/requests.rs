@@ -12,6 +12,55 @@ pub const TABLE: &str = "ai_requests";
 /// Höchstlänge der Spalte `Refusal Reason` in Zeichen (AI-014).
 pub const REFUSAL_REASON_MAX_CHARS: usize = 500;
 
+/// Kanonische Spaltennamen der Ansicht „KI-Protokoll“ und des Exports „AI Request Log“ in der Reihenfolge von AI-014,
+/// mit den Spalten des Nachtrags 24.11.2026 (Q00): `Reasoning Level` nach `Endpoint`, `Reasoning Tokens` nach
+/// `Output Tokens`, `Computed Cost (USD)` nach `Cost (USD)`; `Refusal Reason` aus den Kriterien am Ende. Die
+/// Kennzeichen `over_reservation`, `confidence_mismatch` und `cost_mismatch` sind keine Spalten dieser Liste.
+pub const COLUMNS: [&str; 30] = [
+    "Timestamp",
+    "Run",
+    "Task",
+    "Provider",
+    "Model",
+    "Endpoint",
+    "Reasoning Level",
+    "Address",
+    "Question/Prompt Version",
+    "Input Tokens",
+    "Cached Input Tokens",
+    "Cache Write Tokens",
+    "Output Tokens",
+    "Reasoning Tokens",
+    "Images",
+    "Token Cost (USD)",
+    "Fixed Fees (USD)",
+    "Regional Uplift (USD)",
+    "Cost (USD)",
+    "Computed Cost (USD)",
+    "Price Source",
+    "Batch",
+    "Cache Hit",
+    "Status",
+    "HTTP Status",
+    "Error Code",
+    "Duration ms",
+    "Provider Request ID",
+    "Retries",
+    "Refusal Reason",
+];
+
+/// Werte der Spalte `Reasoning Level` (AI-011, Nachtrag 24.11.2026, Q00); dieselben Namen erzwingt die Tabelle per CHECK.
+pub const REASONING_LEVELS: [&str; 8] = [
+    "model-default",
+    "off",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+];
+
 /// Herkunft des Preises einer Zeile (`Price Source`, AI-014).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PriceSource {
@@ -20,6 +69,8 @@ pub enum PriceSource {
     User,
     /// Anbieter lieferte keine `usage`; Kosten aus der lokalen Schätzung (AI-012, AI-004).
     Estimate,
+    /// Ist-Kosten vom Anbieter je Antwort gemeldet (OpenRouter `usage.cost`; AI-005, AI-014, Nachtrag 24.11.2026).
+    Reported,
 }
 impl PriceSource {
     pub fn as_str(self) -> &'static str {
@@ -28,6 +79,7 @@ impl PriceSource {
             PriceSource::Table => "table",
             PriceSource::User => "user",
             PriceSource::Estimate => "estimate",
+            PriceSource::Reported => "reported",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
@@ -36,6 +88,7 @@ impl PriceSource {
             "table" => PriceSource::Table,
             "user" => PriceSource::User,
             "estimate" => PriceSource::Estimate,
+            "reported" => PriceSource::Reported,
             _ => return None,
         })
     }
@@ -85,12 +138,39 @@ pub struct RequestRecord {
     pub estimated_input_tokens: Option<u64>,
 }
 
+/// Spalten des Nachtrags 24.11.2026, Q00 (AI-014) zu einer [`RequestRecord`]. Getrennt gehalten, damit bestehende
+/// Aufrufer von [`insert`] unverändert bleiben; [`RequestDetails::default`] ergibt leere Stufe und Reasoning-Tokens,
+/// `Computed Cost` = `Cost` und `cost_mismatch = false`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RequestDetails {
+    /// `Reasoning Level`: effektiv gesendete Stufe (Werte aus [`REASONING_LEVELS`]); `None` bei Decisions, Embeddings
+    /// und Cache-Treffern.
+    pub reasoning_level: Option<String>,
+    /// `Reasoning Tokens` (Teilmenge von `Output Tokens`); `None`, wenn der Anbieter nichts meldet.
+    pub reasoning_tokens: Option<u64>,
+    /// `Computed Cost (USD)`: lokal aus Preisen berechneter Betrag; `None` = gleich `Cost (USD)`. Ein abweichender
+    /// Wert ist nur bei `Price Source = reported` zulässig.
+    pub computed_cost: Option<MicroUsd>,
+    /// `cost_mismatch` (AI-005): gemeldete und berechnete Kosten weichen um mehr als 1 % und 1 µUSD ab; nur bei
+    /// `Price Source = reported`.
+    pub cost_mismatch: bool,
+}
+
+impl RequestDetails {
+    /// `Computed Cost` der Zeile (`None` → `Cost`).
+    pub fn computed_cost_of(&self, record: &RequestRecord) -> MicroUsd {
+        self.computed_cost.unwrap_or(record.cost)
+    }
+}
+
 /// Gelesene Zeile mit Kennung und Adresse (aus `urls`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoggedRequest {
     pub id: i64,
     pub address: Option<String>,
     pub record: RequestRecord,
+    /// Spalten des Nachtrags Q00; `computed_cost` ist beim Lesen immer gesetzt.
+    pub details: RequestDetails,
 }
 
 /// Summenzeile je Aufgabe und Modell (AI-014).
@@ -103,11 +183,15 @@ pub struct RequestTotals {
     pub cached_input_tokens: u64,
     pub cache_write_tokens: u64,
     pub output_tokens: u64,
+    /// Summe `Reasoning Tokens` (Teilmenge von `output_tokens`, nicht zusätzlich berechnet; AI-014 Nachtrag).
+    pub reasoning_tokens: u64,
     pub images: u64,
     pub token_cost: MicroUsd,
     pub fixed_fees: MicroUsd,
     pub regional_uplift: MicroUsd,
     pub cost: MicroUsd,
+    /// Summe `Computed Cost (USD)`.
+    pub computed_cost: MicroUsd,
 }
 
 /// Filter der Ansicht „KI-Protokoll“ (Aufgabe, Modell, Status, Zeitraum `[from, to]`).
@@ -135,8 +219,32 @@ fn truncate_chars(s: &str, max: usize) -> &str {
 }
 
 /// Schreibt eine Zeile und gibt ihre Kennung zurück. Verweigert Zeilen, deren `cost` nicht der Summe der drei
-/// Bestandteile entspricht.
+/// Bestandteile entspricht. Spalten des Nachtrags Q00 mit [`RequestDetails::default`].
 pub fn insert(conn: &Connection, r: &RequestRecord) -> Result<i64, StoreError> {
+    insert_with_details(conn, r, &RequestDetails::default())
+}
+
+/// Schreibt eine Zeile mit den Spalten des Nachtrags 24.11.2026, Q00 (AI-014). Verweigert zusätzlich ein
+/// abweichendes `Computed Cost` oder `cost_mismatch` ohne `Price Source = reported` und eine unbekannte Stufe.
+pub fn insert_with_details(
+    conn: &Connection,
+    r: &RequestRecord,
+    d: &RequestDetails,
+) -> Result<i64, StoreError> {
+    let computed = d.computed_cost_of(r);
+    if r.price_source != PriceSource::Reported && (computed != r.cost || d.cost_mismatch) {
+        return Err(StoreError::InvalidInput(format!(
+            "computed cost {} / cost_mismatch {} only differ from cost {} with price source reported",
+            computed.0, d.cost_mismatch, r.cost.0
+        )));
+    }
+    if let Some(level) = &d.reasoning_level {
+        if !REASONING_LEVELS.contains(&level.as_str()) {
+            return Err(StoreError::InvalidInput(format!(
+                "unknown reasoning level {level:?}"
+            )));
+        }
+    }
     let sum = r
         .token_cost
         .checked_add(r.fixed_fees)
@@ -156,9 +264,10 @@ pub fn insert(conn: &Connection, r: &RequestRecord) -> Result<i64, StoreError> {
            reservation_microusd, redactions, input_tokens, output_tokens, cached_input_tokens, cache_write_tokens,
            images, token_cost_microusd, fixed_fees_microusd, regional_uplift_microusd, cost_microusd, price_source,
            batch_id, cache_hit, status, http_status, error_code, error_message, refusal_reason, duration_ms,
-           provider_request_id, retries, over_reservation, confidence_mismatch, estimated_input_tokens)
+           provider_request_id, retries, over_reservation, confidence_mismatch, estimated_input_tokens,
+           reasoning_level, reasoning_tokens, computed_cost_microusd, cost_mismatch)
          VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-           ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33)",
+           ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37)",
         params![
             r.run_id,
             r.timestamp,
@@ -193,6 +302,10 @@ pub fn insert(conn: &Connection, r: &RequestRecord) -> Result<i64, StoreError> {
             r.over_reservation,
             r.confidence_mismatch,
             opt_i64(r.estimated_input_tokens, "estimated_input_tokens")?,
+            d.reasoning_level,
+            opt_i64(d.reasoning_tokens, "reasoning_tokens")?,
+            i64_of(computed.0, "computed_cost")?,
+            d.cost_mismatch,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -210,6 +323,8 @@ fn opt_u64(row: &Row<'_>, idx: &str) -> rusqlite::Result<Option<u64>> {
 
 fn read_row(row: &Row<'_>) -> rusqlite::Result<LoggedRequest> {
     let price: String = row.get("price_source")?;
+    let cost = micro(row, "cost_microusd")?;
+    let computed = opt_u64(row, "computed_cost_microusd")?.map_or(cost, MicroUsd);
     Ok(LoggedRequest {
         id: row.get("id")?,
         address: row.get("address")?,
@@ -233,7 +348,7 @@ fn read_row(row: &Row<'_>) -> rusqlite::Result<LoggedRequest> {
             fixed_fees: micro(row, "fixed_fees_microusd")?,
             regional_uplift: micro(row, "regional_uplift_microusd")?,
             cost: micro(row, "cost_microusd")?,
-            // Die Tabelle erzwingt die vier Werte per CHECK.
+            // Die Tabelle erzwingt die fünf Werte per CHECK.
             price_source: PriceSource::parse(&price).unwrap_or(PriceSource::Table),
             batch_id: row.get("batch_id")?,
             cache_hit: row.get("cache_hit")?,
@@ -248,6 +363,12 @@ fn read_row(row: &Row<'_>) -> rusqlite::Result<LoggedRequest> {
             over_reservation: row.get("over_reservation")?,
             confidence_mismatch: row.get("confidence_mismatch")?,
             estimated_input_tokens: opt_u64(row, "estimated_input_tokens")?,
+        },
+        details: RequestDetails {
+            reasoning_level: row.get("reasoning_level")?,
+            reasoning_tokens: opt_u64(row, "reasoning_tokens")?,
+            computed_cost: Some(computed),
+            cost_mismatch: row.get("cost_mismatch")?,
         },
     })
 }
@@ -279,7 +400,8 @@ pub fn totals_by_task_and_model(conn: &Connection) -> Result<Vec<RequestTotals>,
         "SELECT task, model, count(*), coalesce(sum(input_tokens),0), coalesce(sum(cached_input_tokens),0),
                 coalesce(sum(cache_write_tokens),0), coalesce(sum(output_tokens),0), coalesce(sum(images),0),
                 coalesce(sum(token_cost_microusd),0), coalesce(sum(fixed_fees_microusd),0),
-                coalesce(sum(regional_uplift_microusd),0), coalesce(sum(cost_microusd),0)
+                coalesce(sum(regional_uplift_microusd),0), coalesce(sum(cost_microusd),0),
+                coalesce(sum(reasoning_tokens),0), coalesce(sum(coalesce(computed_cost_microusd, cost_microusd)),0)
          FROM ai_requests GROUP BY task, model ORDER BY task, model",
     )?;
     let u = |v: i64| u64::try_from(v).unwrap_or(0);
@@ -297,6 +419,8 @@ pub fn totals_by_task_and_model(conn: &Connection) -> Result<Vec<RequestTotals>,
             fixed_fees: MicroUsd(u(r.get(9)?)),
             regional_uplift: MicroUsd(u(r.get(10)?)),
             cost: MicroUsd(u(r.get(11)?)),
+            reasoning_tokens: u(r.get(12)?),
+            computed_cost: MicroUsd(u(r.get(13)?)),
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -347,6 +471,33 @@ pub fn calibration_samples(
         ))
     })?;
     let mut samples: Vec<(u64, u64)> = rows.collect::<Result<_, _>>()?;
+    samples.reverse();
+    Ok(samples)
+}
+
+/// Ausgabe-Tokens der letzten `limit` erfolgreichen Requests einer (Anbieter, Modell, Aufgabe, effektive Stufe),
+/// älteste zuerst – Grundlage des Ausgabe-Korrekturfaktors (AI-012, Nachtrag 24.11.2026, Q00). Es zählen nur Zeilen
+/// mit Status `Success`, gemeldeten Ausgabe-Tokens und ohne Cache-Treffer; `reasoning_level = None` sucht Zeilen ohne
+/// Stufe (z. B. Decisions).
+pub fn output_calibration_samples(
+    conn: &Connection,
+    provider: &str,
+    model: &str,
+    task: &str,
+    reasoning_level: Option<&str>,
+    limit: usize,
+) -> Result<Vec<u64>, StoreError> {
+    let mut st = conn.prepare(
+        "SELECT output_tokens FROM ai_requests
+         WHERE provider = ?1 AND model = ?2 AND task = ?3 AND reasoning_level IS ?4 AND cache_hit = 0
+           AND status = 'Success' AND output_tokens IS NOT NULL
+         ORDER BY id DESC LIMIT ?5",
+    )?;
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let rows = st.query_map(params![provider, model, task, reasoning_level, limit], |r| {
+        Ok(u64::try_from(r.get::<_, i64>(0)?).unwrap_or(0))
+    })?;
+    let mut samples: Vec<u64> = rows.collect::<Result<_, _>>()?;
     samples.reverse();
     Ok(samples)
 }

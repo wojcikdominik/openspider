@@ -38,7 +38,7 @@ CREATE TABLE ai_requests (
  fixed_fees_microusd INTEGER NOT NULL DEFAULT 0 CHECK(fixed_fees_microusd >= 0),
  regional_uplift_microusd INTEGER NOT NULL DEFAULT 0 CHECK(regional_uplift_microusd >= 0),
  cost_microusd INTEGER NOT NULL CHECK(cost_microusd >= 0),
- price_source TEXT NOT NULL CHECK(price_source IN ('api','table','user','estimate')),
+ price_source TEXT NOT NULL CHECK(price_source IN ('api','table','user','estimate','reported')),
  batch_id INTEGER REFERENCES ai_batches(id), cache_hit INTEGER NOT NULL DEFAULT 0 CHECK(cache_hit IN (0,1)),
  status TEXT NOT NULL, http_status INTEGER, error_code TEXT, error_message TEXT,
  refusal_reason TEXT CHECK(refusal_reason IS NULL OR length(refusal_reason) <= 500),
@@ -47,7 +47,15 @@ CREATE TABLE ai_requests (
  over_reservation INTEGER NOT NULL DEFAULT 0 CHECK(over_reservation IN (0,1)),
  confidence_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(confidence_mismatch IN (0,1)),
  -- AI-012: geschätzte Eingabe-Tokens vor Korrekturfaktor (Kalibrierung Ist/Schätzung); NULL z. B. bei Cache-Treffern.
- estimated_input_tokens INTEGER CHECK(estimated_input_tokens >= 0)
+ estimated_input_tokens INTEGER CHECK(estimated_input_tokens >= 0),
+ -- AI-014 (Nachtrag 24.11.2026, Q00): effektiv gesendete Reasoning-Stufe (NULL bei Decisions, Embeddings, Cache-Treffern),
+ -- Reasoning-Tokens als Teilmenge von output_tokens (NULL, wenn der Anbieter nichts meldet), lokal berechnete Kosten
+ -- (NULL = gleich cost_microusd; abweichend nur bei price_source 'reported') und Kennzeichen cost_mismatch (AI-005).
+ reasoning_level TEXT CHECK(reasoning_level IS NULL OR reasoning_level IN
+   ('model-default','off','minimal','low','medium','high','xhigh','max')),
+ reasoning_tokens INTEGER CHECK(reasoning_tokens >= 0),
+ computed_cost_microusd INTEGER CHECK(computed_cost_microusd >= 0),
+ cost_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(cost_mismatch IN (0,1))
 );
 CREATE INDEX ai_requests_task ON ai_requests(task, model, timestamp);
 CREATE INDEX ai_requests_run ON ai_requests(run_id);
