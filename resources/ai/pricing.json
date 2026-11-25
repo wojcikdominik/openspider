@@ -45,8 +45,14 @@
       "endpoint": "decisions",
       "input_per_million": 0.1,
       "output_per_million": 0,
-      "cache_read_per_million": 0,
-      "cache_write_per_million": 0,
+      "cache_read_per_million": 0.01,
+      "cache_write_per_million": 0.125,
+      "long_context": {
+        "threshold_input_tokens": 272000,
+        "input_factor": 2,
+        "output_factor": 1.5,
+        "cache_read_factor": 2
+      },
       "regional_surcharge": {
         "eu": 0.1
       },
@@ -55,7 +61,7 @@
       "capabilities": {
         "decisions": true
       },
-      "note": "Decisions-Leitfaden (source_url): ungecachte Eingabe 0,10, Ausgabe nicht berechnet, Regionalzuschlag gilt. Cache-Lesen/-Schreiben und Langkontext hier 0 bzw. ohne Faktor nach AI-010 („alle anderen Positionen 0“); der Leitfaden nennt Cache zu Standardpreisen und Langkontext-Faktoren – Widerspruch zur Spec, offen im Bericht K4-20."
+      "note": "Decisions-Leitfaden: ungecachte Eingabe 0,10; Cache-Lesen und -Schreiben zu den Standardpreisen von gpt-6-luna (0,01 / 0,125 laut Preisseite); Ausgabe nicht berechnet; Regionalzuschlag und Langkontext-Faktoren gelten (wie responses, Schwelle 272.000). Kein Batch. AI-010, Nachtrag 25.11.2026 „Preise der Decisions API“."
     },
     {
       "provider": "openai",
