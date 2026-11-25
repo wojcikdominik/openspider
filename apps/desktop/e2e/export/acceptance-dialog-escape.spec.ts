@@ -29,6 +29,16 @@ const focusInside = (page: Page) => page.evaluate(() => {
   const top = all[all.length - 1];
   return !!top && top.contains(document.activeElement);
 });
+/**
+ * Deterministic "focus lies on body": wait until React Aria has moved the focus into the topmost dialog (it may do so a
+ * frame after opening), stop the page clock so that no later frame moves it back, then blur and check the precondition.
+ */
+async function moveFocusToBody(page: Page) {
+  await expect.poll(() => focusInside(page), { message: "focus has entered the dialog" }).toBe(true);
+  await freeze(page);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  expect(await page.evaluate(() => document.activeElement === document.body), "precondition: focus lies on body").toBe(true);
+}
 /** Activates `trigger` without key or pointer (as a screen reader or a programmatic click would). */
 const virtualClick = (trigger: Locator) => trigger.evaluate(el => (el as HTMLElement).click());
 
@@ -57,10 +67,12 @@ test("Escape while the focus lies on body closes the open dialog and returns the
   const trigger = exportButton(page);
   await trigger.click();
   await expect(dialog(page)).toBeVisible();
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  await moveFocusToBody(page);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await page.clock.resume();
+  await frames(page);
   await expect(trigger).toBeFocused();
 });
 
@@ -151,9 +163,10 @@ test("while the export is starting (running operation) Escape leaves the dialog 
   await options.getByRole("heading", { name: "Export options" }).click();
   await page.keyboard.press("Escape");
   await expect(options).toBeVisible();
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await moveFocusToBody(page);
   await page.keyboard.press("Escape");
   await expect(options).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement === document.body), "the Escape went out from body").toBe(true);
 });
 
 // spec: UI-015

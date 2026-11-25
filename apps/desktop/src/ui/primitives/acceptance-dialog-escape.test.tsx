@@ -21,13 +21,14 @@ const esc = (target: EventTarget, init: KeyboardEventInit = {}) => {
 /** Moves the focus out of every dialog onto `body` (the gap before the focus has entered a freshly opened dialog). */
 const focusBody = () => act(() => { (document.activeElement as HTMLElement | null)?.blur(); });
 
-function Host({ title = "Demo", opener = "Open", refuse = false, onChange, children, isDismissable, footer }: {
-  title?: string; opener?: string; refuse?: boolean; onChange?: (open: boolean) => void; children?: ReactNode; isDismissable?: boolean; footer?: ReactNode;
+function Host({ title = "Demo", opener = "Open", refuse = false, onChange, children, isDismissable, isKeyboardDismissDisabled, footer }: {
+  title?: string; opener?: string; refuse?: boolean; onChange?: (open: boolean) => void; children?: ReactNode; isDismissable?: boolean;
+  isKeyboardDismissDisabled?: boolean; footer?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return <>
     <button type="button" onClick={() => setOpen(true)}>{opener}</button>
-    <Dialog title={title} isOpen={open} isDismissable={isDismissable} footer={footer}
+    <Dialog title={title} isOpen={open} isDismissable={isDismissable} isKeyboardDismissDisabled={isKeyboardDismissDisabled} footer={footer}
       onOpenChange={value => { onChange?.(value); if (!value && refuse) return; setOpen(value); }}>
       <button type="button">Inside</button>
       {children}
@@ -227,6 +228,71 @@ describe("UI-015 Abnahme: Escape am Dialog-Baustein", () => {
     esc(document.body);
     expect(screen.getByRole("dialog", { name: "Demo" })).toBeVisible();
     expect(trigger).not.toHaveFocus();
+  });
+
+  // spec: UI-015
+  // acceptance: independent
+  it("4 (Festlegung 25.11.): isKeyboardDismissDisabled keeps the dialog open on Escape, focus inside or outside", () => {
+    const onChange = vi.fn();
+    render(<Host isKeyboardDismissDisabled onChange={onChange} />);
+    open();
+    const inside = within(screen.getByRole("dialog")).getByRole("button", { name: "Inside" });
+    act(() => inside.focus());
+    esc(inside);
+    expect(screen.getByRole("dialog", { name: "Demo" })).toBeVisible();
+    focusBody();
+    esc(document.body);
+    expect(screen.getByRole("dialog", { name: "Demo" })).toBeVisible();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // spec: UI-015
+  // acceptance: independent
+  it("3+4: a topmost mandatory dialog (isKeyboardDismissDisabled) does not let Escape close the dialog below it", () => {
+    const outerChange = vi.fn();
+    function Pair() {
+      const [outer, setOuter] = useState(true);
+      return <>
+        <Dialog title="Outer" isOpen={outer} onOpenChange={v => { outerChange(v); setOuter(v); }}><button type="button">Outer button</button></Dialog>
+        <Dialog title="Mandatory" isOpen isKeyboardDismissDisabled onOpenChange={() => undefined}><button type="button">Mandatory button</button></Dialog>
+      </>;
+    }
+    render(<Pair />);
+    const inner = screen.getByRole("button", { name: "Mandatory button", hidden: true });
+    act(() => inner.focus());
+    esc(inner);
+    focusBody();
+    esc(document.body);
+    esc(screen.getByRole("button", { name: "Outer button", hidden: true }));
+    expect(screen.getByRole("dialog", { name: "Mandatory", hidden: true })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Outer", hidden: true })).toBeInTheDocument();
+    expect(outerChange).not.toHaveBeenCalled();
+  });
+
+  // spec: UI-015
+  // acceptance: independent
+  it("3 (B1-1): with the key target still in the outer dialog, Escape closes only the inner dialog", async () => {
+    function Nested() {
+      const [outer, setOuter] = useState(false);
+      const [inner, setInner] = useState(false);
+      return <>
+        <button type="button" onClick={() => setOuter(true)}>Open outer</button>
+        <Dialog title="Outer" isOpen={outer} onOpenChange={setOuter}>
+          <button type="button" onClick={() => setInner(true)}>Open inner</button>
+          <Dialog title="Inner" isOpen={inner} onOpenChange={setInner}><button type="button">Inner button</button></Dialog>
+        </Dialog>
+      </>;
+    }
+    render(<Nested />);
+    open("Open outer");
+    const innerTrigger = within(screen.getByRole("dialog", { name: "Outer" })).getByRole("button", { name: "Open inner" });
+    act(() => innerTrigger.focus());
+    fireEvent.click(innerTrigger);
+    expect(screen.getByRole("dialog", { name: "Inner" })).toBeVisible();
+    esc(innerTrigger);
+    expect(screen.queryByRole("dialog", { name: "Inner", hidden: true })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Outer" })).toBeVisible();
+    await waitFor(() => expect(innerTrigger).toHaveFocus());
   });
 
   // spec: UI-015
