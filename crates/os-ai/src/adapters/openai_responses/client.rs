@@ -259,7 +259,10 @@ impl OpenAiHttp {
                 .or(self.limiter())
                 .map(|l| l.clock().wall_unix_millis())
                 .unwrap_or_else(wall_now_millis);
-            return Err(self.classify_error(status, &headers, &body, now));
+            // Request-ID auch bei Fehlern (AI-001/AI-003/AI-004, Nachtrag Q00-N2, N6: Header `x-request-id`).
+            return Err(self
+                .classify_error(status, &headers, &body, now)
+                .with_request_id(header_text(&headers, "x-request-id")));
         }
         Ok(HttpReply {
             status,
@@ -355,19 +358,18 @@ fn wall_now_millis() -> i64 {
 
 /// `usage` einer OpenAI-Antwort in einheitlicher Form (AI-001): `input_tokens` (einschließlich der aus dem
 /// Anbieter-Cache gelesenen Tokens, Festlegung 24.11.2026 – OpenAI zählt sie bereits so), `output_tokens`,
-/// `input_tokens_details.cached_tokens`; Cache-Schreiben meldet OpenAI nicht (`null`). Fehlende Felder bleiben `null`.
-/// `None`, wenn die Antwort kein `usage`-Objekt hat.
+/// `input_tokens_details.cached_tokens`, `input_tokens_details.cache_write_tokens` (Nachtrag Q00-N1) und
+/// `output_tokens_details.reasoning_tokens` (Nachtrag Q00-H1). Fehlende Felder bleiben `null`. `None`, wenn die
+/// Antwort kein `usage`-Objekt hat.
 pub fn parse_usage(body: &Value) -> Option<Usage> {
     let usage = body.get("usage").filter(|u| u.is_object())?;
+    let field = |pointer: &str| usage.pointer(pointer).and_then(Value::as_u64);
     Some(Usage {
-        input_tokens: usage.get("input_tokens").and_then(Value::as_u64),
-        output_tokens: usage.get("output_tokens").and_then(Value::as_u64),
-        cached_input_tokens: usage
-            .get("input_tokens_details")
-            .and_then(|d| d.get("cached_tokens"))
-            .and_then(Value::as_u64),
-        cache_write_tokens: None,
-        reasoning_tokens: None,
+        input_tokens: field("/input_tokens"),
+        output_tokens: field("/output_tokens"),
+        cached_input_tokens: field("/input_tokens_details/cached_tokens"),
+        cache_write_tokens: field("/input_tokens_details/cache_write_tokens"),
+        reasoning_tokens: field("/output_tokens_details/reasoning_tokens"),
     })
 }
 
@@ -401,6 +403,13 @@ impl RequestMeta {
     ) -> Self {
         let (http_status, usage, request_id, received) = match (&exec.result, reply) {
             (Ok(_), Some((status, usage, id))) => (Some(status), usage, id, true),
+            // Fehlerantwort: Request-ID der letzten Antwort (M4-K09, Befund B1).
+            (Err(error), _) => (
+                exec.http_status(),
+                None,
+                error.provider_request_id.clone(),
+                false,
+            ),
             _ => (exec.http_status(), None, None, false),
         };
         Self {

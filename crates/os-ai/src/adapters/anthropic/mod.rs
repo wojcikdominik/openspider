@@ -9,6 +9,7 @@
 //! Einstieg für die Ausführung (D01): [`AnthropicAdapter::send`] je Versuch innerhalb von
 //! [`crate::limits::Limiter::run`] und [`crate::schema::run_with_repair`]; das gemeinsame [`AiProvider`] nutzt denselben
 //! Weg ohne Wiederholung.
+pub mod reasoning;
 pub mod shared;
 
 use std::collections::HashMap;
@@ -21,13 +22,14 @@ use serde_json::{json, Map, Value};
 
 use crate::limits::{AttemptFailure, Limiter};
 use crate::provider::{
-    AiProvider, Capabilities, CapabilitySource, Input, Model, ProviderError, ProviderFuture,
-    Request, Usage,
+    resolve_reasoning_level, AiProvider, Capabilities, CapabilitySource, Input, Model,
+    ProviderError, ProviderFuture, ReasoningLevel, Request, Usage,
 };
 use crate::schema::{RawAnswer, RepairRequest};
 
 pub use shared::{
-    base64_encode, image_input, sniff_image_media_type, AdapterReply, ApiKey, QuotaLatch, QuotaStop,
+    base64_encode, image_input, sniff_image_media_type, AdapterReply, ApiKey, OutputLimitReached,
+    QuotaLatch, QuotaStop,
 };
 use shared::{
     elapsed_ms, error_message, http_failure, opt_u64, quota_failure, rate_limited, raw_from_text,
@@ -105,6 +107,12 @@ pub struct AnthropicModel {
     pub effort_supported: bool,
     /// Stufen mit `effort.<stufe>.supported = true` (aufsteigend); leer, wenn `effort.supported` nicht `true` ist.
     pub effort_levels: Vec<String>,
+    /// `thinking.supported` (Nachtrag Q00-H1); ohne Knoten `false`.
+    pub thinking_supported: bool,
+    /// `thinking.types.adaptive.supported` (nur mit `thinking.supported`).
+    pub thinking_adaptive: bool,
+    /// `thinking.types.disabled.supported` (nur mit `thinking.supported`): `off` ist „sicher aus“.
+    pub thinking_disabled: bool,
 }
 
 /// Wählbarkeit eines Modells für eine Aufgabe (AI-002, AI-005, AI-011).
@@ -147,7 +155,16 @@ impl AnthropicModel {
                 level.clone(),
             )
         });
+        let thinking = node("thinking");
+        let thinking_supported = supported(thinking);
+        let thinking_type = |name: &str| {
+            thinking_supported
+                && supported(thinking.and_then(|t| t.pointer(&format!("/types/{name}"))))
+        };
         Some(Self {
+            thinking_adaptive: thinking_type("adaptive"),
+            thinking_disabled: thinking_type("disabled"),
+            thinking_supported,
             id,
             display_name: entry
                 .get("display_name")
@@ -183,7 +200,49 @@ impl AnthropicModel {
             endpoint: ENDPOINT.into(),
             capabilities: self.capabilities(),
             capability_source: CapabilitySource::AnthropicModels,
-            reasoning_levels: Vec::new(),
+            reasoning_levels: self.reasoning_levels(),
+        }
+    }
+
+    /// Verfügbare Reasoning-Stufen (AI-002, Nachtrag Q00-H1), aufsteigend: `off` nur bei
+    /// `thinking.types.disabled.supported`, dazu die Aufwandsstufen aus `capabilities.effort`; ohne `effort` nur
+    /// `model-default` (leere Liste).
+    pub fn reasoning_levels(&self) -> Vec<ReasoningLevel> {
+        let mut levels = Vec::new();
+        if self.thinking_disabled {
+            levels.push(ReasoningLevel::Off);
+        }
+        if self.effort_supported {
+            levels.extend(reasoning::levels_from_efforts(
+                self.effort_levels.iter().map(String::as_str),
+            ));
+        }
+        levels.sort_by_key(|level| level.rank());
+        levels.dedup();
+        levels
+    }
+
+    /// Effektive Stufe dieses Modells für die gewünschte Stufe (AI-011, Nachtrag).
+    pub fn effective_reasoning(&self, requested: ReasoningLevel) -> ReasoningLevel {
+        resolve_reasoning_level(requested, &self.reasoning_levels())
+    }
+
+    /// `thinking` und `output_config.effort` für die gewünschte Stufe (AI-002, Nachtrag Q00-H1): `off` → `thinking`
+    /// `disabled` ohne Aufwand; `minimal` … `max` → `adaptive` (nur wenn unterstützt) plus der Aufwand der effektiven
+    /// Stufe; `model-default` bzw. keine verfügbare Stufe → keines der beiden Felder.
+    pub fn reasoning_params(
+        &self,
+        requested: ReasoningLevel,
+    ) -> (Option<Value>, Option<&'static str>) {
+        match self.effective_reasoning(requested) {
+            ReasoningLevel::ModelDefault => (None, None),
+            ReasoningLevel::Off => (reasoning::anthropic_thinking(ReasoningLevel::Off), None),
+            level => (
+                self.thinking_adaptive
+                    .then(|| reasoning::anthropic_thinking(level))
+                    .flatten(),
+                reasoning::effort_value(level),
+            ),
         }
     }
 
@@ -301,7 +360,9 @@ impl AnthropicAdapter {
                 .map_err(|e| AttemptFailure::from_reqwest(&e))?;
             let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
             if !status.is_success() {
-                return Err(self.classify_error(status, &headers, &body));
+                return Err(self
+                    .classify_error(status, &headers, &body)
+                    .with_request_id(request_id(&headers, &body)));
             }
             let page = body.get("data").and_then(Value::as_array);
             out.extend(
@@ -395,7 +456,18 @@ impl AnthropicAdapter {
                 json!({"type": "json_schema", "schema": schema}),
             );
         }
-        if let (Some(wanted), Some(model)) = (request.effort.as_deref(), model) {
+        if request.reasoning != ReasoningLevel::ModelDefault {
+            // Reasoning-Stufe (Nachtrag Q00-H1) hat Vorrang vor dem älteren Feld `effort`.
+            if let Some(model) = model {
+                let (thinking, effort) = model.reasoning_params(request.reasoning);
+                if let Some(thinking) = thinking {
+                    body.insert("thinking".into(), thinking);
+                }
+                if let Some(effort) = effort {
+                    output_config.insert("effort".into(), json!(effort));
+                }
+            }
+        } else if let (Some(wanted), Some(model)) = (request.effort.as_deref(), model) {
             if let Some(level) = model.effort_to_send(wanted) {
                 output_config.insert("effort".into(), json!(level));
             }
@@ -416,9 +488,11 @@ impl AnthropicAdapter {
         if let Some(blocked) = self.latch.blocked_failure() {
             return Err(blocked);
         }
-        let model = match request.effort {
-            Some(_) => self.model_info(&request.model.id).await,
-            None => None,
+        let model = if request.effort.is_some() || request.reasoning != ReasoningLevel::ModelDefault
+        {
+            self.model_info(&request.model.id).await
+        } else {
+            None
         };
         let body = self.request_body(request, repair, model.as_ref());
         let started = Instant::now();
@@ -439,7 +513,9 @@ impl AnthropicAdapter {
         let duration_ms = elapsed_ms(started);
         if !status.is_success() {
             let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-            return Err(self.classify_error(status, &headers, &body));
+            return Err(self
+                .classify_error(status, &headers, &body)
+                .with_request_id(request_id(&headers, &body)));
         }
         let structured = request.response_schema.is_some();
         let body: Value = match serde_json::from_slice(&bytes) {
@@ -452,10 +528,12 @@ impl AnthropicAdapter {
                     usage: Usage::default(),
                     refusal_reason: None,
                     stop_reason: None,
-                    provider_request_id: request_id(&headers),
+                    provider_request_id: request_id(&headers, &Value::Null),
                     http_status: status.as_u16(),
                     duration_ms,
                     structured,
+                    output_limit: None,
+                    reported_cost: None,
                 })
             }
         };
@@ -493,7 +571,9 @@ impl AnthropicAdapter {
             .map_err(|e| AttemptFailure::from_reqwest(&e))?;
         let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
         if !status.is_success() {
-            return Err(self.classify_error(status, &headers, &body));
+            return Err(self
+                .classify_error(status, &headers, &body)
+                .with_request_id(request_id(&headers, &body)));
         }
         body.get("input_tokens")
             .and_then(Value::as_u64)
@@ -573,13 +653,18 @@ fn query_escape(value: &str) -> String {
         .collect()
 }
 
-fn request_id(headers: &HeaderMap) -> Option<String> {
-    ["request-id", "x-request-id"].iter().find_map(|name| {
-        headers
-            .get(*name)
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_string)
-    })
+/// Anbieter-Request-ID (AI-001, Nachtrag Q00-N2): Header `request-id`, bei Fehlern ersatzweise `request_id` im
+/// Antwortkörper; nie die Antwort-`id` (`msg_…`).
+pub fn request_id(headers: &HeaderMap, body: &Value) -> Option<String> {
+    headers
+        .get("request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string)
+        .or_else(|| {
+            body.get("request_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 
 /// Einheitliche Tokenzahlen (AI-001, AI-002): `input_tokens` zählt einschließlich der aus dem Cache gelesenen und der
@@ -594,7 +679,10 @@ pub fn usage_from_json(usage: Option<&Value>) -> Usage {
         output_tokens: field("output_tokens"),
         cached_input_tokens: cached,
         cache_write_tokens: written,
-        reasoning_tokens: None,
+        // Nachtrag Q00-H1: `usage.output_tokens_details.thinking_tokens` (Teilmenge von `output_tokens`).
+        reasoning_tokens: opt_u64(
+            usage.and_then(|u| u.pointer("/output_tokens_details/thinking_tokens")),
+        ),
     }
 }
 
@@ -610,6 +698,7 @@ fn parse_message(
         .get("stop_reason")
         .and_then(Value::as_str)
         .map(str::to_string);
+    // Nur Textblöcke; `thinking`-Blöcke sind kein Ergebnis und werden verworfen (AI-001, Nachtrag).
     let text: String = body
         .get("content")
         .and_then(Value::as_array)
@@ -619,14 +708,13 @@ fn parse_message(
         .filter_map(|block| block.get("text").and_then(Value::as_str))
         .collect();
     let refusal = stop_reason.as_deref() == Some("refusal");
+    // `stop_reason: "max_tokens"` → Abbruch an der Ausgabegrenze für jede Aufgabe (Nachtrag Q00-H1).
+    let output_limit = (!refusal && stop_reason.as_deref() == Some("max_tokens"))
+        .then(|| "max_tokens".to_string());
     let raw = if refusal {
         RawAnswer::Refusal
     } else {
-        raw_from_text(
-            text,
-            structured,
-            stop_reason.as_deref() == Some("max_tokens"),
-        )
+        raw_from_text(text, structured, output_limit.as_deref())
     };
     let refusal_reason = refusal
         .then(|| {
@@ -644,14 +732,12 @@ fn parse_message(
         usage: usage_from_json(body.get("usage")),
         refusal_reason,
         stop_reason,
-        provider_request_id: body
-            .get("id")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .or_else(|| request_id(headers)),
+        provider_request_id: request_id(headers, body),
         http_status,
         duration_ms,
         structured,
+        output_limit,
+        reported_cost: None,
     }
 }
 

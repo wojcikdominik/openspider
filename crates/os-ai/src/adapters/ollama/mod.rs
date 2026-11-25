@@ -545,6 +545,8 @@ impl OllamaAdapter {
                     http_status: status.as_u16(),
                     duration_ms,
                     structured,
+                    output_limit: None,
+                    reported_cost: None,
                 })
             }
         };
@@ -628,6 +630,7 @@ impl OllamaAdapter {
                 error.error_code.unwrap_or_else(|| UNREACHABLE_CODE.into())
             }),
             message,
+            provider_request_id: None,
         }
     }
 
@@ -790,11 +793,9 @@ fn error_message(body: &Value, status: reqwest::StatusCode) -> String {
         .unwrap_or_else(|| status.canonical_reason().unwrap_or("").to_string())
 }
 
-fn request_id(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get("x-request-id")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_string)
+/// Anbieter-Request-ID (AI-001, Nachtrag Q00-N2): Ollama liefert keine (leer).
+fn request_id(_headers: &HeaderMap) -> Option<String> {
+    None
 }
 
 /// Einheitliche Tokenzahlen (AI-001): `prompt_eval_count` → Eingabe, `eval_count` → Ausgabe; Cache-Felder meldet
@@ -822,12 +823,13 @@ fn parse_chat(
         .get("done_reason")
         .and_then(Value::as_str)
         .map(str::to_string);
+    // `done_reason: "length"` → Abbruch an der Ausgabegrenze für jede Aufgabe (AI-006, Nachtrag Q00-H1; Feldname und
+    // Wert nach der öffentlichen Ollama-API-Doku zu `/api/chat`).
+    let output_limit = (done_reason.as_deref() == Some("length")).then(|| "length".to_string());
     let raw = match body.pointer("/message/content") {
-        Some(Value::String(text)) => raw_from_text(
-            text.clone(),
-            structured,
-            done_reason.as_deref() == Some("length"),
-        ),
+        Some(Value::String(text)) => {
+            raw_from_text(text.clone(), structured, output_limit.as_deref())
+        }
         _ => RawAnswer::Unparsable {
             detail: "response without message.content".into(),
         },
@@ -841,6 +843,8 @@ fn parse_chat(
         http_status,
         duration_ms,
         structured,
+        output_limit,
+        reported_cost: None,
     }
 }
 
@@ -948,6 +952,7 @@ impl EmbeddingProvider for OllamaAdapter {
                 http_status: None,
                 error_code: Some(UNREACHABLE_CODE.into()),
                 message,
+                provider_request_id: None,
             })
     }
 

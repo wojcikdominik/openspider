@@ -698,11 +698,10 @@ async fn multipart_upload_and_token_counter_use_real_provider_shapes() {
         )
         .await,
     );
-    assert_eq!(r["usage"]["input_tokens"], 2);
-    assert_eq!(
-        r["usage"]["output_tokens"],
-        r["answers"].to_string().chars().count().div_ceil(4)
-    );
+    // Nachtrag 24.11.2026 (08 Konventionen, Q00-M1): Decisions zählen je Frage ⌈Eingabe / 4⌉ + ⌈Fragentext / 4⌉ + 100
+    // (Fragentext = `name` + `instructions` + Werte/Levels; hier keines davon) und melden 0 Ausgabe-Tokens.
+    assert_eq!(r["usage"]["input_tokens"], 1 + 100);
+    assert_eq!(r["usage"]["output_tokens"], 0);
 }
 
 // spec: INTEG-019 [M4]

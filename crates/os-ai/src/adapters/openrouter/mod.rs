@@ -6,6 +6,8 @@
 //! Objekt `provider`. Kontostand über `GET /key` (`limit_remaining` direkt, `null` = unbegrenzt). Kontingentfehler
 //! werden über `error.metadata.limit_source` unterschieden; Verweigerungen kommen als HTTP 200 (Form a) oder HTTP 403
 //! mit `error.type = "refusal"` (Form b, vor allen anderen 403-Regeln geprüft).
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -13,18 +15,21 @@ use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde_json::{json, Map, Value};
 
+use crate::adapters::anthropic::reasoning;
 use crate::adapters::anthropic::shared::{
     elapsed_ms, error_message, http_failure, opt_u64, quota_failure, rate_limited, raw_from_text,
     retry_after, wall_millis,
 };
-pub use crate::adapters::anthropic::shared::{AdapterReply, ApiKey, QuotaLatch, QuotaStop};
+pub use crate::adapters::anthropic::shared::{
+    AdapterReply, ApiKey, OutputLimitReached, QuotaLatch, QuotaStop, ReportedCost,
+};
 pub use crate::adapters::anthropic::Selectability;
 use crate::cost::rates::{parse_decimal_scaled, usd_to_pico};
 use crate::cost::{PriceSource, Rates};
 use crate::limits::{AttemptFailure, Limiter};
 use crate::provider::{
-    AiProvider, Capabilities, CapabilitySource, Input, Model, ProviderError, ProviderFuture,
-    Request, Usage,
+    resolve_reasoning_level, AiProvider, Capabilities, CapabilitySource, Input, Model,
+    ProviderError, ProviderFuture, ReasoningLevel, Request, Usage,
 };
 use crate::schema::{RawAnswer, RepairRequest};
 
@@ -129,6 +134,27 @@ pub struct OpenRouterModel {
     pub supported_parameters: Vec<String>,
     pub input_modalities: Vec<String>,
     pub output_modalities: Vec<String>,
+    /// `pricing.internal_reasoning` in Piko-USD je Token (Nachtrag Q00-M4; nur Voranschlag und Reservierung).
+    pub internal_reasoning_pico: u64,
+    /// `pricing.overrides[]` (Langkontext, Nachtrag Q00-M4), aufsteigend nach `min_prompt_tokens`.
+    pub overrides: Vec<PriceOverride>,
+    /// `reasoning.supported_efforts` (Nachtrag Q00-H1); leer, wenn das Feld fehlt.
+    pub reasoning_efforts: Vec<String>,
+    /// `reasoning.mandatory = true`: Reasoning lässt sich nicht abschalten.
+    pub reasoning_mandatory: bool,
+    /// `top_provider.max_completion_tokens` (Ausgabegrenze des Modells, AI-011 Nachtrag); `null` → `None`.
+    pub max_completion_tokens: Option<u64>,
+}
+
+/// Ein Eintrag aus `pricing.overrides[]`: absolute Preise je Token (Piko-USD) ab `min_prompt_tokens` Eingabe-Tokens;
+/// fehlende Felder behalten den Grundpreis (AI-005, Nachtrag Q00-M4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PriceOverride {
+    pub min_prompt_tokens: u64,
+    pub prompt_pico: Option<u64>,
+    pub completion_pico: Option<u64>,
+    pub cache_read_pico: Option<u64>,
+    pub cache_write_pico: Option<u64>,
 }
 
 fn strings(value: Option<&Value>) -> Vec<String> {
@@ -180,8 +206,46 @@ impl OpenRouterModel {
         let cache_write_pico = price("input_cache_write");
         let request_pico = price("request");
         let image_pico = price("image");
+        let internal_reasoning_pico = price("internal_reasoning");
+        let mut overrides: Vec<PriceOverride> = Vec::new();
+        for item in pricing
+            .and_then(|p| p.get("overrides"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let Some(min_prompt_tokens) = item.get("min_prompt_tokens").and_then(Value::as_u64)
+            else {
+                continue;
+            };
+            let mut field = |name: &str| -> Option<u64> {
+                let value = item.get(name).filter(|v| !v.is_null())?;
+                let pico = decimal_text(value).and_then(|t| usd_to_pico(&t));
+                if pico.is_none() {
+                    prices_known = false;
+                }
+                pico
+            };
+            overrides.push(PriceOverride {
+                min_prompt_tokens,
+                prompt_pico: field("prompt"),
+                completion_pico: field("completion"),
+                cache_read_pico: field("input_cache_read"),
+                cache_write_pico: field("input_cache_write"),
+            });
+        }
+        overrides.sort_by_key(|o| o.min_prompt_tokens);
+        let reasoning = entry.get("reasoning");
         let architecture = entry.get("architecture");
         Some(Self {
+            internal_reasoning_pico,
+            overrides,
+            reasoning_efforts: strings(reasoning.and_then(|r| r.get("supported_efforts"))),
+            reasoning_mandatory: reasoning
+                .and_then(|r| r.get("mandatory"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            max_completion_tokens: opt_u64(entry.pointer("/top_provider/max_completion_tokens")),
             id,
             name: entry
                 .get("name")
@@ -243,8 +307,60 @@ impl OpenRouterModel {
             endpoint: ENDPOINT.into(),
             capabilities: self.capabilities(),
             capability_source: CapabilitySource::OpenRouterModels,
-            reasoning_levels: Vec::new(),
+            reasoning_levels: self.reasoning_levels(),
         }
+    }
+
+    /// Verfügbare Reasoning-Stufen (AI-005, Nachtrag Q00-H1): nur mit `"reasoning"` in `supported_parameters` und
+    /// `reasoning.supported_efforts`; `off` nur, wenn `"none"` darin steht und `reasoning.mandatory` nicht `true` ist.
+    pub fn reasoning_levels(&self) -> Vec<ReasoningLevel> {
+        if !self.supported_parameters.iter().any(|p| p == "reasoning") {
+            return Vec::new();
+        }
+        let mut levels =
+            reasoning::levels_from_efforts(self.reasoning_efforts.iter().map(String::as_str));
+        if self.reasoning_mandatory {
+            levels.retain(|level| *level != ReasoningLevel::Off);
+        }
+        levels
+    }
+
+    /// Objekt `reasoning` für die gewünschte Stufe (effektive Stufe nach AI-011); `None` = kein Feld.
+    pub fn reasoning_param(&self, requested: ReasoningLevel) -> Option<Value> {
+        reasoning::reasoning_object(resolve_reasoning_level(requested, &self.reasoning_levels()))
+    }
+
+    /// Spalte `Long Context From`: kleinstes `min_prompt_tokens` aus `pricing.overrides` (Nachtrag Q00-M4).
+    pub fn long_context_from(&self) -> Option<u64> {
+        self.overrides.iter().map(|o| o.min_prompt_tokens).min()
+    }
+
+    /// Der zutreffende `overrides`-Eintrag für `input_tokens` (größtes `min_prompt_tokens` ≤ Eingabe-Tokens).
+    pub fn override_for(&self, input_tokens: u64) -> Option<&PriceOverride> {
+        self.overrides
+            .iter()
+            .filter(|o| input_tokens >= o.min_prompt_tokens)
+            .max_by_key(|o| o.min_prompt_tokens)
+    }
+
+    /// Preissätze für einen Request mit `input_tokens` Eingabe-Tokens: Grundpreise bzw. der zutreffende
+    /// `overrides`-Eintrag (fehlende Felder behalten den Grundpreis). `None`, wenn ein Preisfeld nicht lesbar ist.
+    pub fn rates_for(&self, input_tokens: u64) -> Option<Rates> {
+        let mut rates = self.rates()?;
+        if let Some(o) = self.override_for(input_tokens) {
+            rates.input_pico = o.prompt_pico.unwrap_or(rates.input_pico);
+            rates.output_pico = o.completion_pico.unwrap_or(rates.output_pico);
+            rates.cache_read_pico = o.cache_read_pico.unwrap_or(rates.cache_read_pico);
+            rates.cache_write_pico = o.cache_write_pico.unwrap_or(rates.cache_write_pico);
+        }
+        Some(rates)
+    }
+
+    /// Vorsichtiger Ausgabepreis für Voranschlag und Reservierung: max(`completion`, `internal_reasoning`) je
+    /// Ausgabe-Token (Nachtrag Q00-M4; Bedeutung von `internal_reasoning` nicht belegt, V-A7).
+    pub fn reserve_output_pico(&self, input_tokens: u64) -> Option<u64> {
+        self.rates_for(input_tokens)
+            .map(|rates| rates.output_pico.max(self.internal_reasoning_pico))
     }
 
     /// Wählbarkeit für eine Aufgabe (z. B. Schema-Aufgabe ohne Structured Output → ausgegraut mit Hinweis).
@@ -372,6 +488,9 @@ pub struct OpenRouterAdapter {
     limiter: Option<Arc<Limiter>>,
     latch: QuotaLatch,
     balance: Mutex<Option<KeyBalance>>,
+    models: Mutex<Option<HashMap<String, OpenRouterModel>>>,
+    /// Requests mit ausdrücklicher Reasoning-Stufe, die mangels Modellliste ohne `reasoning` gingen.
+    reasoning_skipped: AtomicU64,
 }
 
 impl std::fmt::Debug for OpenRouterAdapter {
@@ -392,6 +511,8 @@ impl OpenRouterAdapter {
             limiter: None,
             latch: QuotaLatch::default(),
             balance: Mutex::new(None),
+            models: Mutex::new(None),
+            reasoning_skipped: AtomicU64::new(0),
         }
     }
 
@@ -455,20 +576,54 @@ impl OpenRouterAdapter {
         if status.is_success() {
             Ok(body)
         } else {
-            Err(self.classify_error(status, &headers, &body).0)
+            Err(self
+                .classify_error(status, &headers, &body)
+                .0
+                .with_request_id(request_id(&body, &headers)))
         }
     }
 
-    /// Lädt die Modellliste.
+    /// Lädt die Modellliste und merkt sie sich (Reasoning-Stufen je Modell, Nachtrag Q00-H1).
     pub async fn list_models(&self) -> Result<Vec<OpenRouterModel>, AttemptFailure> {
         let body = self.get_json("/models").await?;
-        Ok(body
+        let models: Vec<OpenRouterModel> = body
             .get("data")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
             .filter_map(OpenRouterModel::from_json)
-            .collect())
+            .collect();
+        *self.models.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(models.iter().map(|m| (m.id.clone(), m.clone())).collect());
+        Ok(models)
+    }
+
+    /// Zahl der Requests mit ausdrücklicher Reasoning-Stufe, bei denen mangels geladener Modellliste kein `reasoning`
+    /// gesendet wurde (konservativ). Ersatz für eine Debug-Logzeile, bis `os-ai` eine Log-Abhängigkeit hat; enthält
+    /// weder Schlüssel noch Inhalte.
+    pub fn reasoning_skipped_without_model_list(&self) -> u64 {
+        self.reasoning_skipped.load(Ordering::Relaxed)
+    }
+
+    /// Modell aus der zuletzt geladenen Liste.
+    pub fn cached_model(&self, id: &str) -> Option<OpenRouterModel> {
+        self.models
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .and_then(|m| m.get(id).cloned())
+    }
+
+    async fn ensure_models(&self) {
+        let loaded = self
+            .models
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_some();
+        if !loaded {
+            // Konservativ: ohne Modellliste wird kein `reasoning` gesendet.
+            let _ = self.list_models().await;
+        }
     }
 
     /// Lädt den Kontostand (`GET /key`) und merkt ihn sich.
@@ -510,6 +665,16 @@ impl OpenRouterAdapter {
         if let Some(temperature) = request.temperature {
             body.insert("temperature".into(), json!(temperature));
         }
+        // Reasoning-Stufe (Nachtrag Q00-H1) nur als `reasoning: {"effort": …}`; nie `reasoning_effort` oder
+        // `include_reasoning`. Ohne geladene Modellliste kein Feld.
+        if request.reasoning != ReasoningLevel::ModelDefault {
+            if let Some(reasoning) = self
+                .cached_model(&request.model.id)
+                .and_then(|model| model.reasoning_param(request.reasoning))
+            {
+                body.insert("reasoning".into(), reasoning);
+            }
+        }
         if let Some(schema) = &request.response_schema {
             body.insert(
                 "response_format".into(),
@@ -550,6 +715,17 @@ impl OpenRouterAdapter {
         if let Some(blocked) = self.latch.blocked_failure() {
             return Err(blocked);
         }
+        if request.reasoning != ReasoningLevel::ModelDefault {
+            self.ensure_models().await;
+            let loaded = self
+                .models
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_some();
+            if !loaded {
+                self.reasoning_skipped.fetch_add(1, Ordering::Relaxed);
+            }
+        }
         let body = self.request_body(request, repair);
         let structured = request.response_schema.is_some();
         let started = Instant::now();
@@ -583,6 +759,8 @@ impl OpenRouterAdapter {
                     http_status: status.as_u16(),
                     duration_ms,
                     structured,
+                    output_limit: None,
+                    reported_cost: None,
                 });
             }
             let (failure, final_quota) = self.classify_error(status, &headers, &body);
@@ -590,7 +768,7 @@ impl OpenRouterAdapter {
                 // Die Kontostandsanzeige wird neu geladen (AI-005); ein Fehler dabei ändert den Eintrag nicht.
                 let _ = self.key_balance().await;
             }
-            return Err(failure);
+            return Err(failure.with_request_id(request_id(&body, &headers)));
         }
         let body = match parsed {
             Ok(body) => body,
@@ -606,6 +784,8 @@ impl OpenRouterAdapter {
                     http_status: status.as_u16(),
                     duration_ms,
                     structured,
+                    output_limit: None,
+                    reported_cost: None,
                 })
             }
         };
@@ -674,18 +854,35 @@ impl OpenRouterAdapter {
     }
 }
 
-fn request_id(body: &Value, headers: &HeaderMap) -> Option<String> {
-    body.get("id")
-        .and_then(Value::as_str)
+/// Anbieter-Request-ID (AI-001, Nachtrag Q00-N2): Header `x-generation-id`, ersatzweise die Antwort-`id`.
+pub fn request_id(body: &Value, headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-generation-id")
+        .and_then(|v| v.to_str().ok())
         .map(str::to_string)
-        .or_else(|| {
-            ["x-request-id", "x-generation-id"].iter().find_map(|name| {
-                headers
-                    .get(*name)
-                    .and_then(|v| v.to_str().ok())
-                    .map(str::to_string)
-            })
-        })
+        .or_else(|| body.get("id").and_then(Value::as_str).map(str::to_string))
+}
+
+/// Gemeldete Ist-Kosten aus `usage.cost`, `usage.cost_details.upstream_inference_cost` und `usage.is_byok` (AI-005,
+/// Nachtrag Q00-M3); `None`, wenn keines der Felder vorkommt. Die Verbuchung (`Price Source = reported`) macht K10.
+pub fn reported_cost_from_json(usage: Option<&Value>) -> Option<ReportedCost> {
+    let usage = usage?;
+    let cost = usage.get("cost");
+    let upstream = usage.pointer("/cost_details/upstream_inference_cost");
+    let is_byok = usage.get("is_byok").and_then(Value::as_bool);
+    if cost.is_none() && upstream.is_none() && is_byok.is_none() {
+        return None;
+    }
+    let micro = |v: Option<&Value>| -> Option<u64> {
+        v.filter(|v| v.is_number())
+            .map(Value::to_string)
+            .and_then(|text| parse_decimal_scaled(&text, 6))
+    };
+    Some(ReportedCost {
+        cost_micro_usd: micro(cost),
+        upstream_inference_cost_micro_usd: micro(upstream),
+        is_byok,
+    })
 }
 
 /// Einheitliche Tokenzahlen: `prompt_tokens` zählt die gecachten Tokens bereits mit (Festlegung 24.11.2026);
@@ -697,7 +894,10 @@ pub fn usage_from_json(usage: Option<&Value>) -> Usage {
         output_tokens: opt_u64(usage.and_then(|u| u.get("completion_tokens"))),
         cached_input_tokens: opt_u64(details.and_then(|d| d.get("cached_tokens"))),
         cache_write_tokens: opt_u64(details.and_then(|d| d.get("cache_write_tokens"))),
-        reasoning_tokens: None,
+        // Nachtrag Q00-H1: `usage.completion_tokens_details.reasoning_tokens`.
+        reasoning_tokens: opt_u64(
+            usage.and_then(|u| u.pointer("/completion_tokens_details/reasoning_tokens")),
+        ),
     }
 }
 
@@ -722,6 +922,10 @@ fn parse_completion(
         .filter(|s| !s.trim().is_empty())
         .map(str::to_string);
     let refusal = refusal_text.is_some() || finish_reason.as_deref() == Some(CONTENT_FILTER);
+    // `finish_reason: "length"` → Abbruch an der Ausgabegrenze für jede Aufgabe (Nachtrag Q00-H1). `message.reasoning`
+    // und `message.reasoning_details` werden nie gelesen (AI-001, Nachtrag).
+    let output_limit =
+        (!refusal && finish_reason.as_deref() == Some("length")).then(|| "length".to_string());
     let raw = if refusal {
         RawAnswer::Refusal
     } else if choice.is_none() {
@@ -737,7 +941,7 @@ fn parse_completion(
                 .collect(),
             _ => String::new(),
         };
-        raw_from_text(text, structured, finish_reason.as_deref() == Some("length"))
+        raw_from_text(text, structured, output_limit.as_deref())
     };
     AdapterReply {
         raw,
@@ -748,6 +952,8 @@ fn parse_completion(
         http_status,
         duration_ms,
         structured,
+        output_limit,
+        reported_cost: reported_cost_from_json(body.get("usage")),
     }
 }
 

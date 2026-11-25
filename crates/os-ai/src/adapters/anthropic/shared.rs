@@ -65,6 +65,67 @@ pub struct AdapterReply {
     pub duration_ms: u64,
     /// Ob die Aufgabe ein Antwortschema hatte.
     pub structured: bool,
+    /// Abbruch an der Ausgabegrenze (AI-020, Nachtrag Q00-H1) mit dem Grund des Anbieters (`max_tokens` bzw.
+    /// `length`); dann ist [`AdapterReply::raw`] nie ein Teilergebnis. Siehe [`AdapterReply::for_repair`].
+    pub output_limit: Option<String>,
+    /// Vom Anbieter gemeldete Ist-Kosten (OpenRouter `usage.cost`, Nachtrag Q00-M3); bei anderen Anbietern `None`.
+    pub reported_cost: Option<ReportedCost>,
+}
+
+/// Gemeldete Ist-Kosten einer Antwort (AI-005, Nachtrag Q00-M3), auf µUSD kaufmännisch gerundet. Ob sie als
+/// `Price Source = reported` verbucht werden, entscheidet die Kostenseite (M4-K10) mit [`ReportedCost::usable`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReportedCost {
+    /// `usage.cost`; `None`, wenn das Feld fehlt, keine Zahl oder negativ ist.
+    pub cost_micro_usd: Option<u64>,
+    /// `usage.cost_details.upstream_inference_cost`.
+    pub upstream_inference_cost_micro_usd: Option<u64>,
+    /// `usage.is_byok`.
+    pub is_byok: Option<bool>,
+}
+
+impl ReportedCost {
+    /// Der verwertbare Betrag: `usage.cost` als nichtnegative Zahl und `is_byok` nicht `true` (sonst lokale Rechnung,
+    /// `Price Source = api`).
+    pub fn usable(&self) -> Option<u64> {
+        if self.is_byok == Some(true) {
+            None
+        } else {
+            self.cost_micro_usd
+        }
+    }
+}
+
+/// Abbruch an der Ausgabegrenze (AI-002, AI-005, AI-006, Nachtrag Q00-H1): eigene Antwortklasse des Adapters. Kein
+/// Teilergebnis, kein Reparaturversuch (AI-021), keine Wiederholung; die gemeldeten Tokens werden verbucht. Den Status
+/// `Error: Output limit reached` vergibt M4-K10; bis dahin bildet [`OutputLimitReached::attempt_failure`] den Fall auf
+/// den vorhandenen Fehlerweg `Error: Invalid output` ab (`HTTP Status` und `Error Code` wie im Nachtrag zu AI-014).
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputLimitReached {
+    /// Grund des Anbieters für die Protokollspalte `Error Code` (`max_tokens`, `max_output_tokens`, `length`).
+    pub reason: String,
+    /// Gemeldete Tokens (verbucht, `Output Tokens` = gesendete Grenze).
+    pub usage: Usage,
+    pub provider_request_id: Option<String>,
+    /// `HTTP Status` (200).
+    pub http_status: u16,
+    pub duration_ms: u64,
+    /// Gemeldete Ist-Kosten (OpenRouter).
+    pub reported_cost: Option<ReportedCost>,
+}
+
+impl OutputLimitReached {
+    /// Fehlerklasse bis M4-K10 (vorhandener Fehlerweg, nicht wiederholbar).
+    pub fn provider_error(&self) -> ProviderError {
+        ProviderError::InvalidOutput
+    }
+
+    /// Fehler eines Versuchs mit `HTTP Status` und `Error Code` = Grund des Anbieters.
+    pub fn attempt_failure(&self) -> AttemptFailure {
+        let mut failure = AttemptFailure::from(self.provider_error()).with_error_code(&self.reason);
+        failure.http_status = Some(self.http_status);
+        failure.with_request_id(self.provider_request_id.clone())
+    }
 }
 
 impl AdapterReply {
@@ -73,9 +134,33 @@ impl AdapterReply {
         matches!(self.raw, RawAnswer::Refusal)
     }
 
+    /// Ob die Antwort an der Ausgabegrenze abbrach.
+    pub fn is_output_limit(&self) -> bool {
+        self.output_limit.is_some()
+    }
+
+    /// Schritt für [`crate::schema::run_with_repair`]: `Ok((Rohantwort, Antwort))`, außer bei einem Abbruch an der
+    /// Ausgabegrenze – dann `Err`; der Eintrag endet ohne Reparaturversuch (AI-021, Nachtrag Q00-H1).
+    pub fn for_repair(self) -> Result<(RawAnswer, AdapterReply), Box<OutputLimitReached>> {
+        match self.output_limit {
+            Some(reason) => Err(Box::new(OutputLimitReached {
+                reason,
+                usage: self.usage,
+                provider_request_id: self.provider_request_id,
+                http_status: self.http_status,
+                duration_ms: self.duration_ms,
+                reported_cost: self.reported_cost,
+            })),
+            None => Ok((self.raw.clone(), self)),
+        }
+    }
+
     /// Gemeinsames Ergebnis (AI-001). Mit `schema` wird die Antwort lokal validiert (AI-021, ohne Reparatur);
     /// nicht lesbare oder schemawidrige Antworten ergeben `Error: Invalid output`.
     pub fn into_response(self, schema: Option<&Value>) -> Result<Response, ProviderError> {
+        if let Err(limit) = self.clone().for_repair() {
+            return Err(limit.provider_error());
+        }
         let content = match self.raw {
             RawAnswer::Refusal => None,
             RawAnswer::Json(value) => Some(value),
@@ -277,16 +362,21 @@ pub(crate) fn elapsed_ms(start: std::time::Instant) -> u64 {
     u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
-/// Rohantwort aus dem Antworttext: bei Schema-Aufgaben JSON (bzw. `Unparsable` mit Grund), sonst Text.
-pub(crate) fn raw_from_text(text: String, structured: bool, truncated: bool) -> RawAnswer {
+/// Rohantwort aus dem Antworttext: bei Schema-Aufgaben JSON (bzw. `Unparsable` mit Grund), sonst Text. Ein Abbruch an
+/// der Ausgabegrenze (`output_limit` = Grund des Anbieters) ergibt bei jeder Aufgabe `Unparsable`: Ein Teilergebnis
+/// wird nie übernommen (AI-002, AI-005, AI-006, Nachtrag Q00-H1).
+pub(crate) fn raw_from_text(
+    text: String,
+    structured: bool,
+    output_limit: Option<&str>,
+) -> RawAnswer {
+    if let Some(reason) = output_limit {
+        return RawAnswer::Unparsable {
+            detail: format!("output limit reached ({reason})"),
+        };
+    }
     if !structured {
         return RawAnswer::Text(text);
-    }
-    if truncated {
-        // Abgeschnittenes JSON wird nie teilweise übernommen (AI-002).
-        return RawAnswer::Unparsable {
-            detail: "output truncated at max_tokens".into(),
-        };
     }
     match serde_json::from_str::<Value>(text.trim()) {
         Ok(value) => RawAnswer::Json(value),

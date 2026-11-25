@@ -513,6 +513,7 @@ fn invalid_output(message: String, http_status: Option<u16>) -> FinalError {
         http_status,
         error_code: None,
         message,
+        provider_request_id: None,
     }
 }
 

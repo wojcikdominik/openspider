@@ -190,10 +190,13 @@ async fn usage_is_mapped_to_the_common_fields() {
 
 // spec: AI-002
 // spec: AI-021
-// `stop_reason: "max_tokens"` bei einer Schema-Aufgabe → `Error: Invalid output`; abgeschnittenes JSON wird nicht
-// teilweise übernommen (auch nicht nach dem Reparaturversuch).
+// spec: AI-002 [M4]
+// `stop_reason: "max_tokens"` bei einer Schema-Aufgabe: abgeschnittenes JSON wird nicht teilweise übernommen. Nachtrag
+// 24.11.2026 (Q00-H1) ersetzt „→ `Error: Invalid output` nach Reparaturversuch“: Abbruch an der Ausgabegrenze als eigene
+// Antwortklasse mit `Error Code = max_tokens`, kein Reparaturversuch (genau 1 Request). Den Status
+// `Error: Output limit reached` vergibt M4-K10; bis dahin der vorhandene Fehlerweg `Error: Invalid output`.
 #[tokio::test]
-async fn max_tokens_on_a_schema_task_is_invalid_output() {
+async fn max_tokens_on_a_schema_task_is_an_output_limit_without_repair() {
     let mock = Mock::start().await;
     let adapter = adapter(&mock);
     let request = schema_request(
@@ -203,6 +206,7 @@ async fn max_tokens_on_a_schema_task_is_invalid_output() {
     );
     let reply = adapter.send(&request, None).await.unwrap();
     assert_eq!(reply.stop_reason.as_deref(), Some("max_tokens"));
+    assert_eq!(reply.output_limit.as_deref(), Some("max_tokens"));
     assert!(matches!(reply.raw, RawAnswer::Unparsable { .. }));
     assert_eq!(
         reply.into_response(request.response_schema.as_ref()),
@@ -212,24 +216,25 @@ async fn max_tokens_on_a_schema_task_is_invalid_output() {
         provider::execute(PreviewSwitch::ON, &adapter, request.clone()).await,
         Outcome::Status(AiStatus::InvalidOutput)
     );
+    let before = mock.requests_to(MESSAGES).len();
     let schema = ResponseSchema::new(contract_schema()).unwrap();
     let run = run_with_repair(&schema, RepairAttempts::default(), |repair| {
         let adapter = &adapter;
         let request = &request;
         async move {
-            adapter
-                .send(request, repair.as_ref())
-                .await
-                .map(|reply| (reply.raw.clone(), reply))
+            match adapter.send(request, repair.as_ref()).await {
+                Ok(reply) => reply.for_repair().map_err(|limit| limit.attempt_failure()),
+                Err(failure) => Err(failure),
+            }
         }
     })
     .await;
-    assert!(matches!(
-        run.outcome,
-        StructuredOutcome::InvalidOutput { .. }
-    ));
-    assert_eq!(run.outcome.status(), Some(AiStatus::InvalidOutput));
-    assert_eq!(run.requests.len(), 2);
+    let StructuredOutcome::Failed(failure) = run.outcome else {
+        panic!("erwartet Abbruch ohne Reparatur: {:?}", run.outcome);
+    };
+    assert_eq!(failure.error_code.as_deref(), Some("max_tokens"));
+    assert_eq!(failure.http_status, Some(200));
+    assert_eq!(mock.requests_to(MESSAGES).len(), before + 1);
 }
 
 // spec: AI-002
@@ -421,8 +426,9 @@ async fn effort_and_capabilities_come_live_from_the_model_list() {
     assert_eq!(a.display_name.as_deref(), Some("A"));
     assert_eq!(a.max_input_tokens, Some(200_000));
     assert_eq!(a.max_tokens, Some(8192));
-    assert_eq!(a.effort_levels, ["low", "medium", "high", "max"]);
-    assert_eq!(models[1].effort_levels, ["low", "medium", "high"]);
+    // Nachtrag Q00 (AI-002): A und B melden zusätzlich `xhigh` (Prüfwert „`max` auf B → `xhigh`“).
+    assert_eq!(a.effort_levels, ["low", "medium", "high", "xhigh", "max"]);
+    assert_eq!(models[1].effort_levels, ["low", "medium", "high", "xhigh"]);
     assert!(!models[2].effort_supported && models[2].effort_levels.is_empty());
     assert!(!models[3].capabilities_known && !models[3].effort_supported);
 
