@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "note": "Testrichtlinie M4-K10 (AI-018, Nachtrag 24.11.2026, Q00-H2): Feld storage je Anbieter und Endpunkt. Texte und Daten sind Testwerte, keine Anbieterangaben.",
+  "providers": {
+    "anthropic": {
+      "training_use": "no",
+      "summary": "Test policy.",
+      "source_url": "https://policy.mock.test/anthropic",
+      "verified_at": "2026-11-26",
+      "storage": {
+        "messages": {
+          "text": "TEST-STORAGE-MESSAGES",
+          "source_url": "https://policy.mock.test/anthropic/storage",
+          "verified_at": "2026-11-26"
+        }
+      }
+    },
+    "openai": {
+      "training_use": "no",
+      "summary": "Test policy without storage for decisions.",
+      "source_url": "https://policy.mock.test/openai",
+      "verified_at": "2026-11-26",
+      "storage": {
+        "responses": {
+          "text": "TEST-IGNORED-FOR-RESPONSES",
+          "source_url": "https://policy.mock.test/openai/storage",
+          "verified_at": "2026-11-26"
+        }
+      }
+    }
+  }
+}

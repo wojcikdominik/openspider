@@ -175,6 +175,7 @@ fn overview_has_all_columns_and_values() {
             "Images",
             "Redaction",
             "Training Use (per provider policy)",
+            "Stored by Provider",
             "Consent Given At"
         ]
     );
@@ -198,11 +199,11 @@ fn overview_has_all_columns_and_values() {
     assert_eq!(page[8], "on");
     assert!(page[9].starts_with("no (source: https://"), "{}", page[9]);
     assert!(page[9].contains("verified 2026-11-24"));
-    assert_eq!(page[10], "2026-12-01T00:00:00Z");
+    assert_eq!(page[11], "2026-12-01T00:00:00Z");
     let alt = &overview.rows[3].cells();
     assert_eq!(alt[7], "yes");
     assert!(alt[9].starts_with("depends"));
-    assert_eq!(overview.rows[0].cells()[10], "", "no consent yet");
+    assert_eq!(overview.rows[0].cells()[11], "", "no consent yet");
     assert_eq!(overview.rows[4].cells()[3], "localhost:11434");
 }
 

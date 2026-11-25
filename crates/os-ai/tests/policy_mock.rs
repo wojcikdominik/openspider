@@ -317,6 +317,7 @@ async fn shown_fields_are_exactly_the_sent_fields() {
             region: None,
             fields: set.clone(),
             max_chars: None,
+            api: None,
         };
         let row = &DataFlowOverview::build(&[flow], &policies, &gate, true).rows[0];
         assert_eq!(&row.fields_sent, set);
@@ -530,6 +531,7 @@ async fn redaction_off_sends_originals_and_dialog_shows_off_with_notice() {
         region: None,
         fields: page.fields(),
         max_chars: Some(3000),
+        api: None,
     };
     let dialog = DataFlowOverview::consent_requests(
         &[flow],

@@ -35,6 +35,46 @@ pub struct ProviderPolicy {
     pub source_url: Option<String>,
     /// ISO date (`YYYY-MM-DD`) of the last check against the source.
     pub verified_at: String,
+    /// Field `storage` per endpoint (`messages`, `responses`, `decisions`, `chat-completions`, `embeddings`): whether
+    /// the provider stores requests, with source and check date (AI-018, Nachtrag 24.11.2026, Q00-H2). Missing
+    /// endpoint → column `Stored by Provider` = `unknown`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub storage: BTreeMap<String, StorageNote>,
+}
+
+/// Endpoints a `storage` entry may name (price key endpoints, AI-010).
+pub const STORAGE_ENDPOINTS: [&str; 5] = [
+    "messages",
+    "responses",
+    "decisions",
+    "chat-completions",
+    "embeddings",
+];
+
+/// Cell text for OpenAI Responses: OpenSpider always sends `store: false` (AI-003, AI-018, Nachtrag Q00-H2).
+pub const STORED_OPENAI_RESPONSES: &str = "no (store: false)";
+/// Cell text without a `storage` entry.
+pub const STORED_UNKNOWN: &str = "unknown";
+
+/// Storage statement of a provider for one endpoint (AI-018, Nachtrag Q00-H2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StorageNote {
+    /// Short statement in own words, e.g. `no (local processing)`.
+    pub text: String,
+    pub source_url: String,
+    /// ISO date (`YYYY-MM-DD`).
+    pub verified_at: String,
+}
+
+impl StorageNote {
+    /// Cell text: statement, source and check date (like `Training Use`).
+    pub fn cell(&self) -> String {
+        format!(
+            "{} (source: {}; verified {})",
+            self.text, self.source_url, self.verified_at
+        )
+    }
 }
 
 impl ProviderPolicy {
@@ -132,6 +172,21 @@ impl ProviderPolicies {
             if p.summary.trim().is_empty() {
                 return Err(PolicyFileError::Invalid(format!("{id}: empty summary")));
             }
+            for (endpoint, note) in &p.storage {
+                if !STORAGE_ENDPOINTS.contains(&endpoint.as_str()) {
+                    return Err(PolicyFileError::Invalid(format!(
+                        "{id}: storage for unknown endpoint {endpoint:?}"
+                    )));
+                }
+                if note.text.trim().is_empty()
+                    || !note.source_url.starts_with("https://")
+                    || !is_iso_date(&note.verified_at)
+                {
+                    return Err(PolicyFileError::Invalid(format!(
+                        "{id}: storage.{endpoint} needs text, https source_url and verified_at YYYY-MM-DD"
+                    )));
+                }
+            }
         }
         Ok(())
     }
@@ -147,7 +202,24 @@ impl ProviderPolicies {
             summary: "No entry in provider-policies.json.".into(),
             source_url: None,
             verified_at: String::new(),
+            storage: BTreeMap::new(),
         })
+    }
+
+    /// Cell `Stored by Provider` (AI-018, Nachtrag 24.11.2026, Q00-H2): OpenAI Responses always
+    /// [`STORED_OPENAI_RESPONSES`] (OpenSpider sends `store: false`, no setting changes that); other endpoints the
+    /// `storage` text of the file with source and date; missing entry or unknown endpoint [`STORED_UNKNOWN`]. Never
+    /// empty.
+    pub fn stored_by_provider(&self, provider: &str, endpoint: Option<&str>) -> String {
+        let Some(endpoint) = endpoint else {
+            return STORED_UNKNOWN.into();
+        };
+        if provider == "openai" && endpoint == "responses" {
+            return STORED_OPENAI_RESPONSES.into();
+        }
+        self.get(provider)
+            .and_then(|p| p.storage.get(endpoint))
+            .map_or_else(|| STORED_UNKNOWN.into(), StorageNote::cell)
     }
 }
 

@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "providers": {
+    "openai": {
+      "training_use": "no",
+      "summary": "Storage for an endpoint that does not exist.",
+      "source_url": "https://policy.mock.test/openai",
+      "verified_at": "2026-11-26",
+      "storage": {
+        "batch": {
+          "text": "no",
+          "source_url": "https://policy.mock.test/openai/storage",
+          "verified_at": "2026-11-26"
+        }
+      }
+    }
+  }
+}

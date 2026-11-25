@@ -14,7 +14,9 @@ pub use consent::{
 pub use dataflow::{ConsentRequest, DataFlowOverview, DataFlowRow, TaskDataFlow, COLUMNS};
 pub use fields::{FieldSet, FieldValue, FieldValues, InputField};
 pub use guard::{GuardedOutcome, PreparedInput};
-pub use providers::{ProviderPolicies, ProviderPolicy, TrainingUse};
+pub use providers::{
+    ProviderPolicies, ProviderPolicy, StorageNote, TrainingUse, STORED_OPENAI_RESPONSES, STORED_UNKNOWN,
+};
 pub use redact::{
     FancyRegexEngine, InvalidPattern, PatternEngine, PatternList, RedactionCounts,
     RedactionSettings, Redactor,

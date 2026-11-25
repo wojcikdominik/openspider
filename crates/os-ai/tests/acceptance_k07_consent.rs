@@ -41,6 +41,7 @@ fn flow(task: &str, provider: &str, set: &FieldSet) -> TaskDataFlow {
         region: None,
         fields: set.clone(),
         max_chars: None,
+        api: None,
     }
 }
 
@@ -505,6 +506,7 @@ fn ai018_ausgabe_datenflusstabelle_spalten_und_csv_export() {
             "Images",
             "Redaction",
             "Training Use (per provider policy)",
+            "Stored by Provider",
             "Consent Given At",
         ]
     );
@@ -540,16 +542,16 @@ fn ai018_ausgabe_datenflusstabelle_spalten_und_csv_export() {
     if let Some(src) = &openai.source_url {
         assert!(a[9].contains(src.as_str()), "Quelle: {}", a[9]);
     }
-    assert_eq!(a[10], "", "ohne Einwilligung keine Zeit");
+    assert_eq!(a[11], "", "ohne Einwilligung keine Zeit");
 
     let b = overview.rows[1].cells();
     assert_eq!(b[3], "api.anthropic.com");
     assert_eq!(b[4], "eu");
     assert_ne!(a[7], b[7], "Spalte Images unterscheidet Bild/kein Bild");
     assert!(
-        b[10].starts_with("2026-11-24"),
+        b[11].starts_with("2026-11-24"),
         "Consent Given At: {}",
-        b[10]
+        b[11]
     );
 
     let csv = overview.to_csv();
