@@ -1,0 +1,96 @@
+{
+  "caps": {
+    "max_requests": {
+      "anthropic": 9,
+      "openai": 9,
+      "openrouter": 6
+    },
+    "provider_usd": 0.4,
+    "total_usd": 1.0
+  },
+  "composed_from": "alle Anbieterdateien in results/ (auch aus getrennten Läufen); Zeitpunkte je Anbieter unter providers.*.generated_at_unix",
+  "last_run": {
+    "caps": {
+      "provider_usd": 0.4,
+      "total_usd": 1.0
+    },
+    "estimated_cost_usd": 0.2887439999999999,
+    "generated_at_unix": 1795610237,
+    "models_only": false,
+    "providers": {
+      "anthropic": {
+        "aborted": null,
+        "estimated_cost_usd": 0.15198,
+        "key": {
+          "account": "ai.anthropic",
+          "found": true,
+          "service": "OpenSpider-Probe"
+        },
+        "requests": 8
+      },
+      "openai": {
+        "aborted": null,
+        "estimated_cost_usd": 0.13662,
+        "key": {
+          "account": "ai.openai",
+          "found": true,
+          "service": "OpenSpider-Probe"
+        },
+        "requests": 8
+      },
+      "openrouter": {
+        "aborted": null,
+        "estimated_cost_usd": 0.00014399999999999998,
+        "key": {
+          "account": "ai.openrouter",
+          "found": true,
+          "service": "OpenSpider-Probe"
+        },
+        "requests": 5
+      }
+    },
+    "requests": 21
+  },
+  "price_basis": "Anthropic/OpenAI: vorsichtige Annahme 30/150 USD je 1 Mio. Tokens (Obergrenze, keine Abrechnung); OpenRouter: Preise aus der Modellliste",
+  "probe": "M4-Q00b",
+  "providers": {
+    "anthropic": {
+      "aborted": null,
+      "estimated_cost_usd": 0.15198,
+      "generated_at_unix": 1795610221,
+      "key": {
+        "account": "ai.anthropic",
+        "found": true,
+        "service": "OpenSpider-Probe"
+      },
+      "models_only": false,
+      "requests": 8
+    },
+    "openai": {
+      "aborted": null,
+      "estimated_cost_usd": 0.13662,
+      "generated_at_unix": 1795610231,
+      "key": {
+        "account": "ai.openai",
+        "found": true,
+        "service": "OpenSpider-Probe"
+      },
+      "models_only": false,
+      "requests": 8
+    },
+    "openrouter": {
+      "aborted": null,
+      "estimated_cost_usd": 0.00014399999999999998,
+      "generated_at_unix": 1795610237,
+      "key": {
+        "account": "ai.openrouter",
+        "found": true,
+        "service": "OpenSpider-Probe"
+      },
+      "models_only": false,
+      "requests": 5
+    }
+  },
+  "total_estimated_cost_usd": 0.28874399999999995,
+  "total_requests": 21
+}

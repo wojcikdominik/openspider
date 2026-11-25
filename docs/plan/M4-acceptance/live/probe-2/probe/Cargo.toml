@@ -1,0 +1,28 @@
+# M4-Q00b: zweite Live-Probe (V-A6 Reasoning-Parameter, V-A8 Speicherung); Kopie von probe-1/probe mit eigenem Plan.
+# Eigenständig: gehört nicht zum Haupt-Workspace (leere Tabelle unten). Versionen und Features der Abhängigkeiten
+# entsprechen exakt `[workspace.dependencies]` der Wurzel-Cargo.toml; Cargo.lock ist die gekürzte Wurzel-Lock.
+# Ohne `os-ai`: Q00b prüft nur Rohformen (die Reasoning-Formen des Adapters liegen auf ai/k09, nicht auf main).
+[package]
+name = "openspider-live-probe-2"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "OpenSpider M4-Q00b: zweite Live-Probe (V-A6, V-A8)"
+
+[workspace]
+
+[lib]
+name = "probe"
+path = "src/lib.rs"
+
+[[bin]]
+name = "openspider-live-probe-2"
+path = "src/main.rs"
+
+[dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "stream", "socks", "system-proxy"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+keyring = "4"
