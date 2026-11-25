@@ -53,18 +53,26 @@ jobs:
           # „Page.overrideSetting: Unknown setting: PushAPIEnabled“ und startet keine Seite (Lauf 39024277294).
           # Zwei Shards statt eines Jobs mit 50–60 min. Das Perf-Projekt (UI-146) läuft nur im ersten, kürzeren Shard
           # (Lauf 41535769537: Shard 1 20 min, Shard 2 29 min Testzeit).
+          # 25.11.2026: drei statt zwei Shards. Nach Welle 5a (M4) brauchte der zweite Shard 49 min Jobzeit (Lauf 45564571268)
+          # und lief in Spec coverage M2 in das Schritt-Limit von 50 min (Lauf 45566403349).
           - name: macos-webkit-1
             os: macos-15
             projects: webkit
             browsers: webkit
-            shard: 1/2
+            shard: 1/3
             perf: true
             timeout: 60
           - name: macos-webkit-2
             os: macos-15
             projects: webkit
             browsers: webkit
-            shard: 2/2
+            shard: 2/3
+            timeout: 60
+          - name: macos-webkit-3
+            os: macos-15
+            projects: webkit
+            browsers: webkit
+            shard: 3/3
             timeout: 60
           # windows-chromium überschritt mit 698 Tests das Schritt-Limit von 50 min (Lauf 43225675760: 686 Tests in 50 min),
           # deshalb wie macOS zwei Shards; das Perf-Projekt läuft im ersten.
