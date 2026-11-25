@@ -48,6 +48,23 @@ test("Mod+E opens the same snapshot dialog and Escape returns focus to the trigg
   await expect(button).toBeFocused();
 });
 
+// spec: UI-015
+test("Escape closes the Mod+E dialog as soon as it is visible, before focus has moved into it", async ({ page }) => {
+  const button = page.getByRole("button", { name: "Export", exact: true }).first();
+  // Programmatic focus without a preceding key or pointer event (as with a screen reader): react-aria then moves the focus
+  // into the new dialog only after an animation frame. Freezing the clock holds that frame, so Escape arrives while the
+  // dialog is visible but the focus is still outside it (the state of the intermittent failure of the test above).
+  await button.focus();
+  await page.clock.pauseAt(new Date("2026-10-18T12:00:10Z"));
+  await page.keyboard.press(await page.evaluate(() => window.exportFixture.platform === "mac" ? "Meta+e" : "Control+e"));
+  await expect(page.getByRole("dialog", { name: "Export options" })).toBeVisible();
+  expect(await page.evaluate(() => document.querySelector("[role='dialog']")?.contains(document.activeElement))).toBe(false);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.clock.resume();
+  await expect(button).toBeFocused();
+});
+
 // spec: OUT-075 [P1]
 test("multi-export presets survive reload and the tree supports substring search", async ({ page }) => {
   await page.getByRole("button", { name: "Multi export" }).click();

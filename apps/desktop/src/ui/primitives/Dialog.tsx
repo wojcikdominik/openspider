@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Dialog as RacDialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { currentPlatform, type Platform } from "../platform";
 import { Button } from "./Button";
@@ -15,7 +15,10 @@ export interface DialogProps {
   /** Beschreibender Text unter dem Titel. */
   description?: string;
   size?: "small" | "medium" | "large";
+  /** Klick neben den Dialog schließt ihn (nur Zeiger; Escape steuert `isKeyboardDismissDisabled`). */
   isDismissable?: boolean;
+  /** Escape schließt den Dialog nicht (Pflichtdialog). Standard: Escape schließt den obersten offenen Dialog. */
+  isKeyboardDismissDisabled?: boolean;
   /** Optional symbol left of title and description (e.g. the app mark in the update dialog, OUT-251). */
   icon?: ReactNode;
 }
@@ -28,11 +31,104 @@ export function Dialog(props: DialogProps) {
   // header, detail frame) do not run the overlay machinery of their closed dialogs. Focus still returns on close.
   return props.isOpen ? <OpenDialog {...props} /> : null;
 }
-function OpenDialog({ title, isOpen, onOpenChange, children, footer, description, size = "medium", isDismissable = true, icon }: DialogProps) {
+/** Offene modale Dialoge in Stapelreihenfolge: React Aria hängt jedes Modal als eigenes Portal an das Dokumentende. */
+const OPEN_DIALOGS = ".os-overlay [role='dialog'], .os-overlay [role='alertdialog']";
+
+type EscapeKey = Pick<KeyboardEvent, "key" | "repeat" | "isComposing" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">;
+
+function plainEscape(e: EscapeKey): boolean {
+  return e.key === "Escape" && !e.repeat && !e.isComposing && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey;
+}
+
+function isTopmost(dialog: Element): boolean {
+  const open = dialog.ownerDocument.querySelectorAll(OPEN_DIALOGS);
+  return open[open.length - 1] === dialog;
+}
+
+/**
+ * UI-015/UI-113: does this Escape `keydown` close `dialog` when it reaches the document (bubble phase)?
+ *
+ * Escape closes the topmost open dialog, wherever the focus is. Yes for a plain Escape (not repeated, no IME composition,
+ * no modifier) that no handler took (`preventDefault`: an open list, a popover, a search field clearing its text) when
+ * `dialog` is the topmost open dialog.
+ */
+export function dialogEscapeCloses(e: EscapeKey & Pick<KeyboardEvent, "defaultPrevented">, dialog: Element): boolean {
+  return plainEscape(e) && !e.defaultPrevented && isTopmost(dialog);
+}
+
+/**
+ * Lies the target of this key event in a lower modal overlay, i.e. in a dialog below the topmost `dialog`? A lower overlay
+ * must not answer Escape (React Aria consumed it there, and the nested confirmation stayed open): it belongs to `dialog`,
+ * which takes it in the capture phase. Targets inside the dialog, in overlays opened above it (its lists and popovers) and
+ * in the page keep the normal order; a page handler that takes Escape (`preventDefault`) keeps it.
+ */
+export function escapeTargetBelow(target: EventTarget | null, dialog: Element): boolean {
+  const overlay = dialog.closest(".os-overlay") ?? dialog;
+  const el = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+  const lower = el?.closest(".os-overlay");
+  if (!lower || lower === overlay) return false;
+  return (overlay.compareDocumentPosition(lower) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+}
+
+/**
+ * Escape handling shared by every modal overlay (the Dialog primitive and overlays built on `ModalOverlay` directly, such
+ * as the settings dialog); their `ModalOverlay` sets `isKeyboardDismissDisabled` so React Aria leaves Escape alone.
+ *
+ * React Aria handles Escape only from inside a modal and consumes it there even when that modal is not the topmost (a
+ * nested confirmation stayed open). After a focus change without a key or pointer event (screen reader, programmatic
+ * focus) it moves the focus into a new dialog only an animation frame later; an Escape in that window landed outside the
+ * dialog and was lost. Here the topmost dialog takes Escape from lower dialogs in the capture phase and otherwise in the
+ * bubble phase (from its own content, the page or body, unless a handler took it), closes via `onClose` (unless `isKeyboardDismissDisabled`: a mandatory dialog keeps the key)
+ * and afterwards returns the focus to the element that was focused when it opened. A trigger that no longer exists is
+ * skipped (the focus stays on body); focus that something else took meanwhile stays where it is.
+ */
+export function useTopmostEscape(ref: RefObject<Element | null>, onClose: () => void, isKeyboardDismissDisabled = false): void {
+  const latest = useRef({ onClose, isKeyboardDismissDisabled });
+  latest.current = { onClose, isKeyboardDismissDisabled };
+  // The trigger, read while rendering (before the modal makes the rest of the page inert and the trigger loses focus).
+  const trigger = useRef<Element | null>(typeof document !== "undefined" ? document.activeElement : null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    const win = dialog.ownerDocument.defaultView;
+    let escaped = false;
+    const take = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (latest.current.isKeyboardDismissDisabled) return;
+      escaped = true;
+      latest.current.onClose();
+    };
+    const below = (e: KeyboardEvent) => {
+      if (plainEscape(e) && escapeTargetBelow(e.target, dialog) && isTopmost(dialog)) take(e);
+    };
+    const bubble = (e: KeyboardEvent) => {
+      if (dialogEscapeCloses(e, dialog)) take(e);
+    };
+    win?.addEventListener("keydown", below, true);
+    dialog.ownerDocument.addEventListener("keydown", bubble);
+    return () => {
+      win?.removeEventListener("keydown", below, true);
+      dialog.ownerDocument.removeEventListener("keydown", bubble);
+      // After the unmount cleanups the page is no longer inert. React Aria returns the focus only from a scope the focus
+      // has entered, and only a frame later.
+      const el = trigger.current;
+      if (!escaped || !(el instanceof HTMLElement) || el === el.ownerDocument.body) return;
+      queueMicrotask(() => {
+        const active = el.ownerDocument.activeElement;
+        if (el.isConnected && (!active || active === el.ownerDocument.body)) el.focus({ preventScroll: true });
+      });
+    };
+  }, [ref]);
+}
+
+function OpenDialog({ title, isOpen, onOpenChange, children, footer, description, size = "medium", isDismissable = true, isKeyboardDismissDisabled = false, icon }: DialogProps) {
+  const ref = useRef<HTMLElement>(null);
+  useTopmostEscape(ref, () => onOpenChange(false), isKeyboardDismissDisabled);
   return (
-    <ModalOverlay className="os-overlay" isOpen={isOpen} onOpenChange={onOpenChange} isDismissable={isDismissable}>
+    <ModalOverlay className="os-overlay" isOpen={isOpen} onOpenChange={onOpenChange} isDismissable={isDismissable} isKeyboardDismissDisabled>
       <Modal className={cx("os-modal", `os-modal-${size}`)}>
-        <RacDialog className="os-dialog">
+        <RacDialog ref={ref} className="os-dialog">
           {({ close }) => (
             <>
               {icon ? (

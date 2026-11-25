@@ -1,6 +1,6 @@
 export { Button, IconButton, type ButtonProps, type IconButtonProps, type ButtonVariant } from "./Button";
 export { TextField, SearchField, Switch, Checkbox, RadioGroup, Select, type RadioOption } from "./fields";
-export { Dialog, DialogFooter, type DialogProps, type DialogFooterProps } from "./Dialog";
+export { Dialog, DialogFooter, useTopmostEscape, type DialogProps, type DialogFooterProps } from "./Dialog";
 export { Tabs, type TabSpec } from "./Tabs";
 export { Menu, MenuBody, type MenuEntry } from "./Menu";
 export { Tooltip } from "./Tooltip";
