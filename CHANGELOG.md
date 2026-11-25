@@ -4,6 +4,22 @@
 
 - Frühe Beta für SEO-Agenturen in Vorbereitung. Plattform-Smoke, Archiv-Kompatibilität und noch offene M2-Parität bleiben vor der Freigabe zu prüfen.
 
+## [1.0.3] - 2026-11-26
+
+OpenSpider 1.0.3 fixes an error in the main table that has existed since 1.0.0. Crawling, analysis and exports otherwise work as in 1.0.2.
+
+- The error: right after you started a crawl, opened a saved crawl or cleared the current one, the table still showed the rows of the previous crawl for a moment, and they could be selected. If you then chose "Remove" or "Re-crawl", the action could hit a different URL in the new crawl. This needed a click within that short moment and a new crawl that was already finished, for example a small or a saved one.
+- The table: the rows of the previous crawl now disappear as soon as you start, open or clear a crawl. A selection made in the new crawl stays when its first data arrives.
+- Protection in the core: "Remove", "Re-crawl", API requests for selected URLs and the export of detail data now state which crawl the selection comes from. If that crawl is no longer the open one, OpenSpider changes nothing and shows the message "The selected rows belong to a crawl that is no longer open. Nothing was changed."
+
+### Deutsch
+
+OpenSpider 1.0.3 behebt einen Fehler in der Haupttabelle, der seit 1.0.0 besteht. Crawlen, Analyse und Exporte arbeiten sonst wie in 1.0.2.
+
+- Der Fehler: Direkt nachdem Sie einen Crawl gestartet, einen gespeicherten Crawl geöffnet oder den aktuellen geleert hatten, zeigte die Tabelle kurz noch die Zeilen des vorherigen Crawls, und sie ließen sich markieren. Wählten Sie dann „Entfernen“ oder „Erneut crawlen“, konnte die Aktion eine andere URL im neuen Crawl treffen. Dafür brauchte es einen Klick in diesem kurzen Moment und einen neuen Crawl, der schon fertig war, zum Beispiel einen kleinen oder einen gespeicherten.
+- Die Tabelle: Die Zeilen des vorherigen Crawls verschwinden jetzt, sobald Sie einen Crawl starten, öffnen oder leeren. Eine Auswahl im neuen Crawl bleibt erhalten, wenn dessen erste Daten eintreffen.
+- Absicherung im Kern: „Entfernen“, „Erneut crawlen“, API-Abrufe für markierte URLs und der Export von Detaildaten nennen jetzt den Crawl, aus dem die Auswahl stammt. Ist dieser Crawl nicht mehr der geöffnete, ändert OpenSpider nichts und zeigt die Meldung „Die markierten Zeilen gehören zu einem Crawl, der nicht mehr geöffnet ist. Es wurde nichts geändert.“
+
 ## [1.0.2] - 2026-11-25
 
 OpenSpider 1.0.2 improves how AI assistants see the built-in MCP server. Crawling, analysis and exports work as in 1.0.1.

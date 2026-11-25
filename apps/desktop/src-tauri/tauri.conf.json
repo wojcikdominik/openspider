@@ -108,7 +108,7 @@
       "binaries/openspider"
     ]
   },
-  "version": "1.0.2",
+  "version": "1.0.3",
   "plugins": {
     "updater": {
       "endpoints": [],
