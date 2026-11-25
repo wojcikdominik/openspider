@@ -83,16 +83,22 @@ test("nested question with the focus on body: Escape closes only the question", 
   const del = scheduling(page).getByRole("button", { name: "Delete task", exact: true });
   await del.click();
   await expect(confirm(page)).toBeVisible();
+  await expect.poll(() => focusPlace(page), { message: "focus has entered the question" }).toBe("topmost");
+  await freeze(page);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  expect(await focusPlace(page), "precondition: focus lies on body").toBe("body");
   await page.keyboard.press("Escape");
   await expect(confirm(page)).toHaveCount(0);
   await expect(scheduling(page)).toBeVisible();
+  await expect(del).toBeFocused();
+  await page.clock.resume();
+  await frames(page);
   await expect(del).toBeFocused();
 });
 
 // spec: UI-015
 // acceptance: independent
-test("nested question opening while the focus is still in the outer dialog: Escape closes only the question (Restfall)", async ({ page }) => {
+test("nested question opening, focus not yet in it (body or outer dialog): Escape closes only the question", async ({ page }) => {
   await openScheduling(page);
   const del = scheduling(page).getByRole("button", { name: "Delete task", exact: true });
   await del.focus();
@@ -102,7 +108,7 @@ test("nested question opening while the focus is still in the outer dialog: Esca
   const where = await focusPlace(page);
   test.info().annotations.push({ type: "focus-before-escape", description: where });
   console.log(`UI015-PROBE tasks-nested-gap focus=${where} active=${await page.evaluate(() => document.activeElement?.tagName + ":" + (document.activeElement?.textContent ?? "").slice(0, 20))}`);
-  expect(where, "precondition: focus has not entered the question").not.toBe("topmost");
+  expect(["body", "lower dialog"], "precondition: focus has not entered the question").toContain(where);
   await page.keyboard.press("Escape");
   await expect(confirm(page)).toHaveCount(0);
   await expect(scheduling(page)).toBeVisible();
@@ -110,6 +116,28 @@ test("nested question opening while the focus is still in the outer dialog: Esca
   await frames(page);
   await expect(scheduling(page)).toBeVisible();
   await expect(del).toBeFocused();
+});
+
+// spec: UI-015
+// acceptance: independent
+test("nested question with the key target still in the outer dialog: Escape closes only the question (deterministic Restfall)", async ({ page }) => {
+  await openScheduling(page);
+  const del = scheduling(page).getByRole("button", { name: "Delete task", exact: true });
+  await del.focus();
+  await freeze(page);
+  await virtualClick(del);
+  await expect(confirm(page)).toBeVisible();
+  // The Escape a keyboard delivers while the focus is still on the outer dialog's button: its target is that button.
+  await del.evaluate(el => {
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true }));
+  });
+  await expect(confirm(page)).toHaveCount(0);
+  await expect(scheduling(page)).toBeVisible();
+  await page.clock.resume();
+  await frames(page);
+  await expect(scheduling(page)).toBeVisible();
+  await expect(del).toBeFocused();
+  expect(await page.evaluate(() => window.taskFixture.calls().filter(c => c.cmd === "tasks.delete"))).toEqual([]);
 });
 
 // spec: UI-015

@@ -91,10 +91,17 @@ test("delete question opened by mouse with the focus moved to body: Escape close
   const del = manage(page).getByRole("button", { name: "Delete", exact: true });
   await del.click();
   await expect(question(page)).toBeVisible();
+  // Deterministic "focus on body": wait until the focus is in the question, stop the clock, then blur and check.
+  await expect.poll(() => focusInTopmost(page), { message: "focus has entered the question" }).toBe(true);
+  await freeze(page);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  expect(await page.evaluate(() => document.activeElement === document.body), "precondition: focus lies on body").toBe(true);
   await page.keyboard.press("Escape");
   await expect(question(page)).toHaveCount(0);
   await expect(manage(page)).toBeVisible();
+  await expect(del).toBeFocused();
+  await page.clock.resume();
+  await frames(page);
   await expect(del).toBeFocused();
   expect(await deletes(page)).toEqual([]);
 });
