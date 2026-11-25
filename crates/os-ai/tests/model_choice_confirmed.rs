@@ -49,7 +49,14 @@ fn confirmed_table() -> Vec<(TaskType, ModelRef, Vec<ModelRef>)> {
     for task in [Decision, DecisionVision] {
         rows.push((task, luna_decisions(), vec![haiku(), openrouter_luna()]));
     }
-    for task in [SuggestTitle, SuggestMeta, SuggestH1, LinkAnchor, RedirectConfirm, SuggestAlt] {
+    for task in [
+        SuggestTitle,
+        SuggestMeta,
+        SuggestH1,
+        LinkAnchor,
+        RedirectConfirm,
+        SuggestAlt,
+    ] {
         rows.push((task, luna(), vec![haiku()]));
     }
     for task in [AskSql, AuditSummary, LlmsSummary] {
@@ -91,14 +98,20 @@ fn bundled_task_defaults_match_the_confirmed_table() {
 fn every_listed_model_is_priced_for_its_endpoint_or_marked_openrouter() {
     let defaults = TaskDefaults::bundled().unwrap();
     let pricing = PriceTable::bundled().unwrap();
-    assert_eq!(defaults.check_against_pricing(&pricing), Vec::<String>::new());
+    assert_eq!(
+        defaults.check_against_pricing(&pricing),
+        Vec::<String>::new()
+    );
     let mut seen = 0;
     for (task, d) in &defaults.tasks {
         for m in d.model.iter().chain(d.fallback.iter()) {
             seen += 1;
             if m.provider == "openrouter" {
                 let key = PriceKey::new(&m.provider, &m.model, m.endpoint);
-                assert!(pricing.get(&key).is_none(), "{task}: OpenRouter ohne Tabelleneintrag");
+                assert!(
+                    pricing.get(&key).is_none(),
+                    "{task}: OpenRouter ohne Tabelleneintrag"
+                );
                 continue;
             }
             let entry = pricing
@@ -196,7 +209,9 @@ fn bundled_prices_match_the_documented_values() {
     assert_eq!(table.entries().len(), expected.len());
     let pico = |t: &str| usd_per_million_to_pico(t).unwrap();
     for e in expected {
-        let entry = table.get(&e.key).unwrap_or_else(|| panic!("{:?} fehlt", e.key));
+        let entry = table
+            .get(&e.key)
+            .unwrap_or_else(|| panic!("{:?} fehlt", e.key));
         let rates = entry.rates(None).unwrap();
         assert_eq!(rates.input_pico, pico(e.input), "{:?}", e.key);
         assert_eq!(rates.output_pico, pico(e.output), "{:?}", e.key);
@@ -329,7 +344,10 @@ fn only(key: &str) -> BTreeMap<String, ProviderState> {
         .collect()
 }
 
-fn chosen(task: TaskType, providers: &BTreeMap<String, ProviderState>) -> Result<ModelRef, AiStatus> {
+fn chosen(
+    task: TaskType,
+    providers: &BTreeMap<String, ProviderState>,
+) -> Result<ModelRef, AiStatus> {
     let defaults = TaskDefaults::bundled().unwrap();
     plan_task(task, &TaskSettings::default(), &defaults, providers).map(|p| p.model_ref)
 }
@@ -366,7 +384,11 @@ fn only_anthropic_key_uses_haiku_and_sonnet() {
 fn only_openrouter_key_runs_decisions_over_openrouter() {
     let p = only("openrouter");
     assert_eq!(chosen(TaskType::Decision, &p), Ok(openrouter_luna()));
-    for task in [TaskType::SuggestTitle, TaskType::AskSql, TaskType::Embedding] {
+    for task in [
+        TaskType::SuggestTitle,
+        TaskType::AskSql,
+        TaskType::Embedding,
+    ] {
         assert!(chosen(task, &p).is_err(), "{task}");
     }
 }
@@ -385,7 +407,11 @@ fn tasks_without_available_candidate_are_skipped_per_confirmed_list_criteria() {
         Err(AiStatus::SkippedNoCapableModel)
     );
     let openrouter = only("openrouter");
-    for task in [TaskType::SuggestTitle, TaskType::AskSql, TaskType::Embedding] {
+    for task in [
+        TaskType::SuggestTitle,
+        TaskType::AskSql,
+        TaskType::Embedding,
+    ] {
         assert_eq!(
             chosen(task, &openrouter),
             Err(AiStatus::SkippedNoCapableModel),

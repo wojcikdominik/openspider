@@ -756,7 +756,8 @@ fn confirmed_list_uses_defaults_then_fallbacks_including_unpriced_models() {
 #[test]
 fn task_without_any_candidate_depends_on_any_key() {
     let placeholder =
-        TaskDefaults::from_json_str(&fixture("task-defaults-placeholder.json").to_string()).unwrap();
+        TaskDefaults::from_json_str(&fixture("task-defaults-placeholder.json").to_string())
+            .unwrap();
     let keyed = |ids: &[&str]| -> BTreeMap<String, ProviderState> {
         ids.iter()
             .map(|id| {
@@ -771,7 +772,12 @@ fn task_without_any_candidate_depends_on_any_key() {
             .collect()
     };
     for task in TaskType::ALL {
-        let none = plan_task(task, &TaskSettings::default(), &placeholder, &providers(&[]));
+        let none = plan_task(
+            task,
+            &TaskSettings::default(),
+            &placeholder,
+            &providers(&[]),
+        );
         assert_eq!(none, Err(AiStatus::MissingApiKey), "{task}");
         let without_key = providers(&[("openai", ProviderState::default())]);
         assert_eq!(
