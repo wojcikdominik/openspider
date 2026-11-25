@@ -108,3 +108,61 @@ verloren. Der Fix ist für die Freigabe tragfähig; B1-1 kann als Folgearbeit la
 4. Manage crawls (Crawl-Verwaltung, `CrawlsHost`) mit Rückfrage „Delete“: Öffnen per Entf-Taste und sofortiges Escape
    (auch bei angehaltener Uhr), Fokus auf `body`, Kontextmenü (Shift+F10), zwei schnelle Escapes.
 5. Baustein (Vitest): eigene Testdialoge mit `ComboBox`, `SearchField` und `DialogFooter`.
+
+## Folgeauftrag 25.11.2026 (Bauer-Stand `23094ab6`, Endstand ausstehend)
+
+Festlegungen des Orchestrators:
+- B1-1 ist behoben: Es schließt immer der oberste Dialog.
+- B2-2: Allein `isKeyboardDismissDisabled` steuert, ob Escape schließt; `isDismissable` betrifft nur den Klick daneben.
+- B2-1: Ist der Auslöser verschwunden, schließt der Dialog ohne Fehler, und der Fokus darf auf `body` liegen.
+
+`fix/ui146-svg-export` ist in den Abnahmezweig gemergt (`89921a79`).
+
+### Wackler in der Vorbereitung beseitigt
+
+`export/acceptance-dialog-escape.spec.ts` „Escape while the focus lies on body …“ (im Lauf des Bauers 1 von 1 120 rot)
+hatte eine Wettlaufbedingung: Das `blur()` kam, bevor React Aria den Fokus einen Frame nach dem Öffnen in den Dialog
+legt. Neue Reihenfolge:
+1. warten, bis der Fokus im Dialog ist (`expect.poll`),
+2. Seitenuhr anhalten (kein weiterer Frame),
+3. `blur()`,
+4. Vorbedingung „Fokus auf body“ hart prüfen,
+5. Escape drücken.
+
+Die Zusicherung bleibt unverändert, zusätzlich wird nach dem Weiterlaufen der Uhr geprüft, dass der Fokus beim Auslöser
+bleibt.
+
+Dieselbe Schwäche hatten weitere Fälle; sie sind ebenso festgezogen:
+- Export: der laufende Vorgang.
+- Tasks: die verschachtelte Rückfrage mit Fokus auf `body`.
+- Crawls: die Rückfrage nach Mausklick. Dieser Dialog holt den Fokus beim `blur()` synchron zurück, „Fokus auf body“
+  lässt sich dort also nicht herstellen. Der Fall liefert jetzt das Escape mit Ziel `body` aus, so wie die Tastatur es
+  bei Fokus auf `body` täte. Bisher war die Vorbedingung dort nur scheinbar erfüllt.
+
+Die Lückenfälle (Uhr angehalten vor dem programmatischen Öffnen) waren bereits deterministisch.
+
+### Neue Fälle
+
+- Vitest „4 (Festlegung 25.11.)“: Mit `isKeyboardDismissDisabled` bleibt der Dialog offen, wenn Escape mit Fokus im
+  Dialog oder auf `body` kommt, und `onOpenChange` wird nicht aufgerufen.
+- Vitest „3+4“: Ist der oberste Dialog ein Pflichtdialog, schließt Escape auch den Dialog darunter nicht, egal ob das
+  Ziel im Pflichtdialog, auf `body` oder im unteren Dialog liegt.
+- Vitest „3 (B1-1)“: Liegt das Escape-Ziel noch im äußeren Dialog, schließt nur der innere, und der Fokus geht an
+  dessen Auslöser.
+- Playwright Tasks „deterministic Restfall“: Uhr angehalten, Rückfrage programmatisch geöffnet, Escape mit Ziel auf
+  „Delete task“ im äußeren Dialog. Es schließt nur die Rückfrage, und der Fokus kehrt zurück. Der bisherige
+  Tastaturfall mit Fokus auf `body` oder im äußeren Dialog erwartet jetzt ebenfalls Grün.
+- Playwright `settings-sections/acceptance-dialog-escape.spec.ts`: Einstellungsrahmen → Notifications → „Add SMTP
+  account“, geöffnet, während der Fokus noch im Einstellungsrahmen liegt. Geprüft werden drei Wege: Escape über die
+  Tastatur, Escape mit Ziel auf der Schaltfläche „Add“ der Einstellungen und Escape im Textfeld. Jedes Mal schließt nur
+  der Kontodialog, die Einstellungen bleiben, und der Fokus kehrt zu „Add“ zurück.
+
+Hinweis: Auf der Testseite ist der Einstellungsrahmen (`SettingsFrame`) das Fenster selbst, kein Overlay. Sobald der
+Einstellungsdialog als eigenes Overlay vorliegt, prüfe ich den Fall dort erneut.
+
+### Vorläufe gegen `23094ab6`
+
+| Lauf | Stand | Ergebnis |
+|---|---|---|
+| a1: Typecheck, Vitest, Playwright ×1 | f3154021 | TC 0, Vitest 17/17, Playwright 46/48 (Fehler im Test: Crawls-Vorbedingung, siehe oben) |
+| a2: Typecheck, Vitest, Playwright `--repeat-each=3` | c21f748d | TC 0, Vitest 17/17, Playwright 144/144 |
