@@ -8,7 +8,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # int/**: Integrationsstände vor dem Merge (Nutzerentscheidung 25.11.2026, docs/plan/M4.md Abschnitt 7).
+    branches: [main, "int/**"]
     tags: ["v*"]
     # Reine Doku-Commits lösen keinen Lauf aus (Muster werden der Reihe nach angewendet, später gewinnt):
     # Markdown, docs/**, website/** (eigener leichter Lauf website.yml), learnings/** und assets bleiben draußen

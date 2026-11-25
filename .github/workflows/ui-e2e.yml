@@ -12,7 +12,8 @@ name: ui-e2e
 on:
   push:
     # Paketbranches (m2/<kurz-id>) laufen ohne Pull-Request mit (Definition of Done: CI-Matrix des Branches grün)
-    branches: [main, "m2/**"]
+    # int/**: Integrationsstände vor dem Merge (Nutzerentscheidung 25.11.2026, docs/plan/M4.md Abschnitt 7).
+    branches: [main, "m2/**", "int/**"]
     # Schmale Positivliste (K2-67: Markdown und assets lösen keinen Lauf aus; die Ausschlüsse stehen am Ende).
     paths: &ui-paths
       - "apps/desktop/**"

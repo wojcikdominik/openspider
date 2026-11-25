@@ -34,7 +34,7 @@ on:
         type: string
         default: ''
   push:
-    branches: [main, 'm3/**', 'm4/**', 'm5/**']
+    branches: [main, 'm3/**', 'm4/**', 'm5/**', 'int/**']
     paths: &plan-paths
       - 'docs/plan/M*-packages.json'
       - 'docs/plan/plan-check.py'
