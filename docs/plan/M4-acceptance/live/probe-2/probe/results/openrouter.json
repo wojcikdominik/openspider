@@ -1,0 +1,1532 @@
+{
+  "base_url": "https://openrouter.ai/api/v1",
+  "facts": {
+    "primary_listed": true,
+    "primary_model": "openai/gpt-6-luna",
+    "primary_pricing": {
+      "completion": "0.0000005",
+      "input_cache_read": "0.00000001",
+      "input_cache_write": "0.000000125",
+      "overrides": [
+        {
+          "completion": "0.00000075",
+          "input_cache_read": "0.00000002",
+          "input_cache_write": "0.00000025",
+          "min_prompt_tokens": 272000,
+          "prompt": "0.0000002"
+        }
+      ],
+      "prompt": "0.0000001",
+      "web_search": "0.01"
+    },
+    "primary_reasoning": {
+      "default_effort": "medium",
+      "default_enabled": true,
+      "mandatory": false,
+      "supported_efforts": [
+        "max",
+        "xhigh",
+        "high",
+        "medium",
+        "low",
+        "none"
+      ]
+    },
+    "primary_supported_parameters": [
+      "include_reasoning",
+      "max_completion_tokens",
+      "max_tokens",
+      "reasoning",
+      "reasoning_effort",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools",
+      "verbosity"
+    ]
+  },
+  "generated_at_unix": 1795610237,
+  "key": {
+    "account": "ai.openrouter",
+    "found": true,
+    "service": "OpenSpider-Probe"
+  },
+  "models_only": false,
+  "price_basis": "Preise aus der OpenRouter-Modellliste (openai/gpt-6-luna); usage.cost zusätzlich aufgezeichnet",
+  "probe": "M4-Q00b",
+  "provider": "openrouter",
+  "requests": [
+    {
+      "cost_basis": "free",
+      "cost_cap_usd": 0.0,
+      "cost_usd": 0.0,
+      "duration_ms": 499,
+      "executed": true,
+      "form_source": "list",
+      "method": "GET",
+      "model": null,
+      "purpose": "Modellliste: reasoning (supported_efforts, mandatory, default_enabled) für openai/gpt-6-luna; Preise",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": null,
+        "headers": {}
+      },
+      "response_body": {
+        "count": 440,
+        "custom_models_omitted": 0,
+        "entry_field_paths": {
+          "alias_target": {
+            "entries": 19,
+            "types": [
+              "object"
+            ]
+          },
+          "alias_target.name": {
+            "entries": 19,
+            "types": [
+              "string"
+            ]
+          },
+          "alias_target.slug": {
+            "entries": 19,
+            "types": [
+              "string"
+            ]
+          },
+          "architecture": {
+            "entries": 440,
+            "types": [
+              "object"
+            ]
+          },
+          "architecture.input_modalities": {
+            "entries": 440,
+            "types": [
+              "array"
+            ]
+          },
+          "architecture.instruct_type": {
+            "entries": 440,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "architecture.modality": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "architecture.output_modalities": {
+            "entries": 440,
+            "types": [
+              "array"
+            ]
+          },
+          "architecture.tokenizer": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "benchmarks": {
+            "entries": 245,
+            "types": [
+              "object"
+            ]
+          },
+          "benchmarks.artificial_analysis": {
+            "entries": 203,
+            "types": [
+              "object"
+            ]
+          },
+          "benchmarks.artificial_analysis.agentic_index": {
+            "entries": 203,
+            "types": [
+              "null"
+            ]
+          },
+          "benchmarks.artificial_analysis.coding_index": {
+            "entries": 203,
+            "types": [
+              "null"
+            ]
+          },
+          "benchmarks.artificial_analysis.cyber_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.decision_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.economics_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.engineering_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.finance_and_accounting_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.healthcare_and_medical_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.intelligence_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.legal_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.multilingual_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.openness_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.artificial_analysis.strategy_and_ops_index": {
+            "entries": 203,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "benchmarks.design_arena": {
+            "entries": 245,
+            "types": [
+              "array"
+            ]
+          },
+          "canonical_slug": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "context_length": {
+            "entries": 440,
+            "types": [
+              "number"
+            ]
+          },
+          "created": {
+            "entries": 440,
+            "types": [
+              "number"
+            ]
+          },
+          "default_parameters": {
+            "entries": 440,
+            "types": [
+              "object"
+            ]
+          },
+          "default_parameters.frequency_penalty": {
+            "entries": 193,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "default_parameters.presence_penalty": {
+            "entries": 132,
+            "types": [
+              "null"
+            ]
+          },
+          "default_parameters.repetition_penalty": {
+            "entries": 135,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "default_parameters.temperature": {
+            "entries": 237,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "default_parameters.top_k": {
+            "entries": 150,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "default_parameters.top_p": {
+            "entries": 228,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "description": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "endpoints": {
+            "entries": 440,
+            "types": [
+              "array"
+            ]
+          },
+          "expiration_date": {
+            "entries": 440,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "hugging_face_id": {
+            "entries": 440,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "knowledge_cutoff": {
+            "entries": 440,
+            "types": [
+              "null",
+              "string"
+            ]
+          },
+          "links": {
+            "entries": 440,
+            "types": [
+              "object"
+            ]
+          },
+          "links.details": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "name": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "per_request_limits": {
+            "entries": 440,
+            "types": [
+              "null"
+            ]
+          },
+          "pricing": {
+            "entries": 440,
+            "types": [
+              "object"
+            ]
+          },
+          "pricing.audio": {
+            "entries": 38,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.audio_output": {
+            "entries": 2,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.completion": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.image": {
+            "entries": 35,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.image_output": {
+            "entries": 10,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.input_audio_cache": {
+            "entries": 33,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.input_cache_read": {
+            "entries": 313,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.input_cache_write": {
+            "entries": 107,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.input_cache_write_1h": {
+            "entries": 26,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.internal_reasoning": {
+            "entries": 36,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.overrides": {
+            "entries": 82,
+            "types": [
+              "array"
+            ]
+          },
+          "pricing.prompt": {
+            "entries": 440,
+            "types": [
+              "string"
+            ]
+          },
+          "pricing.web_search": {
+            "entries": 166,
+            "types": [
+              "string"
+            ]
+          },
+          "reasoning": {
+            "entries": 329,
+            "types": [
+              "object"
+            ]
+          },
+          "reasoning.default_effort": {
+            "entries": 223,
+            "types": [
+              "string"
+            ]
+          },
+          "reasoning.default_enabled": {
+            "entries": 180,
+            "types": [
+              "boolean"
+            ]
+          },
+          "reasoning.mandatory": {
+            "entries": 329,
+            "types": [
+              "boolean"
+            ]
+          },
+          "reasoning.supported_efforts": {
+            "entries": 223,
+            "types": [
+              "array"
+            ]
+          },
+          "reasoning.supports_max_tokens": {
+            "entries": 8,
+            "types": [
+              "boolean"
+            ]
+          },
+          "supported_parameters": {
+            "entries": 440,
+            "types": [
+              "array"
+            ]
+          },
+          "supported_voices": {
+            "entries": 440,
+            "types": [
+              "null"
+            ]
+          },
+          "top_provider": {
+            "entries": 440,
+            "types": [
+              "object"
+            ]
+          },
+          "top_provider.context_length": {
+            "entries": 440,
+            "types": [
+              "null",
+              "number"
+            ]
+          },
+          "top_provider.is_moderated": {
+            "entries": 440,
+            "types": [
+              "boolean"
+            ]
+          },
+          "top_provider.max_completion_tokens": {
+            "entries": 440,
+            "types": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "architecture": {
+              "input_modalities": [
+                "text"
+              ],
+              "instruct_type": null,
+              "modality": "text->text",
+              "output_modalities": [
+                "text"
+              ],
+              "tokenizer": "Other"
+            },
+            "canonical_slug": "upstage/solar-mini-4-5-20261125",
+            "context_length": 524288,
+            "created": 1795562304,
+            "default_parameters": {},
+            "description": "Solar Mini 4.5 is Upstage's compact language model, built on a proprietary mixture-of-experts architecture with 35B total and 3B active parameters and a 524K co…[gekürzt, 189 Zeichen]",
+            "endpoints": [
+              "/api/v1/chat/completions",
+              "/api/v1/completions",
+              "/api/v1/messages",
+              "/api/v1/responses"
+            ],
+            "expiration_date": null,
+            "hugging_face_id": null,
+            "id": "upstage/solar-mini-4-5",
+            "knowledge_cutoff": null,
+            "links": {
+              "details": "/api/v1/models/upstage/solar-mini-4-5-20261125/endpoints"
+            },
+            "name": "Upstage: Solar Mini 4.5 (Preview)",
+            "per_request_limits": null,
+            "pricing": {
+              "completion": "0.00000004",
+              "input_cache_read": "0.000000001",
+              "prompt": "0.00000001"
+            },
+            "reasoning": {
+              "default_effort": "medium",
+              "default_enabled": false,
+              "mandatory": false,
+              "supported_efforts": [
+                "max",
+                "xhigh",
+                "high",
+                "medium",
+                "low",
+                "minimal",
+                "none"
+              ]
+            },
+            "supported_parameters": [
+              "frequency_penalty",
+              "include_reasoning",
+              "max_tokens",
+              "parallel_tool_calls",
+              "presence_penalty",
+              "reasoning",
+              "reasoning_effort",
+              "response_format",
+              "structured_outputs",
+              "temperature",
+              "tool_choice",
+              "tools",
+              "top_p"
+            ],
+            "supported_voices": null,
+            "top_provider": {
+              "context_length": 524288,
+              "is_moderated": false,
+              "max_completion_tokens": 131072
+            }
+          },
+          {
+            "architecture": {
+              "input_modalities": [
+                "text"
+              ],
+              "instruct_type": null,
+              "modality": "text->text",
+              "output_modalities": [
+                "text"
+              ],
+              "tokenizer": "Other"
+            },
+            "canonical_slug": "upstage/solar-pro-4-contributor-20261125",
+            "context_length": 524288,
+            "created": 1795562304,
+            "default_parameters": {},
+            "description": "Solar Pro 4 Contributor is the same Solar Pro 4 model from Upstage, offered at a lower rate in exchange for allowing Upstage to use interaction data to improve …[gekürzt, 166 Zeichen]",
+            "endpoints": [
+              "/api/v1/chat/completions",
+              "/api/v1/completions",
+              "/api/v1/messages",
+              "/api/v1/responses"
+            ],
+            "expiration_date": null,
+            "hugging_face_id": null,
+            "id": "upstage/solar-pro-4-contributor",
+            "knowledge_cutoff": null,
+            "links": {
+              "details": "/api/v1/models/upstage/solar-pro-4-contributor-20261125/endpoints"
+            },
+            "name": "Upstage: Solar Pro 4 Contributor",
+            "per_request_limits": null,
+            "pricing": {
+              "completion": "0.00000036",
+              "input_cache_read": "0.000000018",
+              "prompt": "0.00000009"
+            },
+            "reasoning": {
+              "default_effort": "medium",
+              "default_enabled": false,
+              "mandatory": false,
+              "supported_efforts": [
+                "max",
+                "xhigh",
+                "high",
+                "medium",
+                "low",
+                "minimal",
+                "none"
+              ]
+            },
+            "supported_parameters": [
+              "frequency_penalty",
+              "include_reasoning",
+              "max_tokens",
+              "parallel_tool_calls",
+              "presence_penalty",
+              "reasoning",
+              "reasoning_effort",
+              "response_format",
+              "structured_outputs",
+              "temperature",
+              "tool_choice",
+              "tools",
+              "top_p"
+            ],
+            "supported_voices": null,
+            "top_provider": {
+              "context_length": 524288,
+              "is_moderated": false,
+              "max_completion_tokens": 131072
+            }
+          },
+          {
+            "architecture": {
+              "input_modalities": [
+                "text",
+                "image",
+                "video",
+                "audio"
+              ],
+              "instruct_type": null,
+              "modality": "text+image+audio+video->text",
+              "output_modalities": [
+                "text"
+              ],
+              "tokenizer": "Other"
+            },
+            "canonical_slug": "xiaomi/mimo-v2.6-flash-mopd-20260927",
+            "context_length": 1048576,
+            "created": 1795456634,
+            "default_parameters": {
+              "frequency_penalty": 0,
+              "temperature": 1,
+              "top_p": 0.95
+            },
+            "description": "MiMo-V2.6-Flash-MOPD is an updated checkpoint of Xiaomi's MiMo-V2.6-Flash, a Mixture-of-Experts model with 309B total and 15B active parameters, a 1M-token cont…[gekürzt, 227 Zeichen]",
+            "endpoints": [
+              "/api/v1/chat/completions",
+              "/api/v1/completions",
+              "/api/v1/messages",
+              "/api/v1/responses"
+            ],
+            "expiration_date": null,
+            "hugging_face_id": "XiaomiMiMo/MiMo-V2.6-Flash-MOPD",
+            "id": "xiaomi/mimo-v2.6-flash-mopd",
+            "knowledge_cutoff": null,
+            "links": {
+              "details": "/api/v1/models/xiaomi/mimo-v2.6-flash-mopd-20260927/endpoints"
+            },
+            "name": "Xiaomi: MiMo-V2.6-Flash-MOPD",
+            "per_request_limits": null,
+            "pricing": {
+              "completion": "0.000001",
+              "input_cache_read": "0.00000005",
+              "prompt": "0.0000005"
+            },
+            "reasoning": {
+              "mandatory": false
+            },
+            "supported_parameters": [
+              "frequency_penalty",
+              "include_reasoning",
+              "max_tokens",
+              "min_p",
+              "presence_penalty",
+              "reasoning",
+              "repetition_penalty",
+              "response_format",
+              "seed",
+              "stop",
+              "structured_outputs",
+              "temperature",
+              "tool_choice",
+              "tools",
+              "top_k",
+              "top_p"
+            ],
+            "supported_voices": null,
+            "top_provider": {
+              "context_length": 1048576,
+              "is_moderated": false,
+              "max_completion_tokens": 32768
+            }
+          }
+        ],
+        "top_level_fields": {
+          "links": {
+            "next": null
+          },
+          "total_count": 440
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cache-control": "(Wert nicht aufgezeichnet)",
+        "cf-cache-status": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "permissions-policy": "(Wert nicht aufgezeichnet)",
+        "referrer-policy": "(Wert nicht aufgezeichnet)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "vary": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.0,
+      "status": 200,
+      "step": "openrouter.models",
+      "url": "https://openrouter.ai/api/v1/models",
+      "usage": null
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.0001474,
+      "cost_usd": 0.0000435,
+      "duration_ms": 1217,
+      "executed": true,
+      "form_source": "adapter",
+      "method": "POST",
+      "model": "openai/gpt-6-luna",
+      "observation": {
+        "answer_is_json": true,
+        "answer_present": true,
+        "decisions_answer_types": null,
+        "error_code": null,
+        "error_message": null,
+        "error_type": null,
+        "incomplete_reason": null,
+        "output_tokens": 65,
+        "prompt_cache_retention": null,
+        "reasoning_echo": null,
+        "reasoning_tokens": 25,
+        "stop": "stop",
+        "store": null,
+        "thinking_blocks": null
+      },
+      "purpose": "Stufe model-default: kein reasoning; require_parameters (Schema-Aufgabe)",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 200,
+          "messages": [
+            {
+              "content": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+              "role": "system"
+            },
+            {
+              "content": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Estimate calibrated probabilities for the page type.",
+              "role": "user"
+            }
+          ],
+          "model": "openai/gpt-6-luna",
+          "provider": {
+            "data_collection": "deny",
+            "require_parameters": true
+          },
+          "response_format": {
+            "json_schema": {
+              "name": "openspider_probe",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "probabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "category": {
+                        "type": "number"
+                      },
+                      "other": {
+                        "type": "number"
+                      },
+                      "product": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "product",
+                      "category",
+                      "other"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "probabilities",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          }
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "{\"abstain\":false,\"probabilities\":{\"category\":0.01,\"other\":0.01,\"product\":0.98}}",
+              "reasoning": null,
+              "reasoning_details": [
+                {
+                  "data": "(ausgelassen: undurchsichtiger Blob, 424 Zeichen aufgezeichnet)",
+                  "format": "openai-responses-v1",
+                  "id": "rs_…(ausgelassen: Anbieter-ID)",
+                  "index": 0,
+                  "type": "reasoning.encrypted"
+                }
+              ],
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "completed"
+          }
+        ],
+        "created": 1795610231,
+        "id": "gen-…(ausgelassen: Anbieter-ID)",
+        "model": "openai/gpt-6-luna",
+        "object": "chat.completion",
+        "provider": "OpenAI",
+        "service_tier": "default",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 65,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 25
+          },
+          "cost": 0.0000435,
+          "cost_details": {
+            "upstream_inference_completions_cost": 0.0000325,
+            "upstream_inference_cost": 0.0000435,
+            "upstream_inference_prompt_cost": 0.000011
+          },
+          "is_byok": false,
+          "prompt_tokens": 110,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 175
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "permissions-policy": "(Wert nicht aufgezeichnet)",
+        "referrer-policy": "(Wert nicht aufgezeichnet)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-generation-id": "(Wert nicht aufgezeichnet)",
+        "x-openrouter-release": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.0000435,
+      "status": 200,
+      "step": "openrouter.default",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "usage": {
+        "completion_tokens": 65,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 25
+        },
+        "cost": 0.0000435,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0.0000325,
+          "upstream_inference_cost": 0.0000435,
+          "upstream_inference_prompt_cost": 0.000011
+        },
+        "is_byok": false,
+        "prompt_tokens": 110,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 175
+      }
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.0001489,
+      "cost_usd": 0.000029999999999999997,
+      "duration_ms": 883,
+      "executed": true,
+      "form_source": "adapter",
+      "method": "POST",
+      "model": "openai/gpt-6-luna",
+      "observation": {
+        "answer_is_json": true,
+        "answer_present": true,
+        "decisions_answer_types": null,
+        "error_code": null,
+        "error_message": null,
+        "error_type": null,
+        "incomplete_reason": null,
+        "output_tokens": 38,
+        "prompt_cache_retention": null,
+        "reasoning_echo": null,
+        "reasoning_tokens": 0,
+        "stop": "stop",
+        "store": null,
+        "thinking_blocks": null
+      },
+      "purpose": "Stufe off: reasoning {effort: none} mit provider.require_parameters = true; reasoning_tokens = 0?",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 200,
+          "messages": [
+            {
+              "content": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+              "role": "system"
+            },
+            {
+              "content": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Estimate calibrated probabilities for the page type.",
+              "role": "user"
+            }
+          ],
+          "model": "openai/gpt-6-luna",
+          "provider": {
+            "data_collection": "deny",
+            "require_parameters": true
+          },
+          "reasoning": {
+            "effort": "none"
+          },
+          "response_format": {
+            "json_schema": {
+              "name": "openspider_probe",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "probabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "category": {
+                        "type": "number"
+                      },
+                      "other": {
+                        "type": "number"
+                      },
+                      "product": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "product",
+                      "category",
+                      "other"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "probabilities",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          }
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "{\"abstain\":false,\"probabilities\":{\"category\":0.02,\"other\":0.03,\"product\":0.95}}",
+              "reasoning": null,
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "completed"
+          }
+        ],
+        "created": 1795610233,
+        "id": "gen-…(ausgelassen: Anbieter-ID)",
+        "model": "openai/gpt-6-luna",
+        "object": "chat.completion",
+        "provider": "OpenAI",
+        "service_tier": "default",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 38,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 0.00003,
+          "cost_details": {
+            "upstream_inference_completions_cost": 0.000019,
+            "upstream_inference_cost": 0.00003,
+            "upstream_inference_prompt_cost": 0.000011
+          },
+          "is_byok": false,
+          "prompt_tokens": 110,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 148
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "permissions-policy": "(Wert nicht aufgezeichnet)",
+        "referrer-policy": "(Wert nicht aufgezeichnet)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-generation-id": "(Wert nicht aufgezeichnet)",
+        "x-openrouter-release": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.0000735,
+      "status": 200,
+      "step": "openrouter.off",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "usage": {
+        "completion_tokens": 38,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0.00003,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0.000019,
+          "upstream_inference_cost": 0.00003,
+          "upstream_inference_prompt_cost": 0.000011
+        },
+        "is_byok": false,
+        "prompt_tokens": 110,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 148
+      }
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.0001489,
+      "cost_usd": 0.000040499999999999995,
+      "duration_ms": 2160,
+      "executed": true,
+      "form_source": "adapter",
+      "method": "POST",
+      "model": "openai/gpt-6-luna",
+      "observation": {
+        "answer_is_json": true,
+        "answer_present": true,
+        "decisions_answer_types": null,
+        "error_code": null,
+        "error_message": null,
+        "error_type": null,
+        "incomplete_reason": null,
+        "output_tokens": 59,
+        "prompt_cache_retention": null,
+        "reasoning_echo": null,
+        "reasoning_tokens": 19,
+        "stop": "stop",
+        "store": null,
+        "thinking_blocks": null
+      },
+      "purpose": "Stufe low: reasoning {effort: low}",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 200,
+          "messages": [
+            {
+              "content": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+              "role": "system"
+            },
+            {
+              "content": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Estimate calibrated probabilities for the page type.",
+              "role": "user"
+            }
+          ],
+          "model": "openai/gpt-6-luna",
+          "provider": {
+            "data_collection": "deny",
+            "require_parameters": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "json_schema": {
+              "name": "openspider_probe",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "probabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "category": {
+                        "type": "number"
+                      },
+                      "other": {
+                        "type": "number"
+                      },
+                      "product": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "product",
+                      "category",
+                      "other"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "probabilities",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          }
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "{\"abstain\":false,\"probabilities\":{\"category\":0.01,\"other\":0.01,\"product\":0.98}}",
+              "reasoning": "**Defining output schema**\n\nI need to establish the output schema. It should reflect a high-quality product, and I might want to include product categories as well. Also, I need to ensure the format is in JSON and that it’s precise, capturing all necessary details correctly. It's crucial to get this right so that everything aligns properly with expectations and requirements, avoiding any mistakes …[gekürzt, 497 Zeichen]",
+              "reasoning_details": [
+                {
+                  "format": "openai-responses-v1",
+                  "index": 0,
+                  "summary": "**Defining output schema**\n\nI need to establish the output schema. It should reflect a high-quality product, and I might want to include product categories as well. Also, I need to ensure the format is in JSON and that it’s precise, capturing all necessary details correctly. It's crucial to get this right so that everything aligns properly with expectations and requirements, avoiding any mistakes …[gekürzt, 497 Zeichen]",
+                  "type": "reasoning.summary"
+                },
+                {
+                  "data": "(ausgelassen: undurchsichtiger Blob, 424 Zeichen aufgezeichnet)",
+                  "format": "openai-responses-v1",
+                  "id": "rs_…(ausgelassen: Anbieter-ID)",
+                  "index": 1,
+                  "type": "reasoning.encrypted"
+                }
+              ],
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "completed"
+          }
+        ],
+        "created": 1795610234,
+        "id": "gen-…(ausgelassen: Anbieter-ID)",
+        "model": "openai/gpt-6-luna",
+        "object": "chat.completion",
+        "provider": "OpenAI",
+        "service_tier": "default",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 59,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 19
+          },
+          "cost": 0.0000405,
+          "cost_details": {
+            "upstream_inference_completions_cost": 0.0000295,
+            "upstream_inference_cost": 0.0000405,
+            "upstream_inference_prompt_cost": 0.000011
+          },
+          "is_byok": false,
+          "prompt_tokens": 110,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 169
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "permissions-policy": "(Wert nicht aufgezeichnet)",
+        "referrer-policy": "(Wert nicht aufgezeichnet)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-generation-id": "(Wert nicht aufgezeichnet)",
+        "x-openrouter-release": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.00011399999999999999,
+      "status": 200,
+      "step": "openrouter.low",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "usage": {
+        "completion_tokens": 59,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 19
+        },
+        "cost": 0.0000405,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0.0000295,
+          "upstream_inference_cost": 0.0000405,
+          "upstream_inference_prompt_cost": 0.000011
+        },
+        "is_byok": false,
+        "prompt_tokens": 110,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 169
+      }
+    },
+    {
+      "cost_basis": "usage",
+      "cost_cap_usd": 0.0001489,
+      "cost_usd": 0.000029999999999999997,
+      "duration_ms": 931,
+      "executed": true,
+      "form_source": "alternative",
+      "method": "POST",
+      "model": "openai/gpt-6-luna",
+      "observation": {
+        "answer_is_json": true,
+        "answer_present": true,
+        "decisions_answer_types": null,
+        "error_code": null,
+        "error_message": null,
+        "error_type": null,
+        "incomplete_reason": null,
+        "output_tokens": 38,
+        "prompt_cache_retention": null,
+        "reasoning_echo": null,
+        "reasoning_tokens": 0,
+        "stop": "stop",
+        "store": null,
+        "thinking_blocks": null
+      },
+      "purpose": "Alternative: reasoning {enabled: false}",
+      "request": {
+        "auth_header": "authorization (nicht aufgezeichnet)",
+        "body": {
+          "max_tokens": 200,
+          "messages": [
+            {
+              "content": "You are the endpoint of an API compatibility probe. Answer as briefly as possible.",
+              "role": "system"
+            },
+            {
+              "content": "Page text: \"Red running shoe, 49 EUR, in stock, add to cart.\" Estimate calibrated probabilities for the page type.",
+              "role": "user"
+            }
+          ],
+          "model": "openai/gpt-6-luna",
+          "provider": {
+            "data_collection": "deny",
+            "require_parameters": true
+          },
+          "reasoning": {
+            "enabled": false
+          },
+          "response_format": {
+            "json_schema": {
+              "name": "openspider_probe",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "abstain": {
+                    "type": "boolean"
+                  },
+                  "probabilities": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "category": {
+                        "type": "number"
+                      },
+                      "other": {
+                        "type": "number"
+                      },
+                      "product": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "product",
+                      "category",
+                      "other"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "probabilities",
+                  "abstain"
+                ],
+                "type": "object"
+              },
+              "strict": true
+            },
+            "type": "json_schema"
+          }
+        },
+        "headers": {
+          "content-type": "application/json"
+        }
+      },
+      "response_body": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "{\"abstain\":false,\"probabilities\":{\"category\":0.02,\"other\":0.03,\"product\":0.95}}",
+              "reasoning": null,
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "completed"
+          }
+        ],
+        "created": 1795610236,
+        "id": "gen-…(ausgelassen: Anbieter-ID)",
+        "model": "openai/gpt-6-luna",
+        "object": "chat.completion",
+        "provider": "OpenAI",
+        "service_tier": "default",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 38,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 0.00003,
+          "cost_details": {
+            "upstream_inference_completions_cost": 0.000019,
+            "upstream_inference_cost": 0.00003,
+            "upstream_inference_prompt_cost": 0.000011
+          },
+          "is_byok": false,
+          "prompt_tokens": 110,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 148
+        }
+      },
+      "response_headers": {
+        "access-control-allow-origin": "(Wert nicht aufgezeichnet)",
+        "access-control-expose-headers": "(Wert nicht aufgezeichnet)",
+        "alt-svc": "(Wert nicht aufgezeichnet)",
+        "cf-ray": "(Wert nicht aufgezeichnet)",
+        "content-type": "application/json",
+        "date": "(Wert nicht aufgezeichnet)",
+        "permissions-policy": "(Wert nicht aufgezeichnet)",
+        "referrer-policy": "(Wert nicht aufgezeichnet)",
+        "server": "(Wert nicht aufgezeichnet)",
+        "set-cookie": "(Wert nicht aufgezeichnet)",
+        "x-content-type-options": "(Wert nicht aufgezeichnet)",
+        "x-generation-id": "(Wert nicht aufgezeichnet)",
+        "x-openrouter-release": "(Wert nicht aufgezeichnet)"
+      },
+      "running_cost_usd": 0.00014399999999999998,
+      "status": 200,
+      "step": "openrouter.enabled_false",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "usage": {
+        "completion_tokens": 38,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "cost": 0.00003,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0.000019,
+          "upstream_inference_cost": 0.00003,
+          "upstream_inference_prompt_cost": 0.000011
+        },
+        "is_byok": false,
+        "prompt_tokens": 110,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 0,
+          "video_tokens": 0
+        },
+        "total_tokens": 148
+      }
+    }
+  ],
+  "totals": {
+    "aborted": null,
+    "estimated_cost_usd": 0.00014399999999999998,
+    "requests": 5
+  }
+}
