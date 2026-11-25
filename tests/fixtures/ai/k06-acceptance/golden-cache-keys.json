@@ -1,5 +1,5 @@
 {
-  "_comment": "Unabhaengige Abnahme M4-K06 (AI-015): 10 Golden-Schluessel. Erwartete Werte mit Python berechnet (json.dumps sort_keys, separators=(',',':'), ensure_ascii=False; SHA-256 ueber UTF-8). Feldnamen = oeffentliche Felder von CacheKeyInput plus v = KEY_FORMAT_VERSION; die Spec legt Feldnamen nicht fest.",
+  "_comment": "Unabhaengige Abnahme M4-K06 (AI-015): 10 Golden-Schluessel; neu erzeugt in M4-K10 (Nachtrag Q00: Feld reasoning) mit tests/fixtures/ai/k10/gen_golden_cache_keys.py. Erwartete Werte mit Python berechnet (json.dumps sort_keys, separators=(',',':'), ensure_ascii=False; SHA-256 ueber UTF-8). Feldnamen = oeffentliche Felder von CacheKeyInput plus v = KEY_FORMAT_VERSION; reasoning (effektive Stufe) nur bei Wegen mit Stufe, sonst null und nicht im kanonischen JSON.",
   "keys": [
     {
       "name": "k01",
@@ -16,7 +16,8 @@
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
       "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
-      "key": "9100432c8c42a5ff0e3041eb4e10b3ea82d72b1833996c82c975284744106c7e"
+      "key": "9100432c8c42a5ff0e3041eb4e10b3ea82d72b1833996c82c975284744106c7e",
+      "reasoning": null
     },
     {
       "name": "k02",
@@ -34,8 +35,9 @@
         },
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
-      "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.anthropic.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"claude-opus-5-5\",\"params\":{},\"path\":\"structured-output\",\"provider\":\"anthropic\",\"result_params\":{\"temperature\":0},\"task\":\"decision\",\"v\":1}",
-      "key": "fa0d44f1dfe0bab7a378600ba8678a9fd8bd9a68a1bd41409a5d4a83bfed234e"
+      "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.anthropic.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"claude-opus-5-5\",\"params\":{},\"path\":\"structured-output\",\"provider\":\"anthropic\",\"reasoning\":\"off\",\"result_params\":{\"temperature\":0},\"task\":\"decision\",\"v\":1}",
+      "key": "df35dc7e59f4eb84d15e6ba2430b73c739a780e861ea80e6ba898572d8ef7665",
+      "reasoning": "off"
     },
     {
       "name": "k03",
@@ -54,7 +56,8 @@
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
       "canonical": "{\"definition_id\":\"page-language\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{\"code\":\"de\"},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
-      "key": "404c755313d53305a47898f4d948d460688a9eab31d782a6e116c76f29aed70c"
+      "key": "404c755313d53305a47898f4d948d460688a9eab31d782a6e116c76f29aed70c",
+      "reasoning": null
     },
     {
       "name": "k04",
@@ -73,7 +76,8 @@
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
       "canonical": "{\"definition_id\":\"page-language\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{\"code\":\"en\"},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
-      "key": "7e4b9dc8cb00098586fe226c47444f63cf5f74b3c58bc2bf07ff7f97955563ac"
+      "key": "7e4b9dc8cb00098586fe226c47444f63cf5f74b3c58bc2bf07ff7f97955563ac",
+      "reasoning": null
     },
     {
       "name": "k05",
@@ -90,7 +94,8 @@
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
       "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://eu.api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
-      "key": "28e138d5c260a59f71a2d067e080976c0721827a43dc6c9fd2cbaaa249440a7a"
+      "key": "28e138d5c260a59f71a2d067e080976c0721827a43dc6c9fd2cbaaa249440a7a",
+      "reasoning": null
     },
     {
       "name": "k06",
@@ -107,7 +112,8 @@
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
       "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.1.0\",\"endpoint\":\"https://api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
-      "key": "0c1053aa28ba4aad02e3c5b6932ed5514baadb95ab3903503361bd6ea5c9b921"
+      "key": "0c1053aa28ba4aad02e3c5b6932ed5514baadb95ab3903503361bd6ea5c9b921",
+      "reasoning": null
     },
     {
       "name": "k07",
@@ -126,7 +132,8 @@
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
       "canonical": "{\"definition_id\":\"embed-page\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{},\"path\":null,\"provider\":\"openai\",\"result_params\":{\"dimensions\":256},\"task\":\"embedding\",\"v\":1}",
-      "key": "c108bdf76aec84b71103dc9dd6133590fbb4de7c08e35d99aeb43e74f362423f"
+      "key": "c108bdf76aec84b71103dc9dd6133590fbb4de7c08e35d99aeb43e74f362423f",
+      "reasoning": null
     },
     {
       "name": "k08",
@@ -153,8 +160,9 @@
         "result_params": {},
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
-      "canonical": "{\"definition_id\":\"suggest-title\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{\"candidates\":[{\"id\":\"c1\",\"title\":\"Größe & Passform – Ratgeber\"},{\"id\":\"c2\",\"title\":\"日本語のページ\"}]},\"path\":\"structured-output\",\"provider\":\"openai\",\"result_params\":{},\"task\":\"suggest-title\",\"v\":1}",
-      "key": "ca711c955a09d1436a4ae8bf28926aad14f8238388c724231324dbffb95c6073"
+      "canonical": "{\"definition_id\":\"suggest-title\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://api.openai.com/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"gpt-6-luna\",\"params\":{\"candidates\":[{\"id\":\"c1\",\"title\":\"Größe & Passform – Ratgeber\"},{\"id\":\"c2\",\"title\":\"日本語のページ\"}]},\"path\":\"structured-output\",\"provider\":\"openai\",\"reasoning\":\"low\",\"result_params\":{},\"task\":\"suggest-title\",\"v\":1}",
+      "key": "8b32023abcc3249ff23146f6e2c96a2100b5d51dfa2da14a6bf547266e81e66e",
+      "reasoning": "low"
     },
     {
       "name": "k09",
@@ -174,7 +182,8 @@
         "input_hash": "56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed"
       },
       "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"https://eu.openrouter.ai/api/v1\",\"input_hash\":\"56828c6f0b5493557f59b727b80643597eefd53f05721d196e431b16d7b0c3ed\",\"model\":\"vendor/model:free\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"openrouter\",\"result_params\":{\"temperature\":0.2,\"top_p\":1},\"task\":\"decision\",\"v\":1}",
-      "key": "3dec17f40cb20f3367ca730d0d89f3f299f6bfe4f64096f46038c8efa728d91e"
+      "key": "3dec17f40cb20f3367ca730d0d89f3f299f6bfe4f64096f46038c8efa728d91e",
+      "reasoning": null
     },
     {
       "name": "k10",
@@ -191,7 +200,8 @@
         "input_hash": "2d66151a8ce3f468d86dbf0444388ead4fd9f9ecf1422292be1f679e92094946"
       },
       "canonical": "{\"definition_id\":\"page-type\",\"definition_version\":\"1.0.0\",\"endpoint\":\"http://localhost:11434\",\"input_hash\":\"2d66151a8ce3f468d86dbf0444388ead4fd9f9ecf1422292be1f679e92094946\",\"model\":\"llama-local\",\"params\":{},\"path\":\"decisions-api\",\"provider\":\"ollama\",\"result_params\":{},\"task\":\"decision\",\"v\":1}",
-      "key": "a2470bed156be308c64e6cf7af5563321e479c6bc94ba633aebcf2479dd06ad2"
+      "key": "a2470bed156be308c64e6cf7af5563321e479c6bc94ba633aebcf2479dd06ad2",
+      "reasoning": null
     }
   ]
 }

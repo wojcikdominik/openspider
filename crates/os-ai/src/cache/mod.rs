@@ -3,6 +3,10 @@
 //! * [`CacheKeyInput`] beschreibt alles, was ein Ergebnis bestimmt; [`CacheKey::new`] bildet daraus den Schlüssel als
 //!   SHA-256 über eine kanonische JSON-Darstellung ([`canonical_json`]: Objektschlüssel nach Unicode-Codepunkten
 //!   sortiert, kein Leerraum, Zeichenketten unverändert in UTF-8). Damit ist der Schlüssel plattformunabhängig.
+//! * Die effektive Reasoning-Stufe (AI-011) ist ergebnisrelevant und geht als Feld `reasoning` in den Schlüssel ein
+//!   ([`CacheKey::with_reasoning`], AI-015 Nachtrag 24.11.2026, Q00); auf Wegen ohne Stufe (Decisions API, Embeddings)
+//!   ist sie `null` und steht nicht in der kanonischen Darstellung – deren Schlüssel bleiben dadurch byte-gleich zu
+//!   [`KEY_FORMAT_VERSION`] 1. `max_tokens` geht nicht ein.
 //! * [`input_hash`] hasht die tatsächlich gesendete Eingabe (nach Kürzung und Schwärzung), Bilder über ihre Bytes.
 //! * [`ResultCache`] wendet die Regeln an: nur `Success` und `Refusal` werden gespeichert (Refusal mit Kennzeichen),
 //!   Fehler nie; „Refusals erneut versuchen“ umgeht den Cache nur für Refusals; Option „Cache verwenden“.
@@ -20,9 +24,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::provider::Input;
+use crate::provider::{Input, ReasoningLevel};
 
-/// Version der Schlüsseldarstellung; ändert sich nur, wenn sich die Bildungsregel ändert.
+/// Version der Schlüsseldarstellung; ändert sich nur, wenn sich die Bildungsregel ändert. Das Feld `reasoning` (M4-K10)
+/// kommt nur zu Schlüsseln mit Stufe hinzu; Schlüssel ohne Stufe sind unverändert, daher bleibt die Version 1.
 pub const KEY_FORMAT_VERSION: u64 = 1;
 
 /// Ausführungsweg einer Frage (AI-015, AI-033/AI-034).
@@ -75,18 +80,38 @@ pub struct CacheKey {
     key: String,
     params_hash: String,
     input: CacheKeyInput,
+    reasoning: Option<ReasoningLevel>,
 }
 
 impl CacheKey {
-    /// Bildet den Schlüssel: SHA-256 (hex, Kleinbuchstaben) über [`CacheKey::canonical`].
+    /// Bildet den Schlüssel eines Wegs ohne Reasoning-Stufe (`reasoning = null`: Decisions API, Embeddings):
+    /// SHA-256 (hex, Kleinbuchstaben) über [`CacheKey::canonical`].
     pub fn new(input: CacheKeyInput) -> Self {
-        let key = sha256_hex(canonical_key_json(&input).as_bytes());
+        Self::build(input, None)
+    }
+
+    /// Schlüssel mit der **effektiven** Reasoning-Stufe (AI-015, Nachtrag Q00-H1). Auf Wegen ohne Stufe – Ausführungsweg
+    /// `decisions-api` oder Aufgabe `embedding` – bleibt `reasoning = null`, unabhängig von der eingestellten Stufe.
+    pub fn with_reasoning(input: CacheKeyInput, reasoning: ReasoningLevel) -> Self {
+        let without_level =
+            input.path == Some(ExecutionPath::DecisionsApi) || input.task == "embedding";
+        Self::build(input, (!without_level).then_some(reasoning))
+    }
+
+    fn build(input: CacheKeyInput, reasoning: Option<ReasoningLevel>) -> Self {
+        let key = sha256_hex(canonical_key_json(&input, reasoning).as_bytes());
         let params_hash = params_hash(&input.params);
         Self {
             key,
             params_hash,
             input,
+            reasoning,
         }
+    }
+
+    /// Die Reasoning-Stufe im Schlüssel; `None` = `null` (Weg ohne Stufe).
+    pub fn reasoning(&self) -> Option<ReasoningLevel> {
+        self.reasoning
     }
 
     /// Der Schlüssel (64 Hex-Zeichen).
@@ -106,12 +131,12 @@ impl CacheKey {
 
     /// Die kanonische JSON-Darstellung, über die gehasht wird.
     pub fn canonical(&self) -> String {
-        canonical_key_json(&self.input)
+        canonical_key_json(&self.input, self.reasoning)
     }
 }
 
-fn canonical_key_json(input: &CacheKeyInput) -> String {
-    let value = serde_json::json!({
+fn canonical_key_json(input: &CacheKeyInput, reasoning: Option<ReasoningLevel>) -> String {
+    let mut value = serde_json::json!({
         "v": KEY_FORMAT_VERSION,
         "task": input.task,
         "definition_id": input.definition_id,
@@ -124,6 +149,9 @@ fn canonical_key_json(input: &CacheKeyInput) -> String {
         "result_params": input.result_params,
         "input_hash": input.input_hash,
     });
+    if let (Some(level), Value::Object(map)) = (reasoning, &mut value) {
+        map.insert("reasoning".into(), Value::String(level.as_str().into()));
+    }
     canonical_json(&value)
 }
 
