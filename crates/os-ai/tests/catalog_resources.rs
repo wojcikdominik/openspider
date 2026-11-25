@@ -275,8 +275,15 @@ fn filling_in_confirmed_models_is_a_pure_data_change() {
         "task-defaults-filled.json",
     ]))
     .unwrap();
-    let mut doc: Value =
-        serde_json::from_str(&read(&["resources", "ai", "task-defaults.json"])).unwrap();
+    // Ausgangspunkt: Datei ohne Standardmodelle (Stand vor K4-20, Fixture); die ausgelieferte Datei ist bestätigt.
+    let mut doc: Value = serde_json::from_str(&read(&[
+        "tests",
+        "fixtures",
+        "ai",
+        "k04",
+        "task-defaults-placeholder.json",
+    ]))
+    .unwrap();
     // Ohne Modelle darf der Status nicht `confirmed` sein.
     let mut premature = doc.clone();
     premature["models_status"] = "confirmed".into();
