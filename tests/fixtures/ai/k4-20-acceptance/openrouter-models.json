@@ -1,0 +1,39 @@
+{
+  "_comment": "Unabhängige Abnahme K4-20: OpenRouter-Modellliste mit openai/gpt-6-luna (AI-005).",
+  "data": [
+    {
+      "id": "openai/gpt-6-luna",
+      "pricing": {
+        "prompt": "0.0000001",
+        "completion": "0.0000005"
+      },
+      "supported_parameters": [
+        "reasoning",
+        "structured_outputs",
+        "response_format",
+        "max_tokens"
+      ],
+      "architecture": {
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "reasoning": {
+        "supported_efforts": [
+          "none",
+          "low",
+          "medium",
+          "high"
+        ],
+        "mandatory": false
+      },
+      "top_provider": {
+        "max_completion_tokens": 128000
+      }
+    }
+  ]
+}
