@@ -1,6 +1,6 @@
 # M4-Q00b – Zweite kurze Live-Probe (V-A6 Reasoning-Parameter, V-A8 Speicherung)
 
-Paket M4-Q00b (Welle 4a). Stand: 24.11.2026, **vorbereitet, noch nicht gelaufen**. Startbedingung: neue Testschlüssel
+Paket M4-Q00b (Welle 4a). Vorbereitet 24.11.2026, **live gelaufen am 25.11.2026** (21 Anfragen, Kostenobergrenze der Probe 0,2887 USD; Auswertung in `docs/plan/M4-reports/q00b.md`). Startbedingung: neue Testschlüssel
 des Nutzers (die aus Q00 sind widerrufen) und ein eigenes, ausdrückliches Ja des Nutzers zu diesem Live-Lauf
 (Obergrenze 1 USD). Das Ergebnis ist Merge-Voraussetzung für M4-K09.
 
@@ -113,51 +113,61 @@ Anthropic-Modelle (`thinking`, `types.disabled`, `types.adaptive`, `effort`, `ef
 `gpt-6-luna` und für `openai/gpt-6-luna` bei OpenRouter `reasoning` (`supported_efforts`, `mandatory`,
 `default_enabled`), `supported_parameters`, `pricing`.
 
-## Vergleichstabelle „Spec/Adapter ↔ beobachtet“ (nach dem Lauf füllen)
+## Vergleichstabelle „Spec/Adapter ↔ beobachtet“
 
-| Nr. | Schritt | Gesendet (Form) | Spec 08 / Adapter erwartet | beobachtet (Status, Antwort ja/nein, Reasoning-Tokens, Fehlerform) | Abw. |
+Live-Lauf am 25.11.2026 (Haupt-Mac, Ja des Nutzers, ein voller Lauf über alle drei Anbieter; zwei vorherige
+kostenlose `--models-only`-Läufe sind überschrieben). Quelle: `probe/results/<anbieter>.json`, Feld `observation` und
+`usage` je Schritt. „Abw.“: **nein** = wie 08/Adapter; **ja** = weicht ab; **belegt** = vorher offen, jetzt geklärt;
+**Grenze** = Befund schränkt die Aussage ein.
+
+| Nr. | Schritt | Gesendet (Form) | Spec 08 / Adapter erwartet | beobachtet (Status, Antwort, Reasoning-Tokens, Fehlerform) | Abw. |
 |---|---|---|---|---|---|
-| A0 | `anthropic.models` | – | `claude-haiku-5-5` gelistet mit `thinking.types.disabled/adaptive.supported = true`, `effort.low.supported = true`; mindestens ein Modell ohne `types.disabled` | | |
-| A1 | `anthropic.default` | kein `thinking`, kein `effort` | 200, Antwort, Thinking-Tokens bei dieser kleinen Aufgabe 0 (Q00) | | |
-| A2 | `anthropic.off` | `thinking: {type: disabled}` | 200, Antwort, `thinking_tokens = 0`, kein `thinking`-Block | | |
-| A3 | `anthropic.low` | `thinking: {type: adaptive}` + `effort: low` | 200, Antwort, wenige oder 0 Thinking-Tokens | | |
-| A4 | `anthropic.adaptive_only` | `thinking: {type: adaptive}` | 200 (Adapter sendet das nie ohne `effort`) | | |
-| A5 | `anthropic.effort_only` | `effort: low` ohne `thinking` | 200 (Form für Modelle ohne `capabilities.thinking`) | | |
-| A6 | `anthropic.off_with_effort` | `disabled` + `effort: low` | offen (Adapter sendet das nie) | | |
-| A7 | `anthropic.off_not_disableable` | `disabled` an Modell ohne `types.disabled` | 4xx (`Error: <Code> <Meldung>`, V-A6 OS-Festlegung) | | |
-| O0 | `openai.models` | – | `gpt-6-luna` gelistet | | |
-| O1 | `openai.default` | `store: false`, kein `reasoning` | 200, Antwort, Reasoning-Tokens > 0 (`effort = medium`, Q00), Antwort `store: false` | | |
-| O2 | `openai.off` | `reasoning: {effort: none}` | 200, Antwort, `reasoning_tokens = 0`, Echo `reasoning.effort = "none"` | | |
-| O3 | `openai.low` | `reasoning: {effort: low}` | 200, Antwort, wenige Reasoning-Tokens | | |
-| O4 | `openai.minimal` | `reasoning: {effort: minimal}` | offen (gehört `minimal` zu `reasoning_efforts` von `gpt-6-luna`?) | | |
-| O5 | `openai.invalid_effort` | `reasoning: {effort: off}` | 400 mit `error.param`/`code`; Meldung nennt evtl. die zulässigen Werte | | |
-| V8a | `openai.default` (Antwort) | `store: false` | Antwort `store: false`; `prompt_cache_retention` = ? (Q00: `"24h"`) | | |
-| V8b | `openai.decisions_plain` | ohne `store` | 200, Antwort ohne `store`-Feld (AI-004 Nachtrag) | | |
-| V8c | `openai.decisions_store_false` | `store: false` | offen: 200 (ignoriert/gespiegelt) oder 400 (unbekannter Parameter) | | |
-| R0 | `openrouter.models` | – | `openai/gpt-6-luna` mit `reasoning.supported_efforts` ∋ `none`, `mandatory = false`, `reasoning` in `supported_parameters` | | |
-| R1 | `openrouter.default` | kein `reasoning`, `require_parameters: true` | 200, Antwort, Reasoning-Tokens > 0 (Q00: 52) | | |
-| R2 | `openrouter.off` | `reasoning: {effort: none}` + `require_parameters: true` | 200, Antwort, `reasoning_tokens = 0`; kein 404 „no endpoints“ | | |
-| R3 | `openrouter.low` | `reasoning: {effort: low}` | 200, Antwort, weniger Reasoning-Tokens als R1 | | |
-| R4 | `openrouter.enabled_false` | `reasoning: {enabled: false}` | offen (Adapter sendet das nie) | | |
+| A0 | `anthropic.models` | – | `claude-haiku-5-5` mit `thinking.types.disabled/adaptive` und `effort.low`; ein Modell ohne `types.disabled` | 15 Modelle. `claude-haiku-5-5`: `thinking`, `adaptive`, `disabled`, `effort`, `effort.low` alle `true`. **Ohne `types.disabled`:** `claude-fable-5-2`, `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`, `claude-fable-5`. **Ohne `types.adaptive`:** `claude-opus-4-5-20251101`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929` (die beiden letzten auch ohne `effort`) | belegt |
+| A1 | `anthropic.default` | kein `thinking`, kein `effort` | 200, Antwort, Thinking-Tokens bei dieser kleinen Aufgabe 0 (wie Q00) | 200, JSON-Antwort, `usage.output_tokens = 42`, `output_tokens_details.thinking_tokens = 0`, kein `thinking`-Block, `end_turn` | nein |
+| A2 | `anthropic.off` | `thinking: {type: disabled}` | 200, Antwort, `thinking_tokens = 0` | 200, JSON-Antwort, 41 Ausgabe-Tokens, `thinking_tokens = 0`, kein Block | nein (Grenze, s. u.) |
+| A3 | `anthropic.low` | `thinking: {type: adaptive}` + `effort: low` | 200, Antwort, wenige oder 0 Thinking-Tokens | 200, JSON-Antwort, 42, `thinking_tokens = 0` | nein |
+| A4 | `anthropic.adaptive_only` | `thinking: {type: adaptive}` | 200 | 200, JSON-Antwort, 42, `thinking_tokens = 0` | nein |
+| A5 | `anthropic.effort_only` | `effort: low` ohne `thinking` | 200 | 200, JSON-Antwort, 42, `thinking_tokens = 0` | nein |
+| A6 | `anthropic.off_with_effort` | `disabled` + `effort: low` | offen | 200, JSON-Antwort, 41, `thinking_tokens = 0` – **Konflikt wird angenommen** | belegt |
+| A7 | `anthropic.off_not_disableable` | `disabled` an `claude-fable-5-2` (`types.disabled = false`) | 4xx | **400** `invalid_request_error`: „"thinking.type.disabled" is not supported for this model. Use "thinking.type.adaptive" and "output_config.effort" to control thinking behavior.“ (kein `error.code`) | nein |
+| O0 | `openai.models` | – | `gpt-6-luna` gelistet | gelistet (`owned_by: system`, `shutdown_date: null`); 108 Modelle, 3 kundeneigene ausgelassen | nein |
+| O1 | `openai.default` | `store: false`, kein `reasoning` | 200, Reasoning-Tokens > 0 (`medium`), Antwort `store: false` | 200, JSON-Antwort, 76 Ausgabe-Tokens, **36 Reasoning-Tokens**, Echo `reasoning.effort = "medium"`, `store: false` | nein |
+| O2 | `openai.off` | `reasoning: {effort: none}` | 200, `reasoning_tokens = 0`, Echo `none` | 200, JSON-Antwort, 38, **`reasoning_tokens = 0`**, kein `reasoning`-Element in `output[]`, Echo `effort: "none"` | belegt |
+| O3 | `openai.low` | `reasoning: {effort: low}` | 200, wenige Reasoning-Tokens | 200, JSON-Antwort, 61, `reasoning_tokens = 21`, Echo `low` | nein |
+| O4 | `openai.minimal` | `reasoning: {effort: minimal}` | offen | **400** `invalid_request_error`, `code = unsupported_value`, `param = reasoning.effort`: „'minimal' is not supported with the 'gpt-6-luna' model. Supported values are: 'none', 'low', 'medium', 'high', 'xhigh', and 'max'.“ | belegt |
+| O5 | `openai.invalid_effort` | `reasoning: {effort: off}` | 400 mit `param`/`code` | **400**, `code = invalid_value`, `param = reasoning.effort`: „Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'.“ (allgemeine Werteliste der API) | nein |
+| V8a | `openai.default` (Antwort) | `store: false` | Antwort `store: false`; `prompt_cache_retention` = ? | in allen drei 200-Antworten `store: false`; **`prompt_cache_retention: "24h"`** unverändert (ohne gesendetes Feld) | belegt |
+| V8b | `openai.decisions_plain` | ohne `store` | 200, kein `store`-Feld | 200, `answers[0]` = `soft_404`/`predicate`/`probability 0.0`, Antwort ohne `store`, `usage.input_tokens = 212`, `output_tokens = 0`, `reasoning_tokens = 0`. In der Konsole „Antwort false“: Auswertungsfehler der Probe (zählte `answers[]` nicht), in `results/openai.json` korrigiert und vermerkt | nein |
+| V8c | `openai.decisions_store_false` | `store: false` | offen | **400** `invalid_request_error`, `code = unknown_parameter`, `param = store`: „Unknown parameter: 'store'.“ | belegt |
+| R0 | `openrouter.models` | – | `openai/gpt-6-luna` mit `supported_efforts` ∋ `none`, `mandatory = false`, `reasoning` in `supported_parameters` | `supported_efforts = [max, xhigh, high, medium, low, none]`, `mandatory = false`, `default_enabled = true`, `default_effort = medium`; `supported_parameters` enthält `reasoning` (und `reasoning_effort`, `include_reasoning`) | nein |
+| R1 | `openrouter.default` | kein `reasoning`, `require_parameters: true` | 200, Reasoning-Tokens > 0 | 200, JSON-Antwort, 65 Ausgabe-, **25 Reasoning-Tokens**, `usage.cost = 0,0000435` | nein |
+| R2 | `openrouter.off` | `reasoning: {effort: none}` + `require_parameters: true` | 200, `reasoning_tokens = 0` | 200, JSON-Antwort, 38, **`reasoning_tokens = 0`**, keine `reasoning_details`, `usage.cost = 0,00003` | belegt |
+| R3 | `openrouter.low` | `reasoning: {effort: low}` | 200, weniger als R1 | 200, JSON-Antwort, 59, `reasoning_tokens = 19`, `message.reasoning` mit Zusammenfassung | nein |
+| R4 | `openrouter.enabled_false` | `reasoning: {enabled: false}` | offen | 200, JSON-Antwort, 38, `reasoning_tokens = 0` – gleiche Wirkung wie R2 | belegt |
 
-## Mögliche Ausgänge und Folge
+**Zu Anthropic „0 Thinking-Tokens auch ohne Parameter“:** `usage.output_tokens_details.thinking_tokens` ist in allen
+sechs 200-Antworten 0, es gibt keinen `thinking`-Block, und die Ausgabe-Tokens (41–42) entsprechen nur dem JSON. Das
+widerspricht Q00 nicht: Dort dachte `claude-haiku-5-5` ebenfalls nur bei der Grenzwert-Anfrage mit 20 Enum-Werten und
+2.000 Zeichen Beschreibung (256 Thinking-Tokens), bei der kleinen Schema-Aufgabe waren es auch damals 0 (Q00-H1:
+„bei einfachen Anfragen 0“). Folge: Q00b belegt, dass `disabled`, `adaptive` + `effort` und alle Alternativen
+**angenommen** werden; ob `disabled` Thinking bei einer Aufgabe, die sonst denkt, wirklich abschaltet, belegt Q00b
+nicht (Grenze; Vorschlag: in Q02 mit dem Grenzwert-Schema wiederholen).
 
-| Ausgang | Folge für `adapters/anthropic/reasoning.rs` bzw. Katalogdaten |
+## Ausgänge und Folgen
+
+| Ausgang (eingetreten) | Folge |
 |---|---|
-| A2 200, `thinking_tokens = 0` | Form `off` bestätigt; V-A6 (a) mit Datum nachtragen, „sicher aus“ für Anthropic belegt. |
-| A2 4xx | `anthropic_thinking(Off)` ist falsch: Fehlerform und Meldung an den Planer; bis zur Klärung ist `off` bei Anthropic nicht verfügbar (niedrigste Stufe), K09 nicht mergen. |
-| A2 200, aber `thinking_tokens > 0` oder `thinking`-Block | `disabled` wird angenommen, wirkt aber nicht: `off` nicht als „sicher aus“ werten; Spec-Vorschlag (AI-011), `effort: low` zusätzlich zu prüfen. |
-| A3 200 | Form `low` bestätigt. A3 4xx, A5 200: `adaptive` + `effort` verträgt sich nicht – `anthropic_thinking` für `minimal` … `max` weglassen und nur `effort` senden. |
-| A4/A5 unterschiedlich zu A3 | Hinweis, welcher der beiden Teile die Wirkung trägt; Abbildung der Stufen in AI-002 ggf. vereinfachen. |
-| A6 200 | Konflikt ist harmlos; keine Änderung (der Adapter sendet bei `off` ohnehin kein `effort`). A6 4xx: Regel „bei `off` nie `effort`“ in AI-002 ausdrücklich festhalten und im Mock prüfen. |
-| A7 4xx | Erwartung bestätigt; Fehlerform für `Error: <Code> <Meldung>` und ein Mock-Szenario übernehmen. A7 200: `types.disabled.supported = false` bedeutet nicht „abgelehnt“ – Regel in AI-002 (nur senden, wenn unterstützt) bleibt, Befund nachtragen. |
-| O2 200, `reasoning_tokens = 0` | `"none"` für `gpt-6-luna` bestätigt; Katalog `reasoning_efforts` für `gpt-6-luna` mit `none` (K04). O2 4xx: `none` aus `reasoning_efforts` streichen, `off` bildet auf die niedrigste angenommene Stufe ab (AI-003 Nachtrag) – K04-Katalog und K09-Test anpassen. |
-| O4 200 / 4xx | `minimal` in bzw. nicht in `reasoning_efforts` von `gpt-6-luna` (K04-Katalog). |
-| O5 Meldung nennt zulässige Werte | Liste als Quelle für `reasoning_efforts` (mit Datum) im Katalog vermerken. |
-| V8a Antwort `store: false` | H2 umgesetzt bestätigt; `prompt_cache_retention`-Wert für V-A8 und AI-018 (Datenflussübersicht) nachtragen; weiterhin nichts senden (Entscheidung 24.11.2026). |
-| V8b/V8c | Decisions ohne `store`-Feld und 400 bei `store: false`: AI-004 Nachtrag („nie `store` senden“) bestätigt. 200 bei `store: false`: Decisions kennt den Parameter – Planer entscheidet, ob er gesendet wird (V-A8, AI-018). |
-| R2 200, `reasoning_tokens = 0` | Form `off` für OpenRouter bestätigt (`mandatory = false`, `none` in `supported_efforts`). R2 404/400 mit `require_parameters`: AI-005-Regel prüfen (ggf. `off` → niedrigster Wert aus `supported_efforts` ohne `none`). |
-| R4 abweichend von R2 | Nur Befund; der Adapter bleibt bei einer Form (`effort`, AI-005 OS-Festlegung). |
+| A2 200, `thinking_tokens = 0` (ohne Vergleichswert, s. o.) | Form `off` angenommen. V-A6 (a) nachtragen: Form belegt, Wirkung bei dieser Aufgabe nicht messbar. |
+| A3/A4/A5 200 | `adaptive` + `effort`, `adaptive` allein und `effort` allein werden angenommen; Abbildung in AI-002 bleibt. |
+| A6 200 | Konflikt `disabled` + `effort` ist harmlos; keine Änderung (der Adapter sendet bei `off` ohnehin kein `effort`). |
+| A7 400 mit Hinweis auf `adaptive` + `effort` | Regel „`off` nur bei `types.disabled.supported`, sonst niedrigste Stufe“ bestätigt; die Meldung empfiehlt genau die Ersatzform des Adapters. Fünf aktuelle Modelle (u. a. `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-2`) haben **kein** `off`; die Fehlerform gehört als Mock-Szenario in os-testsite. |
+| O2 200, `reasoning_tokens = 0` | `"none"` für `gpt-6-luna` bestätigt, „sicher aus“ für OpenAI belegt. |
+| O4 400 `unsupported_value` | `minimal` gehört **nicht** in `reasoning_efforts` von `gpt-6-luna`; die Meldung nennt die Liste `none, low, medium, high, xhigh, max` – identisch mit dem K04-Katalog. |
+| O5 400 `invalid_value` | Allgemeine Werteliste der API: `none, minimal, low, medium, high, xhigh, max` (= die Stufen aus AI-011 außer `off`). |
+| V8a `store: false` gespiegelt, `prompt_cache_retention: "24h"` | H2-Umsetzung bestätigt; ob `"24h"` bei `store: false` noch etwas speichert, bleibt offen (V-A8, AI-018-Hinweis). |
+| V8c 400 `unknown_parameter` | Decisions kennt `store` nicht: „nie `store` an `/v1/decisions`“ (AI-004 Nachtrag) ist zwingend, nicht nur vorsichtig. Ob Decisions speichert, bleibt offen. |
+| R2 200, `reasoning_tokens = 0`, mit `require_parameters` | Form `off` für OpenRouter bestätigt; kein Konflikt mit `require_parameters`. |
+| R4 200, gleiche Wirkung | Nur Befund; der Adapter bleibt bei `effort` (AI-005 OS-Festlegung). |
 
 ## Trockenlauf (24.11.2026)
 
