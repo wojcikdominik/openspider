@@ -255,7 +255,8 @@ fn ignored_tests_without_valid_reason_are_listed() {
 }
 
 // Plan M4 E4: Platzhalter `wartet auf M4-xx` und `M5:`-Gründe an Tests ohne M1-ID prüft `--milestone M4`;
-// der M1-Lauf (`--strict` in der CI) wertet sie nicht als ungültig. Mit M1-ID bleibt die M1-Regel.
+// der M1-Lauf (`--strict` in der CI) wertet sie nicht als ungültig. Mit M1-ID bleibt die M1-Regel – außer das
+// Tag weist die ID mit `[M4]`/`[M5]` als Teilkriterium des späteren Meilensteins aus (S01: `UI-064 [M4]`).
 #[test]
 fn later_milestone_reasons_only_count_for_tests_without_an_m1_id() {
     let dir = tempfile::tempdir().unwrap();
@@ -286,6 +287,17 @@ fn p2_reason_without_m1_id() {}
 #[test]
 #[ignore = "wartet auf M4-D01"]
 fn m4_placeholder_with_m1_id() {}
+
+// spec: BETA-003 [M4]
+// spec: AI-906
+#[test]
+#[ignore = "wartet auf M4-S01 (1.2-Etappe): Teilkriterium"]
+fn m4_criterion_of_an_m1_id() {}
+
+// spec: BETA-003 [M4]
+#[test]
+#[ignore = "kommt später"]
+fn free_text_at_m4_criterion() {}
 
 // spec: AI-904
 #[test]
@@ -324,13 +336,18 @@ fn free_text_without_m1_id() {}
         "m5_reason_without_m1_id",
         "k4_clarification_without_m1_id",
         "p2_reason_without_m1_id",
+        "m4_criterion_of_an_m1_id",
     ] {
         assert!(!names.iter().any(|n| n == ok), "{ok} in {names:?}");
     }
-    for bad in ["m4_placeholder_with_m1_id", "free_text_without_m1_id"] {
+    for bad in [
+        "m4_placeholder_with_m1_id",
+        "free_text_without_m1_id",
+        "free_text_at_m4_criterion",
+    ] {
         assert!(names.iter().any(|n| n == bad), "{bad} fehlt in {names:?}");
     }
-    assert_eq!(names.len(), 5, "drei aus dem Beispiel plus zwei: {names:?}");
+    assert_eq!(names.len(), 6, "drei aus dem Beispiel plus drei: {names:?}");
 }
 
 #[test]

@@ -252,6 +252,14 @@ pub fn later_milestone_reason(reason: &str) -> bool {
     mx::valid_defer_reason(3, r) || (4..=5u8).any(|n| r.starts_with(&format!("wartet auf M{n}-")))
 }
 
+/// Trägt das Tag dieser ID den Marker `[M4]` oder `[M5]` (`// spec: UI-064 [M4]`)? Dann prüft der Test ein
+/// Teilkriterium des späteren Meilensteins (`extra_spec_ids`, M4.md E7, M5.md G6), auch wenn die ID in M1 steht.
+fn later_milestone_criterion(t: &TestFn, id: &str) -> bool {
+    t.criteria
+        .get(id)
+        .is_some_and(|m| m.iter().any(|m| m == "M4" || m == "M5"))
+}
+
 /// Ist der Ignore-Grund ein Benchmark-Grund (`Benchmark (P28): …`)? Gültig, aber für den Status neutral.
 pub fn is_benchmark_reason(reason: &str) -> bool {
     reason.trim().starts_with("Benchmark")
@@ -544,11 +552,13 @@ pub(crate) fn compute_with_reason(
             None
         } else if !t.ids.is_empty()
             && t.ids.iter().all(|id| {
-                !package_specs.specs.contains_key(id) && !package_specs.extra.contains_key(id)
+                (!package_specs.specs.contains_key(id) && !package_specs.extra.contains_key(id))
+                    || later_milestone_criterion(t, id)
             })
             && later_milestone_reason(reason)
         {
-            // Test ohne M1-ID mit Grund eines späteren Meilensteins: Sache von `--milestone M4|M5`.
+            // Test ohne M1-ID – oder mit M1-ID als Teilkriterium `[M4]`/`[M5]` – und Grund eines späteren
+            // Meilensteins: Sache von `--milestone M4|M5`.
             None
         } else if !t.ids.is_empty() && !valid_defer_reason(reason) {
             Some("Grund beginnt nicht mit M2:/M3:/Klärung K-xx (Platzhalter zählen nicht als deferred)")
