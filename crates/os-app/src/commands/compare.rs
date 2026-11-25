@@ -717,6 +717,7 @@ fn change_handle(
         state: ViewState::Ready,
         op: None,
         empty_state: None,
+        crawl_id: None,
     })
 }
 

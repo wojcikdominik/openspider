@@ -1,6 +1,7 @@
 // Ein Client, drei Transporte (Tauri, Bridge, Mock) hinter einer Schnittstelle (docs/plan/M2.md 3.8).
 // Aufgaben über den Transport hinaus: Fehler → IpcError, AbortSignal → `op.cancel`, Verwerfen veralteter Antworten.
 import commands from "./commands.json";
+import { trackBegin } from "./begin/crawlBegin";
 import { IpcError, localError, toIpcError } from "./errors";
 import type { OpHandle } from "./gen/OpHandle";
 import { createBridgeTransport } from "./transport/bridge";
@@ -90,7 +91,8 @@ export const client: IpcClient = {
   get transportName() {
     return getClient().transportName;
   },
-  invoke: <T>(cmd: string, args?: unknown, signal?: AbortSignal) => getClient().invoke<T>(cmd, args, signal),
+  // fix-sel (UI-018): begins of new content from this window are noted for the upper table.
+  invoke: <T>(cmd: string, args?: unknown, signal?: AbortSignal) => trackBegin(cmd, () => getClient().invoke<T>(cmd, args, signal)),
   subscribe: (window, onEvent) => getClient().subscribe(window, onEvent),
 };
 

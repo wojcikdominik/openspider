@@ -19,6 +19,8 @@ type Block = { keys: number[]; cells: CellValue[][] };
 /** Canvas reads synchronously; only bounded row windows live in memory. */
 export class ViewDataSource {
   readonly viewId: string;
+  /** The crawl whose rows this view shows (UI-018, fix-sel); unknown for views without it (comparison, fixtures). */
+  readonly crawlId?: string;
   readonly columns: ViewHandle["columns"];
   version: number;
   total: number;
@@ -54,6 +56,7 @@ export class ViewDataSource {
     this.lineage = predecessor?.lineage ?? {};
     if (predecessor) { this.focus = predecessor.focus; this.hold = predecessor.hold; }
     this.viewId = handle.viewId;
+    if (handle.crawlId) this.crawlId = handle.crawlId;
     this.version = handle.version;
     this.total = handle.total ?? 0;
     this.columns = handle.columns;

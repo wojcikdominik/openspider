@@ -29,7 +29,8 @@ export async function executeExport(request: ExportRequest, path: string, choice
       return exportApi.view({ viewId: request.viewId, version, path, format, allColumns: choices.allColumns,
         columns: choices.allColumns ? null : request.columns, preserveUploadOrder: choices.preserveUploadOrder });
     }
-    case "detail": return exportApi.detail({ spec: request.spec, selection: request.selection, path, format });
+    // fix-sel (UI-018): the core refuses a selection of another crawl than the one it holds.
+    case "detail": return exportApi.detail({ spec: request.spec, selection: request.selection, path, format, ...(request.crawlId ? { crawlId: request.crawlId } : {}) });
     case "sidebar": return exportApi.sidebar({ which: request.which, path, format });
     case "issues": return exportApi.issues({ which: request.which, path, format });
     case "bulk": case "report": return exportApi[request.kind]({ name: request.name, dir: path, format, singleWorkbook });

@@ -234,6 +234,12 @@ pub struct ApiFetchArgs {
     pub kinds: Option<Vec<ApiKind>>,
     /// Umfang.
     pub scope: ApiFetchScope,
+    /// Crawl, aus dessen Ansicht eine Auswahl stammt (UI-018, fix-sel). Ist er gesetzt und nicht der Crawl der
+    /// Sitzung, lehnt der Kern ab (`err-selection-other-crawl`), bevor etwas abgerufen oder geschrieben wird; fehlt er,
+    /// gilt das bisherige Verhalten.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crawl_id: Option<String>,
 }
 
 /// Ergebnis von `api.fetch` (Ergebnis der Operation).

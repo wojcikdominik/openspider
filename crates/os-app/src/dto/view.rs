@@ -475,6 +475,11 @@ pub struct ViewHandle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub initial_rows: Option<RowWindow>,
+    /// Crawl, dessen Daten die View zeigt (UI-018, fix-sel): Zeilenschlüssel gelten nur in diesem Crawl. Fehlt bei
+    /// Vergleichs- und Stub-Views.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub crawl_id: Option<String>,
 }
 
 /// Ein Zeilenfenster (`view.rows`).
