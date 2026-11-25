@@ -156,6 +156,12 @@ fn observations_per_provider() {
         observe(&decisions)["decisions_answer_types"],
         json!(["predicate"])
     );
+    assert_eq!(
+        observe(&decisions)["answer_present"],
+        true,
+        "Decisions-Antwort zählt"
+    );
+    assert_eq!(observe(&json!({"answers": []}))["answer_present"], false);
 }
 
 // spec: AI-002 (capabilities.thinking.types)

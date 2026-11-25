@@ -448,8 +448,13 @@ pub fn observe(body: &Value) -> Value {
     let answer_is_json = answer
         .as_deref()
         .is_some_and(|t| serde_json::from_str::<Value>(t.trim()).is_ok());
+    // Decisions antworten mit `answers[]` statt Text (Auswertung Q00b: vorher als „keine Antwort“ gezählt).
+    let decisions_answers = body
+        .get("answers")
+        .and_then(Value::as_array)
+        .is_some_and(|a| !a.is_empty());
     json!({
-        "answer_present": answer.as_deref().is_some_and(|t| !t.trim().is_empty()),
+        "answer_present": decisions_answers || answer.as_deref().is_some_and(|t| !t.trim().is_empty()),
         "answer_is_json": answer_is_json,
         "reasoning_tokens": reasoning_tokens,
         "output_tokens": output_tokens,
