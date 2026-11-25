@@ -81,10 +81,21 @@ jobs:
             browsers: chromium
             shard: 2/2
             timeout: 60
-          - name: linux-chromium
+          # linux-chromium überschritt nach Welle 5a (M4) das Schritt-Limit von 50 min (Lauf 45564571268: Abbruch bei Test 770;
+          # der Lauf davor, 45525004644, brauchte schon 55 min je Job), deshalb wie Windows zwei Shards; das Perf-Projekt
+          # läuft im ersten.
+          - name: linux-chromium-1
             os: ubuntu-latest
             projects: chromium
             browsers: chromium
+            shard: 1/2
+            perf: true
+            timeout: 60
+          - name: linux-chromium-2
+            os: ubuntu-latest
+            projects: chromium
+            browsers: chromium
+            shard: 2/2
             timeout: 60
           # linux-webkit überschritt mit 566 Specs das Schritt-Limit von 50 min (Lauf 42309492668), deshalb wie macOS zwei Shards.
           - name: linux-webkit-1
