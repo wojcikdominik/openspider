@@ -284,3 +284,199 @@ pub fn confirmation_required(
 ) -> bool {
     expected > threshold || remaining.is_some_and(|r| u128::from(expected.0) * 2 > u128::from(r.0))
 }
+
+/// Ein Eintrag eines geplanten Requests (AI-012, Nachtrag 24.11.2026, Q00): z. B. eine Frage zu einer URL.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlannedEntry {
+    /// Cache-Schlüssel des Eintrags; `None` = nicht cachefähig.
+    pub cache_key: Option<String>,
+    /// Decisions API: Zeichen des Fragentexts Z_q ([`super::decisions::question_text_chars`]); sonst 0.
+    pub question_chars: u64,
+    /// Ersatzweg einer Entscheidungsfrage: Gewicht für W (`predicate` 2, `choice` Anzahl Werte, `score` Anzahl
+    /// Levels, wie `question_weight` im Katalog); sonst 0.
+    pub weight: u64,
+}
+
+/// Ein geplanter Request mit den Einträgen, die er bündelt (eine Eingabe, mehrere Fragen bzw. ein Eintrag).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlannedRequest {
+    /// Zeichenzahl der aufbereiteten Eingabe (nach Kürzung/Schwärzung).
+    pub input_chars: u64,
+    pub images: u64,
+    pub entries: Vec<PlannedEntry>,
+}
+
+/// Ausführungsweg der Aufgabe für die Schätzung.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EstimatePath {
+    /// Decisions API: Eingabe je Frage mit Grundanteil G, Ausgabe 0, keine Reasoning-Stufe.
+    DecisionsApi { question_overhead_tokens: u64 },
+    /// Strukturierte Ausgabe bzw. Freitext.
+    Prompt {
+        /// Fester Anteil für Anweisungen je Request (ohne Schema-Zuschlag).
+        instruction_tokens: u64,
+        /// Schema-Zuschlag (`schema_overhead_tokens` aus `provider-limits.json`); 0 ohne Schema.
+        schema_overhead_tokens: u64,
+        /// Antwortanteil A (fest oder `decision-w`, AI-011).
+        answer: crate::catalog::AnswerTokens,
+        /// Effektive Reasoning-Stufe (AI-011).
+        reasoning: crate::provider::ReasoningLevel,
+    },
+}
+
+/// Eingaben des Voranschlags je Aufgabe nach dem Nachtrag Q00.
+#[derive(Debug, Clone)]
+pub struct RequestEstimateInput<'a> {
+    pub task: String,
+    pub model: String,
+    pub requests: &'a [PlannedRequest],
+    pub path: EstimatePath,
+    /// `None` = kein Preis für den Endpunkt.
+    pub basis: Option<super::basis::PriceBasis<'a>>,
+    pub api_key_present: bool,
+    /// Eingabe-Korrekturfaktor je Modell.
+    pub calibration: Calibration,
+    /// Ausgabe-Korrekturfaktor je (Modell, Aufgabe, effektive Stufe), [`super::output::output_calibration_from_log`].
+    pub output_calibration: Calibration,
+    pub batch_capable: bool,
+}
+
+/// Zeile des Abschnitts „KI“ mit Spalte `Reasoning` (effektive Stufe, leer über die Decisions API) und der Zahl der
+/// zu sendenden Requests.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestTaskEstimate {
+    pub estimate: TaskEstimate,
+    pub reasoning: Option<crate::provider::ReasoningLevel>,
+    pub requests: u64,
+}
+
+/// Geschätzte Eingabe-Tokens eines geplanten Requests vor dem Korrekturfaktor, nur über die nicht gecachten Einträge
+/// (`uncached`); `None`, wenn kein Eintrag gesendet wird.
+pub fn planned_input_tokens(
+    path: &EstimatePath,
+    request: &PlannedRequest,
+    uncached: &[&PlannedEntry],
+    image_token_estimate: u64,
+) -> Option<u64> {
+    if uncached.is_empty() {
+        return None;
+    }
+    Some(match path {
+        EstimatePath::DecisionsApi {
+            question_overhead_tokens,
+        } => {
+            let z_q: Vec<u64> = uncached.iter().map(|e| e.question_chars).collect();
+            super::decisions::decisions_input_tokens(
+                request.input_chars,
+                request.images,
+                image_token_estimate,
+                &z_q,
+                *question_overhead_tokens,
+            )
+        }
+        EstimatePath::Prompt {
+            instruction_tokens,
+            schema_overhead_tokens,
+            ..
+        } => estimate_input_tokens(
+            request.input_chars,
+            request.images,
+            image_token_estimate,
+            instruction_tokens.saturating_add(*schema_overhead_tokens),
+        ),
+    })
+}
+
+/// Voranschlag einer Aufgabe nach dem Nachtrag 24.11.2026, Q00 (AI-012): Decisions-Formel je Frage, Ausgabe-Schätzung
+/// (A + E) × Ausgabefaktor, Schema-Zuschlag, Spalte `Reasoning`. Gecachte Einträge zählen in `cached` und tragen 0 bei;
+/// ein Request, dessen Einträge alle gecacht sind, wird nicht gesendet. Gebühren je gesendetem Request.
+pub fn estimate_requests(
+    input: &RequestEstimateInput<'_>,
+    cache: &dyn CachedLookup,
+) -> RequestTaskEstimate {
+    let image_estimate = input
+        .basis
+        .and_then(|b| b.estimate_rates(0))
+        .map_or(0, |r| r.image_token_estimate);
+    let (mut items, mut cached, mut sent) = (0u64, 0u64, 0u64);
+    let (mut tokens_in, mut tokens_out) = (0u64, 0u64);
+    let (mut sync, mut batch) = (MicroUsd(0), MicroUsd(0));
+    let mut priced = input.basis.is_some();
+    for request in input.requests {
+        items += request.entries.len() as u64;
+        let uncached: Vec<&PlannedEntry> = request
+            .entries
+            .iter()
+            .filter(|e| !e.cache_key.as_deref().is_some_and(|k| cache.is_cached(k)))
+            .collect();
+        cached += (request.entries.len() - uncached.len()) as u64;
+        let Some(raw) = planned_input_tokens(&input.path, request, &uncached, image_estimate)
+        else {
+            continue;
+        };
+        sent += 1;
+        let tokens_in_request = input.calibration.apply(raw);
+        let tokens_out_request = match input.path {
+            EstimatePath::DecisionsApi { .. } => 0,
+            EstimatePath::Prompt {
+                answer, reasoning, ..
+            } => {
+                let weight = uncached.iter().map(|e| e.weight).sum();
+                super::output::estimate_output_tokens(
+                    answer.tokens(Some(weight)),
+                    reasoning,
+                    &input.output_calibration,
+                )
+            }
+        };
+        tokens_in = tokens_in.saturating_add(tokens_in_request);
+        tokens_out = tokens_out.saturating_add(tokens_out_request);
+        let rates = input
+            .basis
+            .and_then(|b| b.estimate_rates(tokens_in_request));
+        match rates {
+            Some(rates) => {
+                let t = TokenCounts::plain(tokens_in_request, tokens_out_request);
+                let fees = FeeCounts::one_request(request.images);
+                sync = MicroUsd(sync.0.saturating_add(cost_of(&t, fees, &rates, false).cost.0));
+                batch = MicroUsd(batch.0.saturating_add(cost_of(&t, fees, &rates, true).cost.0));
+            }
+            None => priced = false,
+        }
+    }
+    let executable = if !priced {
+        Executable::PriceUnknown
+    } else if !input.api_key_present {
+        Executable::MissingApiKey
+    } else {
+        Executable::Yes
+    };
+    let (lo, hi) = input.calibration.spread_ppm();
+    RequestTaskEstimate {
+        estimate: TaskEstimate {
+            task: input.task.clone(),
+            model: input.model.clone(),
+            items,
+            cached,
+            est_input_tokens: tokens_in,
+            est_output_tokens: tokens_out,
+            low: priced.then(|| scale(sync, lo)),
+            expected: priced.then_some(sync),
+            high: priced.then(|| scale(sync, hi)),
+            batch_savings: priced.then(|| {
+                if input.batch_capable {
+                    sync.saturating_sub(batch)
+                } else {
+                    MicroUsd(0)
+                }
+            }),
+            executable,
+            calibrated: input.calibration.calibrated,
+        },
+        reasoning: match input.path {
+            EstimatePath::DecisionsApi { .. } => None,
+            EstimatePath::Prompt { reasoning, .. } => Some(reasoning),
+        },
+        requests: sent,
+    }
+}
