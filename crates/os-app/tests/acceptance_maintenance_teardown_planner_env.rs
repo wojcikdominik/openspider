@@ -77,11 +77,8 @@ async fn startup_reconcile_with_planner_dry_and_off_survives_an_immediate_drop()
             .unwrap()
             .to_string()
     };
+    // Neue Aufgaben trägt erst `tasks.register` ein; hier steht stattdessen ein Eintrag aus einer älteren Version.
     let planner = planner::dry_run(planner::native_backend(), &dry_dir);
-    assert!(
-        planner.is_registered(&id),
-        "tasks.save trug nicht in {dry_dir:?} ein"
-    );
     let task = os_sched::tasks::TaskStore::in_settings(dir.path())
         .get(&id)
         .unwrap();
