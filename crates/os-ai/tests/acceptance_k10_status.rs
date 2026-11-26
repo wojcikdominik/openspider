@@ -941,8 +941,8 @@ async fn neutral_cases_neither_count_nor_reset_the_breaker() {
                 let response = exec.result.expect("Success");
                 assert!(!response.refusal);
             } else {
-                match final_status {
-                    Some(status) => assert_eq!(exec.error_status(), Some(&status), "{name}"),
+                match &final_status {
+                    Some(status) => assert_eq!(exec.error_status(), Some(status), "{name}"),
                     None => assert!(
                         exec.result.expect("Refusal kommt als Antwort").refusal,
                         "{name}"
