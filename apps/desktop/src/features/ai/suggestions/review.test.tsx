@@ -3,7 +3,6 @@
 // `detail.serpMeasure`; Pixelwerte kommen nur aus dem Kern (UI-038).
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createClient, setClient } from "../../../ipc/client";
@@ -59,7 +58,7 @@ beforeEach(async () => {
   core.handlers.set("ai.suggestDetail", () => structuredClone(current));
   core.handlers.set("ai.suggestCheck", (args) => {
     const value = (args as { value: string }).value;
-    return { value, length: [...value].length, pixelWidth: 4242, violations: value.length < 30 ? ["length<30"] : [], valid: value.length >= 30 };
+    return { value, length: [...value].length, pixelWidth: 242, violations: value.length < 30 ? ["length<30"] : [], valid: value.length >= 30 };
   });
   core.handlers.set("ai.suggestReview", (args) => {
     const a = args as { action: string; urlIds: number[] };
@@ -98,12 +97,14 @@ describe("Prüfansicht", () => {
     expect(screen.getByText("61 characters · 570 px")).toBeTruthy();
     expect(screen.getByText("same as the suggestion for http://ai.test:8080/a/")).toBeTruthy();
     expect(screen.getAllByText("invalid")).toHaveLength(1);
-    const accept = screen.getByRole("button", { name: "Accept" });
-    fireEvent.click(screen.getByRole("radio", { name: /Candidate 2/ }));
-    await waitFor(() => expect(accept.hasAttribute("disabled") || accept.getAttribute("aria-disabled") === "true").toBe(true));
+    const accept = () => screen.getByRole("button", { name: "Accept" });
+    const second = screen.getByRole("radio", { name: /Candidate 2/ });
+    fireEvent.click(second);
+    await waitFor(() => expect(second).toBeChecked());
+    await waitFor(() => expect(accept()).toBeDisabled());
     fireEvent.click(screen.getByRole("radio", { name: /Candidate 1/ }));
-    await waitFor(() => expect(accept.hasAttribute("disabled")).toBe(false));
-    fireEvent.click(accept);
+    await waitFor(() => expect(accept()).not.toBeDisabled());
+    fireEvent.click(accept());
     await waitFor(() => expect(calls("ai.suggestReview")).toHaveLength(1));
     expect(calls("ai.suggestReview")[0]).toMatchObject({ urlIds: [2], element: "title", action: "accept", candidate: 2 });
     await waitFor(() => expect(calls("ai.suggestDetail").length).toBeGreaterThan(1), { timeout: 2_000 });
@@ -115,9 +116,9 @@ describe("Prüfansicht", () => {
   it("prüft Bearbeitungen live im Kern und speichert sie mit Verstößen", async () => {
     render(<ReviewPanel urlId={2} selected={[2]} />);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    const field = screen.getByRole("textbox", { name: "Edited text" });
+    const field = await screen.findByRole("textbox", { name: "Edited text" });
     fireEvent.change(field, { target: { value: "Zu kurz" } });
-    await waitFor(() => expect(screen.getByTestId("ai-sugg-live").textContent).toContain("4242 px"));
+    await waitFor(() => expect(screen.getByTestId("ai-sugg-live").textContent).toContain("242 px"));
     expect(screen.getByTestId("ai-sugg-live").getAttribute("data-valid")).toBe("false");
     expect(calls("ai.suggestCheck").at(-1)).toMatchObject({ urlId: 2, element: "title", value: "Zu kurz" });
     current = detail();
@@ -205,7 +206,7 @@ describe("Bereich am Tab „AI Suggestions“", () => {
 // spec: AI-075 [M4]
 // Pixelbreiten werden nie im Frontend berechnet (statischer Test wie UI-038): kein Canvas, kein measureText.
 it("misst keine Pixelbreiten im Frontend", () => {
-  const dir = fileURLToPath(new URL(".", import.meta.url));
+  const dir = join(process.cwd(), "src", "features", "ai", "suggestions");
   for (const file of readdirSync(dir).filter((f) => /\.tsx?$/.test(f) && !f.endsWith(".test.tsx"))) {
     const text = readFileSync(join(dir, file), "utf8");
     expect(text, file).not.toMatch(/measureText|getContext\(|OffscreenCanvas|<canvas/);

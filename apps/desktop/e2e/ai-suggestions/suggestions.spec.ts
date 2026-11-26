@@ -12,14 +12,16 @@ import { startBridge, type Bridge } from "../support/bridge";
 const FIXTURE = resolve(import.meta.dirname, "../../../../tests/fixtures/ai/suggest/e2e/suggest.ospider");
 const TAB = "AI Suggestions";
 const BASE = "http://ai.test:8080";
+/** Zeilen der Tabelle nach Address sortiert (URL-IDs 1 … 12 der Fixture). */
+const PATHS = ["/a/", "/b/", "/c/", "/d/", "/e/", "/f/", "/g/", "/m1/", "/m2/", "/m3/", "/m4/", "/m5/"];
 
 interface App {
   page: Page;
   invoke<T = unknown>(cmd: string, args?: unknown): Promise<T>;
   preview(on: boolean): Promise<void>;
   openTab(): Promise<void>;
-  /** Wählt URLs wie die obere Tabelle (veröffentlichte Auswahl, Fokus = erste URL). */
-  select(urlIds: number[]): Promise<void>;
+  /** Wählt in der oberen Tabelle (Sortierung nach Address) `count` Zeilen ab Zeile `first` (0-basiert) per Klick und Tastatur. */
+  select(first: number, count?: number): Promise<void>;
   region(): ReturnType<Page["getByRole"]>;
 }
 
@@ -53,12 +55,13 @@ const test = base.extend<{ app: App }>({
         await tab.click();
         await expect(tab).toHaveAttribute("aria-selected", "true");
       },
-      async select(urlIds) {
-        await page.evaluate(async (ids) => {
-          const p = "/src/features/detail/frame/selection.ts";
-          const { setDetailSelection } = await import(/* @vite-ignore */ p);
-          setDetailSelection({ urlIds: ids, focus: ids[0], topTab: "AI Suggestions" });
-        }, urlIds);
+      async select(first, count = 1) {
+        const grid = page.locator("#data-panel .os-data-grid");
+        await expect.poll(() => counter(page), { timeout: 15_000 }).toMatch(/12 of 12|12 von 12/);
+        await grid.click({ position: { x: 160, y: 32 + 14 } });
+        for (let i = 0; i < first; i++) await page.keyboard.press("ArrowDown");
+        for (let i = 1; i < count; i++) await page.keyboard.press("Shift+ArrowDown");
+        await expect(page.getByRole("complementary", { name: "Review AI suggestions" }).locator(".os-ai-sugg-address")).toHaveText(`${BASE}${PATHS[first]}`);
       },
       region: () => page.getByRole("complementary", { name: "Review AI suggestions" }),
     };
@@ -101,10 +104,9 @@ test("Tab AI Suggestions erscheint nur mit Schalter und zeigt die Vorschläge de
 // Prüfbereich: bei /b/ ist „Rucksäcke …“ Kandidat 1, der doppelte Kandidat trägt `duplicate_candidate` von /a/;
 // „Übernehmen“ setzt `Accepted`, „Ablehnen“ `Rejected`, „Zurücksetzen“ wieder `Open`.
 test("Kandidaten prüfen, übernehmen, ablehnen und zurücksetzen", async ({ app }) => {
-  const { page } = app;
   await app.preview(true);
   await app.openTab();
-  await app.select([2]);
+  await app.select(1);
   const region = app.region();
   await expect(region).toBeVisible();
   await expect(region).toContainText(`${BASE}/b/`);
@@ -132,7 +134,7 @@ test("Kandidaten prüfen, übernehmen, ablehnen und zurücksetzen", async ({ app
 test("bearbeitete Übernahme mit Verstoß bleibt Edited mit Verstoßliste", async ({ app }) => {
   await app.preview(true);
   await app.openTab();
-  await app.select([1]);
+  await app.select(0);
   const region = app.region();
   await region.getByRole("button", { name: "Edit" }).click();
   const field = region.getByRole("textbox", { name: "Edited text" });
@@ -154,7 +156,7 @@ test("bearbeitete Übernahme mit Verstoß bleibt Edited mit Verstoßliste", asyn
 test("SERP-Vorschau des gewählten Kandidaten kürzt wie ein echter Title", async ({ app }) => {
   await app.preview(true);
   await app.openTab();
-  await app.select([1]);
+  await app.select(0);
   const region = app.region();
   const serp = region.getByTestId("ai-sugg-serp");
   await expect(serp.locator(".os-serp-title")).toHaveText("Leichte Wanderschuhe für Damen und Herren");
@@ -176,9 +178,9 @@ test("SERP-Vorschau des gewählten Kandidaten kürzt wie ein echter Title", asyn
 test("Massenaktion übernimmt Kandidat 1 der markierten URLs", async ({ app }) => {
   await app.preview(true);
   await app.openTab();
-  await app.select([1, 2, 3, 13]);
+  await app.select(0, 3);
   const region = app.region();
-  await region.getByRole("button", { name: "Accept candidate 1 for 4 selected URLs" }).click();
+  await region.getByRole("button", { name: "Accept candidate 1 for 3 selected URLs" }).click();
   await expect(region.getByTestId("ai-sugg-message")).toHaveText("3 accepted, 0 without a valid suggestion (stay open).");
   for (const id of [1, 2, 3]) {
     const d = await app.invoke<{ elements: { review: string }[] }>("ai.suggestDetail", { urlId: id });
@@ -191,7 +193,7 @@ test("Massenaktion übernimmt Kandidat 1 der markierten URLs", async ({ app }) =
 test("Prüfbereich ohne kritische Barrierefreiheitsfehler", async ({ app }) => {
   await app.preview(true);
   await app.openTab();
-  await app.select([2]);
+  await app.select(1);
   await expect(app.region()).toContainText("Candidate 1");
   const result = await new AxeBuilder({ page: app.page }).include(".os-ai-sugg").options({ resultTypes: ["violations"] }).analyze();
   const findings = result.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
