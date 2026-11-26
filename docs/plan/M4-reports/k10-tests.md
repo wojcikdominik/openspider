@@ -67,12 +67,14 @@ Weil die Ausführung über die Aufgabenwarteschlange erst mit M4-D01 kommt, prü
 | AI-018 | `no (store: false)` für Responses, `unknown` für Decisions ohne `storage`, keine leere Zelle, CSV | `policy::stored_by_provider_column`, `policy::delivered_policies_never_leave_the_cell_empty` | grün |
 | AI-018 | ungültiges `storage` abgewiesen | `policy::invalid_storage_entries_are_rejected` | grün |
 | AI-018 | jede Zeile `no (store: false)` → jeder Request `"store": false` | `policy::every_responses_request_of_the_task_sends_store_false` | grün |
-| AI-011 | ausgelieferte `task-defaults.json` = bestätigte Tabelle, Preise mit Quelle | `defaults::delivered_defaults_match_the_confirmed_table` | siehe Testzahlen |
-| AI-011 | `max_tokens`-Regel (1024, 2048, 576, 640, 6144, 4000) | `defaults::max_tokens_rule_examples` | siehe Testzahlen |
+| AI-011 | ausgelieferte `task-defaults.json` = bestätigte Tabelle, Preise mit Quelle | `defaults::delivered_defaults_match_the_confirmed_table` | grün |
+| AI-011 | `max_tokens`-Regel (1024, 2048, 576, 640, 6144, 4000) | `defaults::max_tokens_rule_examples` | grün |
 
 ## Testzahlen
 
-Siehe Abschnitt „Läufe“ unten (wird mit dem Endlauf ausgefüllt).
+Eigene Abnahmetests: **54**, davon **52 grün, 2 rot, 0 ignoriert** (status 9, cache 7, cost 13, log 7, limits 6, policy 4, defaults 2, os-store requests 6). Rot sind genau die Befunde B1-1 und B2-1.
+
+Vollständiger Lauf `cargo test --locked -p os-ai -p os-store --no-fail-fast` auf Tests `23181e2a` über Bauer `9bf50749`: 1.085 bestanden, 2 rot (die beiden oben), 77 ignoriert. `cargo fmt --all --check` und `cargo clippy --locked -p os-ai -p os-store --all-targets -- -D warnings` grün.
 
 ## Befunde
 
@@ -108,4 +110,4 @@ Siehe Abschnitt „Läufe“ unten (wird mit dem Endlauf ausgefüllt).
 
 ## Läufe
 
-Build-Maschine Mac mini, eigener Baum `/Volumes/osbuild/openspider/wt/ai-k10-tests`, eigener `CARGO_TARGET_DIR`, jeder Lauf unter `heavy.lock`.
+Lauf 1 (`4b3d3fd9`): fmt/Clippy grün, eigene Ziele 3 rot – neben B1-1/B2-1 ein Fehler im eigenen Test (Kostenvergleich bei Bündelung ohne Rundung je Request; korrigiert, die Spec vergleicht die Tokenschätzung). Lauf 2 (`23181e2a`): Zahlen oben. Build-Maschine Mac mini, eigener Baum `/Volumes/osbuild/openspider/wt/ai-k10-tests`, eigener `CARGO_TARGET_DIR`, jeder Lauf unter `heavy.lock`.
