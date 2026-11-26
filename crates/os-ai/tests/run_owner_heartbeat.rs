@@ -168,12 +168,12 @@ async fn start_is_rejected_while_another_process_is_the_active_owner() {
     }
     let clock = Arc::new(ManualClock::new(t0()));
     let err = RunOwner::start(&path, "app", clock.clone()).unwrap_err();
-    let StoreError::InvalidInput(text) = &err else {
+    let StoreError::Occupied { kind, pid } = &err else {
         panic!("{err:?}");
     };
-    assert!(
-        text.contains(&foreign) && text.contains("mcp-stdio"),
-        "{text}"
+    assert_eq!(
+        (kind.as_str(), pid.as_str()),
+        ("mcp-stdio", foreign.as_str())
     );
     assert_eq!(meta(&path, "owner_pid"), foreign);
     assert_eq!(meta(&path, "heartbeat_at"), t0().to_db());
@@ -202,7 +202,6 @@ async fn a_passive_owner_during_the_own_running_crawl_writes_nothing() {
     let clock = Arc::new(ManualClock::new(t0()));
     let owner = RunOwner::start(&path, "app", clock.clone()).unwrap();
     assert!(owner.is_passive());
-    assert!(owner.heartbeats().is_none());
     for _ in 0..7 {
         clock.advance(Duration::from_millis(500));
         tokio::time::advance(Duration::from_secs(1)).await;
@@ -285,4 +284,97 @@ async fn dropping_without_finish_behaves_like_a_crash() {
         owner::claim(file.conn(), "cli", std::process::id(), clock.now()).unwrap(),
         Claim::Claimed
     );
+}
+
+/// Übernahme nach dem Ende des eigenen Crawls (08 AI-020 [M4], Nachtrag 26.11.2026): KI während des eigenen laufenden
+/// Crawls (passiv); der Crawl endet zuerst (Besitzerangaben wie beim Crawl-Ende geleert), der KI-Lauf läuft weiter →
+/// spätestens nach dem nächsten Intervall trägt die Datei wieder die eigene PID mit aktuellem `heartbeat_at`, der
+/// Zustand bleibt der gespeicherte Endzustand; nach dem Ende des KI-Laufs ist `owner_pid` leer.
+// spec: AI-020 [M4]
+// spec: CRAWL-125
+#[tokio::test(start_paused = true)]
+async fn a_passive_owner_takes_over_after_the_own_crawl_ended() {
+    let dir = TempDir::new("takeover");
+    let path = crawl(&dir.0, "Running");
+    let me = std::process::id().to_string();
+    {
+        let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        file.set_meta("owner_kind", "app").unwrap();
+        file.set_meta("owner_pid", &me).unwrap();
+        file.set_meta("heartbeat_at", &t0().to_db()).unwrap();
+    }
+    let clock = Arc::new(ManualClock::new(t0()));
+    let owner = RunOwner::start(&path, "app", clock.clone()).unwrap();
+    assert!(owner.is_passive());
+    let mut beats = owner.heartbeats().unwrap();
+    // Die eigene Engine endet nach 1 s (letzter Batch: Zustand, heartbeat_at = jetzt, owner_pid leer).
+    tick(&clock).await;
+    {
+        let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        file.set_meta("state", "Completed").unwrap();
+        file.set_meta("end_reason", "queue_empty").unwrap();
+        file.set_meta("heartbeat_at", &plus(t0(), 1_000)).unwrap();
+        file.set_meta("owner_pid", "").unwrap();
+    }
+    tick(&clock).await;
+    beats.changed().await.unwrap();
+    assert!(!owner.is_passive(), "übernommen");
+    assert_eq!(meta(&path, "owner_pid"), me);
+    assert_eq!(meta(&path, "heartbeat_at"), plus(t0(), 2_000));
+    assert_eq!(meta(&path, "state"), "Completed");
+    let file = CrawlFile::open(&path, OpenMode::ReadOnly).unwrap();
+    assert!(file.occupancy(clock.as_ref()).unwrap().active_owner);
+    drop(file);
+    tick(&clock).await;
+    tick(&clock).await;
+    beats.changed().await.unwrap();
+    assert_eq!(
+        meta(&path, "heartbeat_at"),
+        plus(t0(), 4_000),
+        "Takt läuft weiter"
+    );
+    owner.finish().unwrap();
+    assert_eq!(meta(&path, "owner_pid"), "");
+    assert_eq!(meta(&path, "heartbeat_at"), plus(t0(), 4_000));
+    assert_eq!(meta(&path, "state"), "Completed");
+}
+
+/// Wie oben, aber nach dem Ende des eigenen Crawls hat sich ein anderer Prozess als aktiver Besitzer eingetragen: Der
+/// KI-Lauf schreibt nichts, auch nicht bei `finish`.
+// spec: AI-020 [M4]
+// spec: CRAWL-125
+#[tokio::test(start_paused = true)]
+async fn a_passive_owner_never_overwrites_a_foreign_active_owner() {
+    let dir = TempDir::new("takeover-foreign");
+    let path = crawl(&dir.0, "Running");
+    let me = std::process::id().to_string();
+    let foreign = std::process::id().wrapping_add(3).to_string();
+    {
+        let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        file.set_meta("owner_kind", "app").unwrap();
+        file.set_meta("owner_pid", &me).unwrap();
+        file.set_meta("heartbeat_at", &t0().to_db()).unwrap();
+    }
+    let clock = Arc::new(ManualClock::new(t0()));
+    let owner = RunOwner::start(&path, "app", clock.clone()).unwrap();
+    assert!(owner.is_passive());
+    tick(&clock).await;
+    {
+        let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        file.set_meta("state", "Paused").unwrap();
+        file.set_meta("owner_kind", "cli").unwrap();
+        file.set_meta("owner_pid", &foreign).unwrap();
+        file.set_meta("heartbeat_at", &plus(t0(), 1_000)).unwrap();
+    }
+    for _ in 0..5 {
+        tick(&clock).await;
+    }
+    tokio::task::yield_now().await;
+    assert!(owner.is_passive());
+    // `finish` wartet über den Mutex einen laufenden Schlag ab und schreibt selbst nichts.
+    owner.finish().unwrap();
+    assert_eq!(meta(&path, "owner_pid"), foreign);
+    assert_eq!(meta(&path, "owner_kind"), "cli");
+    assert_eq!(meta(&path, "heartbeat_at"), plus(t0(), 1_000));
+    assert_eq!(meta(&path, "state"), "Paused");
 }

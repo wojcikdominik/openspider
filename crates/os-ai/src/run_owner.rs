@@ -9,7 +9,9 @@
 //!
 //! * Führt der eigene Prozess den Crawl bereits (laufend nach CRAWL-125 mit eigener PID, z. B. KI während des eigenen
 //!   Crawls), ist der [`RunOwner`] **passiv**: Er schreibt nichts und leert `owner_pid` nicht; den Heartbeat schreibt
-//!   allein die Engine.
+//!   allein die Engine. Endet oder pausiert der eigene Crawl, während der KI-Lauf weiterläuft, leert die Engine
+//!   `owner_pid`; beim nächsten Schlag trägt sich der KI-Lauf dann selbst ein und führt den Heartbeat bis zu seinem Ende
+//!   („Übernahme nach dem Ende des eigenen Crawls“, AI-020) – nie über einen fremden aktiven Besitzer.
 //! * Mehrere KI-Läufe desselben Prozesses auf derselben Datei teilen sich einen Eintrag: Der erste trägt ein und
 //!   schlägt den Takt, der letzte [`RunOwner::finish`] gibt frei.
 //! * [`Drop`] ohne [`RunOwner::finish`] hält den Takt nur an (gilt wie ein Absturz: `owner_pid` bleibt, nach mehr als
@@ -36,6 +38,9 @@ struct Shared {
     file: Mutex<CrawlFile>,
     clock: Arc<dyn Clock>,
     pid: u32,
+    kind: &'static str,
+    /// Der Prozess hat sich eingetragen (beim Start oder später durch Übernahme).
+    claimed: AtomicBool,
     stopped: AtomicBool,
     beats: watch::Sender<u64>,
     task: Mutex<Option<tokio::task::JoinHandle<()>>>,
@@ -50,7 +55,8 @@ impl Shared {
         }
         // Ein fehlgeschlagener Schlag (z. B. Sperre länger als das Busy-Timeout) wird nicht nachgeholt; der nächste
         // folgt im Takt (CRAWL-125: kein Nachholen).
-        if let Ok(true) = owner::beat(file.conn(), self.pid, self.clock.now()) {
+        if let Ok(true) = owner::beat(file.conn(), self.kind, self.pid, self.clock.now()) {
+            self.claimed.store(true, Ordering::SeqCst);
             self.beats.send_modify(|n| *n += 1);
         }
     }
@@ -86,7 +92,7 @@ impl std::fmt::Debug for RunOwner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RunOwner")
             .field("path", &self.key)
-            .field("passive", &self.shared.is_none())
+            .field("passive", &self.is_passive())
             .finish()
     }
 }
@@ -95,8 +101,9 @@ impl RunOwner {
     /// Beginn eines KI-Laufs auf `crawl_path` mit `owner_kind` (`app`, `cli` oder `mcp-stdio`, CRAWL-125).
     ///
     /// * Führt ein anderer Prozess den Crawl (laufend nach CRAWL-125 oder aktiver Besitzer mit fremder PID) →
-    ///   `StoreError::InvalidInput` mit PID und Art des Besitzers; nichts geschrieben.
-    /// * Läuft der Crawl im eigenen Prozess → passiver Wert ([`RunOwner::is_passive`]), nichts geschrieben.
+    ///   [`StoreError::Occupied`] mit Art und PID des Besitzers; nichts geschrieben.
+    /// * Läuft der Crawl im eigenen Prozess → passiver Wert ([`RunOwner::is_passive`]), nichts geschrieben; endet oder
+    ///   pausiert der Crawl, trägt sich der Wert beim nächsten Schlag ein (nie über einen fremden aktiven Besitzer).
     /// * Sonst trägt sich der Prozess ein (ein Commit) und startet den Takt; ein weiterer KI-Lauf desselben Prozesses
     ///   auf derselben Datei teilt diesen Eintrag.
     ///
@@ -122,13 +129,15 @@ impl RunOwner {
         }
         let pid = std::process::id();
         let file = CrawlFile::open(crawl_path, OpenMode::ReadWrite)?;
-        if owner::claim(file.conn(), owner_kind, pid, clock.now())? == Claim::Passive {
-            return Ok(RunOwner { key, shared: None });
-        }
+        let claimed = owner::claim(file.conn(), owner_kind, pid, clock.now())? == Claim::Claimed;
+        // Auch ein passiver Wert schlägt den Takt: Endet oder pausiert der eigene Crawl, trägt `beat` den Prozess ein
+        // (Übernahme nach dem Ende des eigenen Crawls, AI-020); solange der Crawl läuft, schreibt `beat` nichts.
         let shared = Arc::new(Shared {
             file: Mutex::new(file),
             clock,
             pid,
+            kind: owner_kind,
+            claimed: AtomicBool::new(claimed),
             stopped: AtomicBool::new(false),
             beats: watch::Sender::new(0),
             task: Mutex::new(None),
@@ -157,12 +166,15 @@ impl RunOwner {
         })
     }
 
-    /// Der eigene Prozess führt den Crawl bereits; dieser Wert schreibt nichts.
+    /// Der Prozess ist (noch) nicht eingetragen, weil der eigene Crawl nach CRAWL-125 läuft; bis zur Übernahme schreibt
+    /// dieser Wert nichts.
     pub fn is_passive(&self) -> bool {
-        self.shared.is_none()
+        self.shared
+            .as_ref()
+            .is_none_or(|s| !s.claimed.load(Ordering::SeqCst))
     }
 
-    /// Zahl der seit dem Eintrag geschriebenen Heartbeats (ohne den Eintrag selbst); `None` für einen passiven Wert.
+    /// Zahl der geschriebenen Heartbeats (ohne den Eintrag beim Start; eine Übernahme zählt als Heartbeat).
     pub fn heartbeats(&self) -> Option<watch::Receiver<u64>> {
         self.shared.as_ref().map(|s| s.beats.subscribe())
     }
@@ -170,7 +182,7 @@ impl RunOwner {
     /// Ende des KI-Laufs (fertig, pausiert, gestoppt, Budget erreicht, Fehler, geordnetes Beenden): hält den Takt an
     /// und schreibt einmal `heartbeat_at` = jetzt mit leerem `owner_pid` – beim letzten KI-Lauf dieses Prozesses auf
     /// der Datei und nur, solange `owner_pid` noch den eigenen Prozess nennt und der Crawl nicht inzwischen in der
-    /// eigenen Engine läuft. Ein passiver Wert schreibt nichts.
+    /// eigenen Engine läuft. Ein (noch) passiver Wert schreibt daher nichts.
     pub fn finish(mut self) -> Result<(), StoreError> {
         let Some(shared) = self.detach() else {
             return Ok(());
