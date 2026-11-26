@@ -27,7 +27,9 @@ pub mod validate;
 pub use dedupe::{normalized, post_pass, SiteIndex};
 pub use element::Element;
 pub use limits::{ElementLimits, RuleSet, SuggestOptions};
-pub use review::{accept_first, apply, check_text, revalidate, BulkResult, ReviewAction, ReviewError};
+pub use review::{
+    accept_first, apply, check_text, revalidate, BulkResult, ReviewAction, ReviewError,
+};
 pub use run::{
     finish, finish_without_request, CachedAnswer, ElementJob, Engine, FileStore, PageInput,
     RunControl, RunError, RunSummary, SuggestStore,

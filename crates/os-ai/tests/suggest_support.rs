@@ -91,7 +91,9 @@ pub fn pages() -> Vec<FixturePage> {
 /// Testmesser: 9 px je Zeichen bei 20 px (Titel), 6 px bei 14 px (Beschreibung); `W` doppelt.
 pub fn fake_px(text: &str, size: f64) -> u32 {
     let per = if size >= 20.0 { 9 } else { 6 };
-    text.chars().map(|c| if c == 'W' { 2 * per } else { per }).sum()
+    text.chars()
+        .map(|c| if c == 'W' { 2 * per } else { per })
+        .sum()
 }
 
 /// Temporäres Verzeichnis, das am Ende gelöscht wird.
@@ -151,7 +153,11 @@ pub fn crawl_file(dir: &Path, pages: &[FixturePage]) -> CrawlFile {
             json!(address),
             json!(BASE),
             json!(address.len() as i64),
-            json!(if p.indexable { "Indexable" } else { "Non-Indexable" }),
+            json!(if p.indexable {
+                "Indexable"
+            } else {
+                "Non-Indexable"
+            }),
             json!(p.title.is_some() as i64),
             json!(p.title),
             json!(len(&p.title)),
@@ -260,7 +266,11 @@ pub fn model() -> Model {
         endpoint: "responses".into(),
         capabilities: RESPONSES_CAPABILITIES,
         capability_source: CapabilitySource::ModelCatalog,
-        reasoning_levels: vec![ReasoningLevel::Off, ReasoningLevel::Low, ReasoningLevel::Medium],
+        reasoning_levels: vec![
+            ReasoningLevel::Off,
+            ReasoningLevel::Low,
+            ReasoningLevel::Medium,
+        ],
     }
 }
 
@@ -274,7 +284,11 @@ pub fn plan(element: Element, reasoning: ReasoningLevel) -> TaskPlan {
         reasoning: ReasoningChoice {
             requested: reasoning,
             effective: reasoning,
-            dropdown: vec![ReasoningLevel::ModelDefault, ReasoningLevel::Off, ReasoningLevel::Low],
+            dropdown: vec![
+                ReasoningLevel::ModelDefault,
+                ReasoningLevel::Off,
+                ReasoningLevel::Low,
+            ],
             warning: None,
         },
         answer_tokens: Some(AnswerTokens::Fixed(512)),
@@ -303,12 +317,14 @@ pub fn redactor() -> Redactor {
 
 /// Limiter mit kurzem Backoff (Millisekunden) und `workers` gleichzeitigen Anfragen je Anbieter.
 pub fn limiter(workers: u32) -> Limiter {
-    let mut config = LimitsConfig::default();
-    config.backoff = BackoffPolicy {
-        base: Duration::from_millis(5),
-        factor: 2.0,
-        cap: Duration::from_millis(40),
-        jitter: 0.0,
+    let mut config = LimitsConfig {
+        backoff: BackoffPolicy {
+            base: Duration::from_millis(5),
+            factor: 2.0,
+            cap: Duration::from_millis(40),
+            jitter: 0.0,
+        },
+        ..LimitsConfig::default()
     };
     config.providers.insert(
         "openai".into(),
@@ -317,7 +333,11 @@ pub fn limiter(workers: u32) -> Limiter {
             timeout: Duration::from_secs(120),
         },
     );
-    Limiter::with_jitter(config, Arc::new(TokioClock::new()), Arc::new(FixedJitter(0.5)))
+    Limiter::with_jitter(
+        config,
+        Arc::new(TokioClock::new()),
+        Arc::new(FixedJitter(0.5)),
+    )
 }
 
 pub fn clock() -> ManualClock {
@@ -395,7 +415,12 @@ pub struct Kit {
 }
 
 impl Kit {
-    pub fn new(file: CrawlFile, element: Element, pages: &[FixturePage], limits: BudgetLimits) -> Self {
+    pub fn new(
+        file: CrawlFile,
+        element: Element,
+        pages: &[FixturePage],
+        limits: BudgetLimits,
+    ) -> Self {
         let ledger = os_store::ai::budget::open_ledger(file.conn(), limits, &[]).unwrap();
         Self {
             consent: consent(&Element::ALL),
@@ -474,6 +499,12 @@ pub struct Scripted {
     pub delays: HashMap<String, Duration>,
     pub calls: Mutex<Vec<(String, String)>>,
     counters: Mutex<HashMap<String, usize>>,
+}
+
+impl Default for Scripted {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Scripted {

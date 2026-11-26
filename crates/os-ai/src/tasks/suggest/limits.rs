@@ -136,8 +136,14 @@ mod tests {
         for bad in [
             SuggestOptions { candidates: 0, ..d },
             SuggestOptions { candidates: 6, ..d },
-            SuggestOptions { repair_rounds: 4, ..d },
-            SuggestOptions { schema_repairs: 3, ..d },
+            SuggestOptions {
+                repair_rounds: 4,
+                ..d
+            },
+            SuggestOptions {
+                schema_repairs: 3,
+                ..d
+            },
         ] {
             assert!(bad.validated().is_err(), "{bad:?}");
         }

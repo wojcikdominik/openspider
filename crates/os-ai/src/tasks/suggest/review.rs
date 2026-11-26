@@ -2,18 +2,20 @@
 //! (AI-075). Alles hier ist lokal: kein Request, keine Kosten.
 use super::dedupe::{post_pass, SiteIndex};
 use super::validate::{Checked, Checker};
-use os_store::ai::suggestions::{
-    AcceptedValue, ElementRecord, Origin, ReviewStatus, STATUS_VALID,
-};
+use os_store::ai::suggestions::{AcceptedValue, ElementRecord, Origin, ReviewStatus, STATUS_VALID};
 use std::collections::BTreeMap;
 
 /// Aktion der Prüfung.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReviewAction {
     /// Übernimmt den Kandidaten `candidate` (Index in Antwortreihenfolge) bzw. ohne Angabe den gewählten Kandidaten 1.
-    Accept { candidate: Option<u32> },
+    Accept {
+        candidate: Option<u32>,
+    },
     /// Freier Text: wird live geprüft und auch mit Verstößen gespeichert, dann als `Edited` mit Verstoßliste.
-    Edit { value: String },
+    Edit {
+        value: String,
+    },
     Reject,
     /// Zurück auf `Open`.
     Reset,
@@ -109,8 +111,7 @@ pub struct BulkResult {
 pub fn accept_first(records: &mut [ElementRecord], now: &str) -> BulkResult {
     let mut result = BulkResult::default();
     for r in records {
-        let valid = r.status == STATUS_VALID
-            && r.selected_candidate().is_some_and(|c| c.valid);
+        let valid = r.status == STATUS_VALID && r.selected_candidate().is_some_and(|c| c.valid);
         if !valid {
             result.skipped += 1;
             result.skipped_url_ids.push(r.url_id);
@@ -133,7 +134,12 @@ pub fn accept_first(records: &mut [ElementRecord], now: &str) -> BulkResult {
 }
 
 /// Live-Prüfung eines bearbeiteten Texts (AI-076).
-pub fn check_text(checker: &Checker<'_>, url_id: i64, language: Option<&str>, text: &str) -> Checked {
+pub fn check_text(
+    checker: &Checker<'_>,
+    url_id: i64,
+    language: Option<&str>,
+    text: &str,
+) -> Checked {
     checker.check(url_id, language, text)
 }
 

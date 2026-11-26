@@ -57,7 +57,8 @@ fn preview_required(app: &App) -> Result<(), CmdError> {
 
 fn element_of(id: &str) -> Result<Element, CmdError> {
     Element::from_id(id).ok_or_else(|| {
-        CmdError::invalid_input("err-suggest-element", "element").with_arg("element", id.to_string())
+        CmdError::invalid_input("err-suggest-element", "element")
+            .with_arg("element", id.to_string())
     })
 }
 
@@ -188,9 +189,13 @@ pub enum Scope {
     Default,
     All,
     #[serde(rename_all = "camelCase")]
-    Selected { url_ids: Vec<i64> },
+    Selected {
+        url_ids: Vec<i64>,
+    },
     #[serde(rename_all = "camelCase")]
-    Segment { segment_id: i64 },
+    Segment {
+        segment_id: i64,
+    },
 }
 
 const TITLE_FILTERS: [&str; 7] = [
@@ -228,7 +233,11 @@ pub fn scope_ids(
         .collect();
     let set: BTreeSet<i64> = match scope {
         Scope::All => s.iter().copied().collect(),
-        Scope::Selected { url_ids } => url_ids.iter().copied().filter(|id| s.contains(id)).collect(),
+        Scope::Selected { url_ids } => url_ids
+            .iter()
+            .copied()
+            .filter(|id| s.contains(id))
+            .collect(),
         Scope::Segment { segment_id } => {
             let mut stmt = file
                 .conn()
@@ -313,7 +322,9 @@ pub fn catalog_plan(element: Element, cfg: &CrawlConfig) -> Option<(TaskPlan, Ra
         model,
         candidate_index: 0,
         reasoning: choose_reasoning(defaults.reasoning(task), &levels),
-        answer_tokens: defaults.answer_tokens(task).or(Some(AnswerTokens::Fixed(512))),
+        answer_tokens: defaults
+            .answer_tokens(task)
+            .or(Some(AnswerTokens::Fixed(512))),
         model_output_limit: table.max_output_tokens(&key),
         user_max_tokens,
     };
@@ -325,9 +336,8 @@ pub fn catalog_plan(element: Element, cfg: &CrawlConfig) -> Option<(TaskPlan, Ra
 }
 
 fn has_key(app: &App, provider: &str) -> bool {
-    os_ai::keys::AiKeyProvider::from_id(provider).is_some_and(|p| {
-        os_ai::keys::AiKeyStore::new(app.config().secrets.clone()).has_key(p)
-    })
+    os_ai::keys::AiKeyProvider::from_id(provider)
+        .is_some_and(|p| os_ai::keys::AiKeyStore::new(app.config().secrets.clone()).has_key(p))
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -448,8 +458,7 @@ fn plan(
         }));
         scopes.push((element, ids));
     }
-    let confirmation =
-        os_ai::cost::confirmation_required(MicroUsd(total), threshold, None);
+    let confirmation = os_ai::cost::confirmation_required(MicroUsd(total), threshold, None);
     Ok((
         json!({
             "elements": elements,
@@ -662,7 +671,10 @@ fn suggest_review<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, 
                 candidate: a.candidate,
             }),
             "edit" => Some(sg::ReviewAction::Edit {
-                value: a.value.clone().ok_or_else(|| CmdError::invalid_input("err-suggest-value", "value"))?,
+                value: a
+                    .value
+                    .clone()
+                    .ok_or_else(|| CmdError::invalid_input("err-suggest-value", "value"))?,
             }),
             "reject" => Some(sg::ReviewAction::Reject),
             "reset" => Some(sg::ReviewAction::Reset),
@@ -798,17 +810,21 @@ struct FocusArgs {
 
 /// Liest `Address,Keyword` (Kopfzeile optional, Trenner Komma oder Semikolon, Anführungszeichen erlaubt).
 pub fn parse_focus_csv(text: &str) -> Vec<(String, String)> {
-    let unquote = |s: &str| s.trim().trim_matches('"').replace("\"\"", "\"").trim().to_string();
+    let unquote = |s: &str| {
+        s.trim()
+            .trim_matches('"')
+            .replace("\"\"", "\"")
+            .trim()
+            .to_string()
+    };
     text.trim_start_matches('\u{feff}')
         .lines()
         .filter_map(|line| {
             let sep = if line.contains(',') { ',' } else { ';' };
             let (address, keyword) = line.split_once(sep)?;
             let (address, keyword) = (unquote(address), unquote(keyword));
-            (!address.is_empty()
-                && !keyword.is_empty()
-                && !address.eq_ignore_ascii_case("address"))
-            .then_some((address, keyword))
+            (!address.is_empty() && !keyword.is_empty() && !address.eq_ignore_ascii_case("address"))
+                .then_some((address, keyword))
         })
         .collect()
 }
@@ -873,7 +889,6 @@ pub fn register(r: &mut Registry) {
         );
     }
 }
-
 
 /// Fixture der Vorschläge (`tests/fixtures/ai/suggest/`): Crawl-Datei mit den Seiten aus `pages.json` (Pixelbreiten nach
 /// UI-038) und Vorschlägen aus einem Lauf über den Kern mit den Antworten aus `mock-answers.d/v01.json`. Dient den
@@ -949,8 +964,16 @@ pub(crate) mod fixture {
                 json!(i + 1),
                 json!(address),
                 json!(address.len()),
-                json!(if indexable { "Indexable" } else { "Non-Indexable" }),
-                json!(if indexable { Value::Null } else { json!("noindex") }),
+                json!(if indexable {
+                    "Indexable"
+                } else {
+                    "Non-Indexable"
+                }),
+                json!(if indexable {
+                    Value::Null
+                } else {
+                    json!("noindex")
+                }),
                 json!(title.is_some() as i64),
                 json!(title),
                 len(&title).unwrap_or(Value::Null),
@@ -1057,12 +1080,21 @@ pub(crate) mod fixture {
             .unwrap()
         });
         let run_id = store.with(|f| {
-            store::begin_run(f.conn(), "2026-11-26T09:00:00Z", &json!({"task": "suggest"})).unwrap()
+            store::begin_run(
+                f.conn(),
+                "2026-11-26T09:00:00Z",
+                &json!({"task": "suggest"}),
+            )
+            .unwrap()
         });
         let consent = ConsentGate::dialog(ConsentBook::new());
         for e in Element::ALL {
             consent
-                .grant(ConsentKey::new("openai", e.task().as_str(), e.fields()), 0, None)
+                .grant(
+                    ConsentKey::new("openai", e.task().as_str(), e.fields()),
+                    0,
+                    None,
+                )
                 .unwrap();
         }
         let redactor = Redactor::new(RedactionSettings::default());
@@ -1143,19 +1175,27 @@ mod tests {
 
     fn column_value(file: &CrawlFile, key: &str, url_id: i64) -> Value {
         let tab = os_analyze::tabs::ai_suggestions::tab();
-        let column = tab.columns.iter().find(|c| c.key == key).unwrap_or_else(|| panic!("{key}"));
+        let column = tab
+            .columns
+            .iter()
+            .find(|c| c.key == key)
+            .unwrap_or_else(|| panic!("{key}"));
         let ColumnSql::Expr(sql) = column.sql else {
             panic!("{key}: kein Ausdruck")
         };
         file.conn()
-            .query_row(&format!("SELECT {sql} FROM urls u WHERE u.id = ?1"), [url_id], |r| {
-                Ok(match r.get_ref(0)? {
-                    rusqlite::types::ValueRef::Null => Value::Null,
-                    rusqlite::types::ValueRef::Integer(n) => json!(n),
-                    rusqlite::types::ValueRef::Text(t) => json!(String::from_utf8_lossy(t)),
-                    other => json!(format!("{other:?}")),
-                })
-            })
+            .query_row(
+                &format!("SELECT {sql} FROM urls u WHERE u.id = ?1"),
+                [url_id],
+                |r| {
+                    Ok(match r.get_ref(0)? {
+                        rusqlite::types::ValueRef::Null => Value::Null,
+                        rusqlite::types::ValueRef::Integer(n) => json!(n),
+                        rusqlite::types::ValueRef::Text(t) => json!(String::from_utf8_lossy(t)),
+                        other => json!(format!("{other:?}")),
+                    })
+                },
+            )
             .unwrap()
     }
 
@@ -1176,7 +1216,11 @@ mod tests {
         let (_dir, file) = built().await;
         let mut compared = 0;
         for element in Element::ALL {
-            let prefix = if element == Element::Title { "Title" } else { "Meta Description" };
+            let prefix = if element == Element::Title {
+                "Title"
+            } else {
+                "Meta Description"
+            };
             for r in store::load_all(file.conn(), element.id()).unwrap() {
                 for (slot, c) in r.displayed().iter().enumerate().take(5) {
                     let measured = c.value.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -1196,9 +1240,14 @@ mod tests {
         // Gleicher Text wie die Basisspalte → gleicher Wert (Meta Description 1 Pixel Width aus der Extraktion).
         let meta = file
             .conn()
-            .query_row("SELECT meta_desc_1 FROM urls WHERE id = 1", [], |r| r.get::<_, String>(0))
+            .query_row("SELECT meta_desc_1 FROM urls WHERE id = 1", [], |r| {
+                r.get::<_, String>(0)
+            })
             .unwrap();
-        assert_eq!(column_value(&file, "Meta Description 1 Pixel Width", 1), json!(ui038(&meta, 14.0)));
+        assert_eq!(
+            column_value(&file, "Meta Description 1 Pixel Width", 1),
+            json!(ui038(&meta, 14.0))
+        );
     }
 
     // spec: AI-071 [M4]
@@ -1217,14 +1266,20 @@ mod tests {
             json!("Leichte Wanderschuhe für Damen und Herren")
         );
         assert_eq!(column_value(&file, "Title 1", 3), Value::Null);
-        assert_eq!(column_value(&file, "Title Suggestion Status", 3), json!("Valid"));
+        assert_eq!(
+            column_value(&file, "Title Suggestion Status", 3),
+            json!("Valid")
+        );
         assert_eq!(column_value(&file, "Review Status", 3), json!("Open"));
         let tab = os_analyze::tabs::ai_suggestions::tab();
         let count = |filter: &str| -> i64 {
             let f = tab.filters.iter().find(|f| f.id == filter).unwrap();
             file.conn()
                 .query_row(
-                    &format!("SELECT count(*) FROM urls u WHERE ({}) AND ({})", tab.population, f.predicate),
+                    &format!(
+                        "SELECT count(*) FROM urls u WHERE ({}) AND ({})",
+                        tab.population, f.predicate
+                    ),
                     [],
                     |r| r.get(0),
                 )
@@ -1261,7 +1316,8 @@ mod tests {
         let ctx = load_context(&file, &cfg).unwrap();
         let titles = scope_ids(&file, &cfg, &ctx, Element::Title, &Scope::Default).unwrap();
         assert_eq!(titles, vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let metas = scope_ids(&file, &cfg, &ctx, Element::MetaDescription, &Scope::Default).unwrap();
+        let metas =
+            scope_ids(&file, &cfg, &ctx, Element::MetaDescription, &Scope::Default).unwrap();
         assert_eq!(metas, vec![8, 9, 10, 11, 12]);
         // Mit geänderten Grenzwerten (Title max. 40 Zeichen) wächst der Bereich entsprechend.
         let mut strict = cfg.clone();
@@ -1270,12 +1326,22 @@ mod tests {
         let more = scope_ids(&file, &strict, &ctx, Element::Title, &Scope::Default).unwrap();
         assert!(more.len() > titles.len(), "{more:?}");
         assert_eq!(
-            scope_ids(&file, &cfg, &ctx, Element::Title, &Scope::Selected { url_ids: vec![2, 13, 2] })
-                .unwrap(),
+            scope_ids(
+                &file,
+                &cfg,
+                &ctx,
+                Element::Title,
+                &Scope::Selected {
+                    url_ids: vec![2, 13, 2]
+                }
+            )
+            .unwrap(),
             vec![2]
         );
         assert_eq!(
-            scope_ids(&file, &cfg, &ctx, Element::Title, &Scope::All).unwrap().len(),
+            scope_ids(&file, &cfg, &ctx, Element::Title, &Scope::All)
+                .unwrap()
+                .len(),
             12
         );
     }
@@ -1292,7 +1358,11 @@ mod tests {
         for n in [28, 29, 30, 31, 45, 59, 60, 61, 62, 70] {
             texts.push("a".repeat(n));
             texts.push(format!("Ti{}", "W".repeat(n.min(40) - 2)));
-            texts.push(format!("{} {}", "Wanderschuhe".repeat(n / 12), "x".repeat(n % 12)));
+            texts.push(format!(
+                "{} {}",
+                "Wanderschuhe".repeat(n / 12),
+                "x".repeat(n % 12)
+            ));
             texts.push("i".repeat(n * 2));
             texts.push(format!("Seite {n:02} – Ratgeber für {}", "Ü".repeat(n / 3)));
         }
@@ -1344,7 +1414,11 @@ mod tests {
             let ok = check.check(i as i64 + 1, None, t).valid();
             let in_filter = filtered.contains(&(i as i64 + 1));
             assert_eq!(ok, !in_filter, "{t:?}: gültig {ok}, in Filter {in_filter}");
-            if ok { valid += 1 } else { invalid += 1 }
+            if ok {
+                valid += 1
+            } else {
+                invalid += 1
+            }
         }
         assert!(valid > 5 && invalid > 5, "{valid}/{invalid}");
     }
@@ -1376,9 +1450,13 @@ mod tests {
     }
 
     async fn preview(app: &App, on: bool) {
-        call(app, "settings.set", json!({"patch": {"aiApp": {"previewEnabled": on}}}))
-            .await
-            .unwrap();
+        call(
+            app,
+            "settings.set",
+            json!({"patch": {"aiApp": {"previewEnabled": on}}}),
+        )
+        .await
+        .unwrap();
     }
 
     // Plan M4 E1 (E-2 b): mit Schalter „KI (Vorschau)“ aus antwortet jeder Vorschlags-Command ohne Wirkung.
@@ -1410,10 +1488,15 @@ mod tests {
         let (dir, file) = built().await;
         let app = app_for(file, dir.path());
         preview(&app, true).await;
-        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 2})).await.unwrap();
+        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 2}))
+            .await
+            .unwrap();
         let title = &detail["elements"][0];
         assert_eq!(title["element"], "title");
-        assert_eq!(title["candidates"][0]["value"], "Rucksäcke für Wanderungen im großen Vergleich");
+        assert_eq!(
+            title["candidates"][0]["value"],
+            "Rucksäcke für Wanderungen im großen Vergleich"
+        );
         assert_eq!(title["candidates"][0]["selected"], true);
         assert_eq!(
             title["candidates"][1]["violations"][0],
@@ -1436,9 +1519,14 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(edited["updated"], 1);
-        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 2})).await.unwrap();
+        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 2}))
+            .await
+            .unwrap();
         assert_eq!(detail["elements"][0]["review"], "Edited");
-        assert_eq!(detail["elements"][0]["accepted"]["violations"], check["violations"]);
+        assert_eq!(
+            detail["elements"][0]["accepted"]["violations"],
+            check["violations"]
+        );
         // „Kandidat 1 übernehmen“ für /a/ … /g/ und /noindex/ (ohne Eintrag): alle sieben gültig.
         let bulk = call(
             &app,
@@ -1447,7 +1535,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!((bulk["accepted"].clone(), bulk["skipped"].clone()), (json!(6), json!(0)));
+        assert_eq!(
+            (bulk["accepted"].clone(), bulk["skipped"].clone()),
+            (json!(6), json!(0))
+        );
         let reset = call(
             &app,
             "ai.suggestReview",
@@ -1456,7 +1547,9 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(reset["updated"], 1);
-        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 1})).await.unwrap();
+        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 1}))
+            .await
+            .unwrap();
         assert_eq!(detail["elements"][0]["review"], "Open");
         let bad = call(
             &app,
@@ -1478,21 +1571,34 @@ mod tests {
         let requests_before = {
             let s = app.sessions().current(&WindowId("main".into())).unwrap();
             let f = CrawlFile::open(&s.path, os_store::OpenMode::ReadOnly).unwrap();
-            f.conn().query_row("SELECT count(*) FROM ai_requests", [], |r| r.get::<_, i64>(0)).unwrap()
+            f.conn()
+                .query_row("SELECT count(*) FROM ai_requests", [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .unwrap()
         };
         let mut s = app.sessions().current(&WindowId("main".into())).unwrap();
         let mut cfg = (*s.config).clone();
         cfg.title.max_chars = 40;
         s.config = Arc::new(cfg);
-        app.sessions().set_current(WindowId("main".into()), s.clone());
+        app.sessions()
+            .set_current(WindowId("main".into()), s.clone());
         let out = call(&app, "ai.suggestRecheck", Value::Null).await.unwrap();
         assert_eq!(out["updated"], 12);
-        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 3})).await.unwrap();
+        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 3}))
+            .await
+            .unwrap();
         // /c/: alle Kandidaten über 40 Zeichen.
         assert_eq!(detail["elements"][0]["status"], "No valid suggestion");
-        assert!(detail["elements"][0]["violations"][0].as_str().unwrap().starts_with("length>40"));
+        assert!(detail["elements"][0]["violations"][0]
+            .as_str()
+            .unwrap()
+            .starts_with("length>40"));
         let f = CrawlFile::open(&s.path, os_store::OpenMode::ReadOnly).unwrap();
-        let after: i64 = f.conn().query_row("SELECT count(*) FROM ai_requests", [], |r| r.get(0)).unwrap();
+        let after: i64 = f
+            .conn()
+            .query_row("SELECT count(*) FROM ai_requests", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(after, requests_before);
     }
 
@@ -1507,28 +1613,39 @@ mod tests {
         let app = app_for(file, dir.path());
         preview(&app, true).await;
         let csv = format!("Address,Keyword\n{BASE}/a/,wanderschuhe damen\n{BASE}/zz/,unbekannt\n");
-        let imported = call(&app, "ai.suggestFocusImport", json!({"csv": csv})).await.unwrap();
-        assert_eq!(imported["imported"], 1);
-        assert_eq!(imported["unknown"], json!([format!("{BASE}/zz/")]));
-        let plan = call(&app, "ai.suggestPlan", json!({"elements": ["title", "meta_description"]}))
+        let imported = call(&app, "ai.suggestFocusImport", json!({"csv": csv}))
             .await
             .unwrap();
+        assert_eq!(imported["imported"], 1);
+        assert_eq!(imported["unknown"], json!([format!("{BASE}/zz/")]));
+        let plan = call(
+            &app,
+            "ai.suggestPlan",
+            json!({"elements": ["title", "meta_description"]}),
+        )
+        .await
+        .unwrap();
         assert_eq!(plan["elements"][0]["entries"], 7);
         assert_eq!(plan["elements"][1]["entries"], 5);
         let est = &plan["elements"][0]["estimate"];
         assert_eq!(est["requests"], 7);
         assert_eq!(est["executable"], "Missing API key");
         assert!(est["expectedMicroUsd"].as_u64().unwrap() > 0);
-        let handle = call(&app, "ai.suggestRun", json!({"tasks": ["suggest-title"]})).await.unwrap();
-        let op_id = handle["opId"].as_str().unwrap().to_string();
-        let status = tokio::time::timeout(std::time::Duration::from_secs(20), app.ops().wait(&op_id))
+        let handle = call(&app, "ai.suggestRun", json!({"tasks": ["suggest-title"]}))
             .await
-            .unwrap()
             .unwrap();
+        let op_id = handle["opId"].as_str().unwrap().to_string();
+        let status =
+            tokio::time::timeout(std::time::Duration::from_secs(20), app.ops().wait(&op_id))
+                .await
+                .unwrap()
+                .unwrap();
         let result = status.result.unwrap();
         assert_eq!(result["state"], "pendingConfirmation");
         assert_eq!(result["elements"][0]["entries"], 7);
-        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 1})).await.unwrap();
+        let detail = call(&app, "ai.suggestDetail", json!({"urlId": 1}))
+            .await
+            .unwrap();
         assert_eq!(detail["elements"][0]["status"], "Pending (confirmation)");
         assert_eq!(detail["elements"][0]["focus"], "wanderschuhe damen");
     }
@@ -1553,23 +1670,33 @@ mod tests {
         std::fs::copy(&target, &copy).expect("Fixture fehlt (UPDATE_GOLDEN=1)");
         let file = CrawlFile::open(&copy, os_store::OpenMode::ReadOnly).unwrap();
         assert_eq!(store::load_all(file.conn(), "title").unwrap().len(), 7);
-        assert_eq!(store::load_all(file.conn(), "meta_description").unwrap().len(), 5);
+        assert_eq!(
+            store::load_all(file.conn(), "meta_description")
+                .unwrap()
+                .len(),
+            5
+        );
         assert_eq!(store::pages(file.conn()).unwrap().len(), 13);
     }
 
     // spec: AI-070 [M4]
     #[test]
     fn focus_csv_and_html_lang_are_parsed() {
-
         let csv = "\u{feff}Address,Keyword\nhttp://ai.test:8080/a/,wanderschuhe damen\n\"http://ai.test:8080/b/\";\"rucksack\"\n,leer\n";
         assert_eq!(
             parse_focus_csv(csv),
             vec![
-                ("http://ai.test:8080/a/".to_string(), "wanderschuhe damen".to_string()),
+                (
+                    "http://ai.test:8080/a/".to_string(),
+                    "wanderschuhe damen".to_string()
+                ),
                 ("http://ai.test:8080/b/".to_string(), "rucksack".to_string()),
             ]
         );
-        assert_eq!(html_lang("<!doctype html><HTML LANG=\"de-DE\"><head>").as_deref(), Some("de-DE"));
+        assert_eq!(
+            html_lang("<!doctype html><HTML LANG=\"de-DE\"><head>").as_deref(),
+            Some("de-DE")
+        );
         assert_eq!(html_lang("<html lang=en class=x>").as_deref(), Some("en"));
         assert_eq!(html_lang("<html><body lang=\"fr\">"), None);
     }

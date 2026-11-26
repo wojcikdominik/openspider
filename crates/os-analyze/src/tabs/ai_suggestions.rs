@@ -73,7 +73,12 @@ fn element_columns(e: &ElementColumns, visible: bool) -> Vec<ColumnDef> {
     let p = e.prefix;
     let mut columns = vec![
         ColumnDef::dynamic(&format!("{p} 1"), e.base, ColumnKind::Text, visible),
-        ColumnDef::dynamic(&format!("{p} 1 Pixel Width"), e.base_px, ColumnKind::Int, visible),
+        ColumnDef::dynamic(
+            &format!("{p} 1 Pixel Width"),
+            e.base_px,
+            ColumnKind::Int,
+            visible,
+        ),
     ];
     for k in 1..=MAX_CANDIDATES {
         let shown = visible && k <= 3;
@@ -188,7 +193,8 @@ fn filter(id: &'static str, predicate: &'static str) -> FilterDef {
 /// Definition des Tabs „AI Suggestions“.
 pub fn tab() -> TabDef {
     let mut tab = super::stub_tab("AI Suggestions");
-    tab.population = "u.is_internal = 1 AND EXISTS (SELECT 1 FROM ai_suggestions s WHERE s.url_id = u.id \
+    tab.population =
+        "u.is_internal = 1 AND EXISTS (SELECT 1 FROM ai_suggestions s WHERE s.url_id = u.id \
          AND s.candidate = 0 AND s.element IN ('title', 'meta_description', 'h1', 'alt'))";
     let mut columns = tab.columns;
     columns.extend(element_columns(&TITLE, true));
@@ -198,7 +204,10 @@ pub fn tab() -> TabDef {
     let real = "s.element IN ('title', 'meta_description', 'h1', 'alt')";
     let mut titles = filter("Titles", exists("s.element = 'title'"));
     titles.default_columns = title_cols.as_slice();
-    let mut metas = filter("Meta Descriptions", exists("s.element = 'meta_description'"));
+    let mut metas = filter(
+        "Meta Descriptions",
+        exists("s.element = 'meta_description'"),
+    );
     metas.default_columns = meta_cols.as_slice();
     tab.filters = vec![
         FilterDef::placeholder("All", FilterKind::Live, &[]),
@@ -291,6 +300,8 @@ mod tests {
         assert!(tab.filters.iter().all(|f| !f.is_stub()));
         let titles = tab.filters.iter().find(|f| f.id == "Titles").unwrap();
         assert!(titles.default_columns.contains(&"Title Suggestion 1"));
-        assert!(!titles.default_columns.contains(&"Meta Description Suggestion 1"));
+        assert!(!titles
+            .default_columns
+            .contains(&"Meta Description Suggestion 1"));
     }
 }

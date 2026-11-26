@@ -10,9 +10,7 @@
 //! Vergleich jeweils case-insensitiv nach Whitespace-Normalisierung ([`normalized`]).
 use super::element::Element;
 use super::validate::{collapse_whitespace, DUPLICATE_CANDIDATE};
-use os_store::ai::suggestions::{
-    ElementRecord, PageRow, STATUS_NO_VALID, STATUS_VALID,
-};
+use os_store::ai::suggestions::{ElementRecord, PageRow, STATUS_NO_VALID, STATUS_VALID};
 use std::collections::{BTreeMap, HashMap};
 
 /// Vergleichsform: Whitespace zusammengefasst, getrimmt, in Kleinbuchstaben.

@@ -16,10 +16,17 @@ fn title_pages() -> Vec<FixturePage> {
     pages()
 }
 
-fn only(pages: &[os_ai::tasks::suggest::PageInput], paths: &[&str]) -> Vec<os_ai::tasks::suggest::PageInput> {
+fn only(
+    pages: &[os_ai::tasks::suggest::PageInput],
+    paths: &[&str],
+) -> Vec<os_ai::tasks::suggest::PageInput> {
     pages
         .iter()
-        .filter(|p| paths.iter().any(|path| p.address == format!("{BASE}{path}")))
+        .filter(|p| {
+            paths
+                .iter()
+                .any(|path| p.address == format!("{BASE}{path}"))
+        })
         .cloned()
         .collect()
 }
@@ -28,11 +35,7 @@ const TITLE_PATHS: [&str; 7] = ["/a/", "/b/", "/c/", "/d/", "/e/", "/f/", "/g/"]
 const META_PATHS: [&str; 5] = ["/m1/", "/m2/", "/m3/", "/m4/", "/m5/"];
 
 fn record(kit: &Kit, element: Element, path: &str) -> suggestions::ElementRecord {
-    let id = title_pages()
-        .iter()
-        .position(|p| p.path == path)
-        .unwrap() as i64
-        + 1;
+    let id = title_pages().iter().position(|p| p.path == path).unwrap() as i64 + 1;
     kit.store
         .with(|f| suggestions::load(f.conn(), id, element.id()).unwrap())
         .unwrap()
@@ -71,7 +74,10 @@ async fn one_request_per_url_candidates_in_answer_order_and_focus_only_where_imp
     // Kandidaten in Antwortreihenfolge gespeichert.
     let a = record(&kit, Element::Title, "/a/");
     assert_eq!(
-        a.candidates.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(),
+        a.candidates
+            .iter()
+            .map(|c| c.value.as_str())
+            .collect::<Vec<_>>(),
         vec![
             "Leichte Wanderschuhe für Damen und Herren",
             "Wanderschuhe im Test: die besten Modelle 2026",
@@ -84,7 +90,9 @@ async fn one_request_per_url_candidates_in_answer_order_and_focus_only_where_imp
     // Jede Protokollzeile trägt Aufgabe, Stufe, Kosten > 0 und Status Success.
     let log = kit.log("suggest-title");
     assert_eq!(log.len(), 7);
-    assert!(log.iter().all(|r| r.record.status == "Success" && r.record.cost > MicroUsd(0)));
+    assert!(log
+        .iter()
+        .all(|r| r.record.status == "Success" && r.record.cost > MicroUsd(0)));
     assert!(log
         .iter()
         .all(|r| r.details.reasoning_level.as_deref() == Some("off")));
@@ -129,7 +137,10 @@ async fn titles_missing_title_stage_one_and_stage_two_duplicates() {
     assert_eq!(d.selected, Some(2));
     let a = record(&kit, Element::Title, "/a/");
     let b = record(&kit, Element::Title, "/b/");
-    assert_eq!(a.selected_candidate().unwrap().value, "Leichte Wanderschuhe für Damen und Herren");
+    assert_eq!(
+        a.selected_candidate().unwrap().value,
+        "Leichte Wanderschuhe für Damen und Herren"
+    );
     assert_eq!(
         b.candidates[0].violations,
         vec!["duplicate_candidate:http://ai.test:8080/a/".to_string()]
@@ -148,7 +159,11 @@ async fn titles_missing_title_stage_one_and_stage_two_duplicates() {
     for path in TITLE_PATHS {
         let r = record(&kit, Element::Title, path);
         for cand in r.candidates.iter().filter(|c| c.valid) {
-            assert!(!titles.contains(&os_ai::tasks::suggest::normalized(&cand.value)), "{path}: {}", cand.value);
+            assert!(
+                !titles.contains(&os_ai::tasks::suggest::normalized(&cand.value)),
+                "{path}: {}",
+                cand.value
+            );
         }
     }
 }
@@ -173,7 +188,9 @@ async fn meta_descriptions_are_cleaned_checked_and_deduplicated() {
     assert_eq!(summary.requests, 5);
     let m3 = record(&kit, Element::MetaDescription, "/m3/");
     let first = &m3.candidates[0];
-    assert!(!first.value.contains('\n') && !first.value.starts_with('"') && !first.value.ends_with('"'));
+    assert!(
+        !first.value.contains('\n') && !first.value.starts_with('"') && !first.value.ends_with('"')
+    );
     assert!(first.valid, "{:?}", first.violations);
     assert_eq!(first.pixel_width, Some(fake_px(&first.value, 14.0)));
     assert_eq!(first.length, first.value.chars().count() as u32);
@@ -206,11 +223,12 @@ async fn results_and_decisions_survive_reopen_and_a_second_run_hits_the_cache() 
         .unwrap();
     let mut a = record(&kit, Element::Title, "/a/");
     a.review = ReviewStatus::Rejected;
-    kit.store
-        .with(|f| suggestions::save(f.conn(), &a).unwrap());
+    kit.store.with(|f| suggestions::save(f.conn(), &a).unwrap());
     drop(kit);
     let reopened = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadWrite).unwrap();
-    let back = suggestions::load(reopened.conn(), 1, "title").unwrap().unwrap();
+    let back = suggestions::load(reopened.conn(), 1, "title")
+        .unwrap()
+        .unwrap();
     assert_eq!(back.review, ReviewStatus::Rejected);
     assert_eq!(back.candidates.len(), 3);
     assert_eq!(back.status, "Valid");
@@ -223,14 +241,19 @@ async fn results_and_decisions_survive_reopen_and_a_second_run_hits_the_cache() 
         .unwrap();
     assert_eq!(mock.responses().len(), before, "zweiter Lauf: 0 Requests");
     assert_eq!(summary.cache_hits, 2);
-    assert_eq!(record(&kit, Element::Title, "/a/").review, ReviewStatus::Rejected);
+    assert_eq!(
+        record(&kit, Element::Title, "/a/").review,
+        ReviewStatus::Rejected
+    );
     let hits: Vec<_> = kit
         .log("suggest-title")
         .into_iter()
         .filter(|r| r.record.cache_hit)
         .collect();
     assert_eq!(hits.len(), 2);
-    assert!(hits.iter().all(|r| r.record.cost == MicroUsd(0) && r.record.status == "Success (cached)"));
+    assert!(hits
+        .iter()
+        .all(|r| r.record.cost == MicroUsd(0) && r.record.status == "Success (cached)"));
 }
 
 // Plan M4 E1 (E-2 b): Mit Schalter „KI (Vorschau)“ aus geht kein Request hinaus, es entsteht keine Zeile.
@@ -303,9 +326,17 @@ async fn a_small_budget_ends_further_entries_with_budget_exceeded() {
     let mut engine = kit.engine(&provider);
     engine.workers = 1;
     let summary = engine.run(&kit.job(Element::Title, &pages)).await.unwrap();
-    let exceeded = summary.statuses.get("Budget exceeded").copied().unwrap_or(0);
+    let exceeded = summary
+        .statuses
+        .get("Budget exceeded")
+        .copied()
+        .unwrap_or(0);
     assert!(exceeded >= 1, "{summary:?}");
     assert_eq!(mock.responses().len(), 7 - exceeded);
-    let spent: u64 = kit.log("suggest-title").iter().map(|r| r.record.cost.0).sum();
+    let spent: u64 = kit
+        .log("suggest-title")
+        .iter()
+        .map(|r| r.record.cost.0)
+        .sum();
     assert!(spent <= 600, "{spent}");
 }

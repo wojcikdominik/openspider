@@ -143,7 +143,10 @@ fn write_accepted(job: &TableJob<'_>, writer: &mut dyn TableWriter) -> Result<u6
     ];
     let mut count = 0;
     for (label, r) in records(job)? {
-        if !matches!(r.record.review, ReviewStatus::Accepted | ReviewStatus::Edited) {
+        if !matches!(
+            r.record.review,
+            ReviewStatus::Accepted | ReviewStatus::Edited
+        ) {
             continue;
         }
         let Some(a) = &r.record.accepted else {
@@ -292,7 +295,11 @@ mod tests {
             length: value.chars().count() as u32,
             pixel_width: Some(value.chars().count() as u32 * 9),
             valid,
-            violations: if valid { Vec::new() } else { vec!["length<30".into()] },
+            violations: if valid {
+                Vec::new()
+            } else {
+                vec!["length<30".into()]
+            },
             round: 1,
         };
         let base = |url_id: i64, status: &str, candidates: Vec<StoredCandidate>| {
@@ -306,7 +313,11 @@ mod tests {
             r
         };
         // /a/ übernommen (KI), /b/ bearbeitet mit Verstoß und Formelbeginn, /c/ offen, /d/ abgelehnt, Meta /a/ offen.
-        let mut a = base(1, STATUS_VALID, vec![cand(1, "Leichte Wanderschuhe für Damen und Herren", true)]);
+        let mut a = base(
+            1,
+            STATUS_VALID,
+            vec![cand(1, "Leichte Wanderschuhe für Damen und Herren", true)],
+        );
         a.review = ReviewStatus::Accepted;
         a.accepted = Some(AcceptedValue {
             value: "Leichte Wanderschuhe für Damen und Herren".into(),
@@ -328,10 +339,30 @@ mod tests {
             candidate: None,
             at: "2026-11-26T10:01:00Z".into(),
         });
-        let c = base(3, STATUS_VALID, vec![cand(1, "Regenjacken für Wanderer: wasserdicht und leicht", true)]);
-        let mut d = base(4, STATUS_VALID, vec![cand(1, "Zelte für Camping und Trekking im Vergleich", true)]);
+        let c = base(
+            3,
+            STATUS_VALID,
+            vec![cand(
+                1,
+                "Regenjacken für Wanderer: wasserdicht und leicht",
+                true,
+            )],
+        );
+        let mut d = base(
+            4,
+            STATUS_VALID,
+            vec![cand(1, "Zelte für Camping und Trekking im Vergleich", true)],
+        );
         d.review = ReviewStatus::Rejected;
-        let mut meta = base(1, STATUS_VALID, vec![cand(1, "-Rabatt: Wanderschuhe für Damen und Herren mit Testberichten und Pflegetipps.", true)]);
+        let mut meta = base(
+            1,
+            STATUS_VALID,
+            vec![cand(
+                1,
+                "-Rabatt: Wanderschuhe für Damen und Herren mit Testberichten und Pflegetipps.",
+                true,
+            )],
+        );
         meta.element = ELEMENT_META_DESCRIPTION.into();
         for r in [&a, &b, &c, &d, &meta] {
             save(f.conn(), r).unwrap();
@@ -346,14 +377,26 @@ mod tests {
     fn accepted_export_has_exactly_accepted_and_edited_rows_and_masks_formulas() {
         let dir = tempfile::tempdir().unwrap();
         let f = file(dir.path());
-        let out = export_bulk(&f, &CrawlConfig::default(), ACCEPTED, dir.path(), Format::Csv).unwrap();
+        let out = export_bulk(
+            &f,
+            &CrawlConfig::default(),
+            ACCEPTED,
+            dir.path(),
+            Format::Csv,
+        )
+        .unwrap();
         assert_eq!(out.len(), 1);
         let text = std::fs::read_to_string(&out[0].path).unwrap();
         let text = text.trim_start_matches('\u{feff}').replace("\r\n", "\n");
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines.len(), 3, "{text}");
-        assert!(lines[0].starts_with("Address,Element,Current Value,New Value,Length,Pixel Width,Origin,Model,Generated At"));
-        assert!(text.contains("\"'=HYPERLINK(\"\"http://evil\"\")\""), "{text}");
+        assert!(lines[0].starts_with(
+            "Address,Element,Current Value,New Value,Length,Pixel Width,Origin,Model,Generated At"
+        ));
+        assert!(
+            text.contains("\"'=HYPERLINK(\"\"http://evil\"\")\""),
+            "{text}"
+        );
         assert!(text.contains("'=SUM(1,2) Rucksäcke"));
         assert!(text.contains(",edited,"));
         assert!(!text.contains("Zelte für Camping"), "abgelehnt");
@@ -372,7 +415,10 @@ mod tests {
         assert_eq!(text.lines().count(), 6, "{text}");
         assert!(text.contains("Kurz"));
         assert!(text.contains("length<30"));
-        assert!(text.contains("'-Rabatt"), "Formelbeginn auch in Kandidaten maskiert");
+        assert!(
+            text.contains("'-Rabatt"),
+            "Formelbeginn auch in Kandidaten maskiert"
+        );
         assert!(crate::catalog::list(crate::catalog::ExportKind::Bulk).contains(&ALL.to_string()));
         assert_eq!(mask("-5"), "'-5");
         assert_eq!(mask("Wanderschuhe"), "Wanderschuhe");

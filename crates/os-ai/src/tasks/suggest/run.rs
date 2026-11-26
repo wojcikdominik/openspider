@@ -36,19 +36,25 @@ use super::prompt::{self, PromptContext, PROMPT_VERSION};
 use super::style::StyleRules;
 use super::validate::{Checker, PixelMeter};
 use crate::adapters::openai_responses::RequestMeta;
-use crate::cache::{canonical_json, input_hash, CacheKey, CacheKeyInput, CacheOptions, ExecutionPath};
+use crate::cache::{
+    canonical_json, input_hash, CacheKey, CacheKeyInput, CacheOptions, ExecutionPath,
+};
 use crate::catalog::{AnswerTokens, TaskPlan};
 use crate::cost::{
     cache_hit_record, detailed_request_record, raw_output_tokens, reservation_for, LogContext,
     OutcomeDetails, PriceBasis,
 };
 use crate::limits::{AttemptFailure, BreakerEffect, FinalError, Limiter, RequestSpec};
-use crate::policy::{guard, ConsentGate, FieldValue, FieldValues, InputField, PreparedInput, Redactor};
+use crate::policy::{
+    guard, ConsentGate, FieldValue, FieldValues, InputField, PreparedInput, Redactor,
+};
 use crate::preview::PreviewSwitch;
 use crate::provider::{
     AiProvider, Capabilities, Model, Outcome, ProviderError, ProviderFuture, Request, Response,
 };
-use crate::schema::{run_with_repair, FailureStatus, RawAnswer, RepairAttempts, ResponseSchema, StructuredOutcome};
+use crate::schema::{
+    run_with_repair, FailureStatus, RawAnswer, RepairAttempts, ResponseSchema, StructuredOutcome,
+};
 
 /// Zukunft der Speicherschnittstelle.
 pub type StoreFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
@@ -67,7 +73,8 @@ pub trait SuggestStore: Send + Sync {
     fn commit(&self, commit: SuggestionCommit) -> StoreFuture<'_, Vec<i64>>;
     fn load_all(&self, element: Element) -> StoreFuture<'_, Vec<ElementRecord>>;
     fn save_all(&self, records: Vec<ElementRecord>) -> StoreFuture<'_, ()>;
-    fn mark_pending(&self, element: Element, url_ids: Vec<i64>, run_id: i64) -> StoreFuture<'_, ()>;
+    fn mark_pending(&self, element: Element, url_ids: Vec<i64>, run_id: i64)
+        -> StoreFuture<'_, ()>;
 }
 
 /// [`SuggestStore`] über einer geöffneten Crawl-Datei.
@@ -125,12 +132,16 @@ impl SuggestStore for FileStore {
         Box::pin(async move { result })
     }
     fn save_all(&self, records: Vec<ElementRecord>) -> StoreFuture<'_, ()> {
-        let result = self.with(|f| {
-            os_store::ai::suggestions::save_all(f.conn(), &records).map_err(store_err)
-        });
+        let result = self
+            .with(|f| os_store::ai::suggestions::save_all(f.conn(), &records).map_err(store_err));
         Box::pin(async move { result })
     }
-    fn mark_pending(&self, element: Element, url_ids: Vec<i64>, run_id: i64) -> StoreFuture<'_, ()> {
+    fn mark_pending(
+        &self,
+        element: Element,
+        url_ids: Vec<i64>,
+        run_id: i64,
+    ) -> StoreFuture<'_, ()> {
         let result = self.with(|f| {
             os_store::ai::suggestions::mark_pending(f.conn(), element.id(), &url_ids, Some(run_id))
                 .map_err(store_err)
@@ -170,7 +181,10 @@ impl PageInput {
         };
         put(InputField::Url, Some(&self.address));
         put(InputField::Title, self.title.as_deref());
-        put(InputField::MetaDescription, self.meta_description.as_deref());
+        put(
+            InputField::MetaDescription,
+            self.meta_description.as_deref(),
+        );
         put(InputField::H1, self.h1.as_deref());
         put(InputField::PageText, self.text.as_deref());
         put(InputField::HtmlLang, self.language.as_deref());
@@ -266,7 +280,8 @@ impl std::error::Error for RunError {}
 
 /// Führt `futures` nebenläufig im selben Task aus (ohne `tokio::spawn`: die Crawl-Datei ist nicht `'static`).
 pub async fn join_all<F: Future<Output = ()>>(futures: Vec<F>) {
-    let mut slots: Vec<Option<Pin<Box<F>>>> = futures.into_iter().map(|f| Some(Box::pin(f))).collect();
+    let mut slots: Vec<Option<Pin<Box<F>>>> =
+        futures.into_iter().map(|f| Some(Box::pin(f))).collect();
     std::future::poll_fn(|cx| {
         let mut pending = false;
         for slot in &mut slots {
@@ -361,9 +376,11 @@ impl AiProvider for Metered<'_> {
                     },
                 )
                 .await;
-            let reply = exec.result.as_ref().ok().map(|r| {
-                (200u16, Some(r.usage.clone()), r.provider_request_id.clone())
-            });
+            let reply = exec
+                .result
+                .as_ref()
+                .ok()
+                .map(|r| (200u16, Some(r.usage.clone()), r.provider_request_id.clone()));
             let meta = RequestMeta::from_execution(&exec, reply);
             let mut captured = self.captured.lock().unwrap_or_else(|p| p.into_inner());
             captured.meta = Some(meta);
@@ -716,8 +733,7 @@ impl Engine<'_> {
                         stopped: false,
                     });
                 };
-                let reservation = match self.ledger.reserve(BudgetScope::task("ai", task), amount)
-                {
+                let reservation = match self.ledger.reserve(BudgetScope::task("ai", task), amount) {
                     Ok(r) => r,
                     Err(error) => {
                         let status = crate::cost::reserve::status_for(&error)
@@ -735,15 +751,9 @@ impl Engine<'_> {
                     }
                 };
                 let metered = Metered::new(self.provider, self.limiter, estimated_input_tokens);
-                let guarded = guard::execute(
-                    self.switch,
-                    self.consent,
-                    task,
-                    prepared,
-                    &metered,
-                    request,
-                )
-                .await;
+                let guarded =
+                    guard::execute(self.switch, self.consent, task, prepared, &metered, request)
+                        .await;
                 let captured = metered.take();
                 let sent = Sent {
                     reservation: Some(reservation),
@@ -862,11 +872,16 @@ impl Engine<'_> {
             let mut cache_rows = Vec::new();
             let mut sent_list: Vec<Sent> = Vec::new();
             let cached = if self.cache.use_cache {
-                self.store.cached(key.as_str().to_string()).await.ok().flatten()
+                self.store
+                    .cached(key.as_str().to_string())
+                    .await
+                    .ok()
+                    .flatten()
             } else {
                 None
             };
-            let cached = cached.filter(|c| !(self.cache.retry_refusals && *c == CachedAnswer::Refusal));
+            let cached =
+                cached.filter(|c| !(self.cache.retry_refusals && *c == CachedAnswer::Refusal));
             let result = if let Some(hit) = cached {
                 cache_hits += 1;
                 let mut row = cache_hit_record(
@@ -918,7 +933,9 @@ impl Engine<'_> {
                         }
                         Round::Status(AiStatus::Refusal)
                     }
-                    StructuredOutcome::InvalidOutput { .. } => Round::Status(AiStatus::InvalidOutput),
+                    StructuredOutcome::InvalidOutput { .. } => {
+                        Round::Status(AiStatus::InvalidOutput)
+                    }
                     StructuredOutcome::Failed(f) if f.stopped => Round::Stopped,
                     StructuredOutcome::Failed(f) => Round::Status(f.status),
                 }

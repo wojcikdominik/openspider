@@ -60,7 +60,9 @@ pub fn instructions(element: Element, limits: &ElementLimits, ctx: &PromptContex
         ),
     ];
     if let Some(lang) = ctx.language {
-        lines.push(format!("Write in the language of the page (language code {lang})."));
+        lines.push(format!(
+            "Write in the language of the page (language code {lang})."
+        ));
     }
     if let Some(focus) = ctx.focus {
         lines.push(format!("Use the focus keyword \"{focus}\" naturally."));
@@ -69,9 +71,7 @@ pub fn instructions(element: Element, limits: &ElementLimits, ctx: &PromptContex
         lines.push(format!("Search intent of the page: {intent}."));
     }
     lines.extend(ctx.style_lines.iter().cloned());
-    lines.push(
-        "Do not use placeholders, line breaks or surrounding quotation marks.".to_string(),
-    );
+    lines.push("Do not use placeholders, line breaks or surrounding quotation marks.".to_string());
     lines.push(format!(
         "Answer with JSON of the form {{\"candidates\": [...]}} containing exactly {n} strings, best first."
     ));

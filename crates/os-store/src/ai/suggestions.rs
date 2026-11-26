@@ -388,10 +388,15 @@ fn assemble(rows: Vec<RawRow>) -> Vec<ElementRecord> {
     out
 }
 
-const SELECT: &str = "SELECT url_id, element, candidate, value, status, violations_json, review_status, \
+const SELECT: &str =
+    "SELECT url_id, element, candidate, value, status, violations_json, review_status, \
     accepted_value, model, request_id FROM ai_suggestions";
 
-fn query(conn: &Connection, sql: &str, p: &[&dyn rusqlite::ToSql]) -> Result<Vec<RawRow>, StoreError> {
+fn query(
+    conn: &Connection,
+    sql: &str,
+    p: &[&dyn rusqlite::ToSql],
+) -> Result<Vec<RawRow>, StoreError> {
     let mut stmt = conn.prepare(sql)?;
     let rows = stmt
         .query_map(p, |r| {
@@ -413,7 +418,11 @@ fn query(conn: &Connection, sql: &str, p: &[&dyn rusqlite::ToSql]) -> Result<Vec
 }
 
 /// Elementeintrag einer URL; `None`, wenn es keinen gibt.
-pub fn load(conn: &Connection, url_id: i64, element: &str) -> Result<Option<ElementRecord>, StoreError> {
+pub fn load(
+    conn: &Connection,
+    url_id: i64,
+    element: &str,
+) -> Result<Option<ElementRecord>, StoreError> {
     let rows = query(
         conn,
         &format!("{SELECT} WHERE url_id = ?1 AND element = ?2 ORDER BY candidate"),
@@ -517,10 +526,13 @@ pub fn mark_pending(
 /// Schreibt mehrere Einträge in einer Transaktion (Nachlauf, Neuprüfung, Massenaktionen).
 pub fn save_all(conn: &Connection, records: &[ElementRecord]) -> Result<(), StoreError> {
     conn.execute_batch("SAVEPOINT v01_save_all")?;
-    let result = records.iter().try_for_each(|r| save(conn, r)).and_then(|()| {
-        let ids: Vec<i64> = records.iter().map(|r| r.url_id).collect();
-        mark_changed(conn, &ids)
-    });
+    let result = records
+        .iter()
+        .try_for_each(|r| save(conn, r))
+        .and_then(|()| {
+            let ids: Vec<i64> = records.iter().map(|r| r.url_id).collect();
+            mark_changed(conn, &ids)
+        });
     match result {
         Ok(()) => {
             conn.execute_batch("RELEASE v01_save_all")?;
@@ -557,7 +569,12 @@ pub fn replace_focus(conn: &Connection, entries: &[(i64, String)]) -> Result<(),
             insert.execute(params![url_id, keyword])?;
         }
         let map: std::collections::BTreeMap<i64, String> = entries.iter().cloned().collect();
-        for element in [ELEMENT_TITLE, ELEMENT_META_DESCRIPTION, ELEMENT_H1, ELEMENT_ALT] {
+        for element in [
+            ELEMENT_TITLE,
+            ELEMENT_META_DESCRIPTION,
+            ELEMENT_H1,
+            ELEMENT_ALT,
+        ] {
             let mut records = load_all(conn, element)?;
             for r in &mut records {
                 r.focus = map.get(&r.url_id).cloned();
@@ -696,9 +713,11 @@ pub fn export_records(conn: &Connection, element: &str) -> Result<Vec<ExportReco
         )?;
         let request_timestamp = match record.request_id {
             Some(id) => conn
-                .query_row("SELECT timestamp FROM ai_requests WHERE id = ?1", [id], |r| {
-                    r.get(0)
-                })
+                .query_row(
+                    "SELECT timestamp FROM ai_requests WHERE id = ?1",
+                    [id],
+                    |r| r.get(0),
+                )
                 .optional()?,
             None => None,
         };
@@ -790,7 +809,9 @@ mod tests {
         );
         assert_eq!(back.selected_candidate().unwrap().index, 2);
         assert_eq!(load_all(&conn, ELEMENT_TITLE).unwrap().len(), 1);
-        assert!(load_all(&conn, ELEMENT_META_DESCRIPTION).unwrap().is_empty());
+        assert!(load_all(&conn, ELEMENT_META_DESCRIPTION)
+            .unwrap()
+            .is_empty());
     }
 
     // spec: AI-020 [M4]

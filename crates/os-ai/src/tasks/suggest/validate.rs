@@ -62,7 +62,11 @@ fn strip_quotes(text: &str) -> String {
     let mut current = text.trim().to_string();
     while quoted(&current) {
         let inner: Vec<char> = current.chars().collect();
-        current = inner[1..inner.len() - 1].iter().collect::<String>().trim().to_string();
+        current = inner[1..inner.len() - 1]
+            .iter()
+            .collect::<String>()
+            .trim()
+            .to_string();
     }
     current
 }
@@ -74,9 +78,9 @@ fn strip_quotes(text: &str) -> String {
 pub fn prepare(element: Element, raw: &str) -> String {
     match element {
         Element::Title => raw.trim().to_string(),
-        Element::MetaDescription => {
-            strip_quotes(&raw.replace(['\r', '\n'], " ")).trim().to_string()
-        }
+        Element::MetaDescription => strip_quotes(&raw.replace(['\r', '\n'], " "))
+            .trim()
+            .to_string(),
     }
 }
 
@@ -186,7 +190,9 @@ impl Checker<'_> {
 
 /// Konkreter Verstoß für die Reparaturrunde, z. B. „612 px > 561 px“ (AI-075).
 pub fn describe(violation: &str, checked_length: u32, checked_px: u32) -> String {
-    let (code, arg) = violation.split_once(['>', '<', ':']).unwrap_or((violation, ""));
+    let (code, arg) = violation
+        .split_once(['>', '<', ':'])
+        .unwrap_or((violation, ""));
     let op = if violation.contains('>') {
         ">"
     } else if violation.contains('<') {
@@ -298,16 +304,20 @@ mod tests {
         assert!(dup
             .violations
             .contains(&"duplicate_of:http://ai.test:8080/a/".to_string()));
-        assert!(!c
-            .check(1, None, "Wanderschuhe Damen | Shop")
-            .violations
-            .iter()
-            .any(|v| v.starts_with("duplicate_of")), "eigener Title ist keine Dublette");
-        assert!(!c
-            .check(9, None, "Noindex Title Für Alle Fälle")
-            .violations
-            .iter()
-            .any(|v| v.starts_with("duplicate_of")), "nicht indexierbare URL zählt nicht");
+        assert!(
+            !c.check(1, None, "Wanderschuhe Damen | Shop")
+                .violations
+                .iter()
+                .any(|v| v.starts_with("duplicate_of")),
+            "eigener Title ist keine Dublette"
+        );
+        assert!(
+            !c.check(9, None, "Noindex Title Für Alle Fälle")
+                .violations
+                .iter()
+                .any(|v| v.starts_with("duplicate_of")),
+            "nicht indexierbare URL zählt nicht"
+        );
         let fmt = c.check(9, None, "Wanderschuhe für {{brand}} im Test 2026");
         assert!(fmt.violations.contains(&"placeholder".to_string()));
         assert!(c
@@ -330,7 +340,9 @@ mod tests {
             },
             ..checker(&idx, &per_char)
         };
-        assert!(off.check(9, None, "Wanderschuhe Damen | Shop extra lang").valid());
+        assert!(off
+            .check(9, None, "Wanderschuhe Damen | Shop extra lang")
+            .valid());
     }
 
     // spec: AI-072 [M4]
@@ -338,7 +350,10 @@ mod tests {
     #[test]
     fn meta_descriptions_lose_line_breaks_and_wrapping_quotes_before_the_check() {
         assert_eq!(
-            prepare(Element::MetaDescription, "\"Leichte Wanderschuhe\nfür jeden Weg.\""),
+            prepare(
+                Element::MetaDescription,
+                "\"Leichte Wanderschuhe\nfür jeden Weg.\""
+            ),
             "Leichte Wanderschuhe für jeden Weg."
         );
         assert_eq!(prepare(Element::MetaDescription, "„Zitat“"), "Zitat");

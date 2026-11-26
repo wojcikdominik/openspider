@@ -137,9 +137,20 @@ mod tests {
         let german = "Wanderschuhe für Damen und Herren im großen Vergleich mit Testberichten";
         let english = "Hiking boots for women and men compared in our big review with test reports";
         assert_eq!(violation(german, Some("de-DE")), None);
-        assert_eq!(violation(english, Some("de")).as_deref(), Some("language:en"));
-        assert_eq!(violation(english, None), None, "ohne Seitensprache keine Prüfung");
-        assert_eq!(violation("Hiking boots for me", Some("de")), None, "19 Zeichen: keine Prüfung");
+        assert_eq!(
+            violation(english, Some("de")).as_deref(),
+            Some("language:en")
+        );
+        assert_eq!(
+            violation(english, None),
+            None,
+            "ohne Seitensprache keine Prüfung"
+        );
+        assert_eq!(
+            violation("Hiking boots for me", Some("de")),
+            None,
+            "19 Zeichen: keine Prüfung"
+        );
         assert_eq!(violation("Hiking boots", Some("de")), None, "kurz");
         assert_eq!(primary_subtag("de-DE").as_deref(), Some("de"));
         assert_eq!(primary_subtag(" "), None);

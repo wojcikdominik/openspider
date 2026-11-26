@@ -8,7 +8,7 @@ use super::style::StyleRules;
 use crate::catalog::{AnswerTokens, TaskPlan};
 use crate::cost::tokens::{char_count, text_tokens};
 use crate::cost::{
-    estimate_requests, Calibration, CachedLookup, EstimatePath, PlannedEntry, PlannedRequest,
+    estimate_requests, CachedLookup, Calibration, EstimatePath, PlannedEntry, PlannedRequest,
     PriceBasis, RequestEstimateInput, RequestTaskEstimate,
 };
 use crate::policy::{PreparedInput, Redactor};

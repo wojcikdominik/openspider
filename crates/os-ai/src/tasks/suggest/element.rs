@@ -79,7 +79,7 @@ impl Element {
     }
 
     /// Aktueller Wert des Elements einer Seite.
-    pub fn current<'a>(self, page: &'a super::run::PageInput) -> Option<&'a str> {
+    pub fn current(self, page: &super::run::PageInput) -> Option<&str> {
         match self {
             Self::Title => page.title.as_deref(),
             Self::MetaDescription => page.meta_description.as_deref(),
