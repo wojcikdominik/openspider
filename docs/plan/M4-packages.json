@@ -964,6 +964,66 @@
   "release": "1.1"
  },
  {
+  "id": "M4-D05",
+  "kind": "package",
+  "model": "opus",
+  "wave": "5m",
+  "size": "XL",
+  "runner": "local-mac+ci",
+  "title": "KI-Lauf: Verdrahtung mit Engine, App, CLI und Crawl-Datei (automatische Ausführung, Lebenszyklus, Besitz, Kosten, Eingabefelder)",
+  "spec_ids": [],
+  "extra_spec_ids": [
+   "AI-020",
+   "AI-012",
+   "AI-013",
+   "AI-032",
+   "AI-039",
+   "CRAWL-126"
+  ],
+  "depends_on": [
+   "M4-D01",
+   "M4-K11",
+   "M4-U01"
+  ],
+  "owns": [
+   "crates/os-model/src/ai/hook.rs (neu: Feldtyp der Eingabefelder je Seite und Schnittstelle der KI-Warteschlange im Crawl; Variante A aus K4-25)",
+   "crates/os-model/src/ai/mod.rs (nur Zeile `pub mod hook;`)",
+   "crates/os-model/src/config/ai.rs (nur additives Feld für die automatische Ausführung während des Crawls, E-6 a, mit Standard „an, sobald Fragen aktiv sind“)",
+   "crates/os-engine/src/ai_queue.rs (neu: Aufruf der KI-Warteschlange je Seite, bei Pause, Fortsetzen, Stoppen, Ende und Abbruch; Warten auf leere Warteschlange vor `on_finished`)",
+   "crates/os-engine/src/ai_input.rs (neu: Eingabefelder nach AI-032 aus der geparsten Seite bzw. aus der Crawl-Datei, nach K4-24)",
+   "crates/os-engine/src/lib.rs (nur Zeilen `pub mod ai_queue;`, `pub mod ai_input;`)",
+   "crates/os-engine/src/types.rs (nur neues Feld der KI-Warteschlange in `EngineDeps`)",
+   "crates/os-engine/src/crawl.rs (nur Start, Übergabe der Seitenfelder und Endbehandlung der KI-Warteschlange in `run`, analog zu `initialize_apis`)",
+   "crates/os-engine/src/worker.rs (nur Übergabe der Seitenfelder)",
+   "crates/os-engine/src/lifecycle.rs (nur `resume_crawl`: KI-Warteschlange mit fortsetzen)",
+   "crates/os-engine/src/{testing,session_guard,memory}.rs, crates/os-engine/examples/crawl_child.rs, crates/os-loadtest/src/{child,diag}.rs (nur neues Feld in `EngineDeps`-Literalen)",
+   "crates/os-engine/tests/{lifecycle_determinism,b4_resume,lifecycle_hook,lifecycle_support,crawl_151_acceptance}.rs (nur neues Feld in `EngineDeps`-Literalen)",
+   "crates/os-ai/src/run/** (neu: Laufrahmen aller KI-Läufe – `impl OwnerLease for RunOwner`, Register der `RunControl` je Crawl-Datei, Umsetzung der Schnittstelle aus `os_model::ai::hook` für die Decision-Fragen, Ablehnung unterbrochener Crawls)",
+   "crates/os-ai/src/lib.rs (nur Zeile `pub mod run;`)",
+   "crates/os-app/src/commands/ai_run.rs (neu: Handler `ai.decisionsRun`, Start eines KI-Laufs mit Einwilligung, Schätzer, Bestätigung, Budget, Besitz und Meldungen)",
+   "crates/os-app/src/commands/ai_catalog.rs (nur Dispatch-Eintrag für `ai.decisionsRun` und Katalog-Besitzer von `ai.decisionsRun` und `ai.costEstimate`)",
+   "crates/os-app/src/commands/mod.rs (nur Zeile `pub mod ai_run;`)",
+   "crates/os-app/src/commands/config.rs (nur Weitergabe von `ai.budget` an die geöffnete Crawl-Datei)",
+   "crates/os-app/src/commands/crawl_add.rs (nur neues Feld in `EngineDeps`)",
+   "crates/os-app/src/session/control.rs (nur KI-Warteschlange in `deps`, Kopplung von `RunControl` an `pause_or_stop` und `resume`)",
+   "crates/os-app/src/session/mod.rs (nur Funktion `close`: laufenden KI-Lauf abbrechen)",
+   "crates/os-app/src/quit.rs (nur Abbruch laufender KI-Läufe vor dem Warten auf die Rückführung)",
+   "crates/os-cli/src/exec.rs (nur KI-Warteschlange in den `EngineDeps`)",
+   "crates/os-mcp/src/crawl_service.rs (nur KI-Warteschlange in den `EngineDeps`)",
+   "apps/desktop/src/features/ai/run/** (neu: `startAiRun(args)` = `requestConsent` → `requestCostConfirmation` → `ai.decisionsRun`, Anzeige der Meldungen)",
+   "crates/os-ai/tests/decisions_{lifecycle,pending}.rs (nur `#[ignore]` der in prompt_notes zugeordneten Platzhalter entfernen, Testinhalt unverändert)",
+   "crates/os-engine/tests/ai_queue_*.rs",
+   "crates/os-ai/tests/run_*.rs",
+   "crates/os-app/tests/ai_run_*.rs",
+   "crates/os-cli/tests/ai_run_*.rs",
+   "apps/desktop/e2e/ai-run/**",
+   "tests/fixtures/ai/run/**",
+   "tests/fixtures/ai/mock-answers.d/d05.json"
+  ],
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, bei geteilten Dateien nur die genannte Funktion bzw. Zeile, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/d05.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Alles hinter dem Schalter „KI (Vorschau)“: Schalter aus = keine KI-Warteschlange in den `EngineDeps`, kein Request, Verhalten von 1.0 (Test). Grundlage: Berichte docs/plan/M4-reports/d01.md (Abschnitte „Öffentliche Schnittstelle“, „Nicht gebaut“, „Platzhalter“), u01.md („Schnittstellen für Folgepakete“, „Benötigte Änderungen“ 3 und 4), k11.md („Schnittstelle für D01/V01“); 08 AI-020 Nachtrag K4-13 mit den Unterpunkten „Aktiver Besitzer außerhalb von `Running`“ und „Kein KI-Lauf auf einem unterbrochenen Crawl“, AI-039, AI-032; Klärungen K4-24 (Quelle der Eingabefelder) und K4-25 (Kopplung Engine ↔ KI) in docs/plan/M4.md – vor Paketstart deren Stand prüfen; ohne Entscheidung gilt die Empfehlung dort (K4-25 Variante A: Schnittstelle in `os_model::ai::hook`, Umsetzung in `os_ai::run`, Engine ohne Abhängigkeit auf os-ai, keine neue Kante). Schritte: (1) Laufrahmen `os_ai::run`: jeder KI-Lauf (Decision-Fragen jetzt; Vorschläge von V01 und spätere Aufgaben hängen sich an) startet über ihn: `RunOwner::start` (K11) vor dem ersten Request über `DecisionRun::owner` (`impl OwnerLease for RunOwner`, Aufruf aus `spawn_blocking`), `finish` in jedem Ende-Pfad (fertig, Pause, Stopp, Bestätigung ausstehend, Budget, Abbruch, Fehler), nie beim Verwerfen (= Absturz); `StoreError::Interrupted` bzw. `StoreError::Occupied` aus K11 unverändert weitergeben. (2) Engine: KI-Warteschlange während des Crawls (E-6 a; Standard an, sobald Fragen aktiv sind; aus = erst „KI-Analyse starten“), Seitenfelder nach AI-032 aus der geparsten Seite (ONPAGE-140-Text, alle H2, strukturierte Daten, Bildkontext); Pause/Stopp/Fortsetzen/Ende wie 08 AI-020 (Pause: kein neuer Request, laufende abwarten; Stopp: kein weiterer Request; Crawl-Ende ohne Stoppen: Warteschlange bis leer, erst dann `on_finished`; Abbruch: laufende Requests verwerfen). Fortsetzen übergibt `Confirmation::Granted`. (3) App: `ai.decisionsRun` (Katalog-Besitzer auf M4-D05, `ai.costEstimate` auf M4-U01) mit Einwilligung über `ai_consent::consent_gate(&app)` und `register_flow_source` für Bibliotheksfragen, Schätzer über `ai_cost::register_estimator`, Bestätigung über `requestCostConfirmation` in `startAiRun` (Statuswerte `Pending (consent)`/`Pending (confirmation)` bis dahin), Budget beim Laufstart aus `ai.budget` per `os_store::ai::budget` (nur `open_ledger`/`save_limits`/`raise_limits`), Änderungen von `ai.budget` im Konfigurationsdialog an der geöffneten Crawl-Datei (U01-Bericht, „Benötigte Änderungen“ 4); `RunControl` an Pause, Fortsetzen, Stoppen, Schließen der Crawl-Datei und Beenden der App (Zeitbudget CRAWL-126) gekoppelt. Fremder aktiver Besitzer → Ablehnung ohne Request; unterbrochener Crawl → Meldung „Crawl ist unterbrochen – zuerst fortsetzen oder stoppen“ (en „Crawl was interrupted – resume or stop it first“, Text aus `StoreError::Interrupted`), Datei byte-gleich. (4) CLI und MCP STDIO: nur die KI-Warteschlange in den `EngineDeps` (automatische Ausführung und SIGINT/Fortsetzen über die Engine); eigene KI-Befehle bzw. KI-Werkzeuge und deren Meldung „unterbrochen“ bauen M4-C01 bzw. M4-C02 (1.2). Die Schaltfläche „KI-Analyse starten“, ihre deaktivierten Zustände mit Hinweis und die Option der automatischen Ausführung im Dialog baut M4-D02 mit `startAiRun`. Kriterien von M4-D05 (Test je Kriterium, `// spec: AI-020 [M4]` bzw. die genannte ID): (a) E-6 a/AI-039: Crawl der Fixture-Site mit aktiver Seitentyp-Frage → Ergebnisse während des Crawls; Option aus → 0 Requests bis „KI-Analyse starten“; Schalter „KI (Vorschau)“ aus → 0 Requests, Verhalten wie 1.0. (b) AI-032: Eingabefelder aus `tests/fixtures/ai/site/fields.html` (Title, Meta Description, H1, alle H2, ONPAGE-140-Text, Wortzahl, `html_lang`, `hreflang_self`, strukturierte Datentypen, Bildkontext) wie gesendet im Mock-Log, während des Crawls und nach dem Crawl (Quelle nach K4-24). (c) Platzhalter aus D01 (Ignore entfernen, Testinhalt unverändert; rot = Befund): `decisions_lifecycle::heartbeat_of_an_ai_run`, `ai_inside_the_own_running_crawl_keeps_the_owner`, `owner_metadata_during_an_ai_run`, `delete_protection_during_an_ai_run`; `decisions_pending::ai_run_during_a_paused_crawl` (Kernteil; Schaltfläche D02), `cli_sigint_and_resume`, `crawl_end_without_stop_drains_the_queue`, `crash_by_sigkill`, `foreign_writer_is_read_only` (Kernteil: `ai.decisionsRun` auf fremd geführtem Crawl lehnt ab, ai-mock der App zählt 0 Requests – damit auch der Teil „ihr ai-mock zählt 0 Requests“ des K4-13-Kriteriums „Besitzer eines KI-Laufs“; Hinweis und deaktivierte Aktionen D02 bzw. N01), `resume_shows_no_estimate_dialog`. (d) Geordnetes Beenden in der App und Schließen der Crawl-Datei bei gehaltenem Request (08 AI-020): Beenden im Zeitbudget, Eintrag `Pending`, keine Protokollzeile, Reservierung verfallen. (e) Unterbrochener Crawl: `ai.decisionsRun` → Meldung (de/en), Datei byte-gleich, 0 Requests. (f) Kostenbestätigung: über der Schwelle kein Request vor „Starten“ (Rust über den Command mit Bestätigung, E2E in `e2e/ai-run`); Fortsetzen ohne neuen Voranschlag. (g) Budget: Änderung von `ai.budget` im Konfigurationsdialog bei geöffneter Crawl-Datei → `open_ledger` liefert die neue Grenze; eine Erhöhung hebt eine Sperre nach AI-013 auf. (h) Jeder KI-Lauf trägt den Besitz und gibt ihn in jedem Ende-Pfad frei (Test je Ende-Pfad mit `hold`). Nicht hier: Bildverkleinerung (`big_image_is_resized_before_sending`, Manifest) und die Anbindung der Vorschläge von V01 an den Laufrahmen → N01 (Auflagenliste); die beiden `test.fixme` „wartet auf M4-D01“ in `e2e/ai-cost/u01.spec.ts` → D02 (Schaltfläche). Welle 5m: nach D01, K11 und U01 (alle gebaut), vor N01, das die Platzhalter der Welle 5 nur auflösen kann, wenn der Lauf verdrahtet ist; D02 und D03 (Welle 6) brauchen den Laufrahmen für Schaltfläche und Bibliothekstests.",
+  "release": "1.1"
+ },
+ {
   "id": "M4-N01",
   "kind": "package",
   "model": "opus",
@@ -987,7 +1047,8 @@
    "M4-K08",
    "M4-K09",
    "M4-K10",
-   "M4-K11"
+   "M4-K11",
+   "M4-D05"
   ],
   "owns": [
    "crates/*/tests/pending_m4_*.rs",
@@ -1000,7 +1061,7 @@
    "apps/desktop/src/ipc/commands.json",
    "weitere Pfade nur laut Auflagenliste docs/plan/M4-reports/n01-auflagen.md"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M2-N01: Platzhalter `wartet auf M4-xx` (nur in eigenen Dateien `pending_m4_<kurz-id>.rs` bzw. eigenen E2E-Ordnern, E4) auflösen, ohne Testinhalt zu ändern; rote Tests sind Befunde an den Planer. Schnittstellenbedarf der Pakete (Berichtsabschnitt „Schnittstellenbedarf“) gebündelt umsetzen. Startet erst, wenn alle Pakete der Wellen 1 bis 5 gemergt sind. K4-22 (26.11.2026): Leseregel „aktiver Besitzer“ und `RunOwner` baut M4-K11 (dort kein Schnittstellenbedarf mehr bündeln); N01 löst nur Platzhalter `wartet auf M4-K11` in Tests von M4-D01 auf und übernimmt aus dem K4-13-Kriterium „Besitzer eines KI-Laufs“ (08 AI-020) den Teil „ihr ai-mock zählt 0 Requests“ (Crawl-Datei mit `Completed`, `owner_kind = mcp-stdio`, fremdem aktivem Besitzer; KI-Aktionen der App senden nichts).",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M2-N01: Platzhalter `wartet auf M4-xx` (nur in eigenen Dateien `pending_m4_<kurz-id>.rs` bzw. eigenen E2E-Ordnern, E4) auflösen, ohne Testinhalt zu ändern; rote Tests sind Befunde an den Planer. Schnittstellenbedarf der Pakete (Berichtsabschnitt „Schnittstellenbedarf“) gebündelt umsetzen. Startet erst, wenn alle Pakete der Wellen 1 bis 5 gemergt sind. K4-22 (26.11.2026): Leseregel „aktiver Besitzer“ und `RunOwner` baut M4-K11. Nachtrag 26.11.2026 (nach Welle 5): Die Verdrahtung des KI-Laufs (automatische Ausführung, RunControl, RunOwner im Lauf, Eingabefelder, Kostenbestätigung, Budget) baut M4-D05 (Welle 5m) und löst dabei die D01-Platzhalter `wartet auf M4-K11` und `wartet auf M4-N01` außer `big_image_is_resized_before_sending` selbst auf; auch der Teil „ihr ai-mock zählt 0 Requests“ liegt jetzt bei D05. N01 arbeitet die Auflagenliste docs/plan/M4-reports/n01-auflagen.md ab (u. a. Bildverkleinerung mit Manifest, Ollama über `run_classified`, `base.json`, `AiCostSnapshot`, Anbindung der Vorschläge von V01 an den Laufrahmen aus D05) und löst die übrigen Platzhalter `pending_m4_*` (Liste im U01-Bericht, Abschnitt „Platzhalter“). Die beiden `test.fixme(\"wartet auf M4-D01: …\")` in `apps/desktop/e2e/ai-cost/u01.spec.ts` bleiben stehen; sie löst M4-D02 mit der Schaltfläche auf.",
   "extra_spec_ids": [],
   "release": "1.1"
  },
@@ -1024,7 +1085,8 @@
   ],
   "depends_on": [
    "M4-D01",
-   "M4-N01"
+   "M4-N01",
+   "M4-D05"
   ],
   "owns": [
    "crates/os-ai/src/decisions/results/**",
@@ -1038,9 +1100,10 @@
    "tests/fixtures/ai/mock-answers.d/d02.json",
    "apps/desktop/src/features/detail/frame/** (nur Registrierung des KI-Abschnitts im Detailbereich)",
    "apps/desktop/src/features/detail/ai-decisions/** (neu, Verteilung je Frage als Balken, AI-039)",
-   "apps/desktop/src/features/detail/images/** (nur Zeilen der Bildfragen in „Image Details“, AI-039)"
+   "apps/desktop/src/features/detail/images/** (nur Zeilen der Bildfragen in „Image Details“, AI-039)",
+   "apps/desktop/e2e/ai-cost/u01.spec.ts (nur die beiden `test.fixme` „wartet auf M4-D01“ entfernen)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Wahrscheinlichkeiten in der UI 2 Nachkommastellen, im Export ungerundet (≥ 4); Unsicherheitsband, low_confidence_below; Teilfehler mit site-partial (2 × 500-always, 1 × refusal) ohne Abbruch; Leerwerte nach 08 Konventionen; Spalten im Internal-Tab bzw. Images-Tab bei Bildfragen.",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. Wahrscheinlichkeiten in der UI 2 Nachkommastellen, im Export ungerundet (≥ 4); Unsicherheitsband, low_confidence_below; Teilfehler mit site-partial (2 × 500-always, 1 × refusal) ohne Abbruch; Leerwerte nach 08 Konventionen; Spalten im Internal-Tab bzw. Images-Tab bei Bildfragen. Nachtrag 26.11.2026 (nach Welle 5): Den Start eines KI-Laufs (Schaltfläche „KI-Analyse starten“, „Fehlgeschlagene erneut anfragen“, „Neu analysieren“) über `startAiRun` aus `apps/desktop/src/features/ai/run/` (M4-D05) auslösen, keinen eigenen Startweg bauen; deaktivierte Zustände mit Hinweis nach AI-039 Nachtrag 26.11.2026 und 08 AI-020 (laufender Crawl, fremder Writer „gestartet von <cli|mcp-stdio> (PID <n>) – Steuerung nur dort“, unterbrochener Crawl „Crawl ist unterbrochen – zuerst fortsetzen oder stoppen“) und die Option der automatischen Ausführung (Feld aus D05) gehören zu D02. Kriterien: aus dem K4-13-Kriterium „KI-Lauf in der Pause“ der Teil „bei laufendem Crawl ist die Schaltfläche deaktiviert“, aus „Fremder Writer“ der Teil „Hinweis, alle genannten KI-Aktionen deaktiviert“ für die Aktionen dieses Pakets; die beiden `test.fixme(\"wartet auf M4-D01: …\")` in `apps/desktop/e2e/ai-cost/u01.spec.ts` auflösen (nur `test.fixme` entfernen, Testinhalt unverändert).",
   "release": "1.1"
  },
  {
@@ -1264,7 +1327,8 @@
    "M4-E01",
    "M4-P02",
    "M4-B01",
-   "M4-N01"
+   "M4-N01",
+   "M4-D05"
   ],
   "owns": [
    "crates/os-cli/src/ai.rs",
@@ -1273,7 +1337,7 @@
    "crates/os-ai/src/sample/**",
    "tests/fixtures/out-m4-cli/**"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. OUT-201 [M4]: `--api-budget 0.01 --ai-tasks decisions` → genau 2 KI-Requests, danach `Budget exceeded`, Crawl und Exporte vollständig; `--export-query` mit gespeicherter Abfrage ohne KI-Request, unbekannter Name → Exit 2 vor dem Crawl. INTEG-017: `--use-ai`, `--use-embeddings`. Geplante Aufgaben führen KI-Aufgaben nur mit erteilter Einwilligung aus (`--ai-consent`). Stichprobe reproduzierbar per Seed, geschichtet nach Segment, Ergebnisse im Cache.",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). B2: je [M4]-Kriterium der extra_spec_ids mindestens ein getaggter Test `// spec: <ID> [M4]` mit Ergebnis ok; übrige extra_spec_ids nur mitprüfen. OUT-201 [M4]: `--api-budget 0.01 --ai-tasks decisions` → genau 2 KI-Requests, danach `Budget exceeded`, Crawl und Exporte vollständig; `--export-query` mit gespeicherter Abfrage ohne KI-Request, unbekannter Name → Exit 2 vor dem Crawl. INTEG-017: `--use-ai`, `--use-embeddings`. Geplante Aufgaben führen KI-Aufgaben nur mit erteilter Einwilligung aus (`--ai-consent`). Stichprobe reproduzierbar per Seed, geschichtet nach Segment, Ergebnisse im Cache. Nachtrag 26.11.2026 (nach Welle 5): KI-Läufe der CLI starten über den Laufrahmen `os_ai::run` aus M4-D05 (Besitz, Kostenregeln, Lebenszyklus); auf einem unterbrochenen Crawl lehnt die CLI mit „Crawl ist unterbrochen – zuerst fortsetzen oder stoppen“ ab (08 AI-020, Unterpunkt „Kein KI-Lauf auf einem unterbrochenen Crawl“), Exit-Code wie andere Bedienfehler, Datei byte-gleich.",
   "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
@@ -1359,14 +1423,15 @@
    "M4-L01",
    "M4-K05",
    "M4-K07",
-   "M4-K11"
+   "M4-K11",
+   "M4-D05"
   ],
   "owns": [
    "crates/os-mcp/src/tools/ai_*.rs",
    "crates/os-mcp/tests/ai_tools*.rs",
    "crates/os-mcp/src/prompts.rs (nur Vorlage AI-Search-Sichtbarkeit um KI-Werkzeuge ergänzen)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Erster Aufruf ohne `confirm` → Schätzung, Mock-Zähler 0; mit `confirm: true` → Ausführung; ohne Einwilligung nach AI-018 MCP-Fehler mit Datenflussangaben und Mock-Zähler 0, Einträge `Pending (consent)`; Erweiterung der Feldmenge abgelehnt; Budget stoppt wie in der App; Ergebnisse gleich App/CLI. DataForSEO-Hüllen kommen mit M5-C02. AGENT-040: Vorlage „AI-Search-Sichtbarkeit“ referenziert jetzt die KI-Werkzeuge. K4-13 entschieden (26.11.2026): AGENT-030 bei laufendem (auch im eigenen Prozess), pausiertem, gestopptem und fremd gesteuertem Crawl sowie bei zwei Prozessen auf einem Crawl ohne laufenden Besitzer nach docs/spec/10-agent-interface.md AGENT-030, Nachtrag 26.11.2026 (Fehler `busy` nach AGENT-020; Besitzer eines KI-Laufs nach 08 AI-020, Nachtrag 26.11.2026). K4-22 erledigt (26.11.2026): Heartbeat, `owner_kind`/`owner_pid` und „aktuell“ nach 01 CRAWL-125, Nachtrag 26.11.2026 (Klärung K4-22). In 1.0 antworten `pause_crawl`/`stop_crawl` bei einem in einem anderen Prozess laufenden Crawl mit einem MCP-Fehler ohne Code `busy` (`crates/os-mcp/src/crawl_service.rs`, `CrawlService::not_live`); dieses Verhalten nicht ändern und für die KI-Werkzeuge nicht übernehmen – AGENT-030 verlangt dort `busy`. Keine eigene Schwelle (`os_store::resume::HEARTBEAT_TIMEOUT_MS`). Fremden Besitzer auch außerhalb von `Running` (KI-Lauf, 08 AI-020 Unterpunkt „Aktiver Besitzer außerhalb von `Running`“) mit der Prüfung „belegt“ aus M4-K11 (`os_store::owner`) erkennen und `busy` liefern.",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Erster Aufruf ohne `confirm` → Schätzung, Mock-Zähler 0; mit `confirm: true` → Ausführung; ohne Einwilligung nach AI-018 MCP-Fehler mit Datenflussangaben und Mock-Zähler 0, Einträge `Pending (consent)`; Erweiterung der Feldmenge abgelehnt; Budget stoppt wie in der App; Ergebnisse gleich App/CLI. DataForSEO-Hüllen kommen mit M5-C02. AGENT-040: Vorlage „AI-Search-Sichtbarkeit“ referenziert jetzt die KI-Werkzeuge. K4-13 entschieden (26.11.2026): AGENT-030 bei laufendem (auch im eigenen Prozess), pausiertem, gestopptem und fremd gesteuertem Crawl sowie bei zwei Prozessen auf einem Crawl ohne laufenden Besitzer nach docs/spec/10-agent-interface.md AGENT-030, Nachtrag 26.11.2026 (Fehler `busy` nach AGENT-020; Besitzer eines KI-Laufs nach 08 AI-020, Nachtrag 26.11.2026). K4-22 erledigt (26.11.2026): Heartbeat, `owner_kind`/`owner_pid` und „aktuell“ nach 01 CRAWL-125, Nachtrag 26.11.2026 (Klärung K4-22). In 1.0 antworten `pause_crawl`/`stop_crawl` bei einem in einem anderen Prozess laufenden Crawl mit einem MCP-Fehler ohne Code `busy` (`crates/os-mcp/src/crawl_service.rs`, `CrawlService::not_live`); dieses Verhalten nicht ändern und für die KI-Werkzeuge nicht übernehmen – AGENT-030 verlangt dort `busy`. Keine eigene Schwelle (`os_store::resume::HEARTBEAT_TIMEOUT_MS`). Fremden Besitzer auch außerhalb von `Running` (KI-Lauf, 08 AI-020 Unterpunkt „Aktiver Besitzer außerhalb von `Running`“) mit der Prüfung „belegt“ aus M4-K11 (`os_store::owner`) erkennen und `busy` liefern. Nachtrag 26.11.2026 (nach Welle 5): KI-Werkzeuge starten über den Laufrahmen `os_ai::run` aus M4-D05; auf einem unterbrochenen Crawl MCP-Fehler mit „Crawl ist unterbrochen – zuerst fortsetzen oder stoppen“ ohne `busy` (08 AI-020, 10 AGENT-030).",
   "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
