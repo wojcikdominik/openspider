@@ -247,6 +247,27 @@ fn parse_json(text: &str) -> Value {
     }
 }
 
+/// Meldet geänderte URLs an den Änderungsfeed der Tabellen (wie die SERP-Bearbeitung): `urls.change_seq` der URLs
+/// und `crawl_meta.change_seq` steigen, damit offene Tabellen die Spalten neu lesen.
+pub fn mark_changed(conn: &Connection, url_ids: &[i64]) -> Result<(), StoreError> {
+    if url_ids.is_empty() {
+        return Ok(());
+    }
+    conn.execute(
+        "INSERT INTO crawl_meta(key, value) VALUES('change_seq', '1') \
+         ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1",
+        [],
+    )?;
+    let mut stmt = conn.prepare_cached(
+        "UPDATE urls SET change_seq = (SELECT CAST(value AS INTEGER) FROM crawl_meta WHERE key = 'change_seq') \
+         WHERE id = ?1",
+    )?;
+    for id in url_ids {
+        stmt.execute([id])?;
+    }
+    Ok(())
+}
+
 /// Löscht und schreibt alle Zeilen eines (URL, Element).
 pub fn save(conn: &Connection, r: &ElementRecord) -> Result<(), StoreError> {
     conn.execute(
@@ -442,6 +463,7 @@ pub fn commit(conn: &Connection, c: &SuggestionCommit) -> Result<Vec<i64>, Store
             record.accepted = old.accepted;
         }
         save(conn, &record)?;
+        mark_changed(conn, &[record.url_id])?;
         Ok(ids)
     })();
     match result {
@@ -478,7 +500,7 @@ pub fn mark_pending(
             }
             save(conn, &r)?;
         }
-        Ok(())
+        mark_changed(conn, url_ids)
     })();
     match result {
         Ok(()) => {
@@ -495,7 +517,10 @@ pub fn mark_pending(
 /// Schreibt mehrere Einträge in einer Transaktion (Nachlauf, Neuprüfung, Massenaktionen).
 pub fn save_all(conn: &Connection, records: &[ElementRecord]) -> Result<(), StoreError> {
     conn.execute_batch("SAVEPOINT v01_save_all")?;
-    let result = records.iter().try_for_each(|r| save(conn, r));
+    let result = records.iter().try_for_each(|r| save(conn, r)).and_then(|()| {
+        let ids: Vec<i64> = records.iter().map(|r| r.url_id).collect();
+        mark_changed(conn, &ids)
+    });
     match result {
         Ok(()) => {
             conn.execute_batch("RELEASE v01_save_all")?;
@@ -539,7 +564,8 @@ pub fn replace_focus(conn: &Connection, entries: &[(i64, String)]) -> Result<(),
             }
             records.iter().try_for_each(|r| save(conn, r))?;
         }
-        Ok(())
+        let ids: Vec<i64> = entries.iter().map(|(id, _)| *id).collect();
+        mark_changed(conn, &ids)
     })();
     match result {
         Ok(()) => {
