@@ -198,7 +198,10 @@ fn bundling_changes_requests_not_tokens() {
     let b = estimate_requests(&estimate_input(&single, path, &rates), &NoCache);
     assert_eq!(a.estimate.est_input_tokens, b.estimate.est_input_tokens);
     // Kosten: gleich bis auf die Rundung auf ganze µUSD je Request (höchstens 1 µUSD je Einzelrequest).
-    let (x, y) = (a.estimate.expected.unwrap().0, b.estimate.expected.unwrap().0);
+    let (x, y) = (
+        a.estimate.expected.unwrap().0,
+        b.estimate.expected.unwrap().0,
+    );
     assert!(x.abs_diff(y) <= 5, "{x} / {y}");
     assert_eq!(a.estimate.items, 5);
     assert_eq!((a.requests, b.requests), (1, 5));
