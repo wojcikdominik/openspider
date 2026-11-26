@@ -409,3 +409,28 @@ async fn ai018_schwaerzung_an_aus_und_pii_hinweis() {
         "ohne page_text kein Hinweis: {req}"
     );
 }
+
+// spec: AI-019 [M4]
+// spec: AI-018 [M4]
+// acceptance: independent
+// Entscheidung des Orchestrators (26.11.2026): AI-019 wird in 1.1 nicht durchgesetzt, also sagt die Datenflussübersicht
+// keinen Datenort zu – die Spalte `Region` bleibt leer, auch wenn ein EU-Endpunkt in den App-Einstellungen steht.
+#[tokio::test]
+async fn ai019_datenfluss_sagt_in_1_1_keinen_datenort_zu() {
+    let home = tempfile::tempdir().unwrap();
+    let app = fresh_app(home.path());
+    preview_on(&app).await;
+    title_flow(&app);
+    patch_settings(
+        &app,
+        json!({ "aiApp": { "providerEndpoints": { "openai": { "timeoutSeconds": 120, "concurrentRequests": 4, "baseUrl": null, "useEuEndpoint": true, "euAccountConfirmed": true } } } }),
+    )
+    .await;
+    edit_config(&app, |cfg| with_question(cfg, "u01-q", &["url", "title"])).await;
+    let view = status(&app).await;
+    for r in rows_of(&view, "rows") {
+        assert_eq!(cell(r, "Region"), "", "kein Datenort in 1.1: {r}");
+    }
+    let csv = view["csv"].as_str().unwrap();
+    assert!(!csv.contains(",EU,"), "CSV ohne Region EU: {csv}");
+}

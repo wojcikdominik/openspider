@@ -365,6 +365,18 @@ test("Konfigurationsseite KI mit Spalte Reasoning und ohne Richtlinienschalter (
   await expect(cfg.getByRole("radiogroup", { name: "Where may data go?" })).toHaveCount(0);
   await expect(cfg.getByText("Enforce EU processing")).toHaveCount(0);
   await expect(cfg.getByText("Local only", { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // Folge derselben Entscheidung: keine EU-Schalter in den Einstellungen, keine Richtlinie in der Datenflussübersicht.
+  const settings = await context.newPage();
+  await app.open(settings, "settings");
+  await settings.getByRole("tablist", { name: "Settings sections" }).getByRole("tab", { name: "AI", exact: true }).click();
+  await expect(settings.getByRole("tablist", { name: "AI settings" })).toBeVisible();
+  await expect(settings.getByRole("switch", { name: /EU endpoint/ })).toHaveCount(0);
+  await expect(settings.getByText("EU processing", { exact: true })).toHaveCount(0);
+  await settings.getByRole("tab", { name: "AI data flow" }).click();
+  await expect(settings.locator("[data-ai-dataflow-overview]")).toBeVisible();
+  await expect(settings.getByText(/^Policy:/)).toHaveCount(0);
 });
 
 // spec: INTEG-005 [M4]

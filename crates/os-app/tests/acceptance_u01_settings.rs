@@ -588,16 +588,32 @@ async fn ai019_befehl_nimmt_in_1_1_keine_richtlinie_an() {
             json!({ "ai": { "policy": policy } }),
         )
         .await;
-        assert!(
-            res.is_err(),
-            "Richtlinie {policy} darf in 1.1 nicht angenommen werden: {res:?}"
-        );
+        let err = res.expect_err(&format!(
+            "Richtlinie {policy} darf in 1.1 nicht angenommen werden"
+        ));
+        assert_eq!(err.code, ErrorCode::InvalidInput, "{policy}: {err:?}");
     }
-    // Der Standard bleibt zulässig.
+    // Der Standard bleibt zulässig, und die Sicht des Fensters bleibt bei „Keine Einschränkung“.
     call(
         &app,
         "ai.settingsSet",
         json!({ "ai": { "policy": "unrestricted" } }),
     )
     .await;
+    let view = call(&app, "ai.settingsGet", Value::Null).await;
+    assert_eq!(view["policy"], "unrestricted", "{}", view["policy"]);
+}
+
+// spec: AI-019 [M4]
+// acceptance: independent
+// Folge aus derselben Entscheidung: In 1.1 bietet die Einstellungssicht keine EU-Schalter je Anbieter an (sonst stünde
+// dort ein Schalter, dessen Wirkung erst 1.2 durchsetzt).
+#[tokio::test]
+async fn ai019_keine_eu_schalter_in_1_1() {
+    let home = tempfile::tempdir().unwrap();
+    let app = fresh_app(home.path());
+    preview_on(&app).await;
+    let view = call(&app, "ai.settingsGet", Value::Null).await;
+    let eu = view["eu"].as_array().cloned().unwrap_or_default();
+    assert!(eu.is_empty(), "keine EU-Schalter in 1.1: {eu:?}");
 }
