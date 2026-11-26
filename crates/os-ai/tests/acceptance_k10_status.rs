@@ -126,6 +126,7 @@ fn row_for(
         &OutcomeDetails {
             reasoning: Some(level),
             reported_cost: limit.reported_cost,
+            estimated_output_tokens: None,
         },
     )
 }
@@ -292,6 +293,7 @@ async fn responses_output_limit_with_and_without_schema() {
         &OutcomeDetails {
             reasoning: Some(ReasoningLevel::Off),
             reported_cost: None,
+            estimated_output_tokens: None,
         },
     );
     assert_eq!(row.record.status, OUTPUT_LIMIT);
@@ -828,5 +830,135 @@ fn status_value_is_in_the_table_and_in_the_errors_filter() {
         let errors_filter =
             text.starts_with("Error: ") || text == "Quota exceeded" || text == "Budget exceeded";
         assert_eq!(s.is_error(), errors_filter, "{text}");
+    }
+}
+
+/// `n` endgültige HTTP-Fehler (400, nicht wiederholbar) eines Anbieters über den Limiter.
+async fn final_errors(limiter: &Limiter, provider: &str, n: usize) {
+    let spec = RequestSpec::new(provider, "model", 10);
+    for _ in 0..n {
+        let exec = limiter
+            .run(&spec, |_| async {
+                Err::<(), _>(AttemptFailure::from(ProviderError::Http {
+                    status: 400,
+                    message: "bad".into(),
+                }))
+            })
+            .await;
+        assert_eq!(
+            exec.error_status().map(|s| s.to_string()).as_deref(),
+            Some("Error: 400 bad")
+        );
+    }
+}
+
+// spec: AI-017 [M4]
+// spec: AI-020 [M4]
+// acceptance: independent
+// Kriterium (AI-017, Nachtrag 26.11.2026): 9 endgültige Fehler, dann ein `Error: Output limit reached`, dann 1
+// endgültiger Fehler → der Schutzschalter öffnet (Zählung 10); dieselbe Folge mit einem `Success` an der Stelle des
+// Ausgabegrenzen-Falls → er öffnet nicht. Geprüft für alle vier „zählt nicht“-Fälle (Spend-Cap-429, endgültiges
+// OpenRouter-402, Refusal, Ausgabegrenze) über `Limiter::run_provider` mit den Adaptern gegen den ai-mock.
+#[tokio::test]
+async fn neutral_cases_neither_count_nor_reset_the_breaker() {
+    let mock = Mock::start().await;
+    let a = anthropic_model(&mock, "A").await;
+    let roles = openrouter_roles(&mock).await;
+    let ant = |text: &str| {
+        request(
+            model("anthropic", &a.id, "messages", Vec::new()),
+            text,
+            None,
+            ReasoningLevel::Off,
+            Some(256),
+        )
+    };
+    let or = |text: &str| {
+        request(
+            model("openrouter", &roles.r3.id, "chat-completions", Vec::new()),
+            text,
+            None,
+            ReasoningLevel::ModelDefault,
+            Some(256),
+        )
+    };
+    let cases: [(&str, &str, Request, Option<AiStatus>); 5] = [
+        (
+            "output-limit",
+            "anthropic",
+            ant("K10 seq MOCK-SCENARIO:output-limit"),
+            Some(AiStatus::OutputLimitReached),
+        ),
+        (
+            "spend-cap-429",
+            "anthropic",
+            ant("K10 seq MOCK-SCENARIO:429-spend-cap"),
+            Some(AiStatus::QuotaExceeded),
+        ),
+        (
+            "refusal",
+            "anthropic",
+            ant("K10 seq MOCK-SCENARIO:refusal"),
+            None,
+        ),
+        (
+            "402-credits",
+            "openrouter",
+            or("K10 seq MOCK-SCENARIO:402-credits"),
+            Some(AiStatus::QuotaExceeded),
+        ),
+        (
+            "402-key-limit",
+            "openrouter",
+            or("K10 seq MOCK-SCENARIO:402-key-limit"),
+            Some(AiStatus::QuotaExceeded),
+        ),
+    ];
+    for (name, provider, middle, final_status) in cases {
+        for success_instead in [false, true] {
+            // Frische Adapter je Folge (die Kontingent-Sperre eines Adapters soll die Gegenprobe nicht beeinflussen).
+            let anthropic = mock.anthropic();
+            let openrouter = mock.openrouter();
+            let adapter: &dyn AiProvider = if provider == "anthropic" {
+                &anthropic
+            } else {
+                &openrouter
+            };
+            let limiter = fast_limiter();
+            final_errors(&limiter, provider, 9).await;
+            let request = if success_instead {
+                if provider == "anthropic" {
+                    ant("K10 seq success")
+                } else {
+                    or("K10 seq success")
+                }
+            } else {
+                middle.clone()
+            };
+            let exec = limiter.run_provider(adapter, &request, 10).await;
+            assert_eq!(exec.attempts, 1, "{name}");
+            if success_instead {
+                let response = exec.result.expect("Success");
+                assert!(!response.refusal);
+            } else {
+                match final_status {
+                    Some(status) => assert_eq!(exec.error_status(), Some(&status), "{name}"),
+                    None => assert!(
+                        exec.result.expect("Refusal kommt als Antwort").refusal,
+                        "{name}"
+                    ),
+                }
+            }
+            assert!(
+                !limiter.breaker_open(provider),
+                "{name}: nach 9 Fehlern noch zu"
+            );
+            final_errors(&limiter, provider, 1).await;
+            assert_eq!(
+                limiter.breaker_open(provider),
+                !success_instead,
+                "{name}, Success statt Fall: {success_instead}"
+            );
+        }
     }
 }

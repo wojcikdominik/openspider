@@ -242,19 +242,50 @@ fn decisions_and_embeddings_ignore_the_level() {
 
 // spec: AI-015 [M4]
 // acceptance: independent
-// Wortlaut des Nachtrags: Die Stufe „geht als Feld `reasoning` in den Cache-Schlüssel ein (Wert `null` auf Wegen ohne
-// Stufe …)“. Wörtlich gelesen steht das Feld mit dem Wert `null` in der kanonischen Darstellung (Befund B2 im Bericht:
-// Weglassen des Felds ist die zweite Lesart).
+// Klarstellung (Nachtrag 26.11.2026, Abnahme K10): „In der kanonischen Form, aus der der Schlüssel berechnet wird, steht
+// ein Feld mit Wert `null` nicht.“ Ersetzt den früheren Test `decisions_key_names_reasoning_null_literally` (wörtliche
+// Lesart, Befund B2-1). Kriterium: Der Schlüssel eines Wegs ohne Stufe ist von jedem Schlüssel desselben Eintrags mit
+// einer Stufe verschieden.
 #[test]
-fn decisions_key_names_reasoning_null_literally() {
+fn key_without_level_differs_from_every_key_with_a_level() {
     for input in [decision_input("page text"), embedding_input("page text")] {
         let key = CacheKey::with_reasoning(input.clone(), ReasoningLevel::Medium);
         let canonical: Value = serde_json::from_str(&key.canonical()).expect("kanonisches JSON");
         assert!(
-            canonical.get("reasoning").is_some_and(Value::is_null),
-            "Feld `reasoning` mit Wert null fehlt im Schlüssel ({}): {canonical}",
+            canonical.get("reasoning").is_none(),
+            "kein Feld `reasoning` ohne Stufe ({}): {canonical}",
             input.task
         );
+    }
+    // Derselbe Eintrag: Seitentyp-Frage über die Decisions API (ohne Stufe) gegen den Ersatzweg mit jeder Stufe;
+    // `suggest-title` ohne Stufe gegen jede Stufe.
+    let decision = decision_input("page text");
+    let fallback = CacheKeyInput {
+        path: Some(ExecutionPath::StructuredOutput),
+        ..decision.clone()
+    };
+    let title = CacheKeyInput {
+        task: "suggest-title".into(),
+        definition_id: "suggest-title".into(),
+        path: None,
+        ..decision.clone()
+    };
+    let cases = [
+        (CacheKey::new(decision), fallback),
+        (CacheKey::new(title.clone()), title),
+    ];
+    for (without, with_input) in cases {
+        assert_eq!(without.reasoning(), None);
+        for level in ALL_LEVELS {
+            let with = CacheKey::with_reasoning(with_input.clone(), level);
+            assert_eq!(with.reasoning(), Some(level), "{}", with_input.task);
+            assert_ne!(
+                without.as_str(),
+                with.as_str(),
+                "{} ohne Stufe = mit {level}",
+                with_input.task
+            );
+        }
     }
 }
 

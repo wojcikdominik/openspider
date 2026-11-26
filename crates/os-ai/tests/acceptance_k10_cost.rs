@@ -211,12 +211,12 @@ fn bundling_saves_requests_not_tokens() {
     );
     assert_eq!(a.estimate.est_input_tokens, b.estimate.est_input_tokens);
     // Kosten werden je Request auf µUSD gerundet; die Tokenschätzung ist gleich, die Beträge höchstens um die
-    // Rundung je Request (5 × 0,5 µUSD) verschieden.
+    // Rundung verschieden: höchstens 1 µUSD je Request (AI-012, Nachtrag 26.11.2026, Punkt 1).
     let (ca, cb) = (
         a.estimate.expected.unwrap().0,
         b.estimate.expected.unwrap().0,
     );
-    assert!(ca.abs_diff(cb) <= 3, "{ca} vs {cb}");
+    assert!(ca.abs_diff(cb) <= 5, "{ca} vs {cb}");
     assert_eq!((a.requests, b.requests), (1, 5));
     // Je Frage ⌈159/3,5⌉ = 46 Tokens Eingabetext + ⌈Z_q/3,5⌉ + 100.
     let expected: u64 = z.iter().map(|z| 46 + (2 * z).div_ceil(7) + 100).sum();
@@ -406,6 +406,7 @@ async fn output_calibration_per_model_task_and_level() {
             &OutcomeDetails {
                 reasoning: Some(ReasoningLevel::Medium),
                 reported_cost: None,
+                estimated_output_tokens: Some(raw),
             },
         );
         os_store::ai::requests::insert_with_details(file.conn(), &row.record, &row.details)
@@ -416,7 +417,6 @@ async fn output_calibration_per_model_task_and_level() {
             &a.id,
             "suggest-title",
             Some(ReasoningLevel::Medium),
-            raw,
         )
         .unwrap();
         assert_eq!(cal.calibrated, i + 1 >= 20, "nach {} Requests", i + 1);
@@ -427,7 +427,6 @@ async fn output_calibration_per_model_task_and_level() {
         &a.id,
         "suggest-title",
         Some(ReasoningLevel::Medium),
-        raw,
     )
     .unwrap();
     assert!(cal.calibrated);
@@ -444,15 +443,8 @@ async fn output_calibration_per_model_task_and_level() {
         ("suggest-title", ReasoningLevel::Off),
         ("suggest-meta", ReasoningLevel::Medium),
     ] {
-        let other = output_calibration_from_log(
-            &file,
-            "anthropic",
-            &a.id,
-            task,
-            Some(level),
-            raw_output_tokens(512, level),
-        )
-        .unwrap();
+        let other =
+            output_calibration_from_log(&file, "anthropic", &a.id, task, Some(level)).unwrap();
         assert!(!other.calibrated, "{task} {level} bleibt unkalibriert");
     }
 }
@@ -770,6 +762,7 @@ async fn reported_cost_over_the_reservation_halts_the_budget() {
         &OutcomeDetails {
             reasoning: Some(ReasoningLevel::ModelDefault),
             reported_cost: reply.reported_cost,
+            estimated_output_tokens: None,
         },
     );
     assert_eq!(
@@ -800,4 +793,58 @@ async fn reported_cost_over_the_reservation_halts_the_budget() {
         reopened.reserve(BudgetScope::task(AREA_AI, "decision"), MicroUsd(1)),
         Err(BudgetError::Exceeded(BudgetLevel::Halted))
     ));
+}
+
+// spec: AI-012 [M4]
+// acceptance: independent
+// Kriterium (Nachtrag 26.11.2026, Punkt 2): Zwei Gruppen von je 20 Requests derselben (Modell, Aufgabe, Stufe) mit
+// verschiedenem Antwortanteil A und gleichem Verhältnis Ist/Schätzung → der gelernte Faktor entspricht diesem
+// Verhältnis (±1 %), unabhängig von A. Hier `decision` im Ersatzweg (`decision-w`): W = 14 (A = 288) und W = 16
+// (A = 320), Stufe `off` (E = 0), Ist = 0,75 × Schätzung; die Schätzung je Zeile ist `estimated_output_tokens`.
+#[test]
+fn output_factor_per_row_is_independent_of_the_answer_share() {
+    let dir = TempDir::new("factor-rows");
+    let file = crawl_file(&dir.0);
+    let defaults = TaskDefaults::bundled().unwrap();
+    let a = defaults.answer_tokens(TaskType::Decision).unwrap();
+    for weight in [14u64, 16] {
+        let estimate = raw_output_tokens(a.tokens(Some(weight)), ReasoningLevel::Off);
+        assert_eq!(estimate, 64 + 16 * weight);
+        let actual = estimate * 3 / 4;
+        for _ in 0..20 {
+            let row = detailed_request_record(
+                &ctx("decision", "anthropic", "claude-haiku-5-5", "messages"),
+                &claude_rates(),
+                MicroUsd(1_000_000),
+                &RequestOutcome::success(usage(300, actual, Some(0)), 0, 1),
+                &OutcomeDetails {
+                    reasoning: Some(ReasoningLevel::Off),
+                    reported_cost: None,
+                    estimated_output_tokens: Some(estimate),
+                },
+            );
+            assert_eq!(row.details.estimated_output_tokens, Some(estimate));
+            os_store::ai::requests::insert_with_details(file.conn(), &row.record, &row.details)
+                .unwrap();
+        }
+    }
+    let cal = output_calibration_from_log(
+        &file,
+        "anthropic",
+        "claude-haiku-5-5",
+        "decision",
+        Some(ReasoningLevel::Off),
+    )
+    .unwrap();
+    assert!(cal.calibrated);
+    let factor = cal.factor_ppm as f64 / 1_000_000.0;
+    assert!((factor - 0.75).abs() <= 0.0075, "Faktor {factor}");
+    for weight in [14u64, 16, 2] {
+        let est = estimate_output_tokens(a.tokens(Some(weight)), ReasoningLevel::Off, &cal) as f64;
+        let expected = (64 + 16 * weight) as f64 * 0.75;
+        assert!(
+            (est - expected).abs() <= expected * 0.01 + 1.0,
+            "W = {weight}: {est} vs {expected}"
+        );
+    }
 }

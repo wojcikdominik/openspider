@@ -45,6 +45,7 @@ fn row(
         &OutcomeDetails {
             reasoning,
             reported_cost,
+            estimated_output_tokens: None,
         },
     )
 }
@@ -639,4 +640,48 @@ async fn every_row_has_known_price_source_and_level() {
     assert!(stored
         .iter()
         .any(|r| r.record.status == "Error: Output limit reached"));
+}
+
+// spec: AI-014 [M4]
+// acceptance: independent
+// Kriterium (Nachtrag 26.11.2026): Zeile mit `over_reservation` und `cost_mismatch` → `Flags = over_reservation,
+// cost_mismatch`; Zeile ohne Kennzeichen → `Flags` leer. Die Zeilen entstehen über `cost::log` (gemeldete Kosten über
+// der Reservierung bzw. Tabellenpreis) und werden über die Schnittstelle des Protokolls gelesen.
+#[test]
+fn flags_column_from_logged_rows() {
+    let dir = TempDir::new("flags");
+    let file = crawl_file(&dir.0);
+    let rates = claude_rates();
+    let over = detailed_request_record(
+        &ctx("suggest-title", "openrouter", "m", "chat-completions"),
+        &rates,
+        MicroUsd(100),
+        &RequestOutcome::success(usage(1_000, 0, None), 0, 1),
+        &OutcomeDetails {
+            reasoning: Some(ReasoningLevel::ModelDefault),
+            reported_cost: Some(reported(2_000)),
+            estimated_output_tokens: None,
+        },
+    );
+    assert!(over.record.over_reservation && over.details.cost_mismatch);
+    insert(&file, &over);
+    let plain = row(
+        "suggest-title",
+        "anthropic",
+        "mock-claude",
+        "messages",
+        &rates,
+        RequestOutcome::success(usage(1_000, 0, None), 0, 1),
+        Some(ReasoningLevel::Off),
+        None,
+    );
+    insert(&file, &plain);
+    let rows = store::list(file.conn(), &RequestFilter::default()).unwrap();
+    let cells: Vec<String> = rows
+        .iter()
+        .map(|r| store::flags_cell(&r.record, &r.details))
+        .collect();
+    assert_eq!(cells, ["over_reservation, cost_mismatch", ""]);
+    assert_eq!(store::COLUMNS.last(), Some(&store::FLAGS_COLUMN));
+    assert_eq!(store::FLAGS_COLUMN, "Flags");
 }

@@ -12,8 +12,9 @@ use os_model::budget::MicroUsd;
 use os_model::time::{IdSource, SeededIds};
 use os_model::{CrawlConfig, CrawlMode, Timestamp};
 use os_store::ai::requests::{
-    insert, insert_with_details, list, output_calibration_samples, totals_by_task_and_model,
-    PriceSource, RequestDetails, RequestFilter, RequestRecord, COLUMNS, REASONING_LEVELS,
+    flags_cell, insert, insert_with_details, list, output_calibration_samples,
+    totals_by_task_and_model, PriceSource, RequestDetails, RequestFilter, RequestRecord, COLUMNS,
+    REASONING_LEVELS,
 };
 use os_store::{CrawlFile, CrawlInit, OpenMode, StorageProfile, SCHEMA_VERSION};
 
@@ -93,6 +94,7 @@ fn details(
         reasoning_tokens: reasoning,
         computed_cost: computed.map(MicroUsd),
         cost_mismatch: mismatch,
+        estimated_output_tokens: None,
     }
 }
 
@@ -100,7 +102,7 @@ fn details(
 // acceptance: independent
 // Kanonische Spaltennamen und Reihenfolge: Grundliste aus AI-014, `Reasoning Level` nach `Endpoint`, `Reasoning Tokens`
 // nach `Output Tokens`, `Computed Cost (USD)` nach `Cost (USD)`; `Refusal Reason` als eigene Spalte (Position nicht
-// festgelegt).
+// festgelegt); `Flags` als letzte Spalte nach `Retries` (Nachtrag 26.11.2026).
 #[test]
 fn log_columns_follow_the_spec_order() {
     let expected = [
@@ -133,6 +135,7 @@ fn log_columns_follow_the_spec_order() {
         "Duration ms",
         "Provider Request ID",
         "Retries",
+        "Flags",
     ];
     let without_refusal: Vec<&str> = COLUMNS
         .iter()
@@ -141,6 +144,11 @@ fn log_columns_follow_the_spec_order() {
         .collect();
     assert_eq!(without_refusal, expected);
     assert!(COLUMNS.contains(&"Refusal Reason"));
+    // AI-014, Nachtrag 26.11.2026: `Flags` ist die letzte Spalte, die interne Schätzspalte gehört nicht zum Export.
+    assert_eq!(COLUMNS.last(), Some(&"Flags"));
+    assert!(!COLUMNS
+        .iter()
+        .any(|c| c.to_lowercase().contains("estimated")));
     assert_eq!(
         REASONING_LEVELS,
         [
@@ -338,7 +346,9 @@ fn output_calibration_samples_are_per_level_and_task() {
         r.task = task.into();
         r.output_tokens = Some(out);
         r.status = status.into();
-        insert_with_details(f.conn(), &r, &details(level, None, None, false)).unwrap();
+        let mut d = details(level, None, None, false);
+        d.estimated_output_tokens = Some(1_000);
+        insert_with_details(f.conn(), &r, &d).unwrap();
     };
     add("suggest-title", Some("medium"), 500, "Success");
     add("suggest-title", Some("medium"), 510, "Success");
@@ -362,10 +372,13 @@ fn output_calibration_samples_are_per_level_and_task() {
         )
         .unwrap()
     };
-    assert_eq!(samples("suggest-title", Some("medium")), vec![500, 510]);
-    assert_eq!(samples("suggest-title", Some("low")), vec![100]);
-    assert_eq!(samples("suggest-meta", Some("medium")), vec![900]);
-    assert_eq!(samples("decision", None), vec![0]);
+    assert_eq!(
+        samples("suggest-title", Some("medium")),
+        vec![(1_000, 500), (1_000, 510)]
+    );
+    assert_eq!(samples("suggest-title", Some("low")), vec![(1_000, 100)]);
+    assert_eq!(samples("suggest-meta", Some("medium")), vec![(1_000, 900)]);
+    assert_eq!(samples("decision", None), vec![(1_000, 0)]);
 }
 
 // spec: AI-014 [M4]
@@ -397,4 +410,80 @@ fn v5_archive_takes_the_new_columns_after_migration() {
         rows[0].details.computed_cost_of(&rows[0].record),
         MicroUsd(2_399)
     );
+}
+
+// spec: AI-014 [M4]
+// acceptance: independent
+// Kriterium (Nachtrag 26.11.2026): Zeile mit `over_reservation` und `cost_mismatch` → `Flags = over_reservation,
+// cost_mismatch`; Zeile ohne Kennzeichen → `Flags` leer. Dazu alle drei in der Reihenfolge der Aufzählung, auch nach
+// Speichern und Lesen.
+#[test]
+fn flags_cell_lists_the_set_marks() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = create(dir.path());
+    let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    let mut over = record(2_400, PriceSource::Reported);
+    over.over_reservation = true;
+    insert_with_details(f.conn(), &over, &details(None, None, Some(1_200), true)).unwrap();
+    insert_with_details(
+        f.conn(),
+        &record(500, PriceSource::Table),
+        &details(None, None, None, false),
+    )
+    .unwrap();
+    let mut all = record(2_400, PriceSource::Reported);
+    all.over_reservation = true;
+    all.confidence_mismatch = true;
+    insert_with_details(f.conn(), &all, &details(None, None, Some(1_200), true)).unwrap();
+    let mut confidence = record(500, PriceSource::Table);
+    confidence.confidence_mismatch = true;
+    insert_with_details(f.conn(), &confidence, &details(None, None, None, false)).unwrap();
+
+    let rows = list(f.conn(), &RequestFilter::default()).unwrap();
+    let cells: Vec<String> = rows
+        .iter()
+        .map(|r| flags_cell(&r.record, &r.details))
+        .collect();
+    assert_eq!(
+        cells,
+        [
+            "over_reservation, cost_mismatch",
+            "",
+            "over_reservation, confidence_mismatch, cost_mismatch",
+            "confidence_mismatch",
+        ]
+    );
+}
+
+// spec: AI-012 [M4]
+// acceptance: independent
+// Interne Spalte `estimated_output_tokens` (Nachtrag 26.11.2026, Punkt 2): wird gespeichert und gelesen, leer bleibt
+// leer; Zeilen ohne Ausgabeschätzung zählen nicht für den Ausgabe-Korrekturfaktor.
+#[test]
+fn estimated_output_tokens_roundtrip() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = create(dir.path());
+    let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    let mut d = details(Some("off"), None, None, false);
+    d.estimated_output_tokens = Some(288);
+    insert_with_details(f.conn(), &record(10, PriceSource::Table), &d).unwrap();
+    insert_with_details(
+        f.conn(),
+        &record(10, PriceSource::Table),
+        &details(Some("off"), None, None, false),
+    )
+    .unwrap();
+    let rows = list(f.conn(), &RequestFilter::default()).unwrap();
+    assert_eq!(rows[0].details.estimated_output_tokens, Some(288));
+    assert_eq!(rows[1].details.estimated_output_tokens, None);
+    let samples = output_calibration_samples(
+        f.conn(),
+        "openrouter",
+        "openai/gpt-6-luna",
+        "suggest-title",
+        Some("off"),
+        200,
+    )
+    .unwrap();
+    assert_eq!(samples, vec![(288, 200)]);
 }
