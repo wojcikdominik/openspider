@@ -96,9 +96,9 @@ pub enum StoreError {
     },
     /// Der Crawl ist unterbrochen (gespeichertes `Running` mit veraltetem Heartbeat, CRAWL-125): kein KI-Lauf, bis er
     /// fortgesetzt oder gestoppt ist (08 AI-020 [M4], „Kein KI-Lauf auf einem unterbrochenen Crawl“); geliefert von
-    /// `owner::claim` bzw. `os_ai::run_owner::RunOwner::start`. Die Datei bleibt unverändert; die Meldung für die
-    /// Nutzer bildet der Aufrufer.
-    #[error("Der Crawl ist unterbrochen (gespeichert Running, Heartbeat veraltet)")]
+    /// `owner::claim` bzw. `os_ai::run_owner::RunOwner::start`. Die Datei bleibt unverändert; die Anzeige ist der
+    /// Text der Spec (de), die Meldung in der Oberfläche (de/en) bildet der Aufrufer.
+    #[error("Crawl ist unterbrochen – zuerst fortsetzen oder stoppen")]
     Interrupted,
     /// Noch nicht umgesetzt (Stub, `STUB(M1-Pxx)`).
     #[error("nicht implementiert: {0}")]
