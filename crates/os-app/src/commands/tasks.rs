@@ -151,9 +151,13 @@ fn history(app: &App) -> HistoryStore {
 
 /// Der Planer: gesetzt, sonst nach `OPENSPIDER_PLANNER` (`system`, `dry`, `off`); in der E2E-Bridge Dry-Run.
 fn planner_of(app: &App) -> Option<Arc<dyn OsPlanner>> {
-    let state = app.ext::<TasksState>();
+    planner_in(&app.ext::<TasksState>(), &settings_dir(app))
+}
+
+/// Wie [`planner_of`], ohne die `App` (Hintergrundarbeit, die sie nicht am Leben halten soll).
+fn planner_in(state: &TasksState, settings: &Path) -> Option<Arc<dyn OsPlanner>> {
     state.resolve_planner(|| {
-        let dry_dir = settings_dir(app).join("schedules").join("planner-dry");
+        let dry_dir = settings.join("schedules").join("planner-dry");
         let choice = std::env::var("OPENSPIDER_PLANNER").unwrap_or_default();
         match choice.as_str() {
             "off" => None,
@@ -163,7 +167,7 @@ fn planner_of(app: &App) -> Option<Arc<dyn OsPlanner>> {
             }
             _ => planner::system(
                 Arc::new(SystemRunner),
-                &settings_dir(app).join("schedules").join("planner"),
+                &settings.join("schedules").join("planner"),
             ),
         }
     })
@@ -696,16 +700,24 @@ async fn validate_task(app: &App, ctx: &CallCtx, task: &Task) -> Vec<Issue> {
 // Planer
 
 fn planner_spec(app: &App, task: &Task) -> PlannerSpec {
+    planner_spec_for(planner_home(app), task)
+}
+
+/// Eigener Basisordner für den Planer-Eintrag, nur wenn er ausdrücklich gesetzt ist.
+fn planner_home(app: &App) -> Option<PathBuf> {
+    app.config()
+        .home_override
+        .as_ref()
+        .map(|_| app.config().home.clone())
+}
+
+fn planner_spec_for(home: Option<PathBuf>, task: &Task) -> PlannerSpec {
     PlannerSpec {
         task_id: task.id.clone(),
         task_name: task.name.clone(),
         schedule: task.schedule.clone(),
         binary: planner::cli_binary(),
-        home: app
-            .config()
-            .home_override
-            .as_ref()
-            .map(|_| app.config().home.clone()),
+        home,
         run_if_missed: task.execution.run_if_missed,
         on_battery: task.execution.on_battery,
         wake: task.execution.wake,
@@ -1303,28 +1315,31 @@ fn read_import(app: &App, path: &Path) -> Result<Vec<Task>, CmdError> {
 
 /// Start der App: abgestürzte Läufe abgleichen und Planer-Einträge nachziehen, die auf ein anderes
 /// `openspider`-Programm zeigen (nach einem Update, OUT-166).
+///
+/// Die Hintergrundarbeit hält die `App` nicht: Ein Abbau durch ihren Besitzer direkt nach dem Start bleibt der letzte
+/// und wartet damit auf die Hintergrundspuren der Schreibwarteschlange, bevor der Besitzer Verzeichnisse entfernt
+/// (OUT-229).
 pub fn on_startup(app: &App) {
-    let app = app.clone();
-    app.handle().spawn_blocking({
-        let app = app.clone();
-        move || {
-            let h = history(&app);
-            let fixed = h.reconcile(app.config().clock.now());
-            if !fixed.is_empty() {
-                tracing::warn!("{} abgestürzte Aufgabenläufe abgeglichen", fixed.len());
+    let settings = settings_dir(app);
+    let clock = app.config().clock.clone();
+    let state = app.ext::<TasksState>();
+    let home = planner_home(app);
+    app.handle().spawn_blocking(move || {
+        let h = HistoryStore::in_settings(&settings);
+        let fixed = h.reconcile(clock.now());
+        if !fixed.is_empty() {
+            tracing::warn!("{} abgestürzte Aufgabenläufe abgeglichen", fixed.len());
+        }
+        let Some(planner) = planner_in(&state, &settings) else {
+            return;
+        };
+        for task in TaskStore::in_settings(&settings).list() {
+            if !task.enabled || !planner.is_registered(&task.id) {
+                continue;
             }
-            let Some(planner) = planner_of(&app) else {
-                return;
-            };
-            for task in store(&app).list() {
-                if !task.enabled || !planner.is_registered(&task.id) {
-                    continue;
-                }
-                if let Err(e) =
-                    planner::reregister::repair(planner.as_ref(), &planner_spec(&app, &task))
-                {
-                    tracing::warn!("Aufgabe '{}' nicht neu eingetragen: {e}", task.id);
-                }
+            let spec = planner_spec_for(home.clone(), &task);
+            if let Err(e) = planner::reregister::repair(planner.as_ref(), &spec) {
+                tracing::warn!("Aufgabe '{}' nicht neu eingetragen: {e}", task.id);
             }
         }
     });
