@@ -111,6 +111,13 @@ stub_handler!(semantic_run, "ai.semanticRun");
 stub_handler!(search_run, "ai.searchRun");
 
 fn handler(name: &str) -> Handler {
+    // M4-U01 (additiv, E3): umgesetzte Commands der Bereiche Einstellungen, Kosten und Einwilligung.
+    if let Some(h) = super::ai_settings::handler(name)
+        .or_else(|| super::ai_cost::handler(name))
+        .or_else(|| super::ai_consent::handler(name))
+    {
+        return h;
+    }
     match name {
         "ai.accountsList" => accounts_list,
         "ai.accountsTest" => accounts_test,
