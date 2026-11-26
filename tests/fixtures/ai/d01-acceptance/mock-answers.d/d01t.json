@@ -1,0 +1,448 @@
+{
+ "d01t-product": {
+  "page_type": {
+   "type": "choice",
+   "choice": "product",
+   "probabilities": [
+    {
+     "value": "product",
+     "probability": 0.93
+    },
+    {
+     "value": "homepage",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "category",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "article",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "landing",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "local",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "contact",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "about",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "legal",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "search-results",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "account",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "media",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "error",
+     "probability": 0.005384615384615381
+    },
+    {
+     "value": "other",
+     "probability": 0.005384615384615381
+    }
+   ],
+   "confidence": 0.93
+  }
+ },
+ "d01t-norm": {
+  "d01t_norm_q": {
+   "type": "choice",
+   "choice": "a",
+   "probabilities": [
+    {
+     "value": "a",
+     "probability": 0.63
+    },
+    {
+     "value": "b",
+     "probability": 0.3
+    },
+    {
+     "value": "c",
+     "probability": 0.1
+    }
+   ],
+   "confidence": 0.63
+  }
+ },
+ "d01t-nonorm": {
+  "d01t_norm_q": {
+   "type": "choice",
+   "choice": "a",
+   "probabilities": [
+    {
+     "value": "a",
+     "probability": 0.605
+    },
+    {
+     "value": "b",
+     "probability": 0.3
+    },
+    {
+     "value": "c",
+     "probability": 0.1
+    }
+   ],
+   "confidence": 0.605
+  }
+ },
+ "d01t-mismatch": {
+  "d01t_conf_q": {
+   "type": "choice",
+   "choice": "a",
+   "probabilities": [
+    {
+     "value": "a",
+     "probability": 0.93
+    },
+    {
+     "value": "b",
+     "probability": 0.05
+    },
+    {
+     "value": "c",
+     "probability": 0.02
+    }
+   ],
+   "confidence": 0.8
+  }
+ },
+ "d01t-match": {
+  "d01t_conf_q": {
+   "type": "choice",
+   "choice": "a",
+   "probabilities": [
+    {
+     "value": "a",
+     "probability": 0.93
+    },
+    {
+     "value": "b",
+     "probability": 0.05
+    },
+    {
+     "value": "c",
+     "probability": 0.02
+    }
+   ],
+   "confidence": 0.925
+  }
+ },
+ "d01t-score": {
+  "d01t_score_q": {
+   "type": "score",
+   "score": 2.0,
+   "probabilities": [
+    {
+     "value": 0,
+     "label": "l0",
+     "probability": 0.1
+    },
+    {
+     "value": 1,
+     "label": "l1",
+     "probability": 0.2
+    },
+    {
+     "value": 2,
+     "label": "l2",
+     "probability": 0.4
+    },
+    {
+     "value": 3,
+     "label": "l3",
+     "probability": 0.2
+    },
+    {
+     "value": 4,
+     "label": "l4",
+     "probability": 0.1
+    }
+   ],
+   "confidence": 0.4
+  }
+ },
+ "d01t-pred": {
+  "d01t_pred_q": {
+   "type": "predicate",
+   "probability": 0.4999
+  }
+ },
+ "d01t-refusal-mid": {
+  "d01t_r1": {
+   "type": "predicate",
+   "probability": 0.9
+  },
+  "d01t_r2": {
+   "type": "refusal"
+  },
+  "d01t_r3": {
+   "type": "predicate",
+   "probability": 0.2
+  }
+ },
+ "d01t-fb-choice": {
+  "default": {
+   "probabilities": {
+    "product": 0.6,
+    "category": 0.3,
+    "other": 0.1,
+    "article": 0.0
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-score": {
+  "default": {
+   "probabilities": {
+    "0": 0.1,
+    "1": 0.2,
+    "2": 0.4,
+    "3": 0.2,
+    "4": 0.1
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-abstain": {
+  "default": {
+   "probability": 0.5,
+   "abstain": true
+  }
+ },
+ "d01t-fb-sum0": {
+  "default": {
+   "probabilities": {
+    "product": 0.0,
+    "category": 0.0,
+    "other": 0.0,
+    "article": 0.0
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-neg": {
+  "default": {
+   "probabilities": {
+    "product": -0.1,
+    "category": 1.1,
+    "other": 0.0,
+    "article": 0.0
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-tie": {
+  "default": {
+   "probabilities": {
+    "product": 0.4,
+    "category": 0.4,
+    "other": 0.2,
+    "article": 0.0
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-sum2": {
+  "default": {
+   "probabilities": {
+    "product": 1.2,
+    "category": 0.6,
+    "other": 0.2,
+    "article": 0.0
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-noabstain": {
+  "default": {
+   "probabilities": {
+    "product": 0.6,
+    "category": 0.3,
+    "other": 0.1,
+    "article": 0.0
+   }
+  }
+ },
+ "d01t-fb-missingvalue": {
+  "default": {
+   "probabilities": {
+    "product": 0.6,
+    "category": 0.3,
+    "other": 0.1
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-extra": {
+  "default": {
+   "probabilities": {
+    "product": 0.6,
+    "category": 0.3,
+    "other": 0.1,
+    "article": 0.0
+   },
+   "abstain": false,
+   "comment": "extra"
+  }
+ },
+ "d01t-fb-bundle": {
+  "default": {
+   "d01t_b_pred": {
+    "probability": 0.7,
+    "abstain": false
+   },
+   "d01t_b_choice": {
+    "probabilities": {
+     "product": 0.1,
+     "category": 0.7,
+     "other": 0.2,
+     "article": 0.0
+    },
+    "abstain": false
+   },
+   "d01t_b_score": {
+    "probabilities": {
+     "0": 0.2,
+     "1": 0.5,
+     "2": 0.3
+    },
+    "abstain": false
+   }
+  }
+ },
+ "d01t-fb-14": {
+  "default": {
+   "probabilities": {
+    "product": 0.04,
+    "homepage": 0.04,
+    "category": 0.04,
+    "article": 0.48,
+    "landing": 0.04,
+    "local": 0.04,
+    "contact": 0.04,
+    "about": 0.04,
+    "legal": 0.04,
+    "search-results": 0.04,
+    "account": 0.04,
+    "media": 0.04,
+    "error": 0.04,
+    "other": 0.04
+   },
+   "abstain": false
+  }
+ },
+ "d01t-fb-14b": {
+  "default": {
+   "page_type": {
+    "probabilities": {
+     "product": 0.04,
+     "homepage": 0.04,
+     "category": 0.04,
+     "article": 0.48,
+     "landing": 0.04,
+     "local": 0.04,
+     "contact": 0.04,
+     "about": 0.04,
+     "legal": 0.04,
+     "search-results": 0.04,
+     "account": 0.04,
+     "media": 0.04,
+     "error": 0.04,
+     "other": 0.04
+    },
+    "abstain": false
+   },
+   "d01t_b_pred": {
+    "probability": 0.3,
+    "abstain": false
+   }
+  }
+ },
+ "d01t-eq": {
+  "d01t_eq_choice": {
+   "type": "choice",
+   "choice": "product",
+   "probabilities": [
+    {
+     "value": "product",
+     "probability": 0.6
+    },
+    {
+     "value": "category",
+     "probability": 0.3
+    },
+    {
+     "value": "other",
+     "probability": 0.1
+    },
+    {
+     "value": "article",
+     "probability": 0.0
+    }
+   ],
+   "confidence": 0.6
+  },
+  "default": {
+   "probabilities": {
+    "product": 0.6,
+    "category": 0.3,
+    "other": 0.1,
+    "article": 0.0
+   },
+   "abstain": false
+  }
+ },
+ "d01t-eq-score": {
+  "d01t_eq_score": {
+   "type": "score",
+   "score": 1.1,
+   "probabilities": [
+    {
+     "value": 0,
+     "label": "low",
+     "probability": 0.2
+    },
+    {
+     "value": 1,
+     "label": "mid",
+     "probability": 0.5
+    },
+    {
+     "value": 2,
+     "label": "high",
+     "probability": 0.3
+    }
+   ],
+   "confidence": 0.5
+  },
+  "default": {
+   "probabilities": {
+    "0": 0.2,
+    "1": 0.5,
+    "2": 0.3
+   },
+   "abstain": false
+  }
+ }
+}
