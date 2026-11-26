@@ -409,3 +409,32 @@ pub fn assert_fixture_consistent(cases: &[V10Case]) {
         }
     }
 }
+
+/// Inhalt der Crawl-Datei und ihres WAL (für „byte-gleich“); nur bei geschlossenen Verbindungen aufrufen.
+pub fn file_bytes(path: &Path) -> (Vec<u8>, Option<Vec<u8>>) {
+    let mut wal = path.as_os_str().to_os_string();
+    wal.push("-wal");
+    (
+        std::fs::read(path).unwrap(),
+        std::fs::read(PathBuf::from(wal))
+            .ok()
+            .filter(|w| !w.is_empty()),
+    )
+}
+
+/// „Stoppen“ eines unterbrochenen Crawls ohne Engine, wie CRAWL-125 es beschreibt: ein Commit mit `state` =
+/// `Completed`, Endgrund `stopped`, `ended_at`/`heartbeat_at` = jetzt und leerem `owner_pid`.
+pub fn stop_without_engine(path: &Path, at: Timestamp) {
+    let f = CrawlFile::open(path, OpenMode::ReadWrite).unwrap();
+    f.conn().execute_batch("BEGIN IMMEDIATE").unwrap();
+    for (k, v) in [
+        ("state", "Completed".to_string()),
+        ("end_reason", "stopped".to_string()),
+        ("ended_at", at.to_db()),
+        ("heartbeat_at", at.to_db()),
+        ("owner_pid", String::new()),
+    ] {
+        f.set_meta(k, &v).unwrap();
+    }
+    f.conn().execute_batch("COMMIT").unwrap();
+}

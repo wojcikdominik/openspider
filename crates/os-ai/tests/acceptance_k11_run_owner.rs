@@ -385,41 +385,42 @@ async fn after_the_own_crawl_ends_the_run_never_overwrites_a_foreign_active_owne
 // spec: CRAWL-125
 // acceptance: independent
 #[tokio::test(start_paused = true)]
-async fn a_run_on_an_interrupted_crawl_keeps_beating_and_releases_the_owner_at_the_end() {
-    // „KI-Lauf auf einem Crawl ohne laufenden Besitzer (pausiert, abgeschlossen, unterbrochen)“; „Unterbrochen“ ist in
-    // Dateien aus 1.0 ein gespeichertes `Running` mit veraltetem Heartbeat (Absturz, CRAWL-125). „Wer schreibt“: alle
-    // 2 s `heartbeat_at`, solange der KI-Lauf läuft; am Ende `heartbeat_at` = jetzt mit leerem `owner_pid`. Löschschutz:
-    // solange der Lauf läuft, ist der Crawl belegt.
+async fn no_run_starts_on_an_interrupted_crawl_until_it_is_stopped() {
+    // 08 AI-020, Nachtrag 26.11.2026 „Kein KI-Lauf auf einem unterbrochenen Crawl“ (Entscheidung nach Befund B1-5/B2-1
+    // dieser Abnahme): gespeichert `Running`, `owner_pid` gesetzt, Heartbeat 11 s alt → Start abgelehnt mit
+    // „unterbrochen – zuerst fortsetzen oder stoppen“, Datei byte-gleich, abgeleiteter Zustand bleibt „Unterbrochen“;
+    // nach „Stoppen“ ohne Engine gelingt der Start (dann gilt der abgeschlossene Crawl).
     let dir = TempDir::new("ai-run-interrupted");
     let (_, path) = new_crawl(dir.path(), 80, CrawlState::Running);
-    set_owner(&path, "cli", FOREIGN_PID, Some(ago(base_now(), 60_000)));
+    set_owner(&path, "cli", FOREIGN_PID, Some(ago(base_now(), 11_000)));
+    let before = file_bytes(&path);
     let clock = clock();
-    let run = RunOwner::start(&path, "app", clock.clone()).unwrap();
+    let err = RunOwner::start(&path, "app", clock.clone())
+        .expect_err("kein KI-Lauf auf einem unterbrochenen Crawl")
+        .to_string();
     assert!(
-        !run.is_passive(),
-        "ein unterbrochener Crawl hat keinen laufenden Besitzer"
+        err.contains("unterbrochen") && err.contains("zuerst fortsetzen oder stoppen"),
+        "{err}"
     );
-    let (beats, _) = sample(&clock, &path, 12_000).await;
+    sample(&clock, &path, 4_000).await;
+    assert_eq!(file_bytes(&path), before, "Datei byte-gleich");
     let listing = os_store::registry::read_listing(&path).unwrap();
+    assert_eq!(listing.effective_state(clock.now()), CrawlState::Incomplete);
+
+    stop_without_engine(&path, clock.now());
+    let run = RunOwner::start(&path, "app", clock.clone()).unwrap();
+    assert!(!run.is_passive());
+    let (beats, states) = sample(&clock, &path, 7_000).await;
     assert!(
-        listing.occupied(clock.now()),
-        "12 s nach dem Start eines noch laufenden KI-Laufs muss der Crawl belegt sein (Heartbeats: {:?})",
-        beats.iter().map(|b| b.to_db()).collect::<Vec<_>>()
-    );
-    assert!(
-        beats.len() >= 6,
+        beats.len() >= 4,
         "{:?}",
         beats.iter().map(|b| b.to_db()).collect::<Vec<_>>()
     );
+    assert!(states.iter().all(|s| s == "Completed"), "{states:?}");
     let end = clock.now();
     run.finish().unwrap();
     assert_eq!(read(&path, "owner_pid").as_deref(), Some(""));
     assert_eq!(read(&path, "heartbeat_at"), Some(end.to_db()));
-    assert_eq!(
-        read(&path, "state").as_deref(),
-        Some("Running"),
-        "state schreibt er nicht"
-    );
 }
 
 // spec: AI-020 [M4]

@@ -402,3 +402,112 @@ async fn files_from_1_0_list_and_delete_exactly_as_crawl_125_alone() {
         }
     }
 }
+
+// spec: AI-020 [M4]
+// spec: OUT-228
+// acceptance: independent
+#[tokio::test]
+async fn rename_project_assignment_and_duplicate_answer_busy_for_any_active_owner() {
+    // 08 AI-020, Nachtrag 26.11.2026, Wirkung (a) in der Fassung nach der Abnahme M4-K11: Umbenennen, Projekt zuordnen
+    // und Duplizieren eines Crawls mit aktivem Besitzer → `busy`; 11 s später gelingen sie.
+    for (i, pid) in [FOREIGN_PID.to_string(), own_pid()].into_iter().enumerate() {
+        let home = TempDir::new("app-rename");
+        let (app, clock) = app_at(home.path(), base_now());
+        let dir = crawls_dir(&app);
+        let (id, path) = new_crawl(&dir, 70 + i as u64, CrawlState::Completed);
+        set_owner(&path, "mcp-stdio", &pid, Some(clock.now()));
+        let id = id.to_string();
+        let project = app
+            .dispatch(ctx(), "projects.create", json!({"name": "Projekt K11"}))
+            .await
+            .unwrap();
+        let project_id = project["id"].as_str().unwrap().to_string();
+        let before = owner_keys(&path);
+        let name_before = get(&path, "name");
+        let actions = [
+            (
+                "crawls.rename",
+                json!({"crawlId": id, "name": "Neuer Name"}),
+            ),
+            ("crawls.move", json!({"ids": [id], "project": project_id})),
+            ("crawls.duplicate", json!({"ids": [id]})),
+        ];
+        for (name, args) in actions.clone() {
+            let err = outcome(&app, name, args)
+                .await
+                .expect_err(&format!("{name}: PID {pid}"));
+            assert_eq!(err.code, ErrorCode::Busy, "{name}: PID {pid}");
+        }
+        assert_eq!(owner_keys(&path), before);
+        assert_eq!(get(&path, "name"), name_before);
+        assert_eq!(get(&path, "project").as_deref(), Some(""));
+        assert_eq!(list(&app).await.len(), 1, "keine Kopie angelegt");
+
+        clock.advance(Duration::from_millis(11_000));
+        for (name, args) in actions {
+            outcome(&app, name, args)
+                .await
+                .unwrap_or_else(|e| panic!("{name} 11 s später: {e:?}"));
+        }
+        assert_eq!(list(&app).await.len(), 2);
+    }
+}
+
+// spec: AI-020 [M4]
+// spec: CRAWL-125
+// acceptance: independent
+#[tokio::test]
+async fn an_own_running_crawl_without_owner_pid_is_listed_like_in_1_0() {
+    // Befund B3-2, Entscheidung des Orchestrators: Rückschritt gegenüber 1.0. Gespeichertes `Running` ohne
+    // `owner_pid` (Zustand vor dem ersten Batch), geführt von der Engine dieses Prozesses: CRAWL-125 allein ergibt
+    // „laufend“, 1.0 zeigt den eigenen Crawl in der Liste als live und steuerbar (eigene Sitzung mit Engine) und nicht
+    // fortsetzbar. Der Zustand vor dem ersten Batch wird hergestellt, indem `owner_pid` geleert wird (die Engine
+    // schreibt ihn nur im ersten Batch, CRAWL-125).
+    use os_testsite::{SiteOptions, TestSite};
+    let site = TestSite::start_spec(
+        "synthetic:n=40,links=4,seed=7,delay_ms=1000",
+        SiteOptions {
+            port: 0,
+            log_requests: true,
+        },
+    )
+    .await
+    .unwrap();
+    let home = TempDir::new("app-own-running");
+    let app = App::new(AppConfig::new(home.path())).unwrap();
+    let mut cfg = os_model::CrawlConfig::default();
+    cfg.analysis.auto_at_end = false;
+    cfg.speed.threads = 1;
+    cfg.save_default(&app.config().paths.settings).unwrap();
+    app.dispatch(
+        ctx(),
+        "crawl.start",
+        json!({"source": {"kind": "spider", "url": site.url("/")}, "scope": "domain", "profile": null}),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("crawl.start: {e:?}"));
+    let window = os_app::WindowId("main".into());
+    let (id, path) = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let Some(s) = app.sessions().current(&window) {
+                if s.engine.is_some() && s.path.exists() && get(&s.path, "owner_pid").is_some() {
+                    return (s.key.0.clone(), s.path.clone());
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("Crawl läuft");
+    set(&path, "owner_pid", "");
+    let items = list(&app).await;
+    let e = entry(&items, &id);
+    assert_eq!(e["crawl"]["phase"], "running");
+    assert_eq!(e["canResume"], false);
+    assert_eq!(e["crawl"]["owner"]["live"], true);
+    assert_eq!(
+        e["crawl"]["owner"]["controllable"], true,
+        "eigener laufender Crawl ist wie in 1.0 steuerbar"
+    );
+    let _ = app.dispatch(ctx(), "crawl.stop", Value::Null).await;
+}

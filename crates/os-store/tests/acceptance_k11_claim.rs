@@ -209,34 +209,46 @@ fn after_a_crash_the_owner_stays_set_and_the_next_run_takes_over_only_after_ten_
 // spec: CRAWL-125
 // acceptance: independent
 #[test]
-fn a_claim_on_an_interrupted_crawl_keeps_the_management_state_and_further_heartbeats_are_written() {
-    // „KI-Lauf auf einem Crawl ohne laufenden Besitzer (pausiert, abgeschlossen, unterbrochen)“: Die Besitzerangaben
-    // werden eingetragen, „danach alle 2 s `heartbeat_at` …, solange der KI-Lauf läuft“, und „am Ende … leerem
-    // `owner_pid`“. „Unterbrochen“ ist in 1.0-Dateien ein gespeichertes `Running` mit veraltetem Heartbeat (Absturz).
+fn no_owner_is_claimed_on_an_interrupted_crawl_until_it_is_stopped() {
+    // 08 AI-020, Nachtrag 26.11.2026 „Kein KI-Lauf auf einem unterbrochenen Crawl“ (Entscheidung nach Befund B1-5/B2-1
+    // dieser Abnahme): „Die gemeinsame Schreibfunktion trägt auf einem solchen Crawl keinen Besitzer ein und verändert
+    // die Datei nicht.“ Kriterium: gespeichert `Running`, `owner_pid` gesetzt, Heartbeat 11 s alt → Start mit
+    // „unterbrochen – zuerst fortsetzen oder stoppen“ abgelehnt, Datei byte-gleich, Zustand bleibt „Unterbrochen“;
+    // nach „Stoppen“ ohne Engine gelingt der Start.
     let dir = TempDir::new("claim-interrupted");
     let t0 = base_now();
     let (_, path) = new_crawl(dir.path(), 70, CrawlState::Running);
-    set_owner(&path, "cli", "4321", Some(ago(t0, 60_000)));
+    set_owner(&path, "cli", "4321", Some(ago(t0, 11_000)));
+    let before = file_bytes(&path);
+    {
+        let f = open_rw(&path);
+        let err = owner::claim(f.conn(), "app", PID_A, t0)
+            .expect_err("kein Besitzer auf einem unterbrochenen Crawl")
+            .to_string();
+        assert!(
+            err.contains("unterbrochen") && err.contains("zuerst fortsetzen oder stoppen"),
+            "{err}"
+        );
+    }
+    assert_eq!(file_bytes(&path), before, "Datei byte-gleich");
     let listing = registry::read_listing(&path).unwrap();
     assert_eq!(listing.effective_state(t0), CrawlState::Incomplete);
+    assert!(!listing.occupied(t0));
+
+    stop_without_engine(&path, t0);
     let f = open_rw(&path);
     assert_eq!(
-        owner::claim(f.conn(), "app", PID_A, t0).unwrap(),
+        owner::claim(f.conn(), "app", PID_A, ago(t0, -1_000)).unwrap(),
         Claim::Claimed,
-        "ein unterbrochener Crawl hat keinen laufenden Besitzer"
+        "nach dem Stoppen gilt der abgeschlossene Crawl"
     );
-    let t1 = ago(t0, -2_000);
-    assert!(
-        owner::beat(f.conn(), PID_A, t1).unwrap(),
-        "der Heartbeat des KI-Laufs muss auch auf einem unterbrochenen Crawl geschrieben werden"
-    );
-    let end = ago(t0, -3_000);
-    assert!(owner::release(f.conn(), PID_A, end).unwrap());
+    let t1 = ago(t0, -3_000);
+    assert!(owner::beat(f.conn(), PID_A, t1).unwrap());
+    assert!(owner::release(f.conn(), PID_A, ago(t0, -4_000)).unwrap());
     drop(f);
     let after = meta_dump(&path);
-    assert_eq!(after["heartbeat_at"], end.to_db());
     assert_eq!(after["owner_pid"], "");
-    assert_eq!(after["state"], "Running", "state schreibt er nicht");
+    assert_eq!(after["state"], "Completed");
 }
 
 // spec: AI-020 [M4]

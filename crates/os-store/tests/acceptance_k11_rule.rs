@@ -447,3 +447,69 @@ fn the_deferred_link_index_is_not_built_into_the_file_of_a_foreign_active_owner(
     assert!(!has_link_index(&paths[1]));
     assert_eq!(meta_dump(&paths[1]), before);
 }
+
+// spec: AI-020 [M4]
+// spec: OUT-228
+// acceptance: independent
+#[test]
+fn rename_project_assignment_and_duplicate_are_rejected_for_any_active_owner() {
+    // 08 AI-020, Nachtrag 26.11.2026, Wirkung (a) in der Fassung nach der Abnahme M4-K11: „jede weitere
+    // Verwaltungsaktion, die 1.0 bei einem laufenden Crawl abweist (Umbenennen, Projekt zuordnen, Duplizieren)“ →
+    // `busy`. Kontrolle: 11 s später gelingen alle drei.
+    use os_model::SeededIds;
+    let now = base_now();
+    for (i, (state, pid)) in [
+        (CrawlState::Completed, FOREIGN_PID.to_string()),
+        (CrawlState::Paused, own_pid()),
+        (CrawlState::Incomplete, FOREIGN_PID.to_string()),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let dir = TempDir::new("rule-rename");
+        let (id, path) = new_crawl(dir.path(), 950 + i as u64, state);
+        set_owner(&path, "mcp-stdio", &pid, Some(now));
+        let mut m = Manager::open(dir.path()).unwrap();
+        m.create_project("p1", "Projekt 1").unwrap();
+        let label = format!("{state:?}, PID {pid}");
+        let before = meta_dump(&path);
+        let copies = TempDir::new("rule-rename-copies");
+        assert!(
+            m.rename(&id, "Neuer Name", now).is_err(),
+            "Umbenennen: {label}"
+        );
+        assert!(
+            m.move_project(&id, Some("p1"), now).is_err(),
+            "Projekt zuordnen: {label}"
+        );
+        assert!(
+            m.duplicate(
+                &id,
+                copies.path(),
+                &SeededIds::new(77),
+                &ManualClock::new(now),
+                &|_, _| true
+            )
+            .is_err(),
+            "Duplizieren: {label}"
+        );
+        assert_eq!(
+            std::fs::read_dir(copies.path()).unwrap().count(),
+            0,
+            "{label}"
+        );
+        assert_eq!(meta_dump(&path), before, "Datei unverändert: {label}");
+
+        let later = ago(now, -11_000);
+        m.rename(&id, "Neuer Name", later).unwrap();
+        m.move_project(&id, Some("p1"), later).unwrap();
+        m.duplicate(
+            &id,
+            copies.path(),
+            &SeededIds::new(77),
+            &ManualClock::new(later),
+            &|_, _| true,
+        )
+        .unwrap();
+    }
+}
