@@ -224,7 +224,7 @@ Meilensteine (OS-Festlegung, einzige Quelle der Zuordnung): **M1** (headless, ST
   - Doppelte Steuerbefehle sind Fehler, nicht idempotent: `pause_crawl` auf einem pausierten oder beendeten Crawl, `stop_crawl` auf einem beendeten.
   - `stop_crawl` gilt auch für unterbrochene Crawls.
   - `crawl_status` liefert `state`, `errors` und `progress`; `progress` mit den Feldern von `--json-progress` (CRAWL-130), solange der Server den letzten Lauf des Crawls kennt und dieser zum Zustand passt.
-  - `owner_pid` ist leer, sobald kein Prozess den Crawl führt (Pause, Stopp, Ende). Nach einem harten Abbruch lässt sich das nicht mehr schreiben; dort gilt der Heartbeat (CRAWL-125).
+  - `owner_pid` ist leer, sobald kein Prozess den Crawl führt (Pause, Stopp, Ende). Nach einem harten Abbruch lässt sich das nicht mehr schreiben; dort gilt der Heartbeat (CRAWL-125). Definition von Heartbeat, `owner_kind`/`owner_pid` und „aktuell“: CRAWL-125, Nachtrag 26.11.2026 (Klärung K4-22).
 - **Akzeptanzkriterien:**
   - [ ] Gleiches Ergebnis wie gleichwertiger CLI-Aufruf (aus OUT-285).
   - [ ] Läuft die Desktop-App, erscheint ein per MCP gestarteter Crawl dort live.
