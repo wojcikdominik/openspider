@@ -210,7 +210,13 @@ fn bundling_saves_requests_not_tokens() {
         Calibration::UNCALIBRATED,
     );
     assert_eq!(a.estimate.est_input_tokens, b.estimate.est_input_tokens);
-    assert_eq!(a.estimate.expected, b.estimate.expected);
+    // Kosten werden je Request auf µUSD gerundet; die Tokenschätzung ist gleich, die Beträge höchstens um die
+    // Rundung je Request (5 × 0,5 µUSD) verschieden.
+    let (ca, cb) = (
+        a.estimate.expected.unwrap().0,
+        b.estimate.expected.unwrap().0,
+    );
+    assert!(ca.abs_diff(cb) <= 3, "{ca} vs {cb}");
     assert_eq!((a.requests, b.requests), (1, 5));
     // Je Frage ⌈159/3,5⌉ = 46 Tokens Eingabetext + ⌈Z_q/3,5⌉ + 100.
     let expected: u64 = z.iter().map(|z| 46 + (2 * z).div_ceil(7) + 100).sum();
