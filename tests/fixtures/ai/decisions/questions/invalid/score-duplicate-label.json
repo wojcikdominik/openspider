@@ -1,0 +1,25 @@
+{
+  "id": "quality",
+  "version": "1.0.0",
+  "name": "Content Quality",
+  "type": "score",
+  "instructions": "Rate how helpful the main content is for a visitor with the apparent intent.",
+  "levels": [
+    {
+      "label": "low",
+      "description": "a"
+    },
+    {
+      "label": "low",
+      "description": "b"
+    }
+  ],
+  "subject": "page",
+  "inputs": [
+    "title",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ]
+}

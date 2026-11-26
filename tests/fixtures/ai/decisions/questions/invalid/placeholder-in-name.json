@@ -1,0 +1,21 @@
+{
+  "id": "lang-match",
+  "version": "1.0.0",
+  "name": "Language {{lang}}",
+  "type": "predicate",
+  "instructions": "The main content is written in the language {{lang}}.",
+  "subject": "page",
+  "inputs": [
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ],
+  "params": [
+    {
+      "name": "lang",
+      "type": "string",
+      "source": "html_lang"
+    }
+  ]
+}

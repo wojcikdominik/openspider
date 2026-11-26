@@ -1,0 +1,15 @@
+{
+  "id": "soft-404",
+  "version": "1.0.0",
+  "name": "Soft 404",
+  "type": "predicate",
+  "instructions": "",
+  "subject": "page",
+  "inputs": [
+    "title",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ]
+}

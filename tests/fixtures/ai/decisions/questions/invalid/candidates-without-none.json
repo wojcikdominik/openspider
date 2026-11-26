@@ -1,0 +1,37 @@
+{
+  "id": "redirect-target",
+  "version": "1.0.0",
+  "name": "Redirect Target",
+  "type": "choice",
+  "instructions": "Which candidate is the best replacement for the removed page?",
+  "choices": [
+    {
+      "value": "c1",
+      "description": "{{candidates}}"
+    },
+    {
+      "value": "c2",
+      "description": "{{candidates}}"
+    },
+    {
+      "value": "c3",
+      "description": "{{candidates}}"
+    }
+  ],
+  "subject": "page",
+  "inputs": [
+    "url",
+    "title",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ],
+  "params": [
+    {
+      "name": "candidates",
+      "type": "candidates",
+      "source": "redirect.candidates"
+    }
+  ]
+}

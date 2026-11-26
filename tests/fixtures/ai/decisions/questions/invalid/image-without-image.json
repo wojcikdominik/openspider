@@ -1,0 +1,12 @@
+{
+  "id": "alt-fits",
+  "version": "1.0.0",
+  "name": "Alt Text Fits",
+  "type": "predicate",
+  "instructions": "The alt text describes what the image shows.",
+  "subject": "image",
+  "inputs": [
+    "alt",
+    "image_context"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "type-title",
+  "version": "1.0.0",
+  "name": "Title Fits Type",
+  "type": "predicate",
+  "instructions": "The title fits the given page type.",
+  "subject": "page",
+  "inputs": [
+    "page_type",
+    "title"
+  ]
+}

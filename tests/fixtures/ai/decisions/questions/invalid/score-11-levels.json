@@ -1,0 +1,61 @@
+{
+  "id": "quality",
+  "version": "1.0.0",
+  "name": "Content Quality",
+  "type": "score",
+  "instructions": "Rate how helpful the main content is for a visitor with the apparent intent.",
+  "levels": [
+    {
+      "label": "l0",
+      "description": "d"
+    },
+    {
+      "label": "l1",
+      "description": "d"
+    },
+    {
+      "label": "l2",
+      "description": "d"
+    },
+    {
+      "label": "l3",
+      "description": "d"
+    },
+    {
+      "label": "l4",
+      "description": "d"
+    },
+    {
+      "label": "l5",
+      "description": "d"
+    },
+    {
+      "label": "l6",
+      "description": "d"
+    },
+    {
+      "label": "l7",
+      "description": "d"
+    },
+    {
+      "label": "l8",
+      "description": "d"
+    },
+    {
+      "label": "l9",
+      "description": "d"
+    },
+    {
+      "label": "l10",
+      "description": "d"
+    }
+  ],
+  "subject": "page",
+  "inputs": [
+    "title",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ]
+}
