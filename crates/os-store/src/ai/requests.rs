@@ -494,9 +494,10 @@ pub fn output_calibration_samples(
          ORDER BY id DESC LIMIT ?5",
     )?;
     let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    let rows = st.query_map(params![provider, model, task, reasoning_level, limit], |r| {
-        Ok(u64::try_from(r.get::<_, i64>(0)?).unwrap_or(0))
-    })?;
+    let rows = st.query_map(
+        params![provider, model, task, reasoning_level, limit],
+        |r| Ok(u64::try_from(r.get::<_, i64>(0)?).unwrap_or(0)),
+    )?;
     let mut samples: Vec<u64> = rows.collect::<Result<_, _>>()?;
     samples.reverse();
     Ok(samples)

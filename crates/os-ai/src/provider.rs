@@ -223,21 +223,32 @@ pub struct Response {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProviderError {
     MissingApiKey,
-    Timeout { seconds: u64 },
+    Timeout {
+        seconds: u64,
+    },
     InvalidOutput,
     MissingAnswer,
     BatchExpired,
     QuotaExceeded,
-    RateLimited { retry_after_seconds: Option<u64> },
+    RateLimited {
+        retry_after_seconds: Option<u64>,
+    },
     Overloaded,
-    Transport { message: String },
+    Transport {
+        message: String,
+    },
     Refusal,
     Policy,
-    Http { status: u16, message: String },
+    Http {
+        status: u16,
+        message: String,
+    },
     /// Abbruch an der Ausgabegrenze (AI-020, Nachtrag 24.11.2026, Q00-H1): `reason` ist der Grund des Anbieters
     /// (`max_tokens`, `max_output_tokens`, `length`) für die Protokollspalte `Error Code`. Kein Teilergebnis, kein
     /// Reparaturversuch (AI-021), keine Wiederholung, nicht im Schutzschalter (AI-017).
-    OutputLimitReached { reason: String },
+    OutputLimitReached {
+        reason: String,
+    },
 }
 impl ProviderError {
     /// Fehlerklasse „Abbruch an der Ausgabegrenze“ mit dem Grund des Anbieters (M4-K10).
@@ -291,8 +302,8 @@ impl crate::adapters::anthropic::OutputLimitReached {
     /// Fehler eines Versuchs für [`crate::limits::Limiter::run`] bzw. [`crate::schema::run_with_repair`]: nicht
     /// wiederholbar, `HTTP Status` der Antwort (200), `Error Code` = Grund, Anbieter-Request-ID der Antwort.
     pub fn output_limit_failure(&self) -> crate::limits::AttemptFailure {
-        let mut failure =
-            crate::limits::AttemptFailure::from(self.output_limit_error()).with_error_code(&self.reason);
+        let mut failure = crate::limits::AttemptFailure::from(self.output_limit_error())
+            .with_error_code(&self.reason);
         failure.http_status = Some(self.http_status);
         failure.with_request_id(self.provider_request_id.clone())
     }

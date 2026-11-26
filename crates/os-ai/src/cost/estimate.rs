@@ -438,8 +438,15 @@ pub fn estimate_requests(
             Some(rates) => {
                 let t = TokenCounts::plain(tokens_in_request, tokens_out_request);
                 let fees = FeeCounts::one_request(request.images);
-                sync = MicroUsd(sync.0.saturating_add(cost_of(&t, fees, &rates, false).cost.0));
-                batch = MicroUsd(batch.0.saturating_add(cost_of(&t, fees, &rates, true).cost.0));
+                sync = MicroUsd(
+                    sync.0
+                        .saturating_add(cost_of(&t, fees, &rates, false).cost.0),
+                );
+                batch = MicroUsd(
+                    batch
+                        .0
+                        .saturating_add(cost_of(&t, fees, &rates, true).cost.0),
+                );
             }
             None => priced = false,
         }

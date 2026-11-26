@@ -401,7 +401,9 @@ fn golden_ten_keys_are_platform_independent() {
             "{name}: eigene Bildung ≠ Fixture"
         );
         let key = match reasoning {
-            Some(level) => CacheKey::with_reasoning(input, level.parse::<ReasoningLevel>().unwrap()),
+            Some(level) => {
+                CacheKey::with_reasoning(input, level.parse::<ReasoningLevel>().unwrap())
+            }
             None => CacheKey::new(input),
         };
         assert_eq!(

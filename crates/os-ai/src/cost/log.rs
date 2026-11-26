@@ -213,7 +213,10 @@ pub fn detailed_request_record(
     details: &OutcomeDetails,
 ) -> LoggedRow {
     let (computed, local_source) = outcome_cost(outcome, rates);
-    let reported = match (&outcome.usage, details.reported_cost.and_then(|r| r.usable())) {
+    let reported = match (
+        &outcome.usage,
+        details.reported_cost.and_then(|r| r.usable()),
+    ) {
         (UsageReport::Reported(_), Some(micro)) => Some(MicroUsd(micro)),
         _ => None,
     };
