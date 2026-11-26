@@ -175,10 +175,18 @@ async fn output_limit_entries_are_never_cached() {
 // ergeben verschiedene Schlüssel (Ersatzweg mit strukturierter Ausgabe).
 #[test]
 fn key_without_level_differs_from_every_key_with_level() {
-    let input = key_input("home", Some(ExecutionPath::StructuredOutput), "suggest-title");
+    let input = key_input(
+        "home",
+        Some(ExecutionPath::StructuredOutput),
+        "suggest-title",
+    );
     let mut keys = vec![CacheKey::new(input.clone()).as_str().to_string()];
     for level in std::iter::once(ReasoningLevel::ModelDefault).chain(ReasoningLevel::EXPLICIT) {
-        keys.push(CacheKey::with_reasoning(input.clone(), level).as_str().to_string());
+        keys.push(
+            CacheKey::with_reasoning(input.clone(), level)
+                .as_str()
+                .to_string(),
+        );
     }
     let mut unique = keys.clone();
     unique.sort();

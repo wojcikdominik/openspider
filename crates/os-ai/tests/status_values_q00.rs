@@ -488,12 +488,23 @@ async fn standard_adapter_paths_give_the_output_limit_status() {
 
     let anthropic = mock.anthropic();
     let a = model("anthropic", "mock-claude", "messages", Vec::new());
-    let req = request(a, text, Some(ok_schema()), ReasoningLevel::ModelDefault, 256);
+    let req = request(
+        a,
+        text,
+        Some(ok_schema()),
+        ReasoningLevel::ModelDefault,
+        256,
+    );
     assert_eq!(
         execute(PreviewSwitch::ON, &anthropic, req.clone()).await,
         Outcome::Status(AiStatus::OutputLimitReached)
     );
-    let limit = anthropic.send(&req, None).await.unwrap().for_repair().unwrap_err();
+    let limit = anthropic
+        .send(&req, None)
+        .await
+        .unwrap()
+        .for_repair()
+        .unwrap_err();
     let failure = limit.attempt_failure();
     assert_eq!(failure.error.status(), Some(AiStatus::OutputLimitReached));
     assert_eq!(failure.error_code.as_deref(), Some("max_tokens"));
@@ -511,8 +522,16 @@ async fn standard_adapter_paths_give_the_output_limit_status() {
         execute(PreviewSwitch::ON, &router, req.clone()).await,
         Outcome::Status(AiStatus::OutputLimitReached)
     );
-    let limit = router.send(&req, None).await.unwrap().for_repair().unwrap_err();
-    assert_eq!(limit.attempt_failure().error_code.as_deref(), Some("length"));
+    let limit = router
+        .send(&req, None)
+        .await
+        .unwrap()
+        .for_repair()
+        .unwrap_err();
+    assert_eq!(
+        limit.attempt_failure().error_code.as_deref(),
+        Some("length")
+    );
     assert_eq!(mock.requests_to(CHAT).len(), 2);
 
     let llama = mock.ollama();
@@ -527,8 +546,16 @@ async fn standard_adapter_paths_give_the_output_limit_status() {
         execute(PreviewSwitch::ON, &llama, req.clone()).await,
         Outcome::Status(AiStatus::OutputLimitReached)
     );
-    let limit = llama.send(&req, None).await.unwrap().for_repair().unwrap_err();
-    assert_eq!(limit.attempt_failure().error_code.as_deref(), Some("length"));
+    let limit = llama
+        .send(&req, None)
+        .await
+        .unwrap()
+        .for_repair()
+        .unwrap_err();
+    assert_eq!(
+        limit.attempt_failure().error_code.as_deref(),
+        Some("length")
+    );
     let cost = cost_of(
         &TokenCounts::from_usage(&limit.usage),
         FeeCounts::one_request(0),
@@ -558,7 +585,14 @@ async fn standard_adapter_paths_give_the_output_limit_status() {
         panic!("erwartet Abbruch");
     };
     assert_eq!(failure.error.status, AiStatus::OutputLimitReached);
-    assert_eq!(failure.error.error_code.as_deref(), Some("max_output_tokens"));
+    assert_eq!(
+        failure.error.error_code.as_deref(),
+        Some("max_output_tokens")
+    );
     assert_eq!(failure.error.http_status, Some(200));
-    assert_eq!(mock.requests_to(RESPONSES).len(), 2, "kein Reparaturversuch");
+    assert_eq!(
+        mock.requests_to(RESPONSES).len(),
+        2,
+        "kein Reparaturversuch"
+    );
 }
