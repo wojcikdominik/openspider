@@ -1,0 +1,21 @@
+{
+  "note": "K10-Abnahme (AI-017, Nachtrag 24.11.2026, Q00-N8): Reset-Header von OpenAI als Go-Dauer. Einheiten h, m, s, ms, us/µs, ns, auch kombiniert, Dezimalstellen erlaubt; nicht lesbare Werte gelten als keine Angabe. Erwartung in Nanosekunden.",
+  "valid": [
+    {"text": "1s", "nanos": 1000000000},
+    {"text": "0s", "nanos": 0},
+    {"text": "2ms", "nanos": 2000000},
+    {"text": "120ms", "nanos": 120000000},
+    {"text": "6m0s", "nanos": 360000000000},
+    {"text": "1m30.5s", "nanos": 90500000000},
+    {"text": "1h2m3s", "nanos": 3723000000000},
+    {"text": "1.5h", "nanos": 5400000000000},
+    {"text": "0.5s", "nanos": 500000000},
+    {"text": "20s", "nanos": 20000000000},
+    {"text": "250us", "nanos": 250000},
+    {"text": "250µs", "nanos": 250000},
+    {"text": "15ns", "nanos": 15},
+    {"text": "1h0m0.001s", "nanos": 3600001000000},
+    {"text": "2m3.25s", "nanos": 123250000000}
+  ],
+  "invalid": ["soon", "", "5", "s", "ms", "1d", "1m30", "abc", "1 s", "1x", "m5"]
+}
