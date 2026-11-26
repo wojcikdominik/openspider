@@ -4,7 +4,7 @@ import { filterLabel } from "../../i18n/canon";
 import { useSession } from "../../state/session";
 import { useTabs } from "../../state/tabs";
 import { EmptyState } from "../../ui/primitives/EmptyState";
-import { useIssues, useOverview } from "../sidebar/frame/useSidebarQuery";
+import { useIssues, useOverview, useRenderedAnswer } from "../sidebar/frame/useSidebarQuery";
 import { OverviewAge } from "../sidebar/overview-age/OverviewAge";
 import { QueryFeedback } from "../sidebar/frame/QueryFeedback";
 import { useSidebarNavigation } from "../sidebar/frame/state";
@@ -22,6 +22,9 @@ export function Dashboard() {
   const scope = useSidebarNavigation(s => s.scope);
   // UI-018 (M2-N27): „Top-Probleme“ keeps its last list while a new data version is counted.
   const issues = useIssues({ ...scope, type: null, priority: null, search: null });
+  // UI-018 (B4-LAGFIX2): both answers are on screen as soon as they are in the cache; the end barrier sees them.
+  useRenderedAnswer(overview, overview.data);
+  useRenderedAnswer(issues, issues.data);
   const issueConfig = useIssueConfig();
   const navigate = (tab: string, filter: string) => {
     useTabs.getState().select(tab, filter);
