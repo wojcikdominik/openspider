@@ -55,7 +55,7 @@ impl Shared {
         }
         // Ein fehlgeschlagener Schlag (z. B. Sperre länger als das Busy-Timeout) wird nicht nachgeholt; der nächste
         // folgt im Takt (CRAWL-125: kein Nachholen).
-        if let Ok(true) = owner::beat(file.conn(), self.kind, self.pid, self.clock.now()) {
+        if let Ok(true) = owner::beat_as(file.conn(), self.kind, self.pid, self.clock.now()) {
             self.claimed.store(true, Ordering::SeqCst);
             self.beats.send_modify(|n| *n += 1);
         }
@@ -102,6 +102,8 @@ impl RunOwner {
     ///
     /// * Führt ein anderer Prozess den Crawl (laufend nach CRAWL-125 oder aktiver Besitzer mit fremder PID) →
     ///   [`StoreError::Occupied`] mit Art und PID des Besitzers; nichts geschrieben.
+    /// * Unterbrochener Crawl (gespeichertes `Running`, Heartbeat veraltet) → [`StoreError::Interrupted`]; nichts
+    ///   geschrieben (08 AI-020 [M4], „Kein KI-Lauf auf einem unterbrochenen Crawl“).
     /// * Läuft der Crawl im eigenen Prozess → passiver Wert ([`RunOwner::is_passive`]), nichts geschrieben; endet oder
     ///   pausiert der Crawl, trägt sich der Wert beim nächsten Schlag ein (nie über einen fremden aktiven Besitzer).
     /// * Sonst trägt sich der Prozess ein (ein Commit) und startet den Takt; ein weiterer KI-Lauf desselben Prozesses

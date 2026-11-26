@@ -378,3 +378,23 @@ async fn a_passive_owner_never_overwrites_a_foreign_active_owner() {
     assert_eq!(meta(&path, "heartbeat_at"), plus(t0(), 1_000));
     assert_eq!(meta(&path, "state"), "Paused");
 }
+
+/// Nacharbeit 26.11.2026 (08 AI-020 [M4], „Kein KI-Lauf auf einem unterbrochenen Crawl“): `start` auf einem
+/// unterbrochenen Crawl liefert `StoreError::Interrupted`, die Datei bleibt byte-gleich.
+// spec: AI-020 [M4]
+// spec: CRAWL-125
+#[tokio::test(start_paused = true)]
+async fn start_refuses_an_interrupted_crawl() {
+    let dir = TempDir::new("interrupted");
+    let path = crawl(&dir.0, "Running");
+    {
+        let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        file.set_meta("owner_pid", "4294967294").unwrap();
+        file.set_meta("heartbeat_at", &plus(t0(), -60_000)).unwrap();
+    }
+    let before = std::fs::read(&path).unwrap();
+    let clock = Arc::new(ManualClock::new(t0()));
+    let err = RunOwner::start(&path, "app", clock).unwrap_err();
+    assert!(matches!(err, StoreError::Interrupted), "{err:?}");
+    assert_eq!(std::fs::read(&path).unwrap(), before, "byte-gleich");
+}
