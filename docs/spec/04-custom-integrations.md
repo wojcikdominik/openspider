@@ -300,6 +300,8 @@ Summe: 154 Funktionen (P0: 28, P1: 102, P2: 24). Davon sind 6 Einträge Verweis-
   - [ ] Integrationen mit eigener Vorgabe zeigen im Reiter „Erweitert" deren Standard und Bereich ([M5] DataForSEO: Standard 10, Eingabe 31 wird abgelehnt; [M4] Ollama: Standard 1); alle anderen Integrationen zeigen Standard 5 und Bereich 1–50 (Konfigurationstest über alle Einträge aus INTEG-001). **Klarstellung 26.11.2026 (Abnahme M4-U01):** Die übrigen KI-Anbieter zeigen den Standard 4 aus 08 AI-017 (eigene Vorgabe der Integration, die nach dem Satz oben vorgeht), Bereich 1–50.
   - [ ] Isolation: Crawl von `site-10-pages` mit PSI-Mock im Szenario `500-always` dauert höchstens 10 % länger als derselbe Crawl ohne Integration; eine gleichzeitig verbundene GA4-Integration erhält ihre Daten in derselben Zeit (±10 %) wie ohne gestörte PSI.
 - **Testfixture:** `fixture-apis` mit Szenario-Schaltern `?scenario=429x2`, `?scenario=retry-after-7`, `?scenario=retry-after-date`, `?scenario=500-always`, `?scenario=slow-2s`; Zeitstempel-Log des Mock-Servers wird ausgewertet.
+- **Nachtrag 26.11.2026 (Befund B2-3 der Abnahme M4-U01, Entscheidung des Orchestrators):** Der Bereich der gleichzeitigen Anfragen gilt für jeden Schreibweg, nicht nur für den Reiter „Erweitert“: Auch `settings.set` (IPC) lehnt einen Wert außerhalb des Bereichs der Integration (Standard 1–50) mit einem Eingabefehler samt Feldangabe ab und speichert nichts.
+  - [ ] `settings.set` mit 51 bzw. 0 gleichzeitigen Anfragen für einen KI-Anbieter → Eingabefehler, Einstellung unverändert; 50 → gespeichert.
 
 ### INTEG-006 Kontingentzähler und Tageskontingente
 - **Priorität:** P1
