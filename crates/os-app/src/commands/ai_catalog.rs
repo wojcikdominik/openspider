@@ -101,7 +101,6 @@ stub_handler!(consent_grant, "ai.consentGrant");
 stub_handler!(decisions_run, "ai.decisionsRun");
 stub_handler!(questions_list, "ai.questionsList");
 stub_handler!(tester_run, "ai.testerRun");
-stub_handler!(suggest_run, "ai.suggestRun");
 stub_handler!(redirects_run, "ai.redirectsRun");
 stub_handler!(links_run, "ai.linksRun");
 stub_handler!(ask_run, "ai.askRun");
@@ -124,7 +123,8 @@ fn handler(name: &str) -> Handler {
         "ai.decisionsRun" => decisions_run,
         "ai.questionsList" => questions_list,
         "ai.testerRun" => tester_run,
-        "ai.suggestRun" => suggest_run,
+        // M4-V01: Besitzer ersetzt den Handler (Vertrag unverändert).
+        "ai.suggestRun" => super::ai_suggest::suggest_run,
         "ai.redirectsRun" => redirects_run,
         "ai.linksRun" => links_run,
         "ai.askRun" => ask_run,
