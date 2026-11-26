@@ -112,6 +112,7 @@ async fn anthropic_output_limit_status_in_log() {
             &OutcomeDetails {
                 reasoning: Some(ReasoningLevel::ModelDefault),
                 reported_cost: None,
+                estimated_output_tokens: None,
             },
         );
         let r = &row.record;
@@ -144,7 +145,7 @@ async fn anthropic_output_limit_status_in_log() {
 async fn responses_output_limit_status_and_reasoning_column() {
     let mock = Mock::start().await;
     let adapter = OpenAiResponses::new(mock.openai_http());
-    let limiter = limiter();
+    let limiter = support::limiter();
     let luna = model("openai", "gpt-6-luna", "responses", Vec::new());
     let rates = Rates::per_million("0.1", "0.5", PriceSource::Table).unwrap();
     let ctx = log_ctx("suggest-title", "openai", "gpt-6-luna", "responses");
@@ -170,6 +171,7 @@ async fn responses_output_limit_status_and_reasoning_column() {
         &OutcomeDetails {
             reasoning: Some(ReasoningLevel::Off),
             reported_cost: None,
+            estimated_output_tokens: None,
         },
     );
     assert_eq!(row.record.status, "Error: Output limit reached");
@@ -196,6 +198,7 @@ async fn responses_output_limit_status_and_reasoning_column() {
         &OutcomeDetails {
             reasoning: Some(ReasoningLevel::Low),
             reported_cost: None,
+            estimated_output_tokens: None,
         },
     );
     assert_eq!(row.details.reasoning_tokens, Some(27));
@@ -291,7 +294,7 @@ async fn ollama_output_limit_status() {
 async fn fallback_run_with_output_limit_never_trips_the_breaker() {
     let mock = Mock::start().await;
     let adapter = mock.anthropic();
-    let limiter = limiter();
+    let limiter = support::limiter();
     let a = model("anthropic", "mock-claude", "messages", Vec::new());
     let schema = ResponseSchema::new(ok_schema()).unwrap();
     let manifest: Value = serde_json::from_str(
@@ -437,7 +440,7 @@ async fn malformed_json_once_then_ok_still_repairs() {
 // weder gezählt noch die Zählung zurückgesetzt).
 #[tokio::test(start_paused = true)]
 async fn output_limit_is_neutral_between_counting_failures() {
-    let limiter = limiter();
+    let limiter = support::limiter();
     let spec = RequestSpec::new("anthropic", "m", 10);
     let fail = |error: ProviderError| {
         let limiter = &limiter;
@@ -595,4 +598,75 @@ async fn standard_adapter_paths_give_the_output_limit_status() {
         2,
         "kein Reparaturversuch"
     );
+}
+
+// spec: AI-017 [M4]
+// Nachtrag 26.11.2026: 9 endgültige Fehler, dann `Error: Output limit reached`, dann 1 endgültiger Fehler → der
+// Schutzschalter öffnet (Zählung 10); dieselbe Folge mit einem `Success` an der Stelle des Ausgabegrenzen-Falls → er
+// öffnet nicht. Refusal (als Fehler und als erhaltene Antwort) und Spend-Cap verhalten sich wie die Ausgabegrenze.
+#[tokio::test(start_paused = true)]
+async fn only_success_resets_the_breaker() {
+    let http500 = || ProviderError::Http {
+        status: 500,
+        message: "boom".into(),
+    };
+    let spec = RequestSpec::new("anthropic", "m", 10);
+    // Folge mit einem neutralen Fall an Stelle 10.
+    for neutral in [
+        ProviderError::output_limit("max_tokens"),
+        ProviderError::Refusal,
+        ProviderError::QuotaExceeded,
+    ] {
+        let limiter = support::limiter();
+        for _ in 0..9 {
+            failing(&limiter, &spec, http500()).await;
+        }
+        failing(&limiter, &spec, neutral.clone()).await;
+        assert!(!limiter.breaker_open("anthropic"), "{neutral:?}");
+        failing(&limiter, &spec, http500()).await;
+        assert!(
+            limiter.breaker_open("anthropic"),
+            "{neutral:?} zählt nicht und setzt nicht zurück"
+        );
+    }
+    // Refusal als erhaltene Antwort (`run_classified`, wie `run_provider`): ebenfalls neutral.
+    let limiter = support::limiter();
+    for _ in 0..9 {
+        failing(&limiter, &spec, http500()).await;
+    }
+    limiter
+        .run_classified(
+            &spec,
+            |_| async { Ok::<_, AttemptFailure>(true) },
+            |refusal: &bool| {
+                if *refusal {
+                    BreakerEffect::Neutral
+                } else {
+                    BreakerEffect::Reset
+                }
+            },
+        )
+        .await;
+    failing(&limiter, &spec, http500()).await;
+    assert!(limiter.breaker_open("anthropic"));
+    // Dieselbe Folge mit `Success` an der Stelle → nicht offen.
+    let limiter = support::limiter();
+    for _ in 0..9 {
+        failing(&limiter, &spec, http500()).await;
+    }
+    let ok = limiter
+        .run(&spec, |_| async { Ok::<_, AttemptFailure>(()) })
+        .await;
+    assert!(ok.result.is_ok());
+    failing(&limiter, &spec, http500()).await;
+    assert!(!limiter.breaker_open("anthropic"), "Success setzt zurück");
+}
+
+async fn failing(limiter: &os_ai::limits::Limiter, spec: &RequestSpec, error: ProviderError) {
+    limiter
+        .run(spec, |_| {
+            let error = error.clone();
+            async move { Err::<(), _>(AttemptFailure::from(error)) }
+        })
+        .await;
 }

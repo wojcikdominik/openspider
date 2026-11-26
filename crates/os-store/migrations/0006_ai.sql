@@ -55,7 +55,10 @@ CREATE TABLE ai_requests (
    ('model-default','off','minimal','low','medium','high','xhigh','max')),
  reasoning_tokens INTEGER CHECK(reasoning_tokens >= 0),
  computed_cost_microusd INTEGER CHECK(computed_cost_microusd >= 0),
- cost_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(cost_mismatch IN (0,1))
+ cost_mismatch INTEGER NOT NULL DEFAULT 0 CHECK(cost_mismatch IN (0,1)),
+ -- AI-012 (Nachtrag 26.11.2026): Ausgabeschätzung A + E ohne Korrekturfaktor (Kalibrierung Ist/Schätzung je Zeile);
+ -- intern wie estimated_input_tokens, keine Exportspalte.
+ estimated_output_tokens INTEGER CHECK(estimated_output_tokens >= 0)
 );
 CREATE INDEX ai_requests_task ON ai_requests(task, model, timestamp);
 CREATE INDEX ai_requests_run ON ai_requests(run_id);

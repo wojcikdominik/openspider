@@ -5,7 +5,7 @@
 //! `type` `Error: Invalid output` für diese Frage, unbekannte Zusatzfelder werden ignoriert. `<Q> Confidence` ist die
 //! höchste Einzelwahrscheinlichkeit; das gelieferte `confidence` bleibt roh erhalten, eine Abweichung über 0,01 wird
 //! als `confidence_mismatch` vermerkt. Ohne `usage` bleiben die Tokenfelder `null` und die Kosten kommen aus der
-//! Schätzung (`Price Source = estimate`). Abgerechnet werden nur Eingabe-Tokens ([`decisions_billing_rates`]).
+//! Schätzung (`Price Source = estimate`). Ausgabe-Tokens kosten nichts ([`decisions_billing_rates`]).
 //!
 //! Einstieg für die Decision-Engine (M4-D01): [`OpenAiDecisions::decide`] bzw.
 //! [`OpenAiDecisions::decide_with_images`]. Konto, Kontingent und Rate-Limit-Auswertung teilt der Adapter mit
@@ -159,14 +159,13 @@ pub fn estimate_input_tokens(
     )
 }
 
-/// Abrechnungssätze der Decisions API: nur Eingabe-Tokens zum Eingabepreis; keine Kosten für Ausgabe, und
-/// Cache-Lesen bzw. -Schreiben werden nicht gesondert bepreist (gelesene und geschriebene Tokens zählen als Eingabe).
-/// Langkontext-Faktor, Gebühren und Regionalzuschlag bleiben wie in der Preistabelle.
+/// Abrechnungssätze der Decisions API (AI-010, Nachtrag 25.11.2026 „Preise der Decisions API“; Korrektur M4-K10,
+/// Befund B1-1, freigegeben 26.11.2026): Ausgabe-Tokens kosten nichts; Eingabe, Cache-Lesen, Cache-Schreiben,
+/// Langkontext-Schwelle und -Faktoren, Gebühren und Regionalzuschlag gelten wie in der Preistabelle (der Eintrag
+/// `decisions` trägt die Cache-Preise und Langkontext-Faktoren des `responses`-Eintrags, kein Batch).
 pub fn decisions_billing_rates(rates: &Rates) -> Rates {
     Rates {
         output_pico: 0,
-        cache_read_pico: rates.input_pico,
-        cache_write_pico: rates.input_pico,
         ..rates.clone()
     }
 }

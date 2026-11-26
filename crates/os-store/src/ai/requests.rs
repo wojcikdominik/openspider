@@ -14,9 +14,10 @@ pub const REFUSAL_REASON_MAX_CHARS: usize = 500;
 
 /// Kanonische Spaltennamen der Ansicht „KI-Protokoll“ und des Exports „AI Request Log“ in der Reihenfolge von AI-014,
 /// mit den Spalten des Nachtrags 24.11.2026 (Q00): `Reasoning Level` nach `Endpoint`, `Reasoning Tokens` nach
-/// `Output Tokens`, `Computed Cost (USD)` nach `Cost (USD)`; `Refusal Reason` aus den Kriterien am Ende. Die
-/// Kennzeichen `over_reservation`, `confidence_mismatch` und `cost_mismatch` sind keine Spalten dieser Liste.
-pub const COLUMNS: [&str; 30] = [
+/// `Output Tokens`, `Computed Cost (USD)` nach `Cost (USD)`; `Refusal Reason` (aus den Kriterien) nach `Error Code`;
+/// als letzte Spalte nach `Retries` `Flags` (Nachtrag 26.11.2026). Die interne Spalte `estimated_output_tokens`
+/// gehört nicht dazu.
+pub const COLUMNS: [&str; 31] = [
     "Timestamp",
     "Run",
     "Task",
@@ -43,11 +44,34 @@ pub const COLUMNS: [&str; 30] = [
     "Status",
     "HTTP Status",
     "Error Code",
+    "Refusal Reason",
     "Duration ms",
     "Provider Request ID",
     "Retries",
-    "Refusal Reason",
+    FLAGS_COLUMN,
 ];
+
+/// Letzte Spalte des Exports „AI Request Log“ nach `Retries` (AI-014, Nachtrag 26.11.2026): Namen der gesetzten
+/// Kennzeichen, Zellenwert aus [`flags_cell`].
+pub const FLAGS_COLUMN: &str = "Flags";
+
+/// Kennzeichen der Spalte `Flags` in der Reihenfolge von AI-014 (Nachtrag 26.11.2026).
+pub const FLAGS: [&str; 3] = ["over_reservation", "confidence_mismatch", "cost_mismatch"];
+
+/// Zellenwert `Flags` einer Protokollzeile: die Namen der gesetzten Kennzeichen in der Reihenfolge [`FLAGS`], durch
+/// `, ` getrennt; leer, wenn keines gesetzt ist.
+pub fn flags_cell(record: &RequestRecord, details: &RequestDetails) -> String {
+    [
+        record.over_reservation,
+        record.confidence_mismatch,
+        details.cost_mismatch,
+    ]
+    .into_iter()
+    .zip(FLAGS)
+    .filter_map(|(set, name)| set.then_some(name))
+    .collect::<Vec<_>>()
+    .join(", ")
+}
 
 /// Werte der Spalte `Reasoning Level` (AI-011, Nachtrag 24.11.2026, Q00); dieselben Namen erzwingt die Tabelle per CHECK.
 pub const REASONING_LEVELS: [&str; 8] = [
@@ -154,6 +178,9 @@ pub struct RequestDetails {
     /// `cost_mismatch` (AI-005): gemeldete und berechnete Kosten weichen um mehr als 1 % und 1 µUSD ab; nur bei
     /// `Price Source = reported`.
     pub cost_mismatch: bool,
+    /// Ausgabeschätzung A + E ohne Korrekturfaktor (AI-012, Nachtrag 26.11.2026), intern für die Kalibrierung; keine
+    /// Spalte des Exports. `None` z. B. bei Decisions, Cache-Treffern und Zeilen ohne Schätzung.
+    pub estimated_output_tokens: Option<u64>,
 }
 
 impl RequestDetails {
@@ -265,9 +292,10 @@ pub fn insert_with_details(
            images, token_cost_microusd, fixed_fees_microusd, regional_uplift_microusd, cost_microusd, price_source,
            batch_id, cache_hit, status, http_status, error_code, error_message, refusal_reason, duration_ms,
            provider_request_id, retries, over_reservation, confidence_mismatch, estimated_input_tokens,
-           reasoning_level, reasoning_tokens, computed_cost_microusd, cost_mismatch)
+           reasoning_level, reasoning_tokens, computed_cost_microusd, cost_mismatch,
+           estimated_output_tokens)
          VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-           ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37)",
+           ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38)",
         params![
             r.run_id,
             r.timestamp,
@@ -306,6 +334,7 @@ pub fn insert_with_details(
             opt_i64(d.reasoning_tokens, "reasoning_tokens")?,
             i64_of(computed.0, "computed_cost")?,
             d.cost_mismatch,
+            opt_i64(d.estimated_output_tokens, "estimated_output_tokens")?,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -369,6 +398,7 @@ fn read_row(row: &Row<'_>) -> rusqlite::Result<LoggedRequest> {
             reasoning_tokens: opt_u64(row, "reasoning_tokens")?,
             computed_cost: Some(computed),
             cost_mismatch: row.get("cost_mismatch")?,
+            estimated_output_tokens: opt_u64(row, "estimated_output_tokens")?,
         },
     })
 }
@@ -475,10 +505,10 @@ pub fn calibration_samples(
     Ok(samples)
 }
 
-/// Ausgabe-Tokens der letzten `limit` erfolgreichen Requests einer (Anbieter, Modell, Aufgabe, effektive Stufe),
-/// älteste zuerst – Grundlage des Ausgabe-Korrekturfaktors (AI-012, Nachtrag 24.11.2026, Q00). Es zählen nur Zeilen
-/// mit Status `Success`, gemeldeten Ausgabe-Tokens und ohne Cache-Treffer; `reasoning_level = None` sucht Zeilen ohne
-/// Stufe (z. B. Decisions).
+/// Paare (geschätzte, tatsächliche Ausgabe-Tokens) der letzten `limit` erfolgreichen Requests einer (Anbieter, Modell,
+/// Aufgabe, effektive Stufe), älteste zuerst – Grundlage des Ausgabe-Korrekturfaktors je Protokollzeile (AI-012,
+/// Nachträge 24.11. und 26.11.2026). Es zählen nur Zeilen mit Status `Success`, gespeicherter Ausgabeschätzung > 0,
+/// gemeldeten Ausgabe-Tokens und ohne Cache-Treffer; `reasoning_level = None` sucht Zeilen ohne Stufe.
 pub fn output_calibration_samples(
     conn: &Connection,
     provider: &str,
@@ -486,19 +516,24 @@ pub fn output_calibration_samples(
     task: &str,
     reasoning_level: Option<&str>,
     limit: usize,
-) -> Result<Vec<u64>, StoreError> {
+) -> Result<Vec<(u64, u64)>, StoreError> {
     let mut st = conn.prepare(
-        "SELECT output_tokens FROM ai_requests
+        "SELECT estimated_output_tokens, output_tokens FROM ai_requests
          WHERE provider = ?1 AND model = ?2 AND task = ?3 AND reasoning_level IS ?4 AND cache_hit = 0
-           AND status = 'Success' AND output_tokens IS NOT NULL
+           AND status = 'Success' AND output_tokens IS NOT NULL AND estimated_output_tokens > 0
          ORDER BY id DESC LIMIT ?5",
     )?;
     let limit = i64::try_from(limit).unwrap_or(i64::MAX);
     let rows = st.query_map(
         params![provider, model, task, reasoning_level, limit],
-        |r| Ok(u64::try_from(r.get::<_, i64>(0)?).unwrap_or(0)),
+        |r| {
+            Ok((
+                u64::try_from(r.get::<_, i64>(0)?).unwrap_or(0),
+                u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
+            ))
+        },
     )?;
-    let mut samples: Vec<u64> = rows.collect::<Result<_, _>>()?;
+    let mut samples: Vec<(u64, u64)> = rows.collect::<Result<_, _>>()?;
     samples.reverse();
     Ok(samples)
 }

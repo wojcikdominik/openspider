@@ -245,11 +245,11 @@ pub struct FinalError {
 pub enum BreakerEffect {
     /// Zählt als aufeinanderfolgender endgültiger Fehler.
     Count,
-    /// Setzt die Zählung zurück (Antwort erhalten, auch Refusal).
+    /// Setzt die Zählung zurück: nur ein Ergebnis mit Status `Success` (AI-017, Nachtrag 26.11.2026).
     Reset,
-    /// Weder noch: Kontingent-/Ausgabengrenze (beendet ohnehin alle offenen Einträge des Anbieters, AI-017), fehlender
-    /// Schlüssel und Richtlinie (kein Request), Antwortinhalt-Fehler und der Abbruch an der Ausgabegrenze (AI-020,
-    /// Nachtrag Q00-H1: zählt nicht und setzt die Zählung nicht zurück).
+    /// Weder noch („zählt nicht“, AI-017 Nachtrag 26.11.2026): Kontingent-/Ausgabengrenze (Spend-Cap-429, endgültiges
+    /// OpenRouter-402; beendet ohnehin alle offenen Einträge des Anbieters), Refusal, fehlender Schlüssel und Richtlinie
+    /// (kein Request), Antwortinhalt-Fehler und der Abbruch an der Ausgabegrenze (AI-020, Nachtrag Q00-H1).
     Neutral,
 }
 
@@ -262,9 +262,9 @@ impl BreakerEffect {
             | ProviderError::Overloaded
             | ProviderError::Timeout { .. }
             | ProviderError::Transport { .. } => Self::Count,
-            ProviderError::Refusal => Self::Reset,
-            // AI-020 (Nachtrag Q00-H1): Ursache ist die Einstellung, keine Störung des Anbieters.
-            ProviderError::OutputLimitReached { .. }
+            // AI-017 (Nachtrag 26.11.2026): Refusal und Ausgabegrenze zählen nicht und setzen nicht zurück.
+            ProviderError::Refusal
+            | ProviderError::OutputLimitReached { .. }
             | ProviderError::QuotaExceeded
             | ProviderError::MissingApiKey
             | ProviderError::Policy
@@ -795,10 +795,28 @@ impl Limiter {
     /// TPM, hält höchstens die eingestellte Zahl gleichzeitiger Anfragen je Anbieter, bricht jeden Versuch nach dem
     /// Timeout des Anbieters ab und wiederholt vorübergehende Fehler nach INTEG-005. `attempt` erhält die
     /// Versuchsnummer (1 = erster Versuch).
-    pub async fn run<T, F, Fut>(&self, spec: &RequestSpec, mut attempt: F) -> Execution<T>
+    pub async fn run<T, F, Fut>(&self, spec: &RequestSpec, attempt: F) -> Execution<T>
     where
         F: FnMut(u32) -> Fut,
         Fut: Future<Output = Result<T, AttemptFailure>>,
+    {
+        self.run_classified(spec, attempt, |_| BreakerEffect::Reset)
+            .await
+    }
+
+    /// Wie [`Limiter::run`]; `classify` bestimmt die Wirkung einer erhaltenen Antwort auf den Schutzschalter (AI-017,
+    /// Nachtrag 26.11.2026: nur `Success` setzt zurück; eine Antwort, die als Refusal oder Abbruch an der Ausgabegrenze
+    /// ankommt, ist [`BreakerEffect::Neutral`]). [`Limiter::run`] wertet jede Antwort als `Reset`.
+    pub async fn run_classified<T, F, Fut, C>(
+        &self,
+        spec: &RequestSpec,
+        mut attempt: F,
+        classify: C,
+    ) -> Execution<T>
+    where
+        F: FnMut(u32) -> Fut,
+        Fut: Future<Output = Result<T, AttemptFailure>>,
+        C: Fn(&T) -> BreakerEffect,
     {
         let provider_limits = self.config.provider(&spec.provider);
         let timeout = provider_limits.timeout;
@@ -825,7 +843,7 @@ impl Limiter {
             drop(permit);
             let failure = match result {
                 Ok(value) => {
-                    self.record_final(&spec.provider, BreakerEffect::Reset);
+                    self.record_final(&spec.provider, classify(&value));
                     return self.finish(Ok(value), number, starts, first_start, queued_since);
                 }
                 Err(failure) => failure,
@@ -873,7 +891,7 @@ impl Limiter {
     }
 
     /// [`Limiter::run`] für einen Adapter: ruft `provider.execute` je Versuch mit einer Kopie von `request` auf. Refusals
-    /// kommen als `Ok` zurück (`Response::refusal`); sie werden nicht wiederholt.
+    /// kommen als `Ok` zurück (`Response::refusal`); sie werden nicht wiederholt und sind für den Schutzschalter neutral.
     pub async fn run_provider(
         &self,
         provider: &dyn AiProvider,
@@ -885,15 +903,25 @@ impl Limiter {
             request.model.id.clone(),
             estimated_input_tokens,
         );
-        self.run(&spec, |_| {
-            let request = request.clone();
-            async move {
-                provider
-                    .execute(request)
-                    .await
-                    .map_err(AttemptFailure::from)
-            }
-        })
+        self.run_classified(
+            &spec,
+            |_| {
+                let request = request.clone();
+                async move {
+                    provider
+                        .execute(request)
+                        .await
+                        .map_err(AttemptFailure::from)
+                }
+            },
+            |response: &Response| {
+                if response.refusal {
+                    BreakerEffect::Neutral
+                } else {
+                    BreakerEffect::Reset
+                }
+            },
+        )
         .await
     }
 }

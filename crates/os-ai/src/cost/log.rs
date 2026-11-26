@@ -137,6 +137,9 @@ pub struct OutcomeDetails {
     pub reasoning: Option<ReasoningLevel>,
     /// Vom Anbieter gemeldete Ist-Kosten (OpenRouter `usage.cost`, AI-005); verwertbar nach [`ReportedCost::usable`].
     pub reported_cost: Option<ReportedCost>,
+    /// Ausgabeschätzung A + E ohne Korrekturfaktor ([`super::output::raw_output_tokens`]) für die interne Spalte
+    /// `estimated_output_tokens` (AI-012, Nachtrag 26.11.2026); `None` z. B. über die Decisions API.
+    pub estimated_output_tokens: Option<u64>,
 }
 
 /// Protokollzeile mit den Spalten des Nachtrags Q00.
@@ -240,6 +243,7 @@ pub fn detailed_request_record(
             reasoning_tokens,
             computed_cost: Some(computed.cost),
             cost_mismatch: mismatch,
+            estimated_output_tokens: details.estimated_output_tokens,
         },
     }
 }

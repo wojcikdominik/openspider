@@ -323,8 +323,9 @@ async fn k5_cost_is_input_tokens_times_input_price_only() {
 }
 
 // spec: AI-004
-// Kriterium 5 (Cache): keine Kosten für Cache-Lesen gesondert – auch bei gemeldeten cached_tokens bleibt
-// Kosten = Eingabe-Tokens × Eingabepreis.
+// Kriterium 5 (Cache): Der Nachtrag 25.11.2026 an AI-004 (Verweis auf AI-010 „Preise der Decisions API“) ersetzt
+// „keine Kosten für … Cache-Lesen“: gemeldete cached_tokens kosten den Cache-Lesepreis der Preistabelle
+// (gpt-6-luna über decisions: 0,01 USD/1M), Ausgabe bleibt 0 (angepasst M4-K10, Befund B1-1).
 #[tokio::test]
 async fn k5_cost_ignores_cache_split() {
     let server = LocalServer::start(|_| {
@@ -343,13 +344,18 @@ async fn k5_cost_ignores_cache_split() {
             &DecideOptions::default(),
         )
         .await;
+    let with_cache_price = Rates {
+        cache_read_pico: 10_000,
+        ..table_rates()
+    };
     let record = request_record(
         &ctx(),
-        &decisions_billing_rates(&table_rates()),
+        &decisions_billing_rates(&with_cache_price),
         MicroUsd(0),
         &run.requests[0].request_outcome(),
     );
-    assert_eq!(record.cost, MicroUsd(100_000));
+    // 600.000 × 0,10 + 400.000 × 0,01 je 1 Mio. = 64.000 µUSD.
+    assert_eq!(record.cost, MicroUsd(64_000));
 }
 
 // spec: AI-004
