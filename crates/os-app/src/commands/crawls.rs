@@ -86,25 +86,21 @@ pub(super) async fn admin<T: Send + 'static>(
 
 /// Wie [`admin`], aber im Hintergrund auf der Wartungsspur der Schreibwarteschlange (M2-N31): Nutzeraufträge der
 /// Hauptspur warten nicht dahinter. Nur für Arbeit an nicht geöffneten Crawl-Dateien (Aufbewahrung).
-async fn maintenance<T: Send + 'static>(
+///
+/// Reiht sofort ein; der Aufrufer hält dabei die Register-Sperre (exklusiv) bis zum Ergebnis. Das Ergebnis hängt nicht
+/// an `app`: Eine Hintergrundaufgabe wartet darauf, ohne die `App` am Leben zu halten, sodass deren Abbau den laufenden
+/// Auftrag beitritt, bevor ihr Verzeichnis verschwindet (OUT-229).
+fn maintenance<T: Send + 'static>(
     app: &App,
     f: impl FnOnce(&mut Manager) -> Result<T, CmdError> + Send + 'static,
-) -> Result<T, CmdError> {
-    let _registry = app
-        .ext::<ManagementState>()
-        .registry
-        .clone()
-        .write_owned()
-        .await;
+) -> impl std::future::Future<Output = Result<T, CmdError>> + Send + 'static {
     let root = app.config().paths.crawls.clone();
     let dir = destination(app);
-    app.write_queue()
-        .submit_maintenance(move || {
-            let mut manager = Manager::open(&root).map_err(|e| store_error(&e))?;
-            manager.add_location(&dir).map_err(|e| store_error(&e))?;
-            f(&mut manager)
-        })
-        .await
+    app.write_queue().enqueue_maintenance(move || {
+        let mut manager = Manager::open(&root).map_err(|e| store_error(&e))?;
+        manager.add_location(&dir).map_err(|e| store_error(&e))?;
+        f(&mut manager)
+    })
 }
 
 pub(super) async fn management_guard(app: &App) -> tokio::sync::OwnedMutexGuard<()> {
@@ -640,32 +636,53 @@ pub fn register(r: &mut Registry) {
 /// hinter ihr, auch nicht direkt nach dem Start. Andere Verwaltungsaufträge (Crawl-Liste, Löschen, Verschieben …)
 /// bleiben mit ihr serialisiert.
 pub async fn run_retention(app: &App) -> Result<usize, CmdError> {
-    let _guard = management_guard(app).await;
-    let settings = app.settings_snapshot().retention;
-    let days = match settings.policy {
-        RetentionPolicy::Never => None,
-        RetentionPolicy::OneWeek => Some(7),
-        RetentionPolicy::OneMonth => Some(30),
-        RetentionPolicy::ThreeMonths => Some(90),
-        RetentionPolicy::SixMonths => Some(180),
-        RetentionPolicy::OneYear => Some(365),
-        RetentionPolicy::Custom => Some(settings.custom_days),
-    };
-    let open: HashSet<CrawlId> = app
-        .sessions()
-        .all()
-        .iter()
-        .filter_map(|s| s.key.0.parse().ok())
-        .collect();
-    let now = app.config().clock.now();
-    let deletions = maintenance(app, move |m| {
-        m.retain_with(days, settings.keep_last, now, &open, |d| {
-            tracing::info!(crawl_id=%d.id,name=%d.name,age_days=d.age_days,"Crawl durch Aufbewahrung gelöscht");
-        })
+    retention_round(|| Some(app.clone()))
+        .await
+        .unwrap_or_else(|| Err(internal("run_retention", "App abgebaut")))
+}
+
+/// Eine Aufbewahrungsrunde; `app` liefert die `App` nur für die synchronen Schritte (`None`: abgebaut, keine Runde).
+///
+/// Über keinem `await` wird eine `App` gehalten: Die Hintergrundaufgaben ([`start_retention`],
+/// [`on_settings_changed`]) halten sie so nicht am Leben, und der Abbau durch ihren Besitzer wartet auf die laufende
+/// Runde der Wartungsspur, bevor er Verzeichnisse freigibt (Drop der Schreibwarteschlange, OUT-229).
+async fn retention_round(app: impl Fn() -> Option<App>) -> Option<Result<usize, CmdError>> {
+    let state = app()?.ext::<ManagementState>();
+    let _guard = state.gate.clone().lock_owned().await;
+    let _registry = state.registry.clone().write_owned().await;
+    let pending = {
+        let app = app()?;
+        let settings = app.settings_snapshot().retention;
+        if settings.policy == RetentionPolicy::Never && settings.keep_last.is_none() {
+            // Standard („Nie“, keine Höchstzahl): Die Runde könnte nichts löschen. Kein Öffnen von Register und
+            // Index im Hintergrund (sie entstehen mit der ersten Verwaltungsaktion), also auch kein Schreiber, der den
+            // Abbau der App überdauern kann (OUT-229).
+            return Some(Ok(0));
+        }
+        let days = match settings.policy {
+            RetentionPolicy::Never => None,
+            RetentionPolicy::OneWeek => Some(7),
+            RetentionPolicy::OneMonth => Some(30),
+            RetentionPolicy::ThreeMonths => Some(90),
+            RetentionPolicy::SixMonths => Some(180),
+            RetentionPolicy::OneYear => Some(365),
+            RetentionPolicy::Custom => Some(settings.custom_days),
+        };
+        let open: HashSet<CrawlId> = app
+            .sessions()
+            .all()
+            .iter()
+            .filter_map(|s| s.key.0.parse().ok())
+            .collect();
+        let now = app.config().clock.now();
+        maintenance(&app, move |m| {
+            m.retain_with(days, settings.keep_last, now, &open, |d| {
+                tracing::info!(crawl_id=%d.id,name=%d.name,age_days=d.age_days,"Crawl durch Aufbewahrung gelöscht");
+            })
             .map_err(|e| store_error(&e))
-    })
-    .await?;
-    Ok(deletions.len())
+        })
+    };
+    Some(pending.await.map(|deletions| deletions.len()))
 }
 
 /// Start sofort und anschließend mindestens einmal pro Stunde, ohne die App am Leben zu halten.
@@ -675,13 +692,13 @@ pub fn start_retention(app: &App) {
     let weak = app.downgrade();
     let task = app.handle().spawn(async move {
         loop {
-            let Some(app) = weak.upgrade() else {
-                break;
-            };
-            if let Err(e) = run_retention(&app).await {
-                tracing::warn!(error=?e,"Aufbewahrung fehlgeschlagen");
+            match retention_round(|| weak.upgrade()).await {
+                None => break,
+                Some(Err(e)) if weak.upgrade().is_some() => {
+                    tracing::warn!(error=?e,"Aufbewahrung fehlgeschlagen");
+                }
+                Some(_) => {}
             }
-            drop(app);
             tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
         }
     });
@@ -701,8 +718,8 @@ pub fn on_settings_changed(app: &App) {
     }
     let weak = app.downgrade();
     app.handle().spawn(async move {
-        if let Some(app) = weak.upgrade() {
-            if let Err(e) = run_retention(&app).await {
+        if let Some(Err(e)) = retention_round(|| weak.upgrade()).await {
+            if weak.upgrade().is_some() {
                 tracing::warn!(error=?e,"Aufbewahrung nach Einstellungsänderung fehlgeschlagen");
             }
         }

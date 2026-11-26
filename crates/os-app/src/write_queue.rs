@@ -14,6 +14,9 @@
 //! Beenden (`quit::drain`, CRAWL-126) wartet ebenfalls nur auf die Hauptspur, nicht auf eine laufende Aufbewahrungsrunde:
 //! Eine abgebrochene Runde ist absturzsicher (Löschen = Checkpoint, Datei entfernen, Indexeintrag; der Index liegt im
 //! WAL, `list()` räumt Einträge ohne Datei auf) und wird beim nächsten Start wiederholt.
+//! Abbau ([`WriteQueue::shutdown`], Drop der `App`) dagegen wartet begrenzt auf einen laufenden Wartungsauftrag und
+//! tritt dem Thread bei, damit keine Verbindung mehr in Dateien schreibt, deren Verzeichnis der Besitzer der `App`
+//! danach entfernt (SQLite blendet `-shm` per mmap ein; ein Zugriff nach dem Entfernen kann mit SIGBUS enden).
 //!
 //! Dies ist neben `pool` die einzige Datei von `os-app`, in der `rusqlite` direkt benannt werden darf.
 #![allow(clippy::disallowed_types, clippy::disallowed_methods)]
@@ -21,6 +24,7 @@
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
@@ -34,6 +38,14 @@ use crate::runtime::error::{internal, no_crawl, panic_text, store_error};
 
 /// Wartezeit auf eine gesperrte Datei, bevor ein Auftrag mit `Busy` scheitert (K-20).
 pub const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Höchste Wartezeit beim Abbau der Schreibwarteschlange auf einen laufenden Wartungsauftrag (OUT-229).
+///
+/// Ein Wartungsauftrag (Aufbewahrungsrunde) besteht aus kurzen SQLite-Schritten, von denen jeder höchstens
+/// [`BUSY_TIMEOUT`] auf eine Sperre wartet; eine gewöhnliche Runde endet weit darunter. Länger wird nicht gewartet: Eine
+/// abgebrochene Runde ist absturzsicher und wird beim nächsten Start wiederholt. Das Beenden der Desktop-App ist davon
+/// nicht betroffen: Sie endet nach `quit::drain` mit dem Prozess, ohne die `App` abzubauen.
+pub const MAINTENANCE_SHUTDOWN_WAIT: Duration = BUSY_TIMEOUT;
 
 type Registry = Arc<Mutex<HashMap<CrawlKey, PathBuf>>>;
 
@@ -118,15 +130,28 @@ type Task = Box<dyn FnOnce() + Send>;
 struct Lane {
     tx: Mutex<Option<mpsc::Sender<Task>>>,
     thread: Mutex<Option<std::thread::JoinHandle<()>>>,
+    /// Gesetzt beim Abbau: eingereihte, noch nicht begonnene Aufträge werden verworfen statt ausgeführt.
+    closed: Arc<AtomicBool>,
+    /// Wird getrennt, sobald der Thread endet (begrenztes Warten in [`Lane::shutdown`]).
+    finished: Mutex<Option<mpsc::Receiver<()>>>,
 }
 
 impl Lane {
     fn start(name: &str) -> Lane {
         let (tx, rx) = mpsc::channel::<Task>();
+        let (finished_tx, finished) = mpsc::channel::<()>();
+        let closed = Arc::new(AtomicBool::new(false));
+        let stop = Arc::clone(&closed);
         let thread = std::thread::Builder::new()
             .name(name.into())
             .spawn(move || {
+                let _finished = finished_tx;
                 while let Ok(task) = rx.recv() {
+                    if stop.load(Ordering::SeqCst) {
+                        // Verwerfen schließt den Rückkanal: der Aufrufer erhält „Auftrag verworfen“.
+                        drop(task);
+                        continue;
+                    }
                     task();
                 }
             })
@@ -134,6 +159,8 @@ impl Lane {
         Lane {
             tx: Mutex::new(Some(tx)),
             thread: Mutex::new(thread),
+            closed,
+            finished: Mutex::new(Some(finished)),
         }
     }
 
@@ -142,14 +169,33 @@ impl Lane {
         guard.as_ref().is_some_and(|tx| tx.send(task).is_ok())
     }
 
-    /// Schließt die Spur; der Thread beendet sich nach den bereits eingereihten Aufträgen.
-    fn shutdown(&self) {
+    /// Schließt die Spur: Noch nicht begonnene Aufträge werden verworfen, ein laufender Auftrag darf höchstens `wait`
+    /// lang zu Ende laufen; danach wird der Thread beigetreten. Läuft er länger, bleibt er losgelöst (eine abgebrochene
+    /// Aufbewahrungsrunde ist absturzsicher, s. Moduldoku). Aus dem Thread der Spur selbst wird nicht gewartet.
+    fn shutdown(&self, wait: Duration) {
+        self.closed.store(true, Ordering::SeqCst);
         self.tx.lock().unwrap_or_else(|p| p.into_inner()).take();
         let handle = self.thread.lock().unwrap_or_else(|p| p.into_inner()).take();
-        if let Some(h) = handle {
-            if h.thread().id() != std::thread::current().id() {
-                let _ = h.join();
-            }
+        let finished = self
+            .finished
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
+        let Some(handle) = handle else {
+            return;
+        };
+        if handle.thread().id() == std::thread::current().id() {
+            return;
+        }
+        let ended = finished
+            .is_none_or(|f| !matches!(f.recv_timeout(wait), Err(mpsc::RecvTimeoutError::Timeout)));
+        if ended {
+            let _ = handle.join();
+        } else {
+            tracing::warn!(
+                wait_ms = wait.as_millis() as u64,
+                "Wartungsauftrag läuft beim Abbau der Schreibwarteschlange noch; Thread bleibt losgelöst"
+            );
         }
     }
 }
@@ -329,8 +375,19 @@ impl WriteQueue {
         &self,
         f: impl FnOnce() -> Result<T, CmdError> + Send + 'static,
     ) -> Result<T, CmdError> {
+        self.enqueue_maintenance(f).await
+    }
+
+    /// Wie [`submit_maintenance`](Self::submit_maintenance), reiht aber sofort ein; das Ergebnis hängt nicht an der
+    /// Warteschlange. So kann eine Hintergrundaufgabe auf das Ergebnis warten, ohne die `App` am Leben zu halten: Wird
+    /// die Warteschlange währenddessen abgebaut, wartet der Abbau auf den laufenden Auftrag (höchstens
+    /// [`MAINTENANCE_SHUTDOWN_WAIT`]) und verwirft nicht begonnene ("Auftrag verworfen").
+    pub fn enqueue_maintenance<T: Send + 'static>(
+        &self,
+        f: impl FnOnce() -> Result<T, CmdError> + Send + 'static,
+    ) -> impl std::future::Future<Output = Result<T, CmdError>> + Send + 'static {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        if !self.maintenance.send(Box::new(move || {
+        let sent = self.maintenance.send(Box::new(move || {
             let result = std::panic::catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|p| {
                 Err(internal(
                     "WriteQueue::submit_maintenance",
@@ -338,14 +395,17 @@ impl WriteQueue {
                 ))
             });
             let _ = tx.send(result);
-        })) {
-            return Err(internal(
-                "WriteQueue::submit_maintenance",
-                "Warteschlange geschlossen",
-            ));
+        }));
+        async move {
+            if !sent {
+                return Err(internal(
+                    "WriteQueue::submit_maintenance",
+                    "Warteschlange geschlossen",
+                ));
+            }
+            rx.await
+                .map_err(|_| internal("WriteQueue::submit_maintenance", "Auftrag verworfen"))?
         }
-        rx.await
-            .map_err(|_| internal("WriteQueue::submit_maintenance", "Auftrag verworfen"))?
     }
 
     /// Die Closure muss jede selbst eröffnete Transaktion vor der Rückkehr committen oder zurückrollen;
@@ -407,7 +467,9 @@ impl WriteQueue {
         }
     }
 
-    /// Beendet beide Threads nach den eingereihten Aufträgen und schließt alle Verbindungen.
+    /// Beendet beide Threads und schließt alle Verbindungen: die Hauptspur nach ihren eingereihten Aufträgen, die
+    /// Wartungsspur nach dem laufenden Auftrag (höchstens [`MAINTENANCE_SHUTDOWN_WAIT`]); dort noch nicht begonnene
+    /// Aufträge werden verworfen. Läuft beim Abbau der `App` (Drop), bevor ihre Verzeichnisse verschwinden können.
     pub fn shutdown(&self) {
         let _ = self.send(Msg::Close);
         self.tx.lock().unwrap_or_else(|p| p.into_inner()).take();
@@ -417,7 +479,7 @@ impl WriteQueue {
                 let _ = h.join();
             }
         }
-        self.maintenance.shutdown();
+        self.maintenance.shutdown(MAINTENANCE_SHUTDOWN_WAIT);
     }
 }
 
