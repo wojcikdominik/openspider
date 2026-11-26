@@ -469,3 +469,96 @@ async fn output_limit_is_neutral_between_counting_failures() {
     fail(http500()).await;
     assert!(limiter.breaker_open("anthropic"));
 }
+
+// spec: AI-002 [M4]
+// spec: AI-003 [M4]
+// spec: AI-005 [M4]
+// spec: AI-006 [M4]
+// spec: AI-020 [M4]
+// Standardwege der Adapter (Umstellung freigegeben 26.11.2026): Szenario `output-limit` je Anbieter →
+// `provider::execute` liefert `Error: Output limit reached`; der Versuchsfehler (`OutputLimitReached::attempt_failure`
+// bzw. Responses `run_structured`) trägt `Error Code` = Grund des Anbieters; genau 1 Request je Eintrag; Ollama
+// Kosten 0.
+#[tokio::test]
+async fn standard_adapter_paths_give_the_output_limit_status() {
+    use os_ai::provider::{execute, Outcome};
+    use os_ai::PreviewSwitch;
+    let mock = Mock::start().await;
+    let text = "MOCK-ID:k09-long MOCK-SCENARIO:output-limit";
+
+    let anthropic = mock.anthropic();
+    let a = model("anthropic", "mock-claude", "messages", Vec::new());
+    let req = request(a, text, Some(ok_schema()), ReasoningLevel::ModelDefault, 256);
+    assert_eq!(
+        execute(PreviewSwitch::ON, &anthropic, req.clone()).await,
+        Outcome::Status(AiStatus::OutputLimitReached)
+    );
+    let limit = anthropic.send(&req, None).await.unwrap().for_repair().unwrap_err();
+    let failure = limit.attempt_failure();
+    assert_eq!(failure.error.status(), Some(AiStatus::OutputLimitReached));
+    assert_eq!(failure.error_code.as_deref(), Some("max_tokens"));
+    assert_eq!(mock.requests_to(MESSAGES).len(), 2, "1 Request je Eintrag");
+
+    let router = mock.openrouter();
+    let req = request(
+        model("openrouter", "mock/text", "chat-completions", Vec::new()),
+        text,
+        Some(ok_schema()),
+        ReasoningLevel::ModelDefault,
+        256,
+    );
+    assert_eq!(
+        execute(PreviewSwitch::ON, &router, req.clone()).await,
+        Outcome::Status(AiStatus::OutputLimitReached)
+    );
+    let limit = router.send(&req, None).await.unwrap().for_repair().unwrap_err();
+    assert_eq!(limit.attempt_failure().error_code.as_deref(), Some("length"));
+    assert_eq!(mock.requests_to(CHAT).len(), 2);
+
+    let llama = mock.ollama();
+    let req = request(
+        model("ollama", "mock-llama", ollama::ENDPOINT, Vec::new()),
+        text,
+        Some(ok_schema()),
+        ReasoningLevel::ModelDefault,
+        256,
+    );
+    assert_eq!(
+        execute(PreviewSwitch::ON, &llama, req.clone()).await,
+        Outcome::Status(AiStatus::OutputLimitReached)
+    );
+    let limit = llama.send(&req, None).await.unwrap().for_repair().unwrap_err();
+    assert_eq!(limit.attempt_failure().error_code.as_deref(), Some("length"));
+    let cost = cost_of(
+        &TokenCounts::from_usage(&limit.usage),
+        FeeCounts::one_request(0),
+        &ollama::rates(),
+        false,
+    );
+    assert_eq!(cost.cost, MicroUsd(0));
+    assert_eq!(mock.requests_to(OLLAMA_CHAT).len(), 2);
+
+    let responses = OpenAiResponses::new(mock.openai_http());
+    let req = request(
+        model("openai", "gpt-6-luna", "responses", Vec::new()),
+        text,
+        None,
+        ReasoningLevel::ModelDefault,
+        256,
+    );
+    assert_eq!(
+        execute(PreviewSwitch::ON, &responses, req.clone()).await,
+        Outcome::Status(AiStatus::OutputLimitReached)
+    );
+    let schema = ResponseSchema::new(ok_schema()).unwrap();
+    let run = responses
+        .run_structured(&limiter(), &req, &schema, RepairAttempts::default(), 10)
+        .await;
+    let StructuredOutcome::Failed(failure) = run.outcome else {
+        panic!("erwartet Abbruch");
+    };
+    assert_eq!(failure.error.status, AiStatus::OutputLimitReached);
+    assert_eq!(failure.error.error_code.as_deref(), Some("max_output_tokens"));
+    assert_eq!(failure.error.http_status, Some(200));
+    assert_eq!(mock.requests_to(RESPONSES).len(), 2, "kein Reparaturversuch");
+}

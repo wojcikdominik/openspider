@@ -194,7 +194,7 @@ async fn usage_is_mapped_to_the_common_fields() {
 // `stop_reason: "max_tokens"` bei einer Schema-Aufgabe: abgeschnittenes JSON wird nicht teilweise übernommen. Nachtrag
 // 24.11.2026 (Q00-H1) ersetzt „→ `Error: Invalid output` nach Reparaturversuch“: Abbruch an der Ausgabegrenze als eigene
 // Antwortklasse mit `Error Code = max_tokens`, kein Reparaturversuch (genau 1 Request). Den Status
-// `Error: Output limit reached` vergibt M4-K10; bis dahin der vorhandene Fehlerweg `Error: Invalid output`.
+// `Error: Output limit reached` (M4-K10, freigegeben 26.11.2026).
 #[tokio::test]
 async fn max_tokens_on_a_schema_task_is_an_output_limit_without_repair() {
     let mock = Mock::start().await;
@@ -210,11 +210,11 @@ async fn max_tokens_on_a_schema_task_is_an_output_limit_without_repair() {
     assert!(matches!(reply.raw, RawAnswer::Unparsable { .. }));
     assert_eq!(
         reply.into_response(request.response_schema.as_ref()),
-        Err(ProviderError::InvalidOutput)
+        Err(ProviderError::output_limit("max_tokens"))
     );
     assert_eq!(
         provider::execute(PreviewSwitch::ON, &adapter, request.clone()).await,
-        Outcome::Status(AiStatus::InvalidOutput)
+        Outcome::Status(AiStatus::OutputLimitReached)
     );
     let before = mock.requests_to(MESSAGES).len();
     let schema = ResponseSchema::new(contract_schema()).unwrap();
