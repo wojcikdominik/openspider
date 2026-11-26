@@ -262,3 +262,48 @@ async fn resume_and_stop_of_an_open_crawl_are_rejected_while_another_process_own
     );
     assert_eq!(file.get_meta("owner_pid").unwrap().as_deref(), Some(""));
 }
+
+/// Nacharbeit 26.11.2026: `crawl.addUrls` ohne Engine auf einem schreibend geöffneten Crawl, den danach ein anderer
+/// Prozess als aktiver Besitzer führt, wird abgewiesen wie in einer nur lesend geöffneten Sitzung (`Permission`,
+/// `err-crawl-readonly`); keine URL wird geschrieben. 11 s später gelingt das Nachreichen.
+// spec: AI-020 [M4]
+// spec: CRAWL-131
+#[tokio::test]
+async fn adding_urls_is_rejected_while_another_process_owns_the_open_crawl() {
+    let dir = tempfile::tempdir().unwrap();
+    let (app, clock) = manual_app(dir.path());
+    let path = dir.path().join("add.ospider");
+    let f = create(&path, cfg());
+    f.set_meta("state", "Paused").unwrap();
+    insert(&f, 1, 1);
+    drop(f);
+    assert!(open(&app, &path).await.owner.controllable);
+    let f = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadWrite).unwrap();
+    f.set_meta("owner_kind", "cli").unwrap();
+    f.set_meta("owner_pid", &foreign_pid()).unwrap();
+    f.set_meta(
+        "heartbeat_at",
+        &os_model::Clock::now(clock.as_ref()).to_db(),
+    )
+    .unwrap();
+    drop(f);
+    let urls = || json!({"urls":["https://fixture.test/added"]});
+    let op = call(&app, "crawl.addUrls", urls()).await;
+    let status = app.ops().wait(op["opId"].as_str().unwrap()).await.unwrap();
+    let err = status.error.expect("abgewiesen");
+    assert_eq!(err.code, os_app::ErrorCode::Permission);
+    assert_eq!(err.message_key, "err-crawl-readonly");
+    let count = |p: &Path| -> i64 {
+        os_store::CrawlFile::open(p, os_store::OpenMode::ReadOnly)
+            .unwrap()
+            .conn()
+            .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
+            .unwrap()
+    };
+    assert_eq!(count(&path), 1);
+    clock.advance(Duration::from_secs(11));
+    let op = call(&app, "crawl.addUrls", urls()).await;
+    let status = app.ops().wait(op["opId"].as_str().unwrap()).await.unwrap();
+    assert!(status.error.is_none(), "{:?}", status.error);
+    assert_eq!(count(&path), 2);
+}

@@ -63,6 +63,12 @@ fn perform<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture
         let result = if let Some(request) = request {
             request.await.map_err(engine_error)?
         } else {
+            // 08 AI-020 [M4] (Wirkung b): Führt ein anderer Prozess den Crawl inzwischen als aktiver Besitzer (z. B.
+            // KI-Lauf nach dem schreibenden Öffnen), wird wie in einer nur lesend geöffneten Sitzung abgewiesen.
+            let (summary, _, _) = crate::session::feed::snapshot(app, session.key.clone()).await?;
+            if !summary.owner.controllable {
+                return Err(CmdError::new(ErrorCode::Permission, "err-crawl-readonly"));
+            }
             let cfg = session.config.clone();
             let summary = app
                 .write_queue()
