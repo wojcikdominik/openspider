@@ -5,8 +5,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use os_ai::provider::Model;
 use os_ai::cost::PriceBasis;
+use os_ai::provider::Model;
 use os_ai::tasks::suggest::{
     Checker, Element, ElementLimits, NoStyleRules, PageInput, RuleSet, SiteIndex, SuggestOptions,
 };
@@ -292,24 +292,31 @@ mod fixture {
 mod tests {
     use super::fixture::{self, BASE};
     use super::*;
+    use os_analyze::defs::ColumnSql;
     use os_app::pool::CrawlKey;
     use os_app::runtime::sessions::SessionInfo;
     use os_app::{AppConfig, WindowId};
-    use os_analyze::defs::ColumnSql;
     use std::sync::Arc;
 
     fn ctx_of(file: &CrawlFile) -> SiteContext {
         context_from(store::site_data(file, false).unwrap())
     }
 
-    fn scope(file: &CrawlFile, cfg: &CrawlConfig, ctx: &SiteContext, element: Element, s: &Scope) -> Vec<i64> {
+    fn scope(
+        file: &CrawlFile,
+        cfg: &CrawlConfig,
+        ctx: &SiteContext,
+        element: Element,
+        s: &Scope,
+    ) -> Vec<i64> {
         scope_ids(
             ctx,
             element,
             s,
             &|tab, ids| {
-                os_analyze::views::filter_members_in(&[tab], file, cfg, ids)
-                    .map_err(|e| CmdError::invalid_input("err-view-query", "spec").with_detail(e.to_string()))
+                os_analyze::views::filter_members_in(&[tab], file, cfg, ids).map_err(|e| {
+                    CmdError::invalid_input("err-view-query", "spec").with_detail(e.to_string())
+                })
             },
             &|segment| Ok(store::segment_url_ids(file.conn(), segment).unwrap()),
         )
@@ -459,8 +466,7 @@ mod tests {
         let ctx = ctx_of(&file);
         let titles = scope(&file, &cfg, &ctx, Element::Title, &Scope::Default);
         assert_eq!(titles, vec![1, 2, 3, 4, 5, 6, 7, 8]);
-        let metas =
-            scope(&file, &cfg, &ctx, Element::MetaDescription, &Scope::Default);
+        let metas = scope(&file, &cfg, &ctx, Element::MetaDescription, &Scope::Default);
         assert_eq!(metas, vec![8, 9, 10, 11, 12]);
         // Mit geänderten Grenzwerten (Title max. 40 Zeichen) wächst der Bereich entsprechend.
         let mut strict = cfg.clone();

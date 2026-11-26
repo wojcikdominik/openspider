@@ -20,12 +20,12 @@ use os_ai::catalog::{
     TaskDefaults, TaskPlan,
 };
 use os_ai::cost::{Calibration, NoCache, PriceBasis, Rates};
-use os_analyze::views::FilterMembers;
 use os_ai::provider::{CapabilitySource, Model};
 use os_ai::tasks::suggest::{
     self as sg, estimate::SuggestEstimate, Checker, Element, ElementLimits, NoStyleRules,
     PageInput, RuleSet, SiteIndex, SuggestOptions,
 };
+use os_analyze::views::FilterMembers;
 use os_model::budget::MicroUsd;
 use os_model::CrawlConfig;
 use os_store::ai::suggestions as store;
@@ -920,4 +920,3 @@ pub fn register(r: &mut Registry) {
         );
     }
 }
-
