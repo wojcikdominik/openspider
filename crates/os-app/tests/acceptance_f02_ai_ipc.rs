@@ -197,6 +197,16 @@ async fn ai_commands_are_in_the_manifest_with_generated_types() {
     }
 }
 
+/// Von M4-U01 umgesetzte Commands des Katalogs (Plan M4 3.3: der Besitzer ersetzt den Stub).
+const U01_IMPLEMENTED: [&str; 6] = [
+    "ai.settingsGet",
+    "ai.settingsSet",
+    "ai.costEstimate",
+    "ai.costBudget",
+    "ai.consentStatus",
+    "ai.consentGrant",
+];
+
 // spec: UI-004 [M4]
 // acceptance: independent
 // M4.md 3.3: die Commands sind Stubs. Ein Stub antwortet in der Form des Command-Vertrags (M2-ui-concept 4.2) mit
@@ -219,6 +229,10 @@ async fn ai_stubs_answer_not_implemented_with_switch_off_and_on() {
         let names = ai_commands(&app);
         assert!(!names.is_empty());
         for name in &names {
+            // M4-U01: diese Commands sind umgesetzt und keine Stubs mehr (eigene Tests in `ai_cost_*.rs`).
+            if U01_IMPLEMENTED.contains(&name.as_str()) {
+                continue;
+            }
             let err = match app.dispatch(ctx(), name, json!({})).await {
                 Ok(v) => panic!("{name} (Schalter {on}) ist ein Stub und darf nicht gelingen: {v}"),
                 Err(e) => e,
