@@ -51,14 +51,18 @@ let heldEnd: CrawlStatus | null = null;
  * counts of the last running tick, which then changed once the end status was released. Both apply together.
  */
 let heldAnalysis: AnalysisStatus | null = null;
+/** Each held end gets its own release; a release of an earlier end (another crawl) must not apply a later one. */
+let endRelease = 0;
 export function registerEndBarrier(refresh: () => Promise<unknown>): () => void {
   endBarriers.add(refresh);
   return () => { endBarriers.delete(refresh); };
 }
 async function releaseEnd(apply: (crawl: CrawlStatus, analysis: AnalysisStatus | null) => void) {
+  const release = ++endRelease;
   await Promise.race([Promise.allSettled([...endBarriers].map(refresh => refresh())), new Promise(resolve => setTimeout(resolve, END_GATE_MS))]);
   // Shared-count views publish their answer in the next task (query notifications); the status follows after them.
   await new Promise(resolve => setTimeout(resolve, 0));
+  if (release !== endRelease) return;
   const crawl = heldEnd;
   const analysis = heldAnalysis;
   heldEnd = null; heldAnalysis = null;
