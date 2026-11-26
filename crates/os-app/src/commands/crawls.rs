@@ -326,6 +326,12 @@ async fn short(app: &App, args: serde_json::Value, action: &'static str) -> CmdR
         let CrawlRenameArgs { crawl_id, name } = parse_args(args)?;
         let id = ids(vec![crawl_id])?[0];
         admin(app, move |m| {
+            // 08 AI-020 [M4] (Wirkung a): ein aktiver Besitzer außerhalb von `Running` → `busy` wie Verschieben und
+            // Duplizieren; ein laufender Crawl antwortet unverändert wie 1.0 (über `guard`).
+            let l = m.get(&id).map_err(|e| store_error(&e))?;
+            if l.occupied(now) && l.effective_state(now) != CrawlState::Running {
+                return Err(CmdError::new(ErrorCode::Busy, "err-crawl-running"));
+            }
             m.rename(&id, &name, now).map_err(|e| store_error(&e))
         })
         .await?;
