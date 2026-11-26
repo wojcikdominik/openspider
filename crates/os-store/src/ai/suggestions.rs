@@ -686,6 +686,59 @@ pub fn answers(conn: &Connection, question_id: &str) -> Result<Vec<(i64, Value)>
         .collect())
 }
 
+/// URLs eines Segments (CRAWL-134), aufsteigend.
+pub fn segment_url_ids(conn: &Connection, segment_id: i64) -> Result<Vec<i64>, StoreError> {
+    let mut stmt =
+        conn.prepare("SELECT url_id FROM url_segments WHERE segment_id = ?1 ORDER BY url_id")?;
+    let ids = stmt
+        .query_map([segment_id], |r| r.get(0))?
+        .collect::<Result<Vec<i64>, _>>()?;
+    Ok(ids)
+}
+
+/// Alles, was Vorschläge, Geltungsbereich und Prüfung aus einer Crawl-Datei lesen (ein Lesezugriff im Pool).
+#[derive(Debug, Clone, Default)]
+pub struct SiteData {
+    pub pages: Vec<PageRow>,
+    pub focus: std::collections::BTreeMap<i64, String>,
+    /// Antworten der Fragen `page-type`, `search-intent`, `title-matches-content`, `meta-description-matches-content`.
+    pub answers: std::collections::BTreeMap<String, Vec<(i64, Value)>>,
+    /// Gespeicherter Quelltext je URL (nur mit `extraction.store_html`).
+    pub html: std::collections::BTreeMap<i64, crate::queries::StoredHtml>,
+}
+
+/// Fragen, deren Antworten [`SiteData`] mitliest.
+pub const CONTEXT_QUESTIONS: [&str; 4] = [
+    "page-type",
+    "search-intent",
+    "title-matches-content",
+    "meta-description-matches-content",
+];
+
+/// Liest [`SiteData`]; `with_html` lädt den gespeicherten Quelltext der Seiten.
+pub fn site_data(file: &crate::CrawlFile, with_html: bool) -> Result<SiteData, StoreError> {
+    let conn = file.conn();
+    let pages = pages(conn)?;
+    let mut answers_by_question = std::collections::BTreeMap::new();
+    for q in CONTEXT_QUESTIONS {
+        answers_by_question.insert(q.to_string(), answers(conn, q)?);
+    }
+    let mut html = std::collections::BTreeMap::new();
+    if with_html {
+        for p in &pages {
+            if let Some(h) = crate::queries::stored_html(file, os_model::UrlId(p.url_id))? {
+                html.insert(p.url_id, h);
+            }
+        }
+    }
+    Ok(SiteData {
+        focus: focus_map(conn)?,
+        pages,
+        answers: answers_by_question,
+        html,
+    })
+}
+
 /// Zeile der Exporte (AI-076) mit Adresse und aktuellem Wert.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportRecord {
