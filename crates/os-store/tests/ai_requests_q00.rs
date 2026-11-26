@@ -100,7 +100,16 @@ fn log_columns_carry_the_new_names_in_place() {
     assert_eq!(sorted.len(), COLUMNS.len());
     assert_eq!(
         REASONING_LEVELS,
-        ["model-default", "off", "minimal", "low", "medium", "high", "xhigh", "max"]
+        [
+            "model-default",
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+        ]
     );
 }
 
@@ -112,13 +121,23 @@ fn reported_rows_and_new_columns_roundtrip() {
     let dir = tempfile::tempdir().unwrap();
     let f = CrawlFile::open(&fresh(dir.path()), OpenMode::ReadWrite).unwrap();
     let c = f.conn();
-    let reported = row("suggest-title", 200, 2_000, PriceSource::Reported, "Success");
+    let reported = row(
+        "suggest-title",
+        200,
+        2_000,
+        PriceSource::Reported,
+        "Success",
+    );
     let d = RequestDetails {
         cost_mismatch: true,
         ..details(Some("low"), Some(120), Some(1_000))
     };
     insert_with_details(c, &reported, &d).unwrap();
-    insert(c, &row("suggest-title", 100, 700, PriceSource::Api, "Success")).unwrap();
+    insert(
+        c,
+        &row("suggest-title", 100, 700, PriceSource::Api, "Success"),
+    )
+    .unwrap();
     let rows = list(c, &RequestFilter::default()).unwrap();
     assert_eq!(rows[0].record, reported);
     assert_eq!(rows[0].record.price_source.as_str(), "reported");
@@ -184,7 +203,12 @@ fn output_samples_are_per_model_task_and_level() {
         ("suggest-title", 20, Some("medium"), "Success"),
         ("suggest-title", 30, Some("low"), "Success"),
         ("suggest-meta", 40, Some("medium"), "Success"),
-        ("suggest-title", 50, Some("medium"), "Error: Output limit reached"),
+        (
+            "suggest-title",
+            50,
+            Some("medium"),
+            "Error: Output limit reached",
+        ),
         ("suggest-title", 60, None, "Success"),
         ("suggest-title", 70, Some("medium"), "Success"),
     ] {

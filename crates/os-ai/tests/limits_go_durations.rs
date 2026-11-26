@@ -110,7 +110,10 @@ async fn output_token_and_image_headers_are_ignored() {
             "anthropic",
             &[
                 ("anthropic-ratelimit-output-tokens-remaining", "0"),
-                ("anthropic-ratelimit-output-tokens-reset", "2026-12-01T00:05:00Z"),
+                (
+                    "anthropic-ratelimit-output-tokens-reset",
+                    "2026-12-01T00:05:00Z"
+                ),
             ],
         )
         .await,

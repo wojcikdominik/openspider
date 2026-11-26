@@ -18,7 +18,7 @@ use os_ai::cost::{
 use os_ai::limits::AttemptFailure;
 use os_ai::provider::{resolve_reasoning_level, ProviderError, ReasoningLevel, Usage};
 use os_ai::AiStatus;
-use os_model::budget::{BudgetLimits, BudgetScope, MicroUsd, AREA_AI};
+use os_model::budget::{BudgetLedger, BudgetLimits, BudgetScope, MicroUsd, AREA_AI};
 use os_store::ai::budget::open_ledger;
 use os_store::ai::requests::{
     insert_with_details, list, total_cost, totals_by_task_and_model, RequestFilter,
@@ -111,7 +111,10 @@ async fn decisions_estimate_counts_input_per_question() {
     let q2 = question_with_chars("q2", 210);
     for (q, chars) in [(&q1, 140), (&q2, 210)] {
         assert_eq!(q.text_chars(), chars);
-        assert_eq!(question_text_chars(&serde_json::to_value(q).unwrap()), chars);
+        assert_eq!(
+            question_text_chars(&serde_json::to_value(q).unwrap()),
+            chars
+        );
     }
     assert_eq!(decisions_input_tokens(350, 0, 85, &[140, 210], g), 500);
     let rates = decisions_rates();
@@ -203,7 +206,10 @@ fn bundling_changes_requests_not_tokens() {
         .map(|s| s.to_string())
         .collect();
     let c = estimate_requests(&estimate_input(&bundled, path, &rates), &cache);
-    assert_eq!((c.requests, c.estimate.cached, c.estimate.est_input_tokens), (0, 5, 0));
+    assert_eq!(
+        (c.requests, c.estimate.cached, c.estimate.est_input_tokens),
+        (0, 5, 0)
+    );
 }
 
 // spec: AI-012 [M4]
@@ -397,7 +403,11 @@ fn schema_overhead_comes_from_provider_limits() {
         },
     ];
     let with = estimate_requests(
-        &estimate_input(&requests, prompt_path(512, ReasoningLevel::Off, overhead), &rates),
+        &estimate_input(
+            &requests,
+            prompt_path(512, ReasoningLevel::Off, overhead),
+            &rates,
+        ),
         &NoCache,
     );
     let without = estimate_requests(
@@ -499,7 +509,12 @@ async fn reported_cost_above_the_reservation_halts_the_budget() {
     let reservation = local;
     let r = ledger.reserve(scope.clone(), reservation).unwrap();
     let row = detailed_request_record(
-        &log_ctx("suggest-title", "openrouter", "mock/text", "chat-completions"),
+        &log_ctx(
+            "suggest-title",
+            "openrouter",
+            "mock/text",
+            "chat-completions",
+        ),
         &basis.actual_rates(input).unwrap(),
         reservation,
         &RequestOutcome::success(reply.usage.clone(), 0, reply.duration_ms),
@@ -536,12 +551,18 @@ async fn reported_cost_above_the_reservation_halts_the_budget() {
 async fn openrouter_long_context_and_internal_reasoning_in_cost_core() {
     let mock = Mock::start().await;
     let models = mock.openrouter().list_models().await.unwrap();
-    let find = |id: &str| -> OpenRouterModel { models.iter().find(|m| m.id == id).unwrap().clone() };
+    let find =
+        |id: &str| -> OpenRouterModel { models.iter().find(|m| m.id == id).unwrap().clone() };
     let lc = find("mock/global-a");
     let basis = PriceBasis::OpenRouter(&lc);
     let row = |input: u64| {
         detailed_request_record(
-            &log_ctx("suggest-title", "openrouter", "mock/global-a", "chat-completions"),
+            &log_ctx(
+                "suggest-title",
+                "openrouter",
+                "mock/global-a",
+                "chat-completions",
+            ),
             &basis.actual_rates(input).unwrap(),
             MicroUsd(0),
             &RequestOutcome::success(usage(input, 100, None), 0, 1),
@@ -616,7 +637,12 @@ async fn openrouter_reported_cost_in_log_and_budget() {
             false,
         );
         let row = detailed_request_record(
-            &log_ctx("suggest-title", "openrouter", "mock/text", "chat-completions"),
+            &log_ctx(
+                "suggest-title",
+                "openrouter",
+                "mock/text",
+                "chat-completions",
+            ),
             &rates,
             MicroUsd(1_000_000),
             &RequestOutcome::success(reply.usage.clone(), 0, 1),
@@ -630,7 +656,10 @@ async fn openrouter_reported_cost_in_log_and_budget() {
         assert_eq!(r.cost, MicroUsd(local.cost.0 * factor), "{scenario}");
         assert_eq!(row.details.computed_cost, Some(local.cost), "{scenario}");
         assert_eq!(row.details.cost_mismatch, mismatch, "{scenario}");
-        assert_eq!(r.cost.0, r.token_cost.0 + r.fixed_fees.0 + r.regional_uplift.0);
+        assert_eq!(
+            r.cost.0,
+            r.token_cost.0 + r.fixed_fees.0 + r.regional_uplift.0
+        );
         insert_with_details(file.conn(), r, &row.details).unwrap();
         expected_spend += r.cost.0;
     }
@@ -665,7 +694,12 @@ async fn openrouter_reported_cost_in_log_and_budget() {
         .actual_rates(reply.usage.input_tokens.unwrap())
         .unwrap();
     let row = detailed_request_record(
-        &log_ctx("suggest-alt", "openrouter", "mock/vision", "chat-completions"),
+        &log_ctx(
+            "suggest-alt",
+            "openrouter",
+            "mock/vision",
+            "chat-completions",
+        ),
         &rates,
         MicroUsd(1_000_000),
         &RequestOutcome::success(reply.usage.clone(), 1, 1),
@@ -693,8 +727,14 @@ fn reported_split_and_mismatch_threshold() {
         (MicroUsd(0), MicroUsd(2_000), MicroUsd(0), MicroUsd(2_000))
     );
     let b = reported_breakdown(MicroUsd(5_000), MicroUsd(3_000));
-    assert_eq!((b.token_cost, b.fixed_fees), (MicroUsd(2_000), MicroUsd(3_000)));
-    assert!(!cost_mismatch(MicroUsd(1_010), MicroUsd(1_000)), "genau 1 %");
+    assert_eq!(
+        (b.token_cost, b.fixed_fees),
+        (MicroUsd(2_000), MicroUsd(3_000))
+    );
+    assert!(
+        !cost_mismatch(MicroUsd(1_010), MicroUsd(1_000)),
+        "genau 1 %"
+    );
     assert!(cost_mismatch(MicroUsd(1_011), MicroUsd(1_000)));
     assert!(!cost_mismatch(MicroUsd(2), MicroUsd(1)), "nur 1 µUSD");
     assert!(cost_mismatch(MicroUsd(3), MicroUsd(1)));
@@ -714,7 +754,13 @@ async fn anthropic_reasoning_tokens_column() {
     let adapter = mock.anthropic();
     let a = model("anthropic", "mock-claude", "messages", Vec::new());
     let send = |text: &'static str| {
-        let req = request(a.clone(), text, Some(ok_schema()), ReasoningLevel::Medium, 4_096);
+        let req = request(
+            a.clone(),
+            text,
+            Some(ok_schema()),
+            ReasoningLevel::Medium,
+            4_096,
+        );
         let adapter = &adapter;
         async move { adapter.send(&req, None).await.unwrap() }
     };
@@ -853,7 +899,11 @@ async fn anthropic_error_request_id_in_log() {
         .map(|r| r.record.provider_request_id)
         .collect();
     assert_eq!(ids, [Some(header_id), Some("req_body_k10".to_string())]);
-    assert_eq!(mock.requests_to(MESSAGES).len(), 1, "401 wird nicht wiederholt");
+    assert_eq!(
+        mock.requests_to(MESSAGES).len(),
+        1,
+        "401 wird nicht wiederholt"
+    );
 }
 
 fn level_strategy() -> impl Strategy<Value = Option<ReasoningLevel>> {
@@ -977,5 +1027,8 @@ async fn output_limit_row_is_stored_with_its_cost() {
     assert_eq!(back.record.output_tokens, Some(300));
     assert_eq!(back.record.http_status, Some(200));
     assert_eq!(back.record.error_code.as_deref(), Some("max_tokens"));
-    assert_eq!(back.record.cost, MicroUsd(300 * 5 + back.record.input_tokens.unwrap()));
+    assert_eq!(
+        back.record.cost,
+        MicroUsd(300 * 5 + back.record.input_tokens.unwrap())
+    );
 }

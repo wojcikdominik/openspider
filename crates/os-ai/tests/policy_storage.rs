@@ -5,8 +5,8 @@ mod support;
 
 use os_ai::adapters::openai_responses::OpenAiResponses;
 use os_ai::policy::{
-    ConsentBook, ConsentGate, DataFlowOverview, FieldSet, ProviderPolicies, TaskDataFlow,
-    COLUMNS, STORED_OPENAI_RESPONSES, STORED_UNKNOWN,
+    ConsentBook, ConsentGate, DataFlowOverview, FieldSet, ProviderPolicies, TaskDataFlow, COLUMNS,
+    STORED_OPENAI_RESPONSES, STORED_UNKNOWN,
 };
 use os_ai::provider::ReasoningLevel;
 use support::{fixture, limiter, model, ok_schema, request, Mock, RESPONSES};
@@ -63,7 +63,8 @@ fn stored_by_provider_column_and_csv() {
         assert!(cells.iter().all(|c| !c.is_empty()), "keine Zeile leer");
         let csv = overview.to_csv();
         let header = csv.lines().next().unwrap();
-        assert!(header.contains("Training Use (per provider policy),Stored by Provider,Consent Given At"));
+        assert!(header
+            .contains("Training Use (per provider policy),Stored by Provider,Consent Given At"));
         assert!(csv.contains("no (store: false)"));
     }
     let overview = DataFlowOverview::build(&flows, &test_policies(), &gate, true);
@@ -80,8 +81,10 @@ fn stored_by_provider_column_and_csv() {
 // lädt weiterhin.
 #[test]
 fn storage_field_is_validated() {
-    assert!(ProviderPolicies::load(&fixture(&["k10", "provider-policies-storage-invalid.json"]))
-        .is_err());
+    assert!(
+        ProviderPolicies::load(&fixture(&["k10", "provider-policies-storage-invalid.json"]))
+            .is_err()
+    );
     let policies = test_policies();
     let anthropic = policies.get("anthropic").unwrap();
     assert_eq!(anthropic.storage["messages"].verified_at, "2026-11-26");
@@ -111,13 +114,19 @@ async fn rows_with_store_false_send_store_false() {
     adapter
         .run_structured(
             &limiter(),
-            &request(luna.clone(), "MOCK-ID:home a", Some(ok_schema()), ReasoningLevel::Off, 1_024),
+            &request(
+                luna.clone(),
+                "MOCK-ID:home a",
+                Some(ok_schema()),
+                ReasoningLevel::Off,
+                1_024,
+            ),
             &schema,
             os_ai::schema::RepairAttempts::default(),
             10,
         )
         .await;
-    adapter
+    let _ = adapter
         .run(
             &limiter(),
             &request(luna, "MOCK-ID:home b", None, ReasoningLevel::Off, 1_024),
