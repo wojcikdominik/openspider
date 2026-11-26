@@ -84,13 +84,19 @@ fn join_err(e: tokio::task::JoinError) -> EngineError {
     EngineError::Join(e.to_string())
 }
 
-/// Ob ein Prozess den Crawl gerade abarbeitet (Zustand „Running“ mit frischem Heartbeat).
+/// Ob ein Prozess den Crawl gerade abarbeitet (Zustand „Running“ mit frischem Heartbeat) oder ein anderer Prozess
+/// ihn als aktiver Besitzer führt (08 AI-020 [M4], Wirkung b: z. B. ein KI-Lauf auf einem abgeschlossenen oder
+/// pausierten Crawl). Ein aktiver Besitzer mit der eigenen PID hält den eigenen Prozess nicht auf.
 pub(crate) fn ensure_not_running(
     file: &CrawlFile,
     deps: &EngineDeps,
 ) -> Result<CrawlState, EngineError> {
     let state = file.effective_state(&*deps.clock)?;
-    if state == CrawlState::Running {
+    if state == CrawlState::Running
+        || file
+            .occupancy(&*deps.clock)?
+            .foreign_active_owner(std::process::id())
+    {
         let pid = file.get_meta("owner_pid")?.unwrap_or_default();
         let who = if pid.is_empty() {
             String::new()
