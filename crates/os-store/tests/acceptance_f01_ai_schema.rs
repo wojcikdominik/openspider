@@ -386,7 +386,7 @@ fn ai_requests_covers_the_ai_014_log_columns() {
 // acceptance: independent
 // `Price Source` ∈ {`api`, `table`, `user`, `estimate`}; andere Werte lehnt die Datei ab.
 #[test]
-fn price_source_accepts_exactly_the_four_spec_values() {
+fn price_source_accepts_exactly_the_five_spec_values() {
     let dir = tempfile::tempdir().unwrap();
     let f = CrawlFile::open(&fresh(dir.path()), OpenMode::ReadWrite).unwrap();
     let c = f.conn();

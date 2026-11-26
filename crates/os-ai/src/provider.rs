@@ -223,19 +223,41 @@ pub struct Response {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProviderError {
     MissingApiKey,
-    Timeout { seconds: u64 },
+    Timeout {
+        seconds: u64,
+    },
     InvalidOutput,
     MissingAnswer,
     BatchExpired,
     QuotaExceeded,
-    RateLimited { retry_after_seconds: Option<u64> },
+    RateLimited {
+        retry_after_seconds: Option<u64>,
+    },
     Overloaded,
-    Transport { message: String },
+    Transport {
+        message: String,
+    },
     Refusal,
     Policy,
-    Http { status: u16, message: String },
+    Http {
+        status: u16,
+        message: String,
+    },
+    /// Abbruch an der Ausgabegrenze (AI-020, Nachtrag 24.11.2026, Q00-H1): `reason` ist der Grund des Anbieters
+    /// (`max_tokens`, `max_output_tokens`, `length`) für die Protokollspalte `Error Code`. Kein Teilergebnis, kein
+    /// Reparaturversuch (AI-021), keine Wiederholung, nicht im Schutzschalter (AI-017).
+    OutputLimitReached {
+        reason: String,
+    },
 }
 impl ProviderError {
+    /// Fehlerklasse „Abbruch an der Ausgabegrenze“ mit dem Grund des Anbieters (M4-K10).
+    pub fn output_limit(reason: impl Into<String>) -> Self {
+        Self::OutputLimitReached {
+            reason: reason.into(),
+        }
+    }
+
     /// Transport errors without an HTTP response map to `Error: Connection failed` (AI-020, K4-15); no HTTP code is
     /// invented. Retrying them and the `transport/<art>` log code belong to [`crate::limits`].
     pub fn status(&self) -> Option<AiStatus> {
@@ -262,7 +284,28 @@ impl ProviderError {
                 message: "Overloaded".into(),
             },
             Self::Transport { .. } => AiStatus::ConnectionFailed,
+            Self::OutputLimitReached { .. } => AiStatus::OutputLimitReached,
         })
+    }
+}
+
+/// Abbildung des Ausgabegrenzen-Abbruchs aus M4-K09 ([`crate::adapters::anthropic::OutputLimitReached`], gemeinsam für
+/// Anthropic, OpenRouter und Ollama) auf `Error: Output limit reached` (M4-K10, AI-020 Nachtrag). Die älteren
+/// Methoden `provider_error`/`attempt_failure` des Adapters bilden bis zur Umstellung der Adapterdateien noch auf
+/// `Error: Invalid output` ab (Bericht M4-K10, Tabelle fremder Dateien).
+impl crate::adapters::anthropic::OutputLimitReached {
+    /// Fehlerklasse `Error: Output limit reached` mit dem Grund des Anbieters.
+    pub fn output_limit_error(&self) -> ProviderError {
+        ProviderError::output_limit(self.reason.clone())
+    }
+
+    /// Fehler eines Versuchs für [`crate::limits::Limiter::run`] bzw. [`crate::schema::run_with_repair`]: nicht
+    /// wiederholbar, `HTTP Status` der Antwort (200), `Error Code` = Grund, Anbieter-Request-ID der Antwort.
+    pub fn output_limit_failure(&self) -> crate::limits::AttemptFailure {
+        let mut failure = crate::limits::AttemptFailure::from(self.output_limit_error())
+            .with_error_code(&self.reason);
+        failure.http_status = Some(self.http_status);
+        failure.with_request_id(self.provider_request_id.clone())
     }
 }
 pub type ProviderFuture<'a, T> =

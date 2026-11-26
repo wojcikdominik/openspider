@@ -16,7 +16,7 @@ use os_ai::cache::{
     canonical_json, input_hash, CacheKey, CacheKeyInput, CacheOptions, CachedRun, ExecutionPath,
     Lookup, ResultCache, KEY_FORMAT_VERSION,
 };
-use os_ai::provider::Input;
+use os_ai::provider::{Input, ReasoningLevel};
 use os_ai::AiStatus;
 use os_model::time::{IdSource, SeededIds};
 use os_model::{CrawlConfig, CrawlMode, Timestamp};
@@ -131,7 +131,16 @@ fn my_string(s: &str) -> String {
 /// Die Feldnamen sind eine Implementierungsfestlegung (Spec-Lücke, siehe Bericht): öffentliche Felder von
 /// `CacheKeyInput` plus `v` = `KEY_FORMAT_VERSION`.
 fn my_key(input: &CacheKeyInput) -> String {
+    my_key_with(input, None)
+}
+
+/// Wie [`my_key`], mit effektiver Reasoning-Stufe (AI-015, Nachtrag 24.11.2026, Q00): Feld `reasoning` im Schlüssel;
+/// `None` = `null` auf Wegen ohne Stufe (nicht in der kanonischen Darstellung, Festlegung M4-K10).
+fn my_key_with(input: &CacheKeyInput, reasoning: Option<&str>) -> String {
     let mut obj = Map::new();
+    if let Some(level) = reasoning {
+        obj.insert("reasoning".into(), json!(level));
+    }
     obj.insert("v".into(), json!(KEY_FORMAT_VERSION));
     obj.insert("task".into(), json!(input.task));
     obj.insert("definition_id".into(), json!(input.definition_id));
@@ -383,10 +392,22 @@ fn golden_ten_keys_are_platform_independent() {
         let name = entry["name"].as_str().unwrap();
         let input: CacheKeyInput = serde_json::from_value(entry["input"].clone()).unwrap();
         let expected = entry["key"].as_str().unwrap();
+        // M4-K10 (AI-015, Nachtrag 24.11.2026, Q00): Golden-Datei mit Feld `reasoning` neu erzeugt.
+        let reasoning = entry["reasoning"].as_str();
         // Die Fixture selbst ist konsistent mit der eigenen Bildung.
-        assert_eq!(my_key(&input), expected, "{name}: eigene Bildung ≠ Fixture");
         assert_eq!(
-            CacheKey::new(input).as_str(),
+            my_key_with(&input, reasoning),
+            expected,
+            "{name}: eigene Bildung ≠ Fixture"
+        );
+        let key = match reasoning {
+            Some(level) => {
+                CacheKey::with_reasoning(input, level.parse::<ReasoningLevel>().unwrap())
+            }
+            None => CacheKey::new(input),
+        };
+        assert_eq!(
+            key.as_str(),
             expected,
             "{name}: Schlüssel weicht vom Golden-Wert ab"
         );

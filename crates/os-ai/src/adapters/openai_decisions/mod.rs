@@ -5,7 +5,7 @@
 //! `type` `Error: Invalid output` für diese Frage, unbekannte Zusatzfelder werden ignoriert. `<Q> Confidence` ist die
 //! höchste Einzelwahrscheinlichkeit; das gelieferte `confidence` bleibt roh erhalten, eine Abweichung über 0,01 wird
 //! als `confidence_mismatch` vermerkt. Ohne `usage` bleiben die Tokenfelder `null` und die Kosten kommen aus der
-//! Schätzung (`Price Source = estimate`). Abgerechnet werden nur Eingabe-Tokens ([`decisions_billing_rates`]).
+//! Schätzung (`Price Source = estimate`). Ausgabe-Tokens kosten nichts ([`decisions_billing_rates`]).
 //!
 //! Einstieg für die Decision-Engine (M4-D01): [`OpenAiDecisions::decide`] bzw.
 //! [`OpenAiDecisions::decide_with_images`]. Konto, Kontingent und Rate-Limit-Auswertung teilt der Adapter mit
@@ -141,30 +141,31 @@ pub fn decisions_body(model: &str, input: &DecisionInput, questions: &[Question]
     })
 }
 
-/// Geschätzte Eingabe-Tokens eines Requests (AI-012: ⌈Zeichen / 3,5⌉ + Bild-Schätzwert je Bild) über Eingabe und
-/// alle gesendeten Fragentexte.
+/// Geschätzte Eingabe-Tokens eines Requests je Frage (AI-012, Nachtrag 24.11.2026, Q00-M1): Σ über die Fragen
+/// [⌈Z_E / 3,5⌉ + b × B + ⌈Z_q / 3,5⌉ + G], G aus `provider-limits.json` (M4-K10, freigegeben 26.11.2026). Gilt für
+/// TPM-Begrenzung (AI-017) und Kosten ohne `usage` (`Price Source = estimate`).
 pub fn estimate_input_tokens(
     input: &DecisionInput,
     questions: &[Question],
     image_token_estimate: u64,
 ) -> u64 {
-    let chars = input.text_chars() + questions.iter().map(Question::text_chars).sum::<u64>();
-    tokens::estimate_input_tokens(
-        chars,
+    let question_chars: Vec<u64> = questions.iter().map(Question::text_chars).collect();
+    crate::cost::decisions_input_tokens(
+        input.text_chars(),
         u64::from(input.image_count()),
         image_token_estimate,
-        0,
+        &question_chars,
+        crate::cost::decisions::bundled_question_overhead(),
     )
 }
 
-/// Abrechnungssätze der Decisions API: nur Eingabe-Tokens zum Eingabepreis; keine Kosten für Ausgabe, und
-/// Cache-Lesen bzw. -Schreiben werden nicht gesondert bepreist (gelesene und geschriebene Tokens zählen als Eingabe).
-/// Langkontext-Faktor, Gebühren und Regionalzuschlag bleiben wie in der Preistabelle.
+/// Abrechnungssätze der Decisions API (AI-010, Nachtrag 25.11.2026 „Preise der Decisions API“; Korrektur M4-K10,
+/// Befund B1-1, freigegeben 26.11.2026): Ausgabe-Tokens kosten nichts; Eingabe, Cache-Lesen, Cache-Schreiben,
+/// Langkontext-Schwelle und -Faktoren, Gebühren und Regionalzuschlag gelten wie in der Preistabelle (der Eintrag
+/// `decisions` trägt die Cache-Preise und Langkontext-Faktoren des `responses`-Eintrags, kein Batch).
 pub fn decisions_billing_rates(rates: &Rates) -> Rates {
     Rates {
         output_pico: 0,
-        cache_read_pico: rates.input_pico,
-        cache_write_pico: rates.input_pico,
         ..rates.clone()
     }
 }

@@ -242,6 +242,7 @@ async fn ai024_k4_schwaerzen_aus_sendet_originale_und_dialog_zeigt_off_mit_hinwe
         region: None,
         fields: set,
         max_chars: None,
+        api: None,
     }];
     let gate = ConsentGate::dialog(ConsentBook::new());
     let asks = DataFlowOverview::consent_requests(

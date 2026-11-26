@@ -49,6 +49,10 @@ pub enum AiStatus {
     /// (AI-020, Nachtrag 24.11.2026, K4-15); die Ursache steht im Protokoll als `transport/<art>`.
     #[serde(rename = "Error: Connection failed")]
     ConnectionFailed,
+    /// Die Antwort endete an der Ausgabegrenze (`max_tokens`, `max_output_tokens`, `length`); kein Teilergebnis, kein
+    /// Reparaturversuch, keine Wiederholung, nicht im Schutzschalter (AI-020, Nachtrag 24.11.2026, Q00-H1).
+    #[serde(rename = "Error: Output limit reached")]
+    OutputLimitReached,
     Timeout {
         seconds: u64,
     },
@@ -70,6 +74,7 @@ impl AiStatus {
                 | Self::MissingAnswer
                 | Self::BatchExpired
                 | Self::ConnectionFailed
+                | Self::OutputLimitReached
                 | Self::HttpError { .. }
         )
     }
@@ -99,6 +104,7 @@ impl std::fmt::Display for AiStatus {
             Self::MissingAnswer => f.write_str("Error: Missing answer"),
             Self::BatchExpired => f.write_str("Error: Batch expired"),
             Self::ConnectionFailed => f.write_str("Error: Connection failed"),
+            Self::OutputLimitReached => f.write_str("Error: Output limit reached"),
             Self::Timeout { seconds } => write!(f, "Error: Timeout nach {seconds} s"),
             Self::HttpError { code, message } => write!(f, "Error: {code} {message}"),
         }

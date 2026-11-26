@@ -381,7 +381,7 @@ async fn k4_fehlende_usage_felder_ergeben_null_nicht_null_wert() {
 // ---------------------------------------------------------------------------------------------------------------
 // K5: stop_reason max_tokens bei Schema-Aufgabe → kein Teilergebnis. Nachtrag 24.11.2026 (AI-002, Q00-H1) ersetzt
 // „→ Error: Invalid output“ und K01-Auslegung 1 (Reparaturversuch): Abbruch an der Ausgabegrenze ohne Reparaturversuch,
-// `Error Code = max_tokens`. Statuswert `Error: Output limit reached` folgt mit M4-K10 (bis dahin `Error: Invalid output`).
+// `Error Code = max_tokens`, Status `Error: Output limit reached` (M4-K10, freigegeben 26.11.2026).
 
 // spec: AI-002
 // spec: AI-021
@@ -400,7 +400,7 @@ async fn k5_max_tokens_bei_schema_aufgabe_ohne_teilergebnis_und_ohne_reparatur()
         Some(ok_schema()),
     );
     let outcome = provider::execute(PreviewSwitch::ON, &adapter, req).await;
-    assert_eq!(outcome, Outcome::Status(AiStatus::InvalidOutput));
+    assert_eq!(outcome, Outcome::Status(AiStatus::OutputLimitReached));
 
     let req = request(
         claude("mock-claude"),

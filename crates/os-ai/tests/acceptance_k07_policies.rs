@@ -102,6 +102,7 @@ fn ai018_datenfluss_zeigt_trainingsangabe_mit_quelle_und_pruefdatum() {
             region: None,
             fields: Default::default(),
             max_chars: None,
+            api: None,
         }];
         let row = &DataFlowOverview::build(&flows, &policies, &gate, true).rows[0];
         let cell = &row.cells()[9];

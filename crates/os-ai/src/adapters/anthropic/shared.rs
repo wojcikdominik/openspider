@@ -97,9 +97,9 @@ impl ReportedCost {
 }
 
 /// Abbruch an der Ausgabegrenze (AI-002, AI-005, AI-006, Nachtrag Q00-H1): eigene Antwortklasse des Adapters. Kein
-/// Teilergebnis, kein Reparaturversuch (AI-021), keine Wiederholung; die gemeldeten Tokens werden verbucht. Den Status
-/// `Error: Output limit reached` vergibt M4-K10; bis dahin bildet [`OutputLimitReached::attempt_failure`] den Fall auf
-/// den vorhandenen Fehlerweg `Error: Invalid output` ab (`HTTP Status` und `Error Code` wie im Nachtrag zu AI-014).
+/// Teilergebnis, kein Reparaturversuch (AI-021), keine Wiederholung; die gemeldeten Tokens werden verbucht. Status
+/// `Error: Output limit reached` (M4-K10, freigegeben 26.11.2026), `HTTP Status` und `Error Code` wie im Nachtrag zu
+/// AI-014.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputLimitReached {
     /// Grund des Anbieters für die Protokollspalte `Error Code` (`max_tokens`, `max_output_tokens`, `length`).
@@ -115,9 +115,9 @@ pub struct OutputLimitReached {
 }
 
 impl OutputLimitReached {
-    /// Fehlerklasse bis M4-K10 (vorhandener Fehlerweg, nicht wiederholbar).
+    /// Fehlerklasse `Error: Output limit reached` (nicht wiederholbar, AI-020 Nachtrag Q00-H1).
     pub fn provider_error(&self) -> ProviderError {
-        ProviderError::InvalidOutput
+        ProviderError::output_limit(self.reason.clone())
     }
 
     /// Fehler eines Versuchs mit `HTTP Status` und `Error Code` = Grund des Anbieters.

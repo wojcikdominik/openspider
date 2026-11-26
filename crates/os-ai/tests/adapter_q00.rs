@@ -306,8 +306,8 @@ async fn anthropic_output_limit_is_its_own_class_without_repair() {
         assert!(reply.is_output_limit());
         assert_eq!(
             reply.clone().into_response(schema.as_ref()),
-            Err(ProviderError::InvalidOutput),
-            "bis M4-K10 vorhandener Fehlerweg"
+            Err(ProviderError::output_limit("max_tokens")),
+            "Error: Output limit reached (M4-K10)"
         );
         let limit = reply.for_repair().unwrap_err();
         assert_eq!(limit.reason, "max_tokens");
@@ -569,7 +569,7 @@ async fn responses_output_limit_ends_without_repair() {
         Some("max_output_tokens")
     );
     assert_eq!(failure.error.http_status, Some(200));
-    assert_eq!(failure.error.status, AiStatus::InvalidOutput, "bis M4-K10");
+    assert_eq!(failure.error.status, AiStatus::OutputLimitReached, "M4-K10");
     assert_eq!(failure.meta.http_status, Some(200));
     assert_eq!(
         failure.meta.error_code.as_deref(),
@@ -586,7 +586,7 @@ async fn responses_output_limit_ends_without_repair() {
     );
     assert_eq!(
         provider::execute(PreviewSwitch::ON, &adapter, req).await,
-        Outcome::Status(AiStatus::InvalidOutput)
+        Outcome::Status(AiStatus::OutputLimitReached)
     );
 }
 

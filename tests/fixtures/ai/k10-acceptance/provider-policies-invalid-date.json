@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "note": "K10-Abnahme Negativfall: date",
+  "providers": {
+    "anthropic": {
+      "training_use": "no",
+      "summary": "Inputs and outputs of commercial products such as the API are not used for model training by default.",
+      "source_url": "https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training",
+      "verified_at": "2026-11-24",
+      "storage": {
+        "messages": {
+          "text": "K10-TEST anthropic messages: kept up to 30 days",
+          "source_url": "https://example.test/anthropic-retention",
+          "verified_at": "26.11.2026"
+        }
+      }
+    },
+    "openai": {
+      "training_use": "no",
+      "summary": "Data sent to the API is not used for training unless the organisation opts in to data sharing.",
+      "source_url": "https://developers.openai.com/api/docs/guides/your-data",
+      "verified_at": "2026-11-24",
+      "storage": {
+        "responses": {
+          "text": "K10-TEST openai responses: stored by default",
+          "source_url": "https://example.test/openai-responses",
+          "verified_at": "2026-11-26"
+        },
+        "embeddings": {
+          "text": "K10-TEST openai embeddings: kept up to 30 days",
+          "source_url": "https://example.test/openai-embeddings",
+          "verified_at": "2026-11-26"
+        }
+      }
+    },
+    "openrouter": {
+      "training_use": "depends",
+      "summary": "OpenRouter's own use of inputs and outputs is an account setting that is off by default. For the providers a request is routed to, the page only refers to separate information; it does not state their training use.",
+      "source_url": "https://openrouter.ai/docs/guides/privacy/data-collection",
+      "verified_at": "2026-11-24",
+      "storage": {
+        "chat-completions": {
+          "text": "K10-TEST openrouter: depends on routed provider",
+          "source_url": "https://example.test/openrouter",
+          "verified_at": "2026-11-26"
+        }
+      }
+    },
+    "gemini": {
+      "training_use": "depends",
+      "summary": "Paid services: prompts and responses are not used to improve products. Unpaid services: content may be used to improve products and machine learning technologies, including human review.",
+      "source_url": "https://aistudio.google.com/docs/terms",
+      "verified_at": "2026-11-24"
+    },
+    "ollama": {
+      "training_use": "no",
+      "summary": "Local operation: Ollama itself does not see prompts or data; inputs stay on this computer or on the Ollama server set in the settings, and no provider uses them for training.",
+      "source_url": "https://docs.ollama.com/faq",
+      "verified_at": "2026-11-24"
+    }
+  }
+}

@@ -9,8 +9,9 @@ use super::{
 };
 use serde::{Deserialize, Serialize};
 
-/// CSV/table columns in the order of AI-018.
-pub const COLUMNS: [&str; 11] = [
+/// CSV/table columns in the order of AI-018; `Stored by Provider` after `Training Use (per provider policy)`
+/// (Nachtrag 24.11.2026, Q00-H2).
+pub const COLUMNS: [&str; 12] = [
     "Task",
     "Provider",
     "Model",
@@ -21,6 +22,7 @@ pub const COLUMNS: [&str; 11] = [
     "Images",
     "Redaction",
     "Training Use (per provider policy)",
+    "Stored by Provider",
     "Consent Given At",
 ];
 
@@ -38,6 +40,10 @@ pub struct TaskDataFlow {
     pub fields: FieldSet,
     /// Maximum characters of `page_text` (`None` if not limited or no page text).
     pub max_chars: Option<u32>,
+    /// API endpoint kind of the task (`messages`, `responses`, `decisions`, `chat-completions`, `embeddings`) for the
+    /// column `Stored by Provider` (AI-018, Nachtrag Q00-H2); `None` → `unknown`.
+    #[serde(default)]
+    pub api: Option<String>,
 }
 
 impl TaskDataFlow {
@@ -60,6 +66,11 @@ pub struct DataFlowRow {
     /// `Redaction` = `on`/`off` (AI-024).
     pub redaction: bool,
     pub training_use: ProviderPolicy,
+    /// `Stored by Provider` (AI-018, Nachtrag Q00-H2): `no (store: false)` for OpenAI Responses, else the `storage`
+    /// text of the policy file, else `unknown`; never empty. Older stored consent records without the field read as
+    /// empty.
+    #[serde(default)]
+    pub stored_by_provider: String,
     pub consent_given_at_ms: Option<i64>,
 }
 
@@ -76,6 +87,7 @@ impl DataFlowRow {
             images: flow.fields.has_images(),
             redaction,
             training_use: policies.training_use(&flow.provider),
+            stored_by_provider: policies.stored_by_provider(&flow.provider, flow.api.as_deref()),
             consent_given_at_ms: None,
         }
     }
@@ -99,7 +111,7 @@ impl DataFlowRow {
     }
 
     /// Cells in [`COLUMNS`] order.
-    pub fn cells(&self) -> [String; 11] {
+    pub fn cells(&self) -> [String; 12] {
         [
             self.task.clone(),
             self.provider.clone(),
@@ -111,6 +123,7 @@ impl DataFlowRow {
             if self.images { "yes" } else { "no" }.into(),
             self.redaction_cell().into(),
             self.training_use.cell(),
+            self.stored_by_provider.clone(),
             self.consent_given_at_ms
                 .map(rfc3339_utc)
                 .unwrap_or_default(),

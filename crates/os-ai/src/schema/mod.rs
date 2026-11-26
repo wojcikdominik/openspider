@@ -6,6 +6,10 @@
 //!   Standard 1, Bereich 0–2): Bei Verstoß (oder nicht parsebarer Antwort) folgt ein weiterer Request mit derselben
 //!   Eingabe plus der Validator-Meldung; scheitert auch der letzte, gilt `Error: Invalid output`.
 //! * [`normalize_text`]/[`normalize_value`] normalisieren Antworttexte vor der Übernahme.
+//! * Ein Abbruch an der Ausgabegrenze ist **kein** Schemaverstoß (AI-021, Nachtrag 24.11.2026, Q00-H1): `send` meldet
+//!   ihn als Fehler (z. B. [`crate::adapters::anthropic::OutputLimitReached::output_limit_failure`]); der Eintrag endet
+//!   ohne Reparaturversuch mit `Error: Output limit reached` ([`StructuredOutcome::final_status`]). Endet ein
+//!   Reparaturversuch an der Grenze, gilt dasselbe.
 //! * [`strict_violations`] prüft, ob ein Schema mit dem strikten Modus der Anbieter verträglich ist (jede Property in
 //!   `required`, `additionalProperties: false` auf jeder Ebene).
 use std::future::Future;
@@ -223,6 +227,53 @@ impl<E> StructuredOutcome<E> {
             Self::Refusal => Some(AiStatus::Refusal),
             Self::InvalidOutput { .. } => Some(AiStatus::InvalidOutput),
             Self::Failed(_) => None,
+        }
+    }
+}
+
+/// Endstatus des Fehlschlags eines Requests (AI-020), für [`StructuredOutcome::final_status`].
+pub trait FailureStatus {
+    /// Status nach AI-020.
+    fn failure_status(&self) -> AiStatus;
+}
+
+impl FailureStatus for crate::provider::ProviderError {
+    fn failure_status(&self) -> AiStatus {
+        self.status().unwrap_or(AiStatus::ConnectionFailed)
+    }
+}
+
+impl FailureStatus for crate::limits::AttemptFailure {
+    fn failure_status(&self) -> AiStatus {
+        self.error.failure_status()
+    }
+}
+
+impl FailureStatus for crate::limits::FinalError {
+    fn failure_status(&self) -> AiStatus {
+        self.status.clone()
+    }
+}
+
+impl FailureStatus for crate::adapters::anthropic::OutputLimitReached {
+    fn failure_status(&self) -> AiStatus {
+        AiStatus::OutputLimitReached
+    }
+}
+
+impl<T: FailureStatus + ?Sized> FailureStatus for Box<T> {
+    fn failure_status(&self) -> AiStatus {
+        (**self).failure_status()
+    }
+}
+
+impl<E: FailureStatus> StructuredOutcome<E> {
+    /// Endstatus des Eintrags einschließlich gescheiterter Requests, z. B. `Error: Output limit reached` für einen
+    /// Abbruch an der Ausgabegrenze (AI-021, Nachtrag Q00-H1).
+    pub fn final_status(&self) -> AiStatus {
+        match self {
+            Self::Failed(error) => error.failure_status(),
+            other => other.status().expect("Status ohne Fehlschlag"),
         }
     }
 }

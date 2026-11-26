@@ -118,16 +118,16 @@ impl ResponsesReply {
     }
 }
 
-/// Endgültiger Fehler eines Abbruchs an der Ausgabegrenze bis M4-K10: vorhandener Fehlerweg `Error: Invalid output`,
-/// nicht wiederholbar, `HTTP Status` der Antwort, `Error Code` = Grund (AI-014, Nachtrag).
+/// Endgültiger Fehler eines Abbruchs an der Ausgabegrenze: `Error: Output limit reached` (AI-020 Nachtrag Q00-H1,
+/// M4-K10), nicht wiederholbar, `HTTP Status` der Antwort, `Error Code` = Grund (AI-014, Nachtrag).
 pub fn output_limit_error(
     reason: &str,
     http_status: u16,
     provider_request_id: Option<String>,
 ) -> FinalError {
     FinalError {
-        error: ProviderError::InvalidOutput,
-        status: AiStatus::InvalidOutput,
+        error: ProviderError::output_limit(reason),
+        status: AiStatus::OutputLimitReached,
         http_status: Some(http_status),
         error_code: Some(reason.to_string()),
         message: format!("output limit reached ({reason})"),
@@ -330,7 +330,16 @@ impl OpenAiResponses {
             estimated_input_tokens,
         );
         let exec = limiter
-            .run(&spec, |_| self.send(request, repair, Some(limiter)))
+            .run_classified(
+                &spec,
+                |_| self.send(request, repair, Some(limiter)),
+                // AI-017 (Nachtrag 26.11.2026): nur eine Antwort mit Text setzt zurück; Refusal, Ausgabegrenze und
+                // unlesbare Antworten sind neutral.
+                |reply| match reply.output {
+                    ResponsesOutput::Text(_) => crate::limits::BreakerEffect::Reset,
+                    _ => crate::limits::BreakerEffect::Neutral,
+                },
+            )
             .await;
         let mut meta = RequestMeta::from_execution(
             &exec,
@@ -461,9 +470,12 @@ impl AiProvider for OpenAiResponses {
                     false,
                 ),
                 ResponsesOutput::Text(text) => (Some(Value::String(text.clone())), false),
-                ResponsesOutput::Incomplete(_)
-                | ResponsesOutput::OutputLimit(_)
-                | ResponsesOutput::Unparsable(_) => return Err(ProviderError::InvalidOutput),
+                ResponsesOutput::OutputLimit(reason) => {
+                    return Err(ProviderError::output_limit(reason.clone()))
+                }
+                ResponsesOutput::Incomplete(_) | ResponsesOutput::Unparsable(_) => {
+                    return Err(ProviderError::InvalidOutput)
+                }
             };
             Ok(Response {
                 content,
