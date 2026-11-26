@@ -11,7 +11,7 @@ import { Button, Checkbox, Switch, Tabs, TextField } from "../../../ui/primitive
 import { EmptyState } from "../../../ui/primitives/EmptyState";
 import { DataFlowOverview } from "../consent/Overview";
 import { parseUsd, usd } from "../cost/format";
-import { aiApi, providerName, type AdvancedRow, type SettingsView } from "./api";
+import { AI_019_ENABLED, aiApi, providerName, type AdvancedRow, type SettingsView } from "./api";
 
 function endpointOf(view: SettingsView, provider: string): ProviderEndpointDto {
   const cur = usePrefs.getState().dto?.aiApp?.providerEndpoints?.[provider];
@@ -56,7 +56,6 @@ function EuEndpoints({ view, reload }: { view: SettingsView; reload: () => void 
     <div data-ai-eu>
       <h4 className="os-settings-heading">{t("ai-settings-eu-title")}</h4>
       <p className="os-hint">{t("ai-settings-eu-hint")}</p>
-      <p className="os-hint os-ai-warning" role="note">{t("ai-policy-not-enforced")}</p>
       {view.eu.map((e) => (
         <fieldset key={e.provider} className="os-ai-fieldset" data-provider={e.provider}>
           <legend>{providerName(e.provider)}</legend>
@@ -175,7 +174,7 @@ export function AiSettingsSection() {
   const general = view ? (
     <>
       <Threshold view={view} reload={reload} />
-      <EuEndpoints view={view} reload={reload} />
+      {AI_019_ENABLED && view.policyAvailable && <EuEndpoints view={view} reload={reload} />}
       <Redaction view={view} reload={reload} />
     </>
   ) : (

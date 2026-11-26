@@ -32,6 +32,7 @@ ai-settings-accounts-later = Keys and the connection test of the AI providers fo
 ## Configuration page AI: model choice per task (AI-011)
 ai-tasks-title = Model choice per task
 ai-tasks-hint = One model with a fallback list per task type. The reasoning level applies to the task type, not to single questions.
+ai-tasks-policy-unavailable = The policy of this profile (EU processing or local only) is not supported in this version; please use "No restriction".
 ai-tasks-error = The model choice could not be checked.
 ai-col-task = Task
 ai-col-model = Model
@@ -80,7 +81,6 @@ ai-policy-eu-only = Enforce EU processing
 ai-policy-local-only = Local only
 ai-policy-unrestricted-hint = All connected providers are allowed.
 ai-policy-eu-only-hint = Only endpoints with processing in the EU; otherwise "Skipped (policy)". No silent fallback to the global endpoint.
-ai-policy-not-enforced = Preview: runs do not enforce the policy yet (EU processing and local only follow with release 1.2). Until then data goes to the chosen provider, even under "Enforce EU processing" or "Local only".
 ai-policy-local-only-hint = Local models only (Ollama); no AI request leaves this computer.
 ai-budget-title = Crawl budget for paid APIs
 ai-budget-crawl = Budget per crawl (USD)

@@ -24,7 +24,6 @@ export function PolicySetting() {
         options={POLICIES.map((p) => ({ value: p, label: t(`ai-policy-${p}`) }))}
       />
       <p className="os-hint" data-ai-policy-hint={value}>{t(`ai-policy-${value}-hint`)}</p>
-      <p className="os-hint os-ai-warning" role="note" data-ai-policy-not-enforced>{t("ai-policy-not-enforced")}</p>
     </section>
   );
 }

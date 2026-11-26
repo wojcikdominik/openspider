@@ -4,6 +4,7 @@ import type { ConfigPage } from "../../config/frame/types";
 import type { SettingsSection } from "../../settings/frame/types";
 import type { AiArea } from "../areas";
 import { AiSettingsSection } from "./AiSettingsSection";
+import { AI_019_ENABLED } from "./api";
 import { BudgetSetting, PolicySetting } from "./PolicyBudget";
 import { TaskTable } from "./TaskTable";
 
@@ -22,7 +23,7 @@ function AiConfig() {
     <section className="os-cfg-page" aria-label={t("config-page-ai")} data-page-id="ai">
       <h3 className="os-settings-heading">{t("config-page-ai")}</h3>
       <TaskTable />
-      <PolicySetting />
+      {AI_019_ENABLED && <PolicySetting />}
       <BudgetSetting />
     </section>
   );

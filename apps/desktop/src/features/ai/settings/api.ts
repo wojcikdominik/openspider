@@ -103,6 +103,13 @@ export interface AdvancedRow {
 export const PROVIDER_NAMES: Record<string, string> = { anthropic: "Anthropic", openai: "OpenAI", openrouter: "OpenRouter", ollama: "Ollama", gemini: "Gemini" };
 export const providerName = (id: string): string => PROVIDER_NAMES[id] ?? id;
 
+/**
+ * AI-019 (Richtlinie „EU-Verarbeitung erzwingen“ / „Nur lokal“, EU-Endpunkte) in diesem Release sichtbar? In 1.1 aus: der Kern
+ * setzt die Richtlinie erst mit der 1.2-Etappe von M4-K07 durch; ohne Durchsetzung keine Zusage zu Datenort oder „nur lokal“
+ * (Entscheidung des Orchestrators 26.11.2026). Gegenstück im Kern: `ai_settings::AI_019_ENABLED`. 1.2 schaltet hier ein.
+ */
+export const AI_019_ENABLED = false;
+
 export type Policy = "unrestricted" | "eu-only" | "local-only";
 
 export interface SettingsView {
@@ -111,6 +118,8 @@ export interface SettingsView {
   listsLoaded: Record<string, boolean>;
   tasks: TaskRow[];
   policy: Policy;
+  /** Richtlinie und EU-Endpunkte wählbar (Kern: `AI_019_ENABLED`). */
+  policyAvailable: boolean;
   budget: BudgetLimits;
   crawlBudget: BudgetLimits | null;
   eu: EuRow[];

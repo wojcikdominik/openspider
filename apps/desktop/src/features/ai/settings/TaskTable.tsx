@@ -208,7 +208,7 @@ export function TaskTableView({ rows, error, onSetTask, onReset }: { rows: TaskR
     <section aria-labelledby="ai-tasks-heading" data-ai-tasks data-setting-anchor="ai.tasks">
       <h4 id="ai-tasks-heading" className="os-settings-heading">{t("ai-tasks-title")}</h4>
       <p className="os-hint">{t("ai-tasks-hint")}</p>
-      {error && <p className="os-field-error" role="alert">{t("ai-tasks-error")}</p>}
+      {error && <p className="os-field-error" role="alert">{t(error === "err-ai-policy-unavailable" ? "ai-tasks-policy-unavailable" : "ai-tasks-error")}</p>}
       {rows && (
         <div className="os-ai-scroll" role="region" aria-label={t("ai-tasks-title")} tabIndex={0}>
         <table className="os-ai-table os-ai-tasks">
