@@ -166,11 +166,30 @@ test.describe("Visualisierungs-Rahmen", () => {
   test("Tooltip nach 300 ms mit genau den Zeilen Address, Status Code, Indexability, Crawl Depth, Unique Inlinks, Link Score, Metrik", async ({ page }) => {
     await openViz(page, bridge, "crawlTree");
     const p = await nodePoint(page, 2);
+    // Die Verzögerung wird in der Seite gemessen (performance.now), nicht mit der Wanduhr des Testprozesses:
+    // Zeitstempel jedes pointermove über der Zeichenfläche und des ersten Einfügens von [role=tooltip].
+    await page.evaluate(() => {
+      const probe = { moves: [] as number[], shown: null as number | null };
+      (window as unknown as { __tipProbe: typeof probe }).__tipProbe = probe;
+      if (document.querySelector('[role="tooltip"]')) throw new Error("Tooltip vor der Mausbewegung vorhanden");
+      document.querySelector(".os-viz-canvas")!.addEventListener("pointermove", () => probe.moves.push(performance.now()), { capture: true });
+      new MutationObserver((_, obs) => {
+        if (probe.shown === null && document.querySelector('[role="tooltip"]')) {
+          probe.shown = performance.now();
+          obs.disconnect();
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
     await page.mouse.move(p.x, p.y);
-    await page.waitForTimeout(150);
-    await expect(page.getByRole("tooltip")).toHaveCount(0);
     const tip = page.getByRole("tooltip");
     await expect(tip).toBeVisible();
+    const probe = await page.evaluate(() => (window as unknown as { __tipProbe: { moves: number[]; shown: number | null } }).__tipProbe);
+    // Die erste Bewegung über der Zeichenfläche ist der früheste Beginn des Verweilens; der Tooltip darf frühestens
+    // 300 ms danach im DOM stehen. Die Obergrenze setzt allein die Wartezeit von toBeVisible (UI-090 nennt keine).
+    expect(probe.moves.length).toBeGreaterThanOrEqual(1);
+    expect(probe.shown).not.toBeNull();
+    const delay = probe.shown! - probe.moves[0]!;
+    expect(delay).toBeGreaterThanOrEqual(300);
     expect(await tip.locator("dt").allTextContents()).toEqual(["Address", "Status Code", "Indexability", "Crawl Depth", "Unique Inlinks", "Link Score", "Crawl Depth"]);
     expect(await tip.locator("dd").allTextContents()).toEqual(["http://127.0.0.1:8000/page-1.html", "200", "Indexable", "1", "1", "11", "1"]);
   });
