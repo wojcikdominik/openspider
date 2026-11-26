@@ -32,6 +32,12 @@ pub struct CrawlMeta {
     pub ended_at: Option<Timestamp>,
     /// Letzter Heartbeat der Engine.
     pub heartbeat_at: Option<Timestamp>,
+    /// Art des (letzten) Besitzers (`owner_kind`: `app`, `cli`, `mcp-stdio`); fehlt bzw. leer → `None`
+    /// (CRAWL-125, Nachtrag K4-22; gelesen für 08 AI-020 [M4], `crate::owner`).
+    pub owner_kind: Option<String>,
+    /// Prozess-ID des Besitzers (`owner_pid`, Dezimalzahl, ungeprüft übernommen); leer, sobald kein Prozess den
+    /// Crawl führt → `None`.
+    pub owner_pid: Option<String>,
     /// Schemaversion der Datei (`PRAGMA user_version`).
     pub schema_version: u32,
 }
@@ -102,6 +108,8 @@ impl CrawlFile {
             started_at: parse_ts(&map, "started_at")?,
             ended_at: parse_ts(&map, "ended_at")?,
             heartbeat_at: parse_ts(&map, "heartbeat_at")?,
+            owner_kind: map.get("owner_kind").filter(|v| !v.is_empty()).cloned(),
+            owner_pid: map.get("owner_pid").filter(|v| !v.is_empty()).cloned(),
             schema_version: schema::user_version(self.conn())?,
         })
     }

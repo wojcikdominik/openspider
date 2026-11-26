@@ -93,8 +93,10 @@ pub async fn ensure_idle(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
     {
         return Err(super::busy());
     }
-    let (_, _, state) = feed::snapshot(app, s.key.clone()).await?;
-    if state == CrawlState::Running {
+    let (summary, _, state) = feed::snapshot(app, s.key.clone()).await?;
+    // 08 AI-020 [M4] (Wirkung b): ein anderer Prozess führt den Crawl als aktiver Besitzer (z. B. KI-Lauf); für eine
+    // Datei aus 1.0 ist `controllable` nur bei `Running` falsch.
+    if state == CrawlState::Running || !summary.owner.controllable {
         return Err(super::busy());
     }
     Ok(())
@@ -850,7 +852,8 @@ async fn start_apis(
 
 /// A restored pause has no engine handle. Finalize its durable checkpoint directly.
 async fn stop_checkpoint(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
-    let now = app.config().clock.now().to_db();
+    let clock = app.config().clock.clone();
+    let now = clock.now().to_db();
     app.write_queue()
         .submit_file(&s.key, move |f| {
             // One atomic commit instead of five Windows disk synchronizations.
@@ -866,6 +869,14 @@ async fn stop_checkpoint(app: &App, s: &SessionInfo) -> Result<(), CmdError> {
                 .meta()
                 .map_err(|e| crate::runtime::error::store_error(&e))?
                 .state;
+            // 08 AI-020 [M4] (Wirkung b): Stoppen ohne Engine wird abgewiesen, solange ein anderer Prozess den Crawl
+            // als aktiver Besitzer führt; die Prüfung liegt in derselben Schreibtransaktion wie der Stopp.
+            if f.occupancy(clock.as_ref())
+                .map_err(|e| crate::runtime::error::store_error(&e))?
+                .foreign_active_owner(std::process::id())
+            {
+                return Err(super::busy());
+            }
             if !matches!(state, CrawlState::Paused | CrawlState::Incomplete) {
                 return Err(CmdError::new(
                     ErrorCode::InvalidInput,

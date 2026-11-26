@@ -125,7 +125,10 @@ pub async fn snapshot(
                 let m = f.meta()?;
                 let state = f.effective_state(clock.as_ref())?;
                 let pid = f.get_meta("owner_pid")?.and_then(|s| s.parse().ok());
-                let live = state == CrawlState::Running;
+                // 08 AI-020 [M4]: ein aktiver Besitzer außerhalb von `Running` (KI-Lauf) gilt wie ein laufender Crawl;
+                // mit fremder PID öffnet die App ihn nur lesend (AGENT-020). Der Zustand bleibt wie CRAWL-125.
+                let live =
+                    state == CrawlState::Running || f.occupancy(clock.as_ref())?.active_owner;
                 let owner = CrawlOwner {
                     kind: match f.get_meta("owner_kind")?.as_deref() {
                         Some("cli") => OwnerKind::Cli,
@@ -277,6 +280,9 @@ pub(super) async fn refresh_aligned(
                 } else {
                     f.get_meta("owner_pid")?.and_then(|v| v.parse().ok())
                 };
+                // 08 AI-020 [M4]: wie `snapshot`; ein laufender eigener Lauf (`local`) ist nie fremd.
+                let live = state == CrawlState::Running
+                    || (!local && f.occupancy(clock.as_ref())?.active_owner);
                 let owner = CrawlOwner {
                     kind: match f.get_meta("owner_kind")?.as_deref() {
                         Some("cli") => OwnerKind::Cli,
@@ -285,8 +291,8 @@ pub(super) async fn refresh_aligned(
                         _ => OwnerKind::App,
                     },
                     pid,
-                    live: state == CrawlState::Running,
-                    controllable: state != CrawlState::Running || pid == Some(std::process::id()),
+                    live,
+                    controllable: !live || pid == Some(std::process::id()),
                 };
                 let p = progress.or(f
                     .get_meta("progress_snapshot")?

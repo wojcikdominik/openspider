@@ -187,6 +187,12 @@ async fn listing(app: &App, args: serde_json::Value) -> CmdResult {
             .any(|s| s.key.0 == l.meta.crawl_id.to_string() && s.engine.is_some());
         // CRAWL-128: `can_resume` already excludes the end reason `stopped` (shared core rule).
         let can_resume = l.can_resume(now);
+        // 08 AI-020 [M4]: „live“ auch bei einem aktiven Besitzer außerhalb von `Running`; steuerbar nur, solange kein
+        // anderer Prozess den Crawl führt. Art und PID bleiben wie 1.0 (K4-22, Hinweis i).
+        let live = state == CrawlState::Running || l.active_owner(now).is_some();
+        // Nur der neue Teil von (b): ein eigener, gerade angelegter Crawl (gespeichertes `Running` noch ohne
+        // `owner_pid`) bleibt wie in 1.0 steuerbar.
+        let foreign_led = l.occupancy(now).foreign_active_owner(std::process::id());
         let end_reason = l.meta.end_reason.map(|r| r.as_str().to_string());
         let duration_ms = l.duration_ms.or_else(|| {
             l.meta.started_at.map(|start| {
@@ -219,8 +225,8 @@ async fn listing(app: &App, args: serde_json::Value) -> CmdResult {
                 owner: CrawlOwner {
                     kind: if own { OwnerKind::App } else { OwnerKind::Cli },
                     pid: own.then_some(std::process::id()),
-                    live: state == CrawlState::Running,
-                    controllable: own,
+                    live,
+                    controllable: own && !foreign_led,
                 },
             },
             project,
@@ -316,6 +322,12 @@ async fn short(app: &App, args: serde_json::Value, action: &'static str) -> CmdR
         let CrawlRenameArgs { crawl_id, name } = parse_args(args)?;
         let id = ids(vec![crawl_id])?[0];
         admin(app, move |m| {
+            // 08 AI-020 [M4] (Wirkung a): ein aktiver Besitzer außerhalb von `Running` → `busy` wie Verschieben und
+            // Duplizieren; ein laufender Crawl antwortet unverändert wie 1.0 (über `guard`).
+            let l = m.get(&id).map_err(|e| store_error(&e))?;
+            if l.occupied(now) && l.effective_state(now) != CrawlState::Running {
+                return Err(CmdError::new(ErrorCode::Busy, "err-crawl-running"));
+            }
             m.rename(&id, &name, now).map_err(|e| store_error(&e))
         })
         .await?;
@@ -337,7 +349,8 @@ async fn short(app: &App, args: serde_json::Value, action: &'static str) -> CmdR
             // zulässig sein, bevor Manager::lock die erste Schreibverbindung öffnen darf.
             for id in &selected {
                 let listing = m.get(id).map_err(|e| store_error(&e))?;
-                if listing.effective_state(now) == CrawlState::Running {
+                // OUT-228; 08 AI-020 [M4] (Wirkung a): auch ein aktiver Besitzer, gleich welcher Prozess.
+                if listing.occupied(now) {
                     return Err(CmdError::new(ErrorCode::Busy, "err-crawl-running"));
                 }
             }
@@ -469,7 +482,8 @@ async fn batch(
     .await?;
     // Alle Zustandsfehler vor dem ersten Dateieingriff prüfen.
     for l in &rows {
-        if l.effective_state(now) == CrawlState::Running {
+        // OUT-228; 08 AI-020 [M4] (Wirkung a): auch ein aktiver Besitzer, gleich welcher Prozess.
+        if l.occupied(now) {
             return Err(CmdError::new(ErrorCode::Busy, "err-crawl-running"));
         }
         if action == "crawls.delete" && l.locked {

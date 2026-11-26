@@ -61,6 +61,17 @@ pub fn validate_resume(path: &Path) -> Result<(), CliError> {
         )));
     }
     let state = listing.effective_state(SystemClock.now());
+    // 08 AI-020 [M4] (Wirkung b): Ein anderer Prozess führt den Crawl als aktiver Besitzer (z. B. KI-Lauf), auch bei
+    // gespeichertem `Completed`/`Paused` – dieselbe Meldung und derselbe Exit-Code wie bei einem dort laufenden Crawl.
+    // Ein fehlgeschlagener Crawl ist nie fortsetzbar; dort bleibt die Meldung mit dem Zustand (CRAWL-128).
+    let occupancy = listing.occupancy(SystemClock.now());
+    if state != os_model::CrawlState::Failed && occupancy.foreign_active_owner(std::process::id()) {
+        return Err(CliError::internal(format!(
+            "Der Crawl läuft noch (Prozess {}) – pausieren oder beenden, dann fortsetzen. Ein abgestürzter Crawl lässt \
+             sich erst mehr als 10 Sekunden nach dem letzten Heartbeat fortsetzen.",
+            occupancy.owner_pid.as_deref().unwrap_or_default()
+        )));
+    }
     if matches!(
         state,
         os_model::CrawlState::Completed | os_model::CrawlState::Failed

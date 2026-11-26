@@ -102,6 +102,9 @@ fn encode(l: &CrawlListing) -> String {
         "started_at": l.meta.started_at.map(|v| v.to_db()).unwrap_or_default(),
         "ended_at": l.meta.ended_at.map(|v| v.to_db()).unwrap_or_default(),
         "heartbeat_at": l.meta.heartbeat_at.map(|v| v.to_db()).unwrap_or_default(),
+        // 08 AI-020 [M4]: Besitzerangaben; ein Eintrag ohne sie (älterer Stand) wird neu gelesen (`decode`).
+        "owner_kind": l.meta.owner_kind.clone().unwrap_or_default(),
+        "owner_pid": l.meta.owner_pid.clone().unwrap_or_default(),
         "schema_version": l.meta.schema_version.to_string(), "url_count": l.url_count.to_string(),
         "locked": l.locked.to_string(), "file_bytes": l.file_bytes.to_string(), "modified_ms": l.modified_ms.to_string(),
         "created_at": l.created_at.map(|v|v.to_db()).unwrap_or_default(),
@@ -136,6 +139,15 @@ fn decode(path: &Path, payload: &str) -> Result<CrawlListing, StoreError> {
             started_at: parse_ts(&m, "started_at")?,
             ended_at: parse_ts(&m, "ended_at")?,
             heartbeat_at: parse_ts(&m, "heartbeat_at")?,
+            // Fehlt der Schlüssel, stammt der Eintrag aus einem Stand ohne Besitzerangaben: neu lesen.
+            owner_kind: m
+                .get("owner_kind")
+                .ok_or_else(|| StoreError::MissingMeta("owner_kind".into()))
+                .map(|v| (!v.is_empty()).then(|| v.clone()))?,
+            owner_pid: m
+                .get("owner_pid")
+                .ok_or_else(|| StoreError::MissingMeta("owner_pid".into()))
+                .map(|v| (!v.is_empty()).then(|| v.clone()))?,
             schema_version: number(&m, "schema_version")?,
         },
         url_count: number(&m, "url_count")?,

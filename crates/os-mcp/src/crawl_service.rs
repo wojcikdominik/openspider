@@ -188,8 +188,16 @@ impl CrawlService {
     fn not_live(ctx: &ToolContext, id: &str, verb: &str) -> Result<ToolError, ToolError> {
         let crawl = super::tools::common::open_crawl(ctx, &json!({"crawl_id":id}))?;
         let state = crawl.file.effective_state(&SystemClock).map_err(invalid)?;
+        // 08 AI-020 [M4] (Wirkung b): ein anderer Prozess führt den Crawl als aktiver Besitzer (z. B. KI-Lauf auf einem
+        // pausierten oder abgeschlossenen Crawl) – derselbe Fehler wie bei einem dort laufenden Crawl, ohne `busy`.
+        let foreign = state == os_model::CrawlState::Running
+            || crawl
+                .file
+                .occupancy(&SystemClock)
+                .map_err(invalid)?
+                .foreign_active_owner(std::process::id());
         Ok(match state {
-            os_model::CrawlState::Running => {
+            _ if foreign => {
                 let kind = crawl
                     .file
                     .get_meta("owner_kind")
@@ -247,10 +255,18 @@ impl CrawlService {
         }
         let crawl = super::tools::common::open_crawl(ctx, &json!({"crawl_id":id}))?;
         let state = crawl.file.effective_state(&SystemClock).map_err(invalid)?;
-        if !matches!(
-            state,
-            os_model::CrawlState::Paused | os_model::CrawlState::Incomplete
-        ) {
+        // 08 AI-020 [M4] (Wirkung b): fremder aktiver Besitzer wie ein fremd laufender Crawl (Fehler ohne `busy`).
+        let foreign = crawl
+            .file
+            .occupancy(&SystemClock)
+            .map_err(invalid)?
+            .foreign_active_owner(std::process::id());
+        if foreign
+            || !matches!(
+                state,
+                os_model::CrawlState::Paused | os_model::CrawlState::Incomplete
+            )
+        {
             return Err(Self::not_live(ctx, id, "stop")?);
         }
         let path = crawl.file.path().to_path_buf();

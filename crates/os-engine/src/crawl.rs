@@ -50,7 +50,7 @@ pub const MAX_THREADS: u32 = 200;
 /// Abstand der Fortschrittsmeldungen.
 pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 /// Abstand des Heartbeats in `crawl_meta` (M1-Plan 3.7).
-pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
+pub const HEARTBEAT_INTERVAL: Duration = os_store::owner::HEARTBEAT_INTERVAL;
 
 /// Steuerung eines laufenden Crawls.
 pub struct CrawlHandle {

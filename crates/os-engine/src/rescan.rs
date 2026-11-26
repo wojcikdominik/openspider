@@ -430,5 +430,13 @@ fn ensure_not_running_with(file: &CrawlFile, probe: &EngineDepsProbe) -> Result<
             "Der Crawl läuft noch – pausieren oder beenden, dann entfernen".to_string(),
         ));
     }
+    // 08 AI-020 [M4] (Wirkung b): ein anderer Prozess führt den Crawl als aktiver Besitzer (z. B. KI-Lauf).
+    let occupancy = file.occupancy(&probe.0)?;
+    if occupancy.foreign_active_owner(std::process::id()) {
+        return Err(EngineError::Invalid(format!(
+            "Der Crawl läuft noch (Prozess {}) – pausieren oder beenden, dann entfernen",
+            occupancy.owner_pid.as_deref().unwrap_or_default()
+        )));
+    }
     Ok(())
 }

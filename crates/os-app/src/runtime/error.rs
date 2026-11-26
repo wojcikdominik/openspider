@@ -82,6 +82,14 @@ pub fn store_error(e: &StoreError) -> CmdError {
             CmdError::new(ErrorCode::InvalidInput, "err-invalid-input").with_detail(detail.clone())
         }
         StoreError::NotImplemented(what) => CmdError::unsupported(what, "M2"),
+        // 08 AI-020 [M4]: ein anderer Prozess führt den Crawl (M4-K11).
+        StoreError::Occupied { kind, pid } => CmdError::new(ErrorCode::Busy, "err-crawl-running")
+            .with_arg("kind", kind.clone())
+            .with_arg("pid", pid.clone()),
+        // 08 AI-020 [M4]: kein KI-Lauf auf einem unterbrochenen Crawl (M4-K11).
+        StoreError::Interrupted => {
+            CmdError::new(ErrorCode::InvalidInput, "err-invalid-input").with_detail(e.to_string())
+        }
         StoreError::Migration(_)
         | StoreError::MissingMeta(_)
         | StoreError::InvalidMeta { .. }

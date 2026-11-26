@@ -215,11 +215,48 @@ impl CrawlListing {
         )
     }
 
+    /// Beide Prüfungen aus `crate::owner` für diesen Eintrag: „laufend“ wie [`CrawlListing::effective_state`]
+    /// (CRAWL-125 samt Ersatzkette), „aktiver Besitzer“ ohne Ersatzkette (08 AI-020 [M4]).
+    pub fn occupancy(&self, now: Timestamp) -> crate::owner::Occupancy {
+        let owner_pid = self.meta.owner_pid.as_deref();
+        crate::owner::Occupancy {
+            running: self.effective_state(now) == CrawlState::Running,
+            active_owner: crate::owner::active_owner_at(owner_pid, self.meta.heartbeat_at, now),
+            owner_kind: self.meta.owner_kind.clone(),
+            owner_pid: self.meta.owner_pid.clone(),
+        }
+    }
+
+    /// PID des aktiven Besitzers (`owner_pid` nicht leer, `heartbeat_at` höchstens 10 000 ms alt, unabhängig vom
+    /// Zustand; 08 AI-020 [M4]), sonst `None`.
+    pub fn active_owner(&self, now: Timestamp) -> Option<&str> {
+        let pid = self.meta.owner_pid.as_deref();
+        crate::owner::active_owner_at(pid, self.meta.heartbeat_at, now)
+            .then_some(pid)
+            .flatten()
+    }
+
+    /// Prüfung (a) „geschützt in der Verwaltung“: laufend nach CRAWL-125 oder aktiver Besitzer mit beliebiger PID
+    /// (Löschen, Verschieben, Exportieren, Sperren, Entsperren → `busy`; die Aufbewahrung übergeht den Crawl).
+    pub fn occupied(&self, now: Timestamp) -> bool {
+        self.occupancy(now).occupied()
+    }
+
+    /// Prüfung (b) „fremd geführt“ aus Sicht dieses Prozesses: laufend nach CRAWL-125 oder aktiver Besitzer, jeweils
+    /// mit fremder PID.
+    pub fn foreign_led(&self, now: Timestamp) -> bool {
+        self.occupancy(now).foreign_led_here()
+    }
+
     /// Gemeinsame Fortsetzbarkeit nach K2-34 und CRAWL-128: „Pausiert“, „Unterbrochen“ und „Abgeschlossen“ mit
     /// Restwarteschlange (Limit), nie ein Crawl mit Endgrund `stopped` („Gestoppt ist endgültig“, unabhängig von der
-    /// Warteschlange; gilt für App, CLI und MCP).
+    /// Warteschlange; gilt für App, CLI und MCP). Ab 1.1 auch nicht, solange ein anderer Prozess den Crawl als aktiver
+    /// Besitzer führt (08 AI-020 [M4], Wirkung b).
     pub fn can_resume(&self, now: Timestamp) -> bool {
         if self.meta.end_reason == Some(EndReason::Stopped) {
+            return false;
+        }
+        if self.occupancy(now).foreign_active_owner(std::process::id()) {
             return false;
         }
         matches!(
@@ -392,6 +429,8 @@ fn read_meta(conn: &Connection) -> Result<CrawlMeta, StoreError> {
         started_at: parse_ts(&map, "started_at")?,
         ended_at: parse_ts(&map, "ended_at")?,
         heartbeat_at: parse_ts(&map, "heartbeat_at")?,
+        owner_kind: map.get("owner_kind").filter(|v| !v.is_empty()).cloned(),
+        owner_pid: map.get("owner_pid").filter(|v| !v.is_empty()).cloned(),
         schema_version: schema::user_version(conn)?,
     })
 }

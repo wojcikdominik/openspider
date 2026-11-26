@@ -124,7 +124,13 @@ pub fn ensure_if_idle(file: &CrawlFile) -> Result<bool, StoreError> {
     {
         return Ok(false);
     }
-    if file.effective_state(&SystemClock)? == CrawlState::Running {
+    // 08 AI-020 [M4] (Wirkung b): Führt ein anderer Prozess den Crawl als aktiver Besitzer (z. B. KI-Lauf), schreibt
+    // dieser Prozess nichts in die Datei – wie bei einem laufenden Crawl.
+    if file.effective_state(&SystemClock)? == CrawlState::Running
+        || file
+            .occupancy(&SystemClock)?
+            .foreign_active_owner(std::process::id())
+    {
         return Ok(false);
     }
     // Zuerst die Indizes über `urls` einer kleinen Datei (N22), dann `links_target`; beides sortiert.
