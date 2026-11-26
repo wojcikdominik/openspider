@@ -115,23 +115,22 @@ async fn quota_and_refusal_do_not_trip_the_breaker() {
         BreakerEffect::of(&ProviderError::QuotaExceeded),
         BreakerEffect::Neutral
     );
+    // AI-017, Nachtrag 26.11.2026 (ersetzt die frühere Annahme „Refusal setzt zurück“, M4-K10): Refusal zählt nicht
+    // und setzt die Zählung auch nicht zurück.
     assert_eq!(
         BreakerEffect::of(&ProviderError::Refusal),
-        BreakerEffect::Reset
+        BreakerEffect::Neutral
     );
-    // Neutrale Fälle unterbrechen die Folge nicht, ein Refusal setzt sie zurück.
+    // Neutrale Fälle unterbrechen die Folge nicht und setzen sie nicht zurück.
     for _ in 0..9 {
         failing(&limiter, "openai", http500()).await;
     }
     failing(&limiter, "openai", ProviderError::QuotaExceeded.into()).await;
     assert!(!limiter.breaker_open("openai"));
     failing(&limiter, "openai", ProviderError::Refusal.into()).await;
-    for _ in 0..9 {
-        failing(&limiter, "openai", http500()).await;
-    }
-    assert!(!limiter.breaker_open("openai"), "nach Refusal neu gezählt");
+    assert!(!limiter.breaker_open("openai"), "Refusal zählt nicht");
     failing(&limiter, "openai", http500()).await;
-    assert!(limiter.breaker_open("openai"));
+    assert!(limiter.breaker_open("openai"), "zehnter zählender Fehler");
 }
 
 // spec: AI-017

@@ -330,7 +330,16 @@ impl OpenAiResponses {
             estimated_input_tokens,
         );
         let exec = limiter
-            .run(&spec, |_| self.send(request, repair, Some(limiter)))
+            .run_classified(
+                &spec,
+                |_| self.send(request, repair, Some(limiter)),
+                // AI-017 (Nachtrag 26.11.2026): nur eine Antwort mit Text setzt zurück; Refusal, Ausgabegrenze und
+                // unlesbare Antworten sind neutral.
+                |reply| match reply.output {
+                    ResponsesOutput::Text(_) => crate::limits::BreakerEffect::Reset,
+                    _ => crate::limits::BreakerEffect::Neutral,
+                },
+            )
             .await;
         let mut meta = RequestMeta::from_execution(
             &exec,

@@ -319,7 +319,6 @@ async fn output_factor_is_learned_per_model_task_and_level() {
             "mock-claude",
             "suggest-title",
             Some(ReasoningLevel::Medium),
-            raw,
         )
         .unwrap();
         assert!(!calibration.calibrated, "erst ab 20 Requests ({i})");
@@ -333,6 +332,7 @@ async fn output_factor_is_learned_per_model_task_and_level() {
             &OutcomeDetails {
                 reasoning: Some(ReasoningLevel::Medium),
                 reported_cost: None,
+                estimated_output_tokens: Some(raw),
             },
         );
         insert_with_details(file.conn(), &row.record, &row.details).unwrap();
@@ -343,7 +343,6 @@ async fn output_factor_is_learned_per_model_task_and_level() {
         "mock-claude",
         "suggest-title",
         Some(ReasoningLevel::Medium),
-        raw,
     )
     .unwrap();
     assert!(calibration.calibrated);
@@ -357,7 +356,6 @@ async fn output_factor_is_learned_per_model_task_and_level() {
         "mock-claude",
         "suggest-title",
         Some(ReasoningLevel::Low),
-        os_ai::cost::raw_output_tokens(512, ReasoningLevel::Low),
     )
     .unwrap();
     assert_eq!(other, Calibration::UNCALIBRATED, "andere Stufe unberührt");
@@ -367,7 +365,6 @@ async fn output_factor_is_learned_per_model_task_and_level() {
         "mock-claude",
         "suggest-meta",
         Some(ReasoningLevel::Medium),
-        raw,
     )
     .unwrap();
     assert!(!other_task.calibrated, "andere Aufgabe unberührt");
@@ -526,6 +523,7 @@ async fn reported_cost_above_the_reservation_halts_the_budget() {
         &OutcomeDetails {
             reasoning: None,
             reported_cost: reply.reported_cost,
+            estimated_output_tokens: None,
         },
     );
     assert_eq!(row.record.price_source, PriceSource::Reported);
@@ -654,6 +652,7 @@ async fn openrouter_reported_cost_in_log_and_budget() {
             &OutcomeDetails {
                 reasoning: Some(ReasoningLevel::ModelDefault),
                 reported_cost: reply.reported_cost,
+                estimated_output_tokens: None,
             },
         );
         let r = &row.record;
@@ -711,6 +710,7 @@ async fn openrouter_reported_cost_in_log_and_budget() {
         &OutcomeDetails {
             reasoning: None,
             reported_cost: reply.reported_cost,
+            estimated_output_tokens: None,
         },
     );
     let r = &row.record;
@@ -782,6 +782,7 @@ async fn anthropic_reasoning_tokens_column() {
         &OutcomeDetails {
             reasoning: Some(ReasoningLevel::Medium),
             reported_cost: None,
+            estimated_output_tokens: None,
         },
     );
     assert_eq!(row.details.reasoning_tokens, Some(40));
@@ -815,6 +816,7 @@ async fn anthropic_reasoning_tokens_column() {
             &OutcomeDetails {
                 reasoning: Some(ReasoningLevel::Low),
                 reported_cost: None,
+                estimated_output_tokens: None,
             },
         );
         insert_with_details(file.conn(), &row.record, &row.details).unwrap();
@@ -964,7 +966,7 @@ proptest! {
             &rates,
             MicroUsd(0),
             &outcome,
-            &OutcomeDetails { reasoning: level, reported_cost },
+            &OutcomeDetails { reasoning: level, reported_cost, estimated_output_tokens: None },
         );
         let r = &row.record;
         prop_assert!(["api", "table", "user", "estimate", "reported"].contains(&r.price_source.as_str()));
@@ -1035,5 +1037,113 @@ async fn output_limit_row_is_stored_with_its_cost() {
     assert_eq!(
         back.record.cost,
         MicroUsd(300 * 5 + back.record.input_tokens.unwrap())
+    );
+}
+
+// spec: AI-012 [M4]
+// Nachtrag 26.11.2026: Zwei Gruppen von je 20 Requests derselben (Modell, Aufgabe, Stufe) mit verschiedenem
+// Antwortanteil A (Ersatzweg mit W = 2 bzw. W = 16) und gleichem Verhältnis Ist/Schätzung 0,5 → der gelernte Faktor
+// ist 0,5 (±1 %), unabhängig von A. Die Schätzung je Zeile steht in der internen Spalte `estimated_output_tokens`.
+#[test]
+fn output_factor_is_learned_per_row_independent_of_answer_share() {
+    let dir = TempDir::new("output-factor-rows");
+    let file = crawl_file(&dir.0);
+    let ctx = log_ctx("decision", "anthropic", "mock-claude", "messages");
+    let level = ReasoningLevel::Off;
+    for weight in [2u64, 16] {
+        let raw =
+            os_ai::cost::raw_output_tokens(os_ai::catalog::decision_answer_tokens(weight), level);
+        for _ in 0..20 {
+            let row = detailed_request_record(
+                &ctx,
+                &claude_rates(),
+                MicroUsd(100_000),
+                &RequestOutcome::success(usage(500, raw / 2, Some(0)), 0, 1),
+                &OutcomeDetails {
+                    reasoning: Some(level),
+                    reported_cost: None,
+                    estimated_output_tokens: Some(raw),
+                },
+            );
+            assert_eq!(row.details.estimated_output_tokens, Some(raw));
+            insert_with_details(file.conn(), &row.record, &row.details).unwrap();
+        }
+    }
+    let calibration =
+        output_calibration_from_log(&file, "anthropic", "mock-claude", "decision", Some(level))
+            .unwrap();
+    assert!(calibration.calibrated);
+    let factor = calibration.factor_ppm as f64 / 1e6;
+    assert!((factor - 0.5).abs() <= 0.005, "Faktor {factor}");
+    // Beide Antwortanteile werden mit demselben Faktor korrigiert.
+    for weight in [2u64, 16] {
+        let answer = os_ai::catalog::decision_answer_tokens(weight);
+        let next = os_ai::cost::estimate_output_tokens(answer, level, &calibration);
+        let raw = os_ai::cost::raw_output_tokens(answer, level);
+        assert!((next as f64 - raw as f64 / 2.0).abs() <= raw as f64 * 0.01);
+    }
+    let logged = list(file.conn(), &RequestFilter::default()).unwrap();
+    assert_eq!(logged[0].details.estimated_output_tokens, Some(64 + 32));
+    assert!(!os_store::ai::requests::COLUMNS.contains(&"estimated_output_tokens"));
+}
+
+// spec: AI-010 [M4]
+// Nachtrag 25.11.2026 „Preise der Decisions API“ (Befund B1-1 der Abnahme K10): Ein Decisions-Request mit 1.000.000
+// Eingabe-Tokens, davon 400.000 aus dem Cache, kostet 600.000 × 0,10 + 400.000 × 0,01 je 1 Mio. = 0,064 USD vor dem
+// Langkontext-Faktor und mit dem Faktor des `responses`-Eintrags 0,128 USD – nicht 0,10 bzw. 0,20 USD pauschal. Die
+// Ausgabe bleibt 0, auch wenn Tokens gemeldet werden.
+#[test]
+fn decisions_billing_uses_the_cache_prices_of_the_table() {
+    use os_ai::adapters::openai_decisions::decisions_billing_rates;
+    use os_ai::catalog::{PriceKey, PriceTable};
+    let table = PriceTable::bundled().unwrap();
+    let rates = table
+        .get(&PriceKey::new("openai", "gpt-6-luna", Endpoint::Decisions))
+        .unwrap()
+        .rates(None)
+        .unwrap();
+    let billing = decisions_billing_rates(&rates);
+    assert_eq!(billing.output_pico, 0);
+    assert_eq!(billing.cache_read_pico, rates.cache_read_pico);
+    assert_eq!(billing.cache_write_pico, rates.cache_write_pico);
+    let outcome = RequestOutcome::success(
+        Usage {
+            input_tokens: Some(1_000_000),
+            output_tokens: Some(50),
+            cached_input_tokens: Some(400_000),
+            cache_write_tokens: None,
+            reasoning_tokens: Some(0),
+        },
+        0,
+        1,
+    );
+    let ctx = log_ctx("decision", "openai", "gpt-6-luna", "decisions");
+    let with_lc = detailed_request_record(
+        &ctx,
+        &billing,
+        MicroUsd(0),
+        &outcome,
+        &OutcomeDetails::default(),
+    );
+    assert_eq!(
+        with_lc.record.cost,
+        MicroUsd(128_000),
+        "0,128 USD mit Langkontext-Faktor"
+    );
+    let without_lc = os_ai::cost::Rates {
+        long_context: None,
+        ..billing.clone()
+    };
+    let row = detailed_request_record(
+        &ctx,
+        &without_lc,
+        MicroUsd(0),
+        &outcome,
+        &OutcomeDetails::default(),
+    );
+    assert_eq!(
+        row.record.cost,
+        MicroUsd(64_000),
+        "0,064 USD vor dem Faktor"
     );
 }
