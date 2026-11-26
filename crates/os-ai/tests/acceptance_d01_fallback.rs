@@ -22,7 +22,12 @@ fn fb_choice() -> QuestionDef {
 }
 
 fn fb_score() -> QuestionDef {
-    s::score("d01t-fb-s", "Fallback S", &["l0", "l1", "l2", "l3", "l4"], &["title"])
+    s::score(
+        "d01t-fb-s",
+        "Fallback S",
+        &["l0", "l1", "l2", "l3", "l4"],
+        &["title"],
+    )
 }
 
 fn fb_predicate() -> QuestionDef {
@@ -92,14 +97,21 @@ fn ai034_answer_schemas_per_type() {
     expected.sort();
     assert_eq!(values, expected, "genau eine Pflicht-Property je value");
     for v in FB_VALUES {
-        assert_eq!(c["properties"]["probabilities"]["properties"][v]["type"], "number");
+        assert_eq!(
+            c["properties"]["probabilities"]["properties"][v]["type"],
+            "number"
+        );
     }
     assert_strict(&c, "choice");
 
     let sc = answer_schema(&fb_score());
     let mut idx = prop_keys(&sc["properties"]["probabilities"]);
     idx.sort();
-    assert_eq!(idx, ["0", "1", "2", "3", "4"], "eine Pflicht-Property je Level-Index");
+    assert_eq!(
+        idx,
+        ["0", "1", "2", "3", "4"],
+        "eine Pflicht-Property je Level-Index"
+    );
     assert_strict(&sc, "score");
 
     let b = bundle_schema(&[&fb_predicate(), &fb_choice(), &fb_score()]);
@@ -143,7 +155,10 @@ fn ai034_derivation_choice_score_confidence() {
             confidence,
             ..
         } => {
-            assert!(s::approx(score, 2.0), "Score = Σ Index × Wahrscheinlichkeit");
+            assert!(
+                s::approx(score, 2.0),
+                "Score = Σ Index × Wahrscheinlichkeit"
+            );
             assert_eq!(level, "l2");
             assert!(s::approx(confidence, 0.4));
         }
@@ -212,7 +227,10 @@ fn ai034_normalization_and_invalid_numbers() {
 #[test]
 fn ai034_abstain_and_schema_violations() {
     assert_eq!(
-        parse_answer(&fb_predicate(), &json!({"probability": 0.9, "abstain": true})),
+        parse_answer(
+            &fb_predicate(),
+            &json!({"probability": 0.9, "abstain": true})
+        ),
         FallbackResult::Abstained,
         "abstain = true → Zahlen werden ignoriert"
     );
@@ -236,7 +254,11 @@ async fn ai034_anthropic_fallback_end_to_end() {
     let bench = s::Bench::new(&["anthropic"], 1).await;
     let items = [s::page(1, "Product MOCK-ID:d01t-fb-choice", "Text.")];
     bench
-        .run(&[s::active_with(fb_choice(), claude())], &items, s::options())
+        .run(
+            &[s::active_with(fb_choice(), claude())],
+            &items,
+            s::options(),
+        )
         .await;
     let row = bench.answer(1, "d01t-fb-q");
     assert_eq!(row.status, "Success");
@@ -317,7 +339,9 @@ async fn ai034_openrouter_m_r1_reasoning_none() {
     let bodies = bench.mock.bodies(s::COMPLETIONS);
     assert_eq!(bodies.len(), 1);
     assert_eq!(bodies[0]["reasoning"]["effort"], "none");
-    assert!(bodies[0]["response_format"].to_string().contains("\"abstain\""));
+    assert!(bodies[0]["response_format"]
+        .to_string()
+        .contains("\"abstain\""));
     assert_eq!(bench.status(1, "d01t-fb-q"), "Success");
 }
 
@@ -370,13 +394,20 @@ async fn ai034_bundled_output_limit_all_questions_one_request() {
             s::options(),
         )
         .await;
-    assert_eq!(bench.mock.posts(s::MESSAGES).len(), 1, "genau 1 Request, kein Reparaturversuch");
+    assert_eq!(
+        bench.mock.posts(s::MESSAGES).len(),
+        1,
+        "genau 1 Request, kein Reparaturversuch"
+    );
     for q in ["d01t-b-pred", "d01t-b-choice", "d01t-b-score"] {
         assert_eq!(bench.status(1, q), "Error: Output limit reached", "{q}");
     }
     // Ohne Bündelung: eine Frage je Request.
     let unbundled = s::Bench::new(&["anthropic"], 1).await;
-    unbundled.mock.scenario("anthropic", "output-limit", 100).await;
+    unbundled
+        .mock
+        .scenario("anthropic", "output-limit", 100)
+        .await;
     let options = RunOptions {
         bundle_fallback: false,
         ..RunOptions::default()
@@ -406,7 +437,11 @@ async fn ai034_abstain_is_refusal_model_abstained() {
         .await;
     let row = bench.answer(1, "d01t-fb-p");
     assert_eq!(row.status, "Refusal");
-    assert_eq!(bench.mock.posts(s::MESSAGES).len(), 1, "Refusal wird nicht wiederholt");
+    assert_eq!(
+        bench.mock.posts(s::MESSAGES).len(),
+        1,
+        "Refusal wird nicht wiederholt"
+    );
     let reason_in_log = bench
         .sent_rows()
         .iter()
@@ -444,7 +479,10 @@ async fn ai034_sum_zero_and_negative_are_invalid_output() {
     assert_eq!(bench.status(1, "d01t-fb-q"), "Error: Invalid output");
     assert_eq!(bench.status(2, "d01t-fb-q"), "Error: Invalid output");
     assert_eq!(bench.status(3, "d01t-fb-q"), "Success");
-    assert_eq!(s::answer_json(&bench.answer(3, "d01t-fb-q"))["choice"], "product");
+    assert_eq!(
+        s::answer_json(&bench.answer(3, "d01t-fb-q"))["choice"],
+        "product"
+    );
     let normalized = s::answer_json(&bench.answer(4, "d01t-fb-q"));
     assert!(s::approx(s::probability_sum(&normalized), 1.0));
     assert!(s::approx(normalized["confidence"].as_f64().unwrap(), 0.6));
@@ -473,7 +511,10 @@ async fn ai021_schema_violation_exactly_one_repair() {
     );
     // Szenario `schema-violation` dauerhaft → 2 Requests, `Error: Invalid output`.
     let bench = s::Bench::new(&["anthropic"], 1).await;
-    bench.mock.scenario("anthropic", "schema-violation", 100).await;
+    bench
+        .mock
+        .scenario("anthropic", "schema-violation", 100)
+        .await;
     let q = s::active_with(fb_choice(), claude());
     bench
         .run(
@@ -501,7 +542,11 @@ async fn ai021_malformed_once_then_ok_same_reasoning_and_max_tokens() {
         )
         .await;
     let bodies = bench.mock.bodies(s::MESSAGES);
-    assert_eq!(bodies.len(), 2, "Protokoll zeigt 2 Requests für den Eintrag");
+    assert_eq!(
+        bodies.len(),
+        2,
+        "Protokoll zeigt 2 Requests für den Eintrag"
+    );
     assert_eq!(bench.status(1, "d01t-fb-q"), "Success");
     assert_eq!(bodies[0]["max_tokens"], bodies[1]["max_tokens"]);
     assert_eq!(bodies[0]["thinking"], bodies[1]["thinking"]);
@@ -538,7 +583,12 @@ fn keys(answer: &Value) -> Vec<String> {
 #[tokio::test]
 async fn ai034_both_paths_give_equivalent_results() {
     let choice_q = s::choice("d01t-eq-choice", "Eq Choice", &FB_VALUES, &["title"]);
-    let score_q = s::score("d01t-eq-score", "Eq Score", &["low", "mid", "high"], &["title"]);
+    let score_q = s::score(
+        "d01t-eq-score",
+        "Eq Score",
+        &["low", "mid", "high"],
+        &["title"],
+    );
     let items = [
         s::page(1, "Equal MOCK-ID:d01t-eq", "Text."),
         s::page(2, "Equal score MOCK-ID:d01t-eq-score", "Text."),
@@ -584,6 +634,9 @@ async fn ai034_both_paths_give_equivalent_results() {
     assert_eq!(ca["choice"], cb["choice"]);
     let sa = s::answer_json(&decisions.answer(2, "d01t-eq-score"));
     let sb = s::answer_json(&fallback.answer(2, "d01t-eq-score"));
-    assert!(s::approx(sa["score"].as_f64().unwrap(), sb["score"].as_f64().unwrap()));
+    assert!(s::approx(
+        sa["score"].as_f64().unwrap(),
+        sb["score"].as_f64().unwrap()
+    ));
     assert_eq!(sa["level"], sb["level"]);
 }

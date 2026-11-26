@@ -52,7 +52,10 @@ fn ai031_one_immutable_row_per_used_version() {
         questions::ensure(conn, "redirect-target", "1.0.0", TEMPLATE_V1).unwrap(),
         Ensured::Present
     );
-    assert_eq!(questions::count_versions(conn, "redirect-target").unwrap(), 1);
+    assert_eq!(
+        questions::count_versions(conn, "redirect-target").unwrap(),
+        1
+    );
     // Gleiche Version, andere Definition → Fehler, die Kopie bleibt.
     let changed = TEMPLATE_V1.replace("Which candidate fits?", "Changed?");
     assert!(questions::ensure(conn, "redirect-target", "1.0.0", &changed).is_err());
@@ -66,7 +69,10 @@ fn ai031_one_immutable_row_per_used_version() {
         questions::ensure(conn, "redirect-target", "1.1.0", &v2).unwrap(),
         Ensured::Inserted
     );
-    assert_eq!(questions::count_versions(conn, "redirect-target").unwrap(), 2);
+    assert_eq!(
+        questions::count_versions(conn, "redirect-target").unwrap(),
+        2
+    );
     assert_eq!(questions::list(conn).unwrap().len(), 2);
     // Änderung oder Löschung über SQL ist ausgeschlossen bzw. ändert die Kopie nicht.
     assert!(conn
@@ -94,11 +100,22 @@ fn ai030_answers_per_parameter_set_on_one_template_version() {
     let rows = [
         AnswerRow::status_only(1, "redirect-target", "1.0.0", "hash-a", params_a, "Pending"),
         AnswerRow::status_only(1, "redirect-target", "1.0.0", "hash-b", params_b, "Pending"),
-        AnswerRow::status_only(2, "redirect-target", "1.0.0", "hash-a", params_a, "Skipped (scope)"),
+        AnswerRow::status_only(
+            2,
+            "redirect-target",
+            "1.0.0",
+            "hash-a",
+            params_a,
+            "Skipped (scope)",
+        ),
     ];
     answers::upsert_all(conn, &rows).unwrap();
     let listed = answers::list_for_question(conn, "redirect-target", Some("1.0.0")).unwrap();
-    assert_eq!(listed.len(), 3, "eine Zeile je (URL, Frage, Version, Parameter)");
+    assert_eq!(
+        listed.len(),
+        3,
+        "eine Zeile je (URL, Frage, Version, Parameter)"
+    );
     // Upsert ersetzt dieselbe Zeile.
     let mut done = rows[0].clone();
     done.status = "Success".into();
@@ -114,5 +131,8 @@ fn ai030_answers_per_parameter_set_on_one_template_version() {
     assert_eq!(counts.get("Pending"), Some(&1));
     assert_eq!(counts.get("Skipped (scope)"), Some(&1));
     // Die Vorlage steht weiterhin genau einmal in ai_questions.
-    assert_eq!(questions::count_versions(conn, "redirect-target").unwrap(), 1);
+    assert_eq!(
+        questions::count_versions(conn, "redirect-target").unwrap(),
+        1
+    );
 }

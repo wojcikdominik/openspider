@@ -30,7 +30,13 @@ fn questions() -> Vec<ActiveQuestion> {
 
 fn pages(n: i64) -> Vec<RunItem> {
     (1..=n)
-        .map(|i| s::page(i, &format!("Lifecycle page {i}"), &format!("Content of page {i}.")))
+        .map(|i| {
+            s::page(
+                i,
+                &format!("Lifecycle page {i}"),
+                &format!("Content of page {i}."),
+            )
+        })
         .collect()
 }
 
@@ -89,17 +95,33 @@ async fn ai020_pause_during_request_6_then_resume_after_restart() {
     .await
     .expect("Lauf endet nach der Pause");
     assert_eq!(report.end, RunEnd::Paused);
-    assert_eq!(bench.mock.posts(s::DECISIONS).len(), 6, "nach der Pause kein neuer Request");
+    assert_eq!(
+        bench.mock.posts(s::DECISIONS).len(),
+        6,
+        "nach der Pause kein neuer Request"
+    );
     assert_eq!(bench.count("page-type", "Success"), 6);
     assert_eq!(bench.count("page-type", "Pending"), 16);
     assert_eq!(bench.count("page-type", "Skipped (scope)"), 3);
     assert_eq!(bench.sent_rows().len(), 6);
-    assert_eq!(bench.spent(), bench.logged_cost(), "Budgetverbrauch = Summe der 6 Zeilen");
-    assert_eq!(bench.reserved(), 0, "offene Einträge belegen keine Reservierung");
+    assert_eq!(
+        bench.spent(),
+        bench.logged_cost(),
+        "Budgetverbrauch = Summe der 6 Zeilen"
+    );
+    assert_eq!(
+        bench.reserved(),
+        0,
+        "offene Einträge belegen keine Reservierung"
+    );
 
     // Fortsetzen nach App-Neustart: genau 16 weitere Requests, keine erneute Kostenbestätigung.
     bench.reopen_file();
-    assert_eq!(bench.spent(), bench.logged_cost(), "bisheriger Verbrauch gilt weiter");
+    assert_eq!(
+        bench.spent(),
+        bench.logged_cost(),
+        "bisheriger Verbrauch gilt weiter"
+    );
     let resume = RunOptions {
         selection: Selection::Open,
         confirmation: Confirmation::Granted,
@@ -109,7 +131,10 @@ async fn ai020_pause_during_request_6_then_resume_after_restart() {
         .await
         .expect("Fortsetzen endet");
     assert_eq!(report.end, RunEnd::Completed);
-    assert!(report.estimate.is_none(), "beim Fortsetzen kein Kostenvoranschlag");
+    assert!(
+        report.estimate.is_none(),
+        "beim Fortsetzen kein Kostenvoranschlag"
+    );
     assert_eq!(bench.mock.posts(s::DECISIONS).len(), 22);
     assert_eq!(bench.count("page-type", "Success"), 22);
     assert_eq!(bench.count("page-type", "Pending (confirmation)"), 0);
@@ -145,7 +170,11 @@ async fn ai020_stop_final_no_further_request_then_new_run_with_estimate() {
     // Request 6 ist übernommen, danach kein weiterer Request.
     assert_eq!(bench.mock.posts(s::DECISIONS).len(), 6);
     assert_eq!(bench.count("page-type", "Success"), 6);
-    assert_eq!(bench.count("page-type", "Pending"), 16, "offene Einträge bleiben Pending");
+    assert_eq!(
+        bench.count("page-type", "Pending"),
+        16,
+        "offene Einträge bleiben Pending"
+    );
     assert_eq!(bench.sent_rows().len(), 6);
     assert_eq!(bench.reserved(), 0);
 
@@ -163,7 +192,11 @@ async fn ai020_stop_final_no_further_request_then_new_run_with_estimate() {
         .map(|t| t.estimate.items - t.estimate.cached)
         .sum();
     assert_eq!(items_open, 16, "Voranschlag über 16 Einträge");
-    assert_eq!(bench.mock.posts(s::DECISIONS).len(), 6, "vor „Starten“ kein Request");
+    assert_eq!(
+        bench.mock.posts(s::DECISIONS).len(),
+        6,
+        "vor „Starten“ kein Request"
+    );
     assert_eq!(bench.count("page-type", "Pending (confirmation)"), 16);
     // „Starten“ → genau 16 Requests.
     let report = bench.run(&qs, &items, s::options()).await;
@@ -201,7 +234,11 @@ async fn ai020_orderly_shutdown_does_not_wait_entry_pending_no_row() {
         bench.mock.posts(s::DECISIONS).iter().any(|r| r.aborted)
     })
     .await;
-    assert_eq!(bench.mock.release("openai", None).await, 0, "nichts mehr gehalten");
+    assert_eq!(
+        bench.mock.release("openai", None).await,
+        0,
+        "nichts mehr gehalten"
+    );
     bench.reopen_file();
     assert_eq!(bench.status(3, "page-type"), "Pending");
     assert!(
@@ -223,7 +260,10 @@ async fn ai020_orderly_shutdown_does_not_wait_entry_pending_no_row() {
         .iter()
         .filter(|b| s::decision_input_text(b).contains("Content of page 3."))
         .count();
-    assert_eq!(resent, 2, "abgebrochener und genau ein neuer Request für Eintrag 3");
+    assert_eq!(
+        resent, 2,
+        "abgebrochener und genau ein neuer Request für Eintrag 3"
+    );
 }
 
 // spec: AI-020 [M4]
@@ -257,7 +297,11 @@ async fn ai020_crash_while_request_held_then_resume_once() {
     );
     assert_eq!(bench.status(3, "page-type"), "Pending");
     assert!(bench.sent_rows().iter().all(|r| r.record.url_id != Some(3)));
-    assert_eq!(bench.spent(), bench.logged_cost(), "keine Reservierung mehr im Verbrauch");
+    assert_eq!(
+        bench.spent(),
+        bench.logged_cost(),
+        "keine Reservierung mehr im Verbrauch"
+    );
     assert_eq!(bench.reserved(), 0);
     let report = bench.run(&qs, &items, s::options()).await;
     assert_eq!(report.end, RunEnd::Completed);
@@ -267,7 +311,10 @@ async fn ai020_crash_while_request_held_then_resume_once() {
         .iter()
         .filter(|r| r.record.url_id == Some(3))
         .count();
-    assert_eq!(rows_for_3, 1, "am Ende genau 1 Protokollzeile für Eintrag 3");
+    assert_eq!(
+        rows_for_3, 1,
+        "am Ende genau 1 Protokollzeile für Eintrag 3"
+    );
     assert_one_row_per_url(&bench);
 }
 
@@ -282,15 +329,21 @@ async fn ai020_answer_processing_is_atomic() {
     let hook = || {
         calls.set(calls.get() + 1);
         if calls.get() == 2 {
-            Err(StoreError::NotFound(PathBuf::from("d01t-injected-before-commit")))
+            Err(StoreError::NotFound(PathBuf::from(
+                "d01t-injected-before-commit",
+            )))
         } else {
             Ok(())
         }
     };
+    let hook_ref: &dyn Fn() -> Result<(), StoreError> = &hook;
     let report = bench
-        .run_ctl(&qs, &items, s::options(), RunControl::new(), Some(&hook))
+        .run_ctl(&qs, &items, s::options(), RunControl::new(), Some(hook_ref))
         .await;
-    assert!(!report.commit_errors.is_empty(), "Fehlerinjektion nicht gemeldet");
+    assert!(
+        !report.commit_errors.is_empty(),
+        "Fehlerinjektion nicht gemeldet"
+    );
     let failed: Vec<i64> = (1..=3)
         .filter(|id| bench.status(*id, "page-type") != "Success")
         .collect();
@@ -300,12 +353,19 @@ async fn ai020_answer_processing_is_atomic() {
     assert!(row.answer_json.is_none(), "Ergebnis trotz Fehlerinjektion");
     assert_eq!(row.status, "Pending");
     assert!(
-        bench.sent_rows().iter().all(|r| r.record.url_id != Some(id)),
+        bench
+            .sent_rows()
+            .iter()
+            .all(|r| r.record.url_id != Some(id)),
         "Protokollzeile trotz Fehlerinjektion"
     );
     assert_eq!(bench.sent_rows().len(), 2);
     assert_eq!(bench.cache_rows(), 2, "Cache-Eintrag trotz Fehlerinjektion");
-    assert_eq!(bench.spent(), bench.logged_cost(), "verbuchte Kosten trotz Fehlerinjektion");
+    assert_eq!(
+        bench.spent(),
+        bench.logged_cost(),
+        "verbuchte Kosten trotz Fehlerinjektion"
+    );
     assert_eq!(bench.reserved(), 0);
     // Ohne Injektion alle vier.
     bench.run(&qs, &items, s::options()).await;

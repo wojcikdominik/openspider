@@ -193,12 +193,8 @@ async fn ai033_score_and_predicate_values_unchanged() {
         s::page(1, "Scored MOCK-ID:d01t-score", "Text."),
         s::page(2, "Predicated MOCK-ID:d01t-pred", "Text."),
     ];
-    bench
-        .run(&[s::active(sc)], &items[..1], s::options())
-        .await;
-    bench
-        .run(&[s::active(pr)], &items[1..], s::options())
-        .await;
+    bench.run(&[s::active(sc)], &items[..1], s::options()).await;
+    bench.run(&[s::active(pr)], &items[1..], s::options()).await;
     let score = s::answer_json(&bench.answer(1, "d01t-score-q"));
     assert!(s::approx(score["score"].as_f64().unwrap(), 2.0));
     assert_eq!(score["level"], "l2");
@@ -269,7 +265,10 @@ async fn ai004_confidence_mismatch_is_logged() {
             .record
             .confidence_mismatch
     };
-    assert!(flag(1), "Abweichung 0,13 nicht als confidence_mismatch vermerkt");
+    assert!(
+        flag(1),
+        "Abweichung 0,13 nicht als confidence_mismatch vermerkt"
+    );
     assert!(!flag(2), "Abweichung 0,005 fälschlich vermerkt");
 }
 
@@ -289,7 +288,16 @@ async fn ai038_refusal_affects_only_its_question() {
     assert_eq!(bench.status(1, "d01t-r1"), "Success");
     assert_eq!(bench.status(1, "d01t-r2"), "Refusal");
     assert_eq!(bench.status(1, "d01t-r3"), "Success");
-    assert!(bench.answer(1, "d01t-r2").answer_json.is_none());
+    // Wertespalten leer (AI-036/AI-038): kein Wert und keine Wahrscheinlichkeit im Ergebnis der Frage.
+    if let Some(json) = bench.answer(1, "d01t-r2").answer_json {
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        for key in ["probability", "probabilities", "choice", "score"] {
+            assert!(
+                v.get(key).is_none_or(|x| x.is_null()),
+                "Refusal mit Wert {key}: {v}"
+            );
+        }
+    }
     assert!(s::approx(
         s::answer_json(&bench.answer(1, "d01t-r3"))["probability"]
             .as_f64()
@@ -332,7 +340,11 @@ async fn ai020_missing_key_22_errors_zero_requests() {
     bench.run(&[q], &items, s::options()).await;
     assert_eq!(bench.count("page-type", "Error: Missing API key"), 22);
     assert_eq!(bench.count("page-type", "Skipped (scope)"), 3);
-    assert_eq!(bench.mock.provider_posts(), 0, "kein Request, kein stiller Ersatzweg");
+    assert_eq!(
+        bench.mock.provider_posts(),
+        0,
+        "kein Request, kein stiller Ersatzweg"
+    );
 }
 
 // spec: AI-020 [M4]
@@ -340,12 +352,19 @@ async fn ai020_missing_key_22_errors_zero_requests() {
 #[tokio::test]
 async fn ai020_quota_exhausted_one_request_all_quota_exceeded() {
     let bench = s::Bench::new(&["openai"], 1).await;
-    bench.mock.scenario("openai", "insufficient-quota", 100).await;
+    bench
+        .mock
+        .scenario("openai", "insufficient-quota", 100)
+        .await;
     let items = s::site(|i| format!("Page {i}."));
     bench
         .run(&[s::active(s::page_type(&["title"]))], &items, s::options())
         .await;
-    assert_eq!(bench.mock.posts(s::DECISIONS).len(), 1, "gleichzeitige Anfragen = 1");
+    assert_eq!(
+        bench.mock.posts(s::DECISIONS).len(),
+        1,
+        "gleichzeitige Anfragen = 1"
+    );
     assert_eq!(bench.count("page-type", "Quota exceeded"), 22);
     assert_eq!(bench.count("page-type", "Skipped (scope)"), 3);
 }
@@ -380,7 +399,11 @@ async fn ai020_5xx_is_retried_then_error_with_log_row() {
     bench
         .run(&[s::active(s::page_type(&["title"]))], &items, s::options())
         .await;
-    assert_eq!(bench.mock.posts(s::DECISIONS).len(), 6, "1 + 5 Wiederholungen");
+    assert_eq!(
+        bench.mock.posts(s::DECISIONS).len(),
+        6,
+        "1 + 5 Wiederholungen"
+    );
     let status = bench.status(1, "page-type");
     assert!(status.starts_with("Error: 500"), "Status {status}");
     let rows = bench.sent_rows();
@@ -434,7 +457,11 @@ async fn ai017_refusals_do_not_trip_the_breaker() {
     bench
         .run(&[s::active(s::page_type(&["title"]))], &items, s::options())
         .await;
-    assert_eq!(bench.mock.posts(s::DECISIONS).len(), 12, "kein Backoff, kein Schutzschalter");
+    assert_eq!(
+        bench.mock.posts(s::DECISIONS).len(),
+        12,
+        "kein Backoff, kein Schutzschalter"
+    );
     assert_eq!(bench.count("page-type", "Refusal"), 12);
 }
 
@@ -476,12 +503,20 @@ async fn ai014_one_log_row_per_request_with_http_status() {
     let bench = s::Bench::new(&["openai"], 1).await;
     let items = s::site(|i| format!("Content of page {i}."));
     bench
-        .run(&[s::active(s::page_type(&["title", "page_text"]))], &items, s::options())
+        .run(
+            &[s::active(s::page_type(&["title", "page_text"]))],
+            &items,
+            s::options(),
+        )
         .await;
     let bodies = bench.mock.bodies(s::DECISIONS);
     let rows = bench.sent_rows();
     assert_eq!(rows.len(), 22);
-    assert_eq!(rows.len(), bodies.len(), "je Request genau eine Protokollzeile");
+    assert_eq!(
+        rows.len(),
+        bodies.len(),
+        "je Request genau eine Protokollzeile"
+    );
     for row in &rows {
         let r = &row.record;
         assert_eq!(r.provider, "openai");
@@ -510,8 +545,16 @@ async fn ai014_one_log_row_per_request_with_http_status() {
             "Cost = Token Cost + Fixed Fees + Regional Uplift"
         );
     }
-    assert_eq!(bench.spent(), bench.logged_cost(), "Ledger = Summe der Protokollzeilen");
-    assert_eq!(bench.reserved(), 0, "keine offene Reservierung nach dem Lauf");
+    assert_eq!(
+        bench.spent(),
+        bench.logged_cost(),
+        "Ledger = Summe der Protokollzeilen"
+    );
+    assert_eq!(
+        bench.reserved(),
+        0,
+        "keine offene Reservierung nach dem Lauf"
+    );
 }
 
 // spec: AI-033 [M4]
@@ -519,8 +562,16 @@ async fn ai014_one_log_row_per_request_with_http_status() {
 #[tokio::test]
 async fn ai033_estimate_per_question_bundling_saves_only_requests() {
     let questions = [
-        s::active(s::predicate("e-one", "Estimate One", &["title", "page_text"])),
-        s::active(s::predicate("e-two", "Estimate Two", &["title", "page_text"])),
+        s::active(s::predicate(
+            "e-one",
+            "Estimate One",
+            &["title", "page_text"],
+        )),
+        s::active(s::predicate(
+            "e-two",
+            "Estimate Two",
+            &["title", "page_text"],
+        )),
         s::active(s::choice(
             "e-three",
             "Estimate Three",
@@ -533,7 +584,11 @@ async fn ai033_estimate_per_question_bundling_saves_only_requests() {
             &["low", "mid", "high"],
             &["title", "page_text"],
         )),
-        s::active(s::predicate("e-five", "Estimate Five", &["title", "page_text"])),
+        s::active(s::predicate(
+            "e-five",
+            "Estimate Five",
+            &["title", "page_text"],
+        )),
     ];
     let items: Vec<RunItem> = (1..=2)
         .map(|i| {
@@ -622,11 +677,20 @@ async fn ai033_image_questions_one_image_per_request() {
         .collect();
     bench.run(&questions, &items, s::options()).await;
     let bodies = bench.mock.bodies(s::DECISIONS);
-    assert_eq!(bodies.len(), 3, "ein Request je Bild");
+    assert_eq!(
+        bodies.len(),
+        3,
+        "ein Request je Bild; Bilder je Request {:?}, Status {:?}",
+        bodies.iter().map(s::image_parts).collect::<Vec<_>>(),
+        bench.status_counts("img-a")
+    );
     for b in &bodies {
         assert_eq!(s::image_parts(b), 1, "genau ein Bild je Request");
         assert_eq!(s::decision_names(b).len(), 2);
-        assert!(s::decision_input_text(b).contains("Caption"), "Kontextfeld fehlt");
+        assert!(
+            s::decision_input_text(b).contains("Caption"),
+            "Kontextfeld fehlt"
+        );
     }
     assert_eq!(bench.count("img-a", "Success"), 3);
 }
@@ -641,7 +705,11 @@ async fn ai018_without_consent_zero_requests() {
     bench
         .run(&[s::active(s::page_type(&["title"]))], &items, s::options())
         .await;
-    assert_eq!(bench.mock.provider_posts(), 0, "ohne Einwilligung kein Request");
+    assert_eq!(
+        bench.mock.provider_posts(),
+        0,
+        "ohne Einwilligung kein Request"
+    );
     assert_eq!(bench.count("page-type", "Pending (consent)"), 22);
     // Schalter „KI (Vorschau)“ aus: ebenfalls kein Request.
     let mut off = s::Bench::new(&["openai"], 1).await;
@@ -670,11 +738,19 @@ async fn ai013_budget_never_exceeded_with_four_workers() {
         rows.iter().all(|r| !r.record.over_reservation),
         "Ist-Antwort über der Reservierung – Voraussetzung des Kriteriums verletzt"
     );
-    assert!(spent <= 600, "Summe der Ist-Kosten {spent} µUSD > Budget 600 µUSD");
+    assert!(
+        spent <= 600,
+        "Summe der Ist-Kosten {spent} µUSD > Budget 600 µUSD"
+    );
     let success = bench.count("budget-q", "Success");
     let exceeded = bench.count("budget-q", "Budget exceeded");
     assert!(success > 0 && success < 200, "Erfolge {success}");
-    assert_eq!(success + exceeded, 200, "{:?}", bench.status_counts("budget-q"));
+    assert_eq!(
+        success + exceeded,
+        200,
+        "{:?}",
+        bench.status_counts("budget-q")
+    );
     assert_eq!(bench.mock.posts(s::DECISIONS).len(), success);
     assert_eq!(rows.len(), success);
     assert_eq!(bench.reserved(), 0);
@@ -694,7 +770,11 @@ async fn ai014_bundled_request_is_one_row_with_all_versions() {
     let bodies = bench.mock.bodies(s::DECISIONS);
     assert_eq!(bodies.len(), 1);
     let rows = bench.sent_rows();
-    assert_eq!(rows.len(), 1, "ein gebündelter Request = eine Protokollzeile");
+    assert_eq!(
+        rows.len(),
+        1,
+        "ein gebündelter Request = eine Protokollzeile"
+    );
     let versions: Vec<String> = rows[0]
         .record
         .definition_version
@@ -724,7 +804,7 @@ async fn ai014_bundled_request_is_one_row_with_all_versions() {
 // acceptance: independent
 #[tokio::test]
 async fn ai020_quota_lock_lasts_one_run_without_further_rows() {
-    let bench = s::Bench::new(&["openai"], 1).await;
+    let mut bench = s::Bench::new(&["openai"], 1).await;
     bench.mock.scenario("openai", "insufficient-quota", 1).await;
     let items: Vec<RunItem> = (1..=5)
         .map(|i| s::page(i, &format!("Quota {i}"), "Text."))
@@ -738,7 +818,8 @@ async fn ai020_quota_lock_lasts_one_run_without_further_rows() {
         1,
         "weitere Einträge ohne Request und ohne Protokollzeile"
     );
-    // Ein neuer Lauf versucht es wieder.
+    // Ein neuer Lauf versucht es wieder (neuer Lauf = neue Adapter-Instanzen, Doku `Adapters`).
+    bench.renew_adapters().await;
     let failed = RunOptions {
         selection: os_ai::decisions::exec::Selection::Failed,
         ..RunOptions::default()
@@ -785,20 +866,23 @@ async fn ai012_confirmation_threshold_is_inclusive() {
     assert!(expected > 0);
     // Erwartete Kosten gleich der Schwelle → bestätigungspflichtig, kein Request.
     let at = RunOptions {
-        confirmation: os_ai::decisions::exec::Confirmation::AskAbove(
-            os_model::budget::MicroUsd(expected),
-        ),
+        confirmation: os_ai::decisions::exec::Confirmation::AskAbove(os_model::budget::MicroUsd(
+            expected,
+        )),
         ..RunOptions::default()
     };
     let report = bench.run(&qs, &items, at).await;
-    assert_eq!(report.end, os_ai::decisions::exec::RunEnd::NeedsConfirmation);
+    assert_eq!(
+        report.end,
+        os_ai::decisions::exec::RunEnd::NeedsConfirmation
+    );
     assert_eq!(bench.mock.provider_posts(), 0);
     assert_eq!(bench.count("page-type", "Pending (confirmation)"), 4);
     // Schwelle 1 µUSD darüber → kein Dialog, die Einträge gehen hinaus.
     let above = RunOptions {
-        confirmation: os_ai::decisions::exec::Confirmation::AskAbove(
-            os_model::budget::MicroUsd(expected + 1),
-        ),
+        confirmation: os_ai::decisions::exec::Confirmation::AskAbove(os_model::budget::MicroUsd(
+            expected + 1,
+        )),
         ..RunOptions::default()
     };
     let report = bench.run(&qs, &items, above).await;

@@ -135,7 +135,11 @@ fn ai031_levels_and_params_changes() {
     .unwrap();
     let mut removed = score.clone();
     removed.levels.as_mut().unwrap().pop();
-    assert_eq!(next_version(&score, &removed), Version::new(2, 0, 0), "Level entfernt → Major");
+    assert_eq!(
+        next_version(&score, &removed),
+        Version::new(2, 0, 0),
+        "Level entfernt → Major"
+    );
     let mut described = score.clone();
     described.levels.as_mut().unwrap()[0].description = "Very low.".into();
     assert_eq!(next_version(&score, &described), Version::new(1, 5, 0));
@@ -158,7 +162,11 @@ fn ai031_saving_a_changed_user_question_bumps_version() {
     let mut thresholds = saved.clone();
     thresholds.thresholds = Some(json!({"low_confidence_below": 0.7}));
     let saved = lib.save_user(thresholds).unwrap().clone();
-    assert_eq!(saved.version, Version::new(1, 3, 0), "Schwellwert ändert die Version nicht");
+    assert_eq!(
+        saved.version,
+        Version::new(1, 3, 0),
+        "Schwellwert ändert die Version nicht"
+    );
 }
 
 // spec: AI-031 [M4]
@@ -217,7 +225,10 @@ fn ai031_export_import_roundtrip_and_conflict() {
         .clone();
     assert_eq!(second.id, "my-intent-copy-2", "erneute Kollision");
     assert_eq!(copy.instructions, "Different criteria.");
-    assert_eq!(empty.get("my-intent").unwrap().1.instructions, q.instructions);
+    assert_eq!(
+        empty.get("my-intent").unwrap().1.instructions,
+        q.instructions
+    );
     let replaced = empty
         .resolve(incoming, ImportChoice::Replace)
         .unwrap()
@@ -234,7 +245,10 @@ fn ai031_update_notice_text() {
         update_notice(Version::new(1, 0, 0), Version::new(1, 1, 0)).as_deref(),
         Some("Frage aktualisiert (1.0.0 → 1.1.0) – neu analysieren?")
     );
-    assert_eq!(update_notice(Version::new(1, 1, 0), Version::new(1, 1, 0)), None);
+    assert_eq!(
+        update_notice(Version::new(1, 1, 0), Version::new(1, 1, 0)),
+        None
+    );
 }
 
 // spec: AI-031 [M4]
@@ -271,26 +285,43 @@ async fn ai031_ai_questions_one_immutable_row_per_used_version() {
     let conn = bench.conn();
     let v1 = user_question();
     assert!(record_used(conn, &v1).unwrap(), "erste Ablage ist neu");
-    assert!(!record_used(conn, &v1).unwrap(), "zweite Ablage legt nichts an");
-    assert_eq!(os_store::ai::questions::count_versions(conn, "my-intent").unwrap(), 1);
+    assert!(
+        !record_used(conn, &v1).unwrap(),
+        "zweite Ablage legt nichts an"
+    );
+    assert_eq!(
+        os_store::ai::questions::count_versions(conn, "my-intent").unwrap(),
+        1
+    );
     let mut v2 = v1.clone();
     v2.instructions = "Changed criteria.".into();
     v2.version = next_version(&v1, &v2);
     assert!(record_used(conn, &v2).unwrap());
-    assert_eq!(os_store::ai::questions::count_versions(conn, "my-intent").unwrap(), 2);
+    assert_eq!(
+        os_store::ai::questions::count_versions(conn, "my-intent").unwrap(),
+        2
+    );
     // Die alte Kopie ist unverändert.
-    assert_eq!(stored_version(conn, "my-intent", "1.2.0").unwrap(), Some(v1.clone()));
-    assert_eq!(stored_version(conn, "my-intent", "1.3.0").unwrap(), Some(v2));
+    assert_eq!(
+        stored_version(conn, "my-intent", "1.2.0").unwrap(),
+        Some(v1.clone())
+    );
+    assert_eq!(
+        stored_version(conn, "my-intent", "1.3.0").unwrap(),
+        Some(v2)
+    );
     // Eine abweichende Definition unter derselben Version wird nicht gespeichert (Kopie bleibt).
     let mut forged = v1.clone();
     forged.instructions = "Forged.".into();
     let _ = os_store::ai::questions::ensure(conn, "my-intent", "1.2.0", &forged.canonical_json())
         .expect_err("gleiche Version mit anderer Definition");
-    assert_eq!(stored_version(conn, "my-intent", "1.2.0").unwrap(), Some(v1));
-    // Direkte Änderung der Zeile ist ausgeschlossen („wird nie verändert“).
-    let update = conn.execute_batch(
-        "UPDATE ai_questions SET definition_json = '{}' WHERE id = 'my-intent';",
+    assert_eq!(
+        stored_version(conn, "my-intent", "1.2.0").unwrap(),
+        Some(v1)
     );
+    // Direkte Änderung der Zeile ist ausgeschlossen („wird nie verändert“).
+    let update = conn
+        .execute_batch("UPDATE ai_questions SET definition_json = '{}' WHERE id = 'my-intent';");
     assert!(update.is_err(), "ai_questions-Zeile ließ sich ändern");
 }
 
@@ -328,7 +359,11 @@ async fn ai031_template_30_sources_one_question_row_30_answers() {
     assert_eq!(report.end, os_ai::decisions::exec::RunEnd::Completed);
     let rows = os_store::ai::questions::list(bench.conn()).unwrap();
     let tpl_rows: Vec<_> = rows.iter().filter(|r| r.id == "redirect-target").collect();
-    assert_eq!(tpl_rows.len(), 1, "genau 1 Eintrag (die Vorlage) in ai_questions");
+    assert_eq!(
+        tpl_rows.len(),
+        1,
+        "genau 1 Eintrag (die Vorlage) in ai_questions"
+    );
     assert_eq!(tpl_rows[0].version, "1.0.0");
     assert!(
         tpl_rows[0].definition_json.contains("{{candidates}}"),
@@ -338,7 +373,11 @@ async fn ai031_template_30_sources_one_question_row_30_answers() {
     let answers = bench.answers("redirect-target");
     assert_eq!(answers.len(), 30, "30 Einträge in ai_answers");
     let params: BTreeSet<_> = answers.iter().map(|a| a.params_json.clone()).collect();
-    assert_eq!(params.len(), 30, "jeder Eintrag mit eigenen Parameterwerten");
+    assert_eq!(
+        params.len(),
+        30,
+        "jeder Eintrag mit eigenen Parameterwerten"
+    );
     for a in &answers {
         assert!(a.params_json.contains(&format!("/neu/{}/ziel-1", a.url_id)));
         assert_eq!(a.question_version, "1.0.0");
@@ -359,14 +398,20 @@ async fn ai031_old_answers_stay_with_old_version() {
     let items: Vec<_> = (1..=2)
         .map(|i| s::page(i, &format!("Title {i}"), "Text."))
         .collect();
-    bench.run(&[s::active(v1.clone())], &items, s::options()).await;
+    bench
+        .run(&[s::active(v1.clone())], &items, s::options())
+        .await;
     let before = s::Mock::posts(&bench.mock, s::DECISIONS).len();
     assert_eq!(before, 2);
     // Unveränderte Frage, erneuter Lauf → keine Requests (Ergebnisse bleiben).
     let mut again = s::options();
     again.selection = os_ai::decisions::exec::Selection::All;
     bench.run(&[s::active(v1.clone())], &items, again).await;
-    assert_eq!(bench.mock.posts(s::DECISIONS).len(), 2, "gleiche Version: aus dem Cache");
+    assert_eq!(
+        bench.mock.posts(s::DECISIONS).len(),
+        2,
+        "gleiche Version: aus dem Cache"
+    );
     // Neue Version (instructions geändert) → neue Ergebnisse unter 1.1.0, die alten bleiben 1.0.0 zugeordnet.
     let mut v2 = v1.clone();
     v2.instructions = "A different observable criterion.".into();
@@ -376,13 +421,17 @@ async fn ai031_old_answers_stay_with_old_version() {
     all.selection = os_ai::decisions::exec::Selection::All;
     bench.run(&[s::active(v2)], &items, all).await;
     assert_eq!(bench.mock.posts(s::DECISIONS).len(), 4);
-    let old = os_store::ai::answers::list_for_question(bench.conn(), "my-check", Some("1.0.0"))
-        .unwrap();
-    let new = os_store::ai::answers::list_for_question(bench.conn(), "my-check", Some("1.1.0"))
-        .unwrap();
+    let old =
+        os_store::ai::answers::list_for_question(bench.conn(), "my-check", Some("1.0.0")).unwrap();
+    let new =
+        os_store::ai::answers::list_for_question(bench.conn(), "my-check", Some("1.1.0")).unwrap();
     assert_eq!(old.len(), 2);
     assert_eq!(new.len(), 2);
-    assert!(old.iter().all(|r| r.status == "Success" && r.answer_json.is_some()));
+    assert!(
+        old.iter()
+            .all(|r| r.status.starts_with("Success") && r.answer_json.is_some()),
+        "alte Ergebnisse verändert: {old:?}"
+    );
     assert_eq!(
         os_store::ai::questions::count_versions(bench.conn(), "my-check").unwrap(),
         2

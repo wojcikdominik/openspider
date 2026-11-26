@@ -122,10 +122,20 @@ fn ai030_valid_questions_of_each_type_are_accepted() {
 // acceptance: independent
 #[test]
 fn ai030_required_fields_are_enforced_with_field_name() {
-    for key in ["id", "version", "name", "type", "instructions", "subject", "inputs"] {
+    for key in [
+        "id",
+        "version",
+        "name",
+        "type",
+        "instructions",
+        "subject",
+        "inputs",
+    ] {
         let errors = errors_of(&without(base_choice(), key));
         assert!(
-            errors.iter().any(|e| e.field.contains(key) || e.message.contains(key)),
+            errors
+                .iter()
+                .any(|e| e.field.contains(key) || e.message.contains(key)),
             "fehlendes Pflichtfeld {key} wird nicht benannt: {errors:?}"
         );
     }
@@ -146,7 +156,17 @@ fn ai030_id_pattern_boundaries() {
         );
     }
     let too_long = format!("a{}", "b".repeat(48));
-    for id in ["", "A", "Page", "9a", "-a", "a_b", "a b", "ä", too_long.as_str()] {
+    for id in [
+        "",
+        "A",
+        "Page",
+        "9a",
+        "-a",
+        "a_b",
+        "a b",
+        "ä",
+        too_long.as_str(),
+    ] {
         assert_rejected_at(&with(base_choice(), "id", json!(id)), "id");
     }
 }
@@ -211,7 +231,8 @@ fn ai030_choice_values_unique_and_patterned() {
     assert_rejected_at(&with(base_choice(), "choices", dup), "choices");
     let ok32 = "v".repeat(32);
     for value in ["a", "a_b-1", "0", ok32.as_str()] {
-        let list = json!([{"value": value, "description": "x"}, {"value": "zz", "description": "y"}]);
+        let list =
+            json!([{"value": value, "description": "x"}, {"value": "zz", "description": "y"}]);
         assert!(
             parse_value(&with(base_choice(), "choices", list)).is_ok(),
             "Wert {value:?} abgelehnt"
@@ -219,7 +240,8 @@ fn ai030_choice_values_unique_and_patterned() {
     }
     let too_long = "v".repeat(33);
     for value in ["", "Product", "a b", "ä", "a.b", too_long.as_str()] {
-        let list = json!([{"value": value, "description": "x"}, {"value": "zz", "description": "y"}]);
+        let list =
+            json!([{"value": value, "description": "x"}, {"value": "zz", "description": "y"}]);
         assert_rejected_at(&with(base_choice(), "choices", list), "choices");
     }
 }
@@ -249,7 +271,7 @@ fn ai030_score_levels_two_to_ten_unique_labels() {
 // acceptance: independent
 #[test]
 fn ai030_instructions_one_to_2000_characters() {
-    for text in ["x".repeat(1), "x".repeat(2000), "ä".repeat(2000)] {
+    for text in ["x".to_string(), "x".repeat(2000), "ä".repeat(2000)] {
         assert!(
             parse_value(&with(base_choice(), "instructions", json!(text))).is_ok(),
             "instructions mit {} Zeichen abgelehnt",
@@ -257,7 +279,10 @@ fn ai030_instructions_one_to_2000_characters() {
         );
     }
     for text in [String::new(), "x".repeat(2001), "ä".repeat(2001)] {
-        assert_rejected_at(&with(base_choice(), "instructions", json!(text)), "instructions");
+        assert_rejected_at(
+            &with(base_choice(), "instructions", json!(text)),
+            "instructions",
+        );
     }
 }
 
@@ -301,7 +326,10 @@ fn ai030_image_subject_allows_only_image_and_context_fields() {
         "subject": "image",
         "inputs": ["image", "alt", "image_context"]
     });
-    assert!(parse_value(&image).is_ok(), "Bildfrage mit Bild und Kontext abgelehnt");
+    assert!(
+        parse_value(&image).is_ok(),
+        "Bildfrage mit Bild und Kontext abgelehnt"
+    );
     for field in ["page_text", "h2", "meta_description"] {
         let bad = with(image.clone(), "inputs", json!(["image", "alt", field]));
         assert_rejected_at(&bad, "inputs");
@@ -309,9 +337,15 @@ fn ai030_image_subject_allows_only_image_and_context_fields() {
     // Nachtrag 26.11.2026 (Auslegung 3 bestätigt): Kontextfelder einer Bildfrage sind alt, image_context und url;
     // eine Seitenfrage darf ein ausdrücklich gewähltes Seitenbild (`image`) wählen, aber nicht alt/image_context.
     let with_url = with(image.clone(), "inputs", json!(["image", "alt", "url"]));
-    assert!(parse_value(&with_url).is_ok(), "url als Kontextfeld einer Bildfrage abgelehnt");
+    assert!(
+        parse_value(&with_url).is_ok(),
+        "url als Kontextfeld einer Bildfrage abgelehnt"
+    );
     let page_image = with(base_predicate(), "inputs", json!(["title", "image"]));
-    assert!(parse_value(&page_image).is_ok(), "Seitenbild in einer Seitenfrage abgelehnt");
+    assert!(
+        parse_value(&page_image).is_ok(),
+        "Seitenbild in einer Seitenfrage abgelehnt"
+    );
     for field in ["alt", "image_context"] {
         let bad = with(base_predicate(), "inputs", json!(["title", field]));
         assert_rejected_at(&bad, "inputs");
@@ -332,7 +366,10 @@ fn ai030_optional_issues_and_segment_are_accepted() {
     let mut v = base_choice();
     v["issues"] = json!([{"name": "Some Issue"}]);
     v["segment"] = json!({"name": "Some Segment"});
-    assert!(parse_value(&v).is_ok(), "optionale Felder issues/segment abgelehnt");
+    assert!(
+        parse_value(&v).is_ok(),
+        "optionale Felder issues/segment abgelehnt"
+    );
 }
 
 // spec: AI-030 [M4]
@@ -417,7 +454,10 @@ fn ai030_schema_file_matches_spec_limits() {
         "alt",
         "image_context",
     ] {
-        assert!(text.contains(&format!("\"{field}\"")), "Eingabefeld {field} fehlt im Schema");
+        assert!(
+            text.contains(&format!("\"{field}\"")),
+            "Eingabefeld {field} fehlt im Schema"
+        );
     }
     // Das Schema allein weist Strukturfehler ab, akzeptiert gültige Fragen.
     assert!(schema_errors(&base_choice()).is_ok());
@@ -494,7 +534,10 @@ fn ai030_template_placeholder_rules() {
     let mut described = base_choice();
     described["choices"][0]["description"] = json!("Product in {{code}}.");
     described["params"] = json!([{"name": "code", "type": "string", "source": "html_lang"}]);
-    assert!(parse_value(&described).is_ok(), "Platzhalter in description abgelehnt");
+    assert!(
+        parse_value(&described).is_ok(),
+        "Platzhalter in description abgelehnt"
+    );
 }
 
 // spec: AI-030 [M4]

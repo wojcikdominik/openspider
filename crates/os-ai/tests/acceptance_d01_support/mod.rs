@@ -377,15 +377,15 @@ pub fn base64_decode(text: &str) -> Vec<u8> {
 
 /// 1 × 1 Pixel PNG.
 pub const PNG_1X1: [u8; 70] = [
-    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0,
-    31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 100, 96, 248, 95, 15, 0, 2, 135, 1, 128,
-    235, 71, 186, 146, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
+    0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 100, 96, 248, 95, 15, 0, 2,
+    135, 1, 128, 235, 71, 186, 146, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
 ];
 
 /// PNG-Kopf (Signatur und IHDR mit gültiger Prüfsumme) eines Bildes mit 3.000 × 2.000 px.
 pub const PNG_HEAD_3000X2000: [u8; 33] = [
-    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 11, 184, 0, 0, 7, 208, 8, 2, 0, 0,
-    0, 221, 112, 133, 109,
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 11, 184, 0, 0, 7, 208, 8,
+    2, 0, 0, 0, 221, 112, 133, 109,
 ];
 
 /// Verschiedene gültige Bilddaten (1 × 1 PNG plus Unterscheidungsbytes nach IEND).
@@ -685,8 +685,10 @@ mod tempdir {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let p = std::env::temp_dir().join(format!(
-                "os-ai-d01-acc-{tag}-{}-{nanos}",
+                "os-ai-d01-acc-{tag}-{}-{n}-{nanos}",
                 std::process::id()
             ));
             std::fs::create_dir_all(&p).unwrap();
@@ -751,8 +753,14 @@ impl Bench {
         );
         // Modelllisten laden (Fähigkeiten, Reasoning-Stufen, Ausgabegrenzen; Adapter-Cache), bevor ein Test `hold`
         // setzt.
-        anthropic.list_models().await.expect("Anthropic-Modellliste");
-        openrouter.list_models().await.expect("OpenRouter-Modellliste");
+        anthropic
+            .list_models()
+            .await
+            .expect("Anthropic-Modellliste");
+        openrouter
+            .list_models()
+            .await
+            .expect("OpenRouter-Modellliste");
         let anthropic_raw = mock.get_json("/anthropic/v1/models").await["data"]
             .as_array()
             .cloned()
@@ -771,8 +779,8 @@ impl Bench {
             }
         }
         let limits = BudgetLimits::default();
-        let ledger = os_store::ai::budget::open_ledger(file.conn(), limits.clone(), &[])
-            .expect("Ledger");
+        let ledger =
+            os_store::ai::budget::open_ledger(file.conn(), limits.clone(), &[]).expect("Ledger");
         let file = Some(file);
         let mut bench = Self {
             mock,
@@ -801,6 +809,32 @@ impl Bench {
         };
         bench.set_keys(keys);
         bench
+    }
+
+    /// Neue Adapter-Instanzen (Kontingentsperren gelten je Instanz bzw. je KI-Lauf, AI-020 Nachtrag 26.11.2026).
+    pub async fn renew_adapters(&mut self) {
+        let http = || {
+            OpenAiHttp::new(
+                client(),
+                OpenAiConfig::new(os_ai::adapters::openai_responses::ApiKey::new(OPENAI_KEY))
+                    .with_base_url(self.mock.url("/openai/v1")),
+                OpenAiAccount::new(),
+            )
+        };
+        let decisions = OpenAiDecisions::new(http());
+        let responses = OpenAiResponses::new(http());
+        let anthropic = AnthropicAdapter::new(
+            client(),
+            AnthropicConfig::new(os_ai::adapters::anthropic::ApiKey::new(ANTHROPIC_KEY))
+                .with_base_url(self.mock.url("/anthropic")),
+        );
+        anthropic
+            .list_models()
+            .await
+            .expect("Anthropic-Modellliste");
+        self.decisions = decisions;
+        self.responses = responses;
+        self.anthropic = anthropic;
     }
 
     /// Setzt die verbundenen Anbieter (Schlüssel vorhanden, Live-Modellliste geladen).
@@ -1097,10 +1131,7 @@ pub fn max_probability(answer: &Value) -> f64 {
 /// Summe der Einzelwahrscheinlichkeiten.
 pub fn probability_sum(answer: &Value) -> f64 {
     match &answer["probabilities"] {
-        Value::Array(items) => items
-            .iter()
-            .filter_map(|p| p["probability"].as_f64())
-            .sum(),
+        Value::Array(items) => items.iter().filter_map(|p| p["probability"].as_f64()).sum(),
         Value::Object(map) => map.values().filter_map(Value::as_f64).sum(),
         _ => 0.0,
     }

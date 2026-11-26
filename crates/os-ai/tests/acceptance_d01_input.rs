@@ -64,9 +64,16 @@ fn ai032_truncation_cuts_at_code_point_boundaries() {
     for max in [1usize, 2, 3, 4, 5, 7, 100, 4_999, 5_000, 9_998] {
         let cut = truncate_chars(&text, max);
         assert_eq!(cut.chars().count(), max, "max = {max}");
-        assert!(text.starts_with(cut), "Kürzung ist kein Präfix (max = {max})");
+        assert!(
+            text.starts_with(cut),
+            "Kürzung ist kein Präfix (max = {max})"
+        );
     }
-    assert_eq!(truncate_chars(&text, 20_000), text, "kurzer Text bleibt unverändert");
+    assert_eq!(
+        truncate_chars(&text, 20_000),
+        text,
+        "kurzer Text bleibt unverändert"
+    );
     // INTEG-172: Umlaut an Position 4.999/5.000 → genau 5.000 Zeichen, das Zeichen bleibt ganz.
     let long = long_text();
     let cut = truncate_chars(&long, 5_000);
@@ -153,7 +160,10 @@ fn ai032_only_selected_fields_reach_the_input() {
     let block = values.text_block();
     assert!(block.contains("MARK-TITLE") && block.contains("MARK-H1"));
     for absent in ["MARK-PAGETEXT", "MARK-H2A", "MARK-META", "MARK-URL"] {
-        assert!(!block.contains(absent), "{absent} gesendet, obwohl nicht gewählt");
+        assert!(
+            !block.contains(absent),
+            "{absent} gesendet, obwohl nicht gewählt"
+        );
     }
     // h2: alle, durch Zeilenumbruch getrennt.
     let q = page_question(json!(["h2"]));
@@ -207,7 +217,11 @@ fn ai032_image_context_is_capped_at_300_characters() {
     };
     let values = build_values(&q, &data, None, None, None).unwrap();
     assert_eq!(
-        values.text(InputField::ImageContext).unwrap().chars().count(),
+        values
+            .text(InputField::ImageContext)
+            .unwrap()
+            .chars()
+            .count(),
         300
     );
     assert_eq!(values.images().len(), 1, "genau ein Bild");
@@ -221,7 +235,10 @@ fn ai032_image_size_rules() {
     assert_eq!(resized_dimensions(2_000, 3_000, 2_048), (1_365, 2_048));
     assert_eq!(resized_dimensions(1_024, 768, 2_048), (1_024, 768));
     assert_eq!(resized_dimensions(2_048, 10, 2_048), (2_048, 10));
-    assert_eq!(image_dimensions(&s::PNG_HEAD_3000X2000), Some((3_000, 2_000)));
+    assert_eq!(
+        image_dimensions(&s::PNG_HEAD_3000X2000),
+        Some((3_000, 2_000))
+    );
     // Über 20 MB → übersprungen.
     let mut huge = s::PNG_1X1.to_vec();
     huge.resize(21 * 1024 * 1024, 0);
@@ -298,7 +315,11 @@ async fn ai032_same_fields_bundle_extra_field_second_request() {
             &["x", "y", "other"],
             &["title", "page_text"],
         )),
-        s::active(s::predicate("q-d", "Question D", &["title", "page_text", "h2"])),
+        s::active(s::predicate(
+            "q-d",
+            "Question D",
+            &["title", "page_text", "h2"],
+        )),
     ];
     bench.run(&questions, &items, s::options()).await;
     let bodies = bench.mock.bodies(s::DECISIONS);
@@ -311,7 +332,11 @@ async fn ai032_same_fields_bundle_extra_field_second_request() {
         assert_eq!(mine.len(), 2, "{url}: 2 Requests");
         let mut sizes: Vec<usize> = mine.iter().map(|b| s::decision_names(b).len()).collect();
         sizes.sort();
-        assert_eq!(sizes, vec![1, 3], "{url}: 3 Fragen gebündelt, die vierte einzeln");
+        assert_eq!(
+            sizes,
+            vec![1, 3],
+            "{url}: 3 Fragen gebündelt, die vierte einzeln"
+        );
         let single = mine
             .iter()
             .find(|b| s::decision_names(b).len() == 1)
@@ -352,7 +377,11 @@ async fn ai032_scope_outside_s_is_skipped_without_request() {
     for id in [23, 24, 25] {
         assert_eq!(bench.status(id, "page-type"), "Skipped (scope)");
     }
-    assert_eq!(bench.mock.posts(s::DECISIONS).len(), 22, "kein Request außerhalb von S");
+    assert_eq!(
+        bench.mock.posts(s::DECISIONS).len(),
+        22,
+        "kein Request außerhalb von S"
+    );
     let log = serde_json::to_string(&bench.mock.log()).unwrap();
     assert!(!log.contains("MARK-NOINDEX") && !log.contains("MARK-404"));
     // Jede Statuszeile enthält nur Werte aus AI-020.
@@ -383,7 +412,12 @@ async fn ai032_empty_input_in_run_sends_nothing() {
 #[tokio::test]
 async fn ai032_page_type_result_feeds_lower_question() {
     let bench = s::Bench::new(&["openai"], 1).await;
-    let pt = s::choice("page-type", "Page Type", &["zzfirst", "zzsecond"], &["title"]);
+    let pt = s::choice(
+        "page-type",
+        "Page Type",
+        &["zzfirst", "zzsecond"],
+        &["title"],
+    );
     let dependent = s::predicate("is-shop", "Is Shop", &["title", "page_type"]);
     let items = [s::page(1, "Some page", "Text.")];
     bench
@@ -424,7 +458,11 @@ async fn ai032_segment_only_miss_is_skipped_segment() {
     let mut missing = s::page(3, "Gone", "Text.");
     missing.status_code = Some(404);
     bench
-        .run(&[s::active(q)], &[in_segment, outside, missing], s::options())
+        .run(
+            &[s::active(q)],
+            &[in_segment, outside, missing],
+            s::options(),
+        )
         .await;
     assert_eq!(bench.status(1, "shop-only"), "Success");
     assert_eq!(bench.status(2, "shop-only"), "Skipped (segment)");
@@ -453,7 +491,11 @@ async fn ai032_image_scope_ignores_indexability() {
     broken.status_code = Some(404);
     let page = s::page(3, "A page, not an image", "Text.");
     bench
-        .run(&[s::active(q)], &[not_indexable, broken, page], s::options())
+        .run(
+            &[s::active(q)],
+            &[not_indexable, broken, page],
+            s::options(),
+        )
         .await;
     assert_eq!(bench.status(1, "alt-check"), "Success");
     assert_eq!(bench.status(2, "alt-check"), "Skipped (scope)");

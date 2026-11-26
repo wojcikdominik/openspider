@@ -137,7 +137,10 @@ async fn hold_count_2_holds_two_third_is_answered_immediately() {
             .unwrap();
         let (raw, _) = common::read_all(&mut stream).await;
         let resp = common::parse(&raw).unwrap();
-        (resp.status, serde_json::from_slice::<Value>(&resp.body).unwrap())
+        (
+            resp.status,
+            serde_json::from_slice::<Value>(&resp.body).unwrap(),
+        )
     };
     let held_in_log = log
         .as_array()
@@ -146,11 +149,17 @@ async fn hold_count_2_holds_two_third_is_answered_immediately() {
         .filter(|r| r["path"] == DECISIONS && r["held"] == true)
         .count();
     assert_eq!(held_in_log, 2);
-    assert!(!first.is_finished() && !second.is_finished(), "gehaltener Request beantwortet");
+    assert!(
+        !first.is_finished() && !second.is_finished(),
+        "gehaltener Request beantwortet"
+    );
     // Ein dritter Request wird sofort beantwortet.
-    let (status, third) = tokio::time::timeout(GUARD, http(addr, DECISIONS, &predicate_request().to_string()))
-        .await
-        .expect("dritter Request sofort beantwortet");
+    let (status, third) = tokio::time::timeout(
+        GUARD,
+        http(addr, DECISIONS, &predicate_request().to_string()),
+    )
+    .await
+    .expect("dritter Request sofort beantwortet");
     assert_eq!(status, 200);
     assert!(third["answers"].is_array());
     assert!(

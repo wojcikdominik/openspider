@@ -92,7 +92,9 @@ async fn ai035_local_only_routes_to_ollama_or_skips() {
     );
     // Im Lauf: ohne lokales Modell `Skipped (policy)` und kein Request.
     let items = [s::page(1, "Local MOCK-ID:d01t-eq", "Text.")];
-    bench.run(&[s::active(q.clone())], &items, s::options()).await;
+    bench
+        .run(&[s::active(q.clone())], &items, s::options())
+        .await;
     assert_eq!(bench.status(1, "d01t-eq-choice"), "Skipped (policy)");
     assert_eq!(bench.mock.provider_posts(), 0);
     // Mit lokalem Modell: Request an Ollama, keiner an Cloud-Anbieter.
@@ -150,7 +152,11 @@ async fn ai035_removed_openai_key_new_entries_via_anthropic_old_unchanged() {
     assert_eq!(new.status, "Success");
     assert_eq!(new.source.as_deref(), Some("self-reported"));
     assert_eq!(new.model.as_deref(), Some("mock-claude"));
-    assert_eq!(bench.mock.posts(s::MESSAGES).len(), 1, "nur der neue Eintrag");
+    assert_eq!(
+        bench.mock.posts(s::MESSAGES).len(),
+        1,
+        "nur der neue Eintrag"
+    );
     for old in before {
         let now = bench.answer(old.url_id, "d01t-eq-choice");
         assert_eq!(now, old, "vorhandenes Ergebnis verändert");
@@ -187,7 +193,9 @@ async fn ai035_changing_the_path_changes_the_cache_key() {
     let mut bench = s::Bench::new(&["openai", "anthropic"], 1).await;
     let q = eq_question();
     let items = [s::page(1, "Cache MOCK-ID:d01t-eq", "Text.")];
-    bench.run(&[s::active(q.clone())], &items, s::options()).await;
+    bench
+        .run(&[s::active(q.clone())], &items, s::options())
+        .await;
     assert_eq!(bench.mock.posts(s::DECISIONS).len(), 1);
     // Gleicher Weg, „Neu analysieren“ → Cache-Treffer, kein Request.
     bench.run(&[s::active(q.clone())], &items, all()).await;
