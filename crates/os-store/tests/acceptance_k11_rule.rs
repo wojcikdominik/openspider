@@ -214,6 +214,7 @@ fn management_rejects_every_file_action_for_any_active_owner_and_retention_skips
             set_owner(&path, "mcp-stdio", &pid, Some(now));
             // Alt genug für jede Aufbewahrungsregel.
             set(&path, "ended_at", &ago(now, 400 * 86_400_000).to_db());
+            set(&path, "locked", "0");
             let label = format!("{state:?}, PID {pid}");
             let before = meta_dump(&path);
             let mut m = Manager::open(dir.path()).unwrap();
@@ -224,12 +225,13 @@ fn management_rejects_every_file_action_for_any_active_owner_and_retention_skips
                 m.move_file(&id, other.path(), now, &|_, _| true).is_err(),
                 "Verschieben: {label}"
             );
+            let out = TempDir::new("rule-manager-export");
+            let export = out.path().join("export.ospider");
             assert!(
-                m.export(&id, &dir.path().join("export.ospider"), now, &|_, _| true)
-                    .is_err(),
+                m.export(&id, &export, now, &|_, _| true).is_err(),
                 "Exportieren: {label}"
             );
-            assert!(!dir.path().join("export.ospider").exists(), "{label}");
+            assert!(!export.exists(), "{label}");
             assert!(m.lock(&id, true, now).is_err(), "Sperren: {label}");
             set(&path, "locked", "1");
             assert!(m.lock(&id, false, now).is_err(), "Entsperren: {label}");
@@ -367,8 +369,8 @@ fn files_from_1_0_in_every_state_are_occupied_exactly_when_running_by_crawl_125(
         if !running {
             m.lock(&id, false, now).unwrap();
         }
-        let export = dir.path().join("x").join("export.ospider");
-        std::fs::create_dir_all(export.parent().unwrap()).unwrap();
+        let out = TempDir::new("rule-v10-export");
+        let export = out.path().join("export.ospider");
         assert_eq!(
             m.export(&id, &export, now, &|_, _| true).is_err(),
             running,
