@@ -5,7 +5,7 @@ import { useT } from "../../../i18n";
 import { TabBar, tabId } from "../../../ui/primitives/TabBar";
 import { TabContextMenuHost, TabsConfigDialog, tabContextEntries } from "../../table-advanced/TabControls";
 import { useSession } from "../../../state/session";
-import { useOverview, useAnalysis } from "./useSidebarQuery";
+import { useOverview, useAnalysis, useRenderedAnswer } from "./useSidebarQuery";
 import { useSidebarLayout } from "./layout";
 import { Overview, overviewRows } from "../overview/Overview";
 import { Issues } from "../issues/Issues";
@@ -35,6 +35,8 @@ export function SidebarFrame({ panels = Object.values(modules).flatMap(m => m.pa
   // response immediately: continuous ticks can starve its background render.
   const deferredOverview = useDeferredValue(overview.data);
   const overviewData = deferredOverview ?? overview.data;
+  // UI-018 (B4-LAGFIX2): „Completed“ waits until the deferred Overview has committed the reloaded answer.
+  useRenderedAnswer(overview, overviewData);
   const analysis = useAnalysis();
   const controls = useStartAnalysis();
   const ids = useMemo(() => [...new Set([...BASE, ...panels.filter(p => !p.embeddingsOnly || embeddingsEnabled).map(p => p.id)])], [panels, embeddingsEnabled]);
