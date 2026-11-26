@@ -919,6 +919,51 @@
   "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). AI-025 (Nachtrag 21.11.2026 zu AI-010/AI-011, E-4): (1) wöchentlicher geplanter CI-Lauf prüft jedes Standardmodell aus resources/ai/task-defaults.json gegen die Modellliste des Anbieters und die Preise aus resources/ai/pricing.json gegen die Anbieterangaben, öffnet bei Abweichung ein Issue; API-Schlüssel nur als Repository-Secrets, die der Nutzer anlegt (Namen im Bericht nennen, nie Werte lesen oder ausgeben); ohne Secrets grün mit Hinweis (M3 D14); Tests nur gegen ai-mock. (2) Release-Check im prepare-Job von release.yml: Abbruch bei verified_at älter als 120 Tage. Kein Katalog-Nachladen in der App. Preise von Anbietern ohne maschinenlesbare Preise: nur Existenzprüfung bis Klärung K4-21. Kein Push; die geplante Ausführung wird erst nach dem Merge aktiv."
  },
  {
+  "id": "M4-K11",
+  "kind": "package",
+  "model": "opus",
+  "wave": "5k",
+  "size": "L",
+  "runner": "local-mac",
+  "title": "Aktiver Besitzer eines KI-Laufs: Leseregel und gemeinsame Schreibfunktion",
+  "spec_ids": [],
+  "extra_spec_ids": [
+   "CRAWL-125",
+   "AGENT-020",
+   "AGENT-030",
+   "OUT-228",
+   "AI-020"
+  ],
+  "depends_on": [
+   "M4-K10"
+  ],
+  "owns": [
+   "crates/os-store/src/owner.rs (neu: Leseregel „aktiver Besitzer“, Prüfung „belegt“, Schreibfunktionen claim/beat/release, Konstante des Intervalls)",
+   "crates/os-store/src/lib.rs (nur Zeile `pub mod owner;`)",
+   "crates/os-store/src/meta.rs (nur additive Felder `owner_kind`/`owner_pid` in `CrawlMeta` und deren Lesen)",
+   "crates/os-store/src/registry.rs (nur `CrawlListing::active_owner`/`occupied`, Anwendung in `can_resume` und das Lesen der neuen Felder)",
+   "crates/os-store/src/registry/index.rs (nur die neuen Felder im Zwischenspeicher; ältere Einträge ohne sie werden neu gelesen)",
+   "crates/os-store/src/registry/management.rs (nur Funktion `guard` und der Filter in `retain`)",
+   "crates/os-engine/src/lifecycle.rs (nur Funktion `ensure_not_running`)",
+   "crates/os-engine/src/rescan.rs (nur Funktion `ensure_not_running_with`)",
+   "crates/os-engine/src/crawl.rs (nur Zeile `HEARTBEAT_INTERVAL`: Wert aus `os_store::owner`, Name und Wert unverändert)",
+   "crates/os-ai/src/run_owner.rs (neu: Typ `RunOwner`, Heartbeat-Aufgabe mit injizierbarer Uhr)",
+   "crates/os-ai/src/lib.rs (nur Zeile `pub mod run_owner;`)",
+   "crates/os-app/src/commands/crawls.rs (nur die Prüfungen „läuft“ in Liste, Sperren/Entsperren und Löschen/Verschieben/Exportieren)",
+   "crates/os-app/src/session/feed.rs (nur Berechnung von `CrawlOwner` in `snapshot` und im Tick)",
+   "crates/os-app/src/session/control.rs (nur Funktionen `ensure_idle` und `stop_checkpoint`)",
+   "crates/os-mcp/src/crawl_service.rs (nur Funktionen `not_live` und `stop`)",
+   "crates/os-store/tests/active_owner_*.rs",
+   "crates/os-engine/tests/active_owner_*.rs",
+   "crates/os-ai/tests/run_owner_*.rs",
+   "crates/os-app/tests/active_owner_*.rs",
+   "crates/os-mcp/tests/active_owner_*.rs",
+   "tests/fixtures/crawl-files/active-owner/**"
+  ],
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, bei geteilten Dateien nur die genannte Funktion bzw. Zeile, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/k11.md. Welle 5k (neben K08): Welle 5 ist mit D01, V01, U01 voll (E11); K11 hängt nur an K10 und läuft parallel zu ihnen, keine gemeinsamen Dateien mit D01, V01, U01 oder K08. Keine KI-Ausführung, kein ai-mock nötig: alle Kriterien mit simuliertem Heartbeat (Metadaten setzen) und `ManualClock` bzw. pausierter tokio-Zeit. Grundlage: 01 CRAWL-125, Nachtrag 26.11.2026 (Klärung K4-22; Verhalten 1.0, Abschnitt „Wer liest“) und 08 AI-020, Unterpunkt „Aktiver Besitzer außerhalb von `Running`“ (Nachtrag 26.11.2026). (1) Leseregel in `os_store::owner` neben `os_store::resume::effective_state_at`, dessen Verhalten unverändert bleibt: `active_owner_at(owner_pid, heartbeat_at, now)` (owner_pid nicht leer und jetzt − heartbeat_at ≤ `os_store::resume::HEARTBEAT_TIMEOUT_MS`, Zukunft gilt als aktuell, keine Ersatzkette) und eine Prüfung „belegt“ = laufend nach `effective_state_at` oder aktiver Besitzer mit fremder PID, dazu Methoden auf `CrawlFile` und `CrawlListing`. Anwenden in allen Lesern aus CRAWL-125 „Wer liest“: Registry (`can_resume`, `guard`, `retain`), Crawl-Verwaltung der App (Liste: `owner.live`/`controllable`/`canResume`; Sperren/Entsperren; Löschen/Verschieben/Exportieren → `busy`), Öffnen in der App (`feed.rs` `CrawlOwner`, nur lesend bei fremdem aktivem Besitzer) und die Prüfung beim Auslösen (`ensure_idle`, `stop_checkpoint`), Engine (`ensure_not_running`, `ensure_not_running_with` → „läuft noch (Prozess <pid>)“; deckt Fortsetzen, erneutes Crawlen, Entfernen und Stoppen ohne Engine für App, CLI und MCP), MCP `crawl_service.rs` (`not_live`/`stop`: fremder aktiver Besitzer wie fremd laufender Crawl, Fehler wie 1.0 **ohne** `busy`, Entscheidung Orchestrator 26.11.2026). Der abgeleitete Zustand (`effective_state`, Listen von CLI und MCP, `q_manifest`) bleibt unverändert. `busy` der KI-Werkzeuge (AGENT-030) baut M4-C02 mit dieser Prüfung. (2) Schreibseite: in `os_store::owner` synchrone Funktionen `claim`, `beat`, `release` (je ein Commit; `claim` in `BEGIN IMMEDIATE` mit Prüfung „belegt“, fremder aktiver Besitzer → Fehler mit Art und PID; schreibt `owner_kind`, `owner_pid`, `heartbeat_at`, nie `state`; `release` schreibt `heartbeat_at` = jetzt und leeres `owner_pid`) und die Konstante des Intervalls (2 s), auf die `os_engine::crawl::HEARTBEAT_INTERVAL` verweist (Name und Wert unverändert, Test auf Gleichheit). In `os_ai::run_owner` der Typ `RunOwner`: `start` trägt ein und startet eine tokio-Aufgabe, die alle `HEARTBEAT_INTERVAL` `beat` schreibt (Zeitstempel aus der injizierbaren `Clock`, Takt über tokio-Zeit, damit Tests die Zeit anhalten können), auch während der Aufrufer auf Antworten wartet; `finish` hält die Aufgabe an und ruft `release`; `Drop` ohne `finish` hält nur an (gilt wie Absturz). Führt der eigene Prozess den Crawl bereits (aktiver Besitzer = eigene PID, z. B. KI während des eigenen Crawls), liefert `start` einen passiven `RunOwner`, der nichts schreibt und `owner_pid` nicht leert (AI-020: dann schreibt allein die Engine). Crate-Wahl: Leseregel und Schreibfunktionen in os-store (hängt nur an os-model und rusqlite; alle Leser und os-ai hängen schon an os-store); die Heartbeat-Aufgabe in os-ai, weil sie tokio braucht und os-ai bereits an os-store und tokio hängt, während os-ai nicht an os-engine hängt und os-engine nicht an os-ai – so entsteht keine neue Abhängigkeitskante. Aufrufer: M4-D01, M4-V01 und spätere KI-Pakete (App, CLI, MCP hängen alle an os-ai). Keine Verhaltensänderung für Dateien aus 1.0 (eigenes Kriterium unten); alle bestehenden Tests der 1.0-Dateien bleiben unverändert grün. `HEARTBEAT_TIMEOUT_MS` (10 000) und `HEARTBEAT_INTERVAL` (2 s) unverändert wiederverwenden, keine eigene Schwelle. Kriterien von M4-K11 (spec-Kommentar AI-020, zusätzlich CRAWL-125 bzw. OUT-228/AGENT-020 je nach Leser): (a) 08 AI-020 Unterpunkt „Aktiver Besitzer“ Kriterium 1 Grenzwerte; (b) Kriterium 2 Verwaltung/Aufbewahrung/Fortsetzen/Stoppen mit simuliertem Heartbeat, 11 s später Löschen möglich; (c) Kriterium 5 Datei aus 1.0, alle Zustände: Prüfung „belegt“ gleich CRAWL-125 allein; (d) aus dem K4-13-Kriterium „Besitzer eines KI-Laufs“ nur der Teil „Crawl-Datei mit `Completed`, `owner_kind = mcp-stdio`, `owner_pid` gesetzt und aktuellem (simuliertem) Heartbeat → die App zeigt nur lesend“ (Schreibbefehle `Unsupported` wie `session_feed.rs` `live_foreign_crawl_is_read_only_and_uses_persisted_progress`); (e) eigenes Kriterium: `RunOwner` auf einer Datei mit `Completed`, pausierte tokio-Zeit 7 s → mindestens vier Werte `heartbeat_at` (Start, 2, 4, 6 s), `state` durchgehend `Completed`; nach `finish` `owner_pid` leer, `heartbeat_at` = Endzeitpunkt; zweiter `start` aus fremder PID während aktivem Besitzer → Fehler mit Art und PID; passiver `RunOwner` bei eigenem laufendem Crawl schreibt nichts; (f) eigenes Kriterium: MCP `stop_crawl` auf `Completed` mit fremdem aktivem Besitzer → Fehler mit `owner_kind` und PID ohne `busy`. Zuordnung der übrigen Kriterien (nicht hier): Kriterien 3 (Heartbeat des KI-Laufs mit `hold`) und 4 (KI während des eigenen laufenden Crawls) des Unterpunkts sowie aus dem K4-13-Nachtrag „Löschschutz“ (mit `hold`) und der erste Satz von „Besitzer eines KI-Laufs“ → M4-D01 (ruft `RunOwner` auf; ist K11 noch nicht gemergt, als Platzhalter `wartet auf M4-K11`, E4); der Teil „ihr ai-mock zählt 0 Requests“ von „Besitzer eines KI-Laufs“ → M4-N01. Hinweise aus K4-22 (nicht stillschweigend ändern, nur im Bericht melden): (i) die Verwaltungsliste meldet für jeden fremden Crawl `OwnerKind::Cli` ohne PID (`crates/os-app/src/commands/crawls.rs`, Feld `owner` in der Liste) – K11 setzt dort nur `live`/`controllable`/`canResume` nach der neuen Regel, Art und PID bleiben wie 1.0; (ii) `scheduler` wird in `feed.rs` gelesen, aber von keinem Prozess geschrieben; (iii) `os_store::registry::effective_state` hat keinen Rückfall auf `created_at` (anders als `CrawlListing::effective_state`) – nur melden; (iv) eine Bezugszeit in der Zukunft gilt unbegrenzt als aktuell – unverändert übernehmen. Offen zur Rückfrage an den Orchestrator (vor Paketstart Stand in docs/plan/M4.md K4-22 prüfen): Der Löschschutz aus K4-13 gilt für jeden KI-Lauf, die „Wirkung“ des Unterpunkts nennt nur einen fremden Besitzer; bis zur Antwort Verwaltungsaktionen nur bei fremder PID abweisen.",
+  "release": "1.1"
+ },
+ {
   "id": "M4-N01",
   "kind": "package",
   "model": "opus",
@@ -941,7 +986,8 @@
    "M4-V01",
    "M4-K08",
    "M4-K09",
-   "M4-K10"
+   "M4-K10",
+   "M4-K11"
   ],
   "owns": [
    "crates/*/tests/pending_m4_*.rs",
@@ -954,7 +1000,7 @@
    "apps/desktop/src/ipc/commands.json",
    "weitere Pfade nur laut Auflagenliste docs/plan/M4-reports/n01-auflagen.md"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M2-N01: Platzhalter `wartet auf M4-xx` (nur in eigenen Dateien `pending_m4_<kurz-id>.rs` bzw. eigenen E2E-Ordnern, E4) auflösen, ohne Testinhalt zu ändern; rote Tests sind Befunde an den Planer. Schnittstellenbedarf der Pakete (Berichtsabschnitt „Schnittstellenbedarf“) gebündelt umsetzen. Startet erst, wenn alle Pakete der Wellen 1 bis 5 gemergt sind. K4-22 (26.11.2026): Melden Pakete Schnittstellenbedarf zum Besitzer-Heartbeat (z. B. eine öffentliche Prüfung „läuft noch“ – `os_engine::lifecycle::ensure_not_running` ist nur crate-intern – oder eine gemeinsame Funktion für Besitzerangaben und Heartbeat eines KI-Laufs), gebündelt umsetzen, Pfade außerhalb von owns nur über die Auflagenliste; Regel und Grenze aus 01 CRAWL-125, Nachtrag 26.11.2026 (Klärung K4-22) – `os_store::resume::effective_state_at`, `HEARTBEAT_TIMEOUT_MS` = 10 000 ms, `os_engine::crawl::HEARTBEAT_INTERVAL` = 2 s – bleiben unverändert.",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Wie M2-N01: Platzhalter `wartet auf M4-xx` (nur in eigenen Dateien `pending_m4_<kurz-id>.rs` bzw. eigenen E2E-Ordnern, E4) auflösen, ohne Testinhalt zu ändern; rote Tests sind Befunde an den Planer. Schnittstellenbedarf der Pakete (Berichtsabschnitt „Schnittstellenbedarf“) gebündelt umsetzen. Startet erst, wenn alle Pakete der Wellen 1 bis 5 gemergt sind. K4-22 (26.11.2026): Leseregel „aktiver Besitzer“ und `RunOwner` baut M4-K11 (dort kein Schnittstellenbedarf mehr bündeln); N01 löst nur Platzhalter `wartet auf M4-K11` in Tests von M4-D01 auf und übernimmt aus dem K4-13-Kriterium „Besitzer eines KI-Laufs“ (08 AI-020) den Teil „ihr ai-mock zählt 0 Requests“ (Crawl-Datei mit `Completed`, `owner_kind = mcp-stdio`, fremdem aktivem Besitzer; KI-Aktionen der App senden nichts).",
   "extra_spec_ids": [],
   "release": "1.1"
  },
@@ -1312,14 +1358,15 @@
    "M4-R01",
    "M4-L01",
    "M4-K05",
-   "M4-K07"
+   "M4-K07",
+   "M4-K11"
   ],
   "owns": [
    "crates/os-mcp/src/tools/ai_*.rs",
    "crates/os-mcp/tests/ai_tools*.rs",
    "crates/os-mcp/src/prompts.rs (nur Vorlage AI-Search-Sichtbarkeit um KI-Werkzeuge ergänzen)"
   ],
-  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Erster Aufruf ohne `confirm` → Schätzung, Mock-Zähler 0; mit `confirm: true` → Ausführung; ohne Einwilligung nach AI-018 MCP-Fehler mit Datenflussangaben und Mock-Zähler 0, Einträge `Pending (consent)`; Erweiterung der Feldmenge abgelehnt; Budget stoppt wie in der App; Ergebnisse gleich App/CLI. DataForSEO-Hüllen kommen mit M5-C02. AGENT-040: Vorlage „AI-Search-Sichtbarkeit“ referenziert jetzt die KI-Werkzeuge. K4-13 entschieden (26.11.2026): AGENT-030 bei laufendem (auch im eigenen Prozess), pausiertem, gestopptem und fremd gesteuertem Crawl sowie bei zwei Prozessen auf einem Crawl ohne laufenden Besitzer nach docs/spec/10-agent-interface.md AGENT-030, Nachtrag 26.11.2026 (Fehler `busy` nach AGENT-020; Besitzer eines KI-Laufs nach 08 AI-020, Nachtrag 26.11.2026). K4-22 erledigt (26.11.2026): Heartbeat, `owner_kind`/`owner_pid` und „aktuell“ nach 01 CRAWL-125, Nachtrag 26.11.2026 (Klärung K4-22). In 1.0 antworten `pause_crawl`/`stop_crawl` bei einem in einem anderen Prozess laufenden Crawl mit einem MCP-Fehler ohne Code `busy` (`crates/os-mcp/src/crawl_service.rs`, `CrawlService::not_live`); dieses Verhalten nicht ändern und für die KI-Werkzeuge nicht übernehmen – AGENT-030 verlangt dort `busy`. Fremdbesitz mit `os_store::CrawlFile::effective_state` (Grenze `os_store::resume::HEARTBEAT_TIMEOUT_MS`) und `owner_kind`/`owner_pid` aus `crawl_meta` erkennen, keine eigene Schwelle. Wie ein KI-Lauf auf einem nicht laufenden Crawl als Besitzer erkannt wird (die Regel von 1.0 wertet nur `Running` aus), entscheidet der Orchestrator zur Nachfrage aus K4-22; vor Paketstart den Stand in docs/plan/M4.md prüfen, nicht selbst festlegen.",
+  "prompt_notes": "Regeln: docs/plan/M4.md Abschnitt 2 (Abweichungen E1–E13), docs/plan/M3.md Abschnitt 2 (D1–D14) und M2.md Abschnitt 2/2a gehen vor; nur Dateien aus owns ändern, sonst abbrechen und melden (Datei, Diff-Auszug, Grund). Schritte in der genannten Reihenfolge; Durchhalteregel und Abschlussmarke PAKET FERTIG/PAKET OFFEN (M3 D4); Bericht docs/plan/M4-reports/<kurz-id>.md. Nur gegen ai-mock testen, nie echte Anbieter (E6). Erster Aufruf ohne `confirm` → Schätzung, Mock-Zähler 0; mit `confirm: true` → Ausführung; ohne Einwilligung nach AI-018 MCP-Fehler mit Datenflussangaben und Mock-Zähler 0, Einträge `Pending (consent)`; Erweiterung der Feldmenge abgelehnt; Budget stoppt wie in der App; Ergebnisse gleich App/CLI. DataForSEO-Hüllen kommen mit M5-C02. AGENT-040: Vorlage „AI-Search-Sichtbarkeit“ referenziert jetzt die KI-Werkzeuge. K4-13 entschieden (26.11.2026): AGENT-030 bei laufendem (auch im eigenen Prozess), pausiertem, gestopptem und fremd gesteuertem Crawl sowie bei zwei Prozessen auf einem Crawl ohne laufenden Besitzer nach docs/spec/10-agent-interface.md AGENT-030, Nachtrag 26.11.2026 (Fehler `busy` nach AGENT-020; Besitzer eines KI-Laufs nach 08 AI-020, Nachtrag 26.11.2026). K4-22 erledigt (26.11.2026): Heartbeat, `owner_kind`/`owner_pid` und „aktuell“ nach 01 CRAWL-125, Nachtrag 26.11.2026 (Klärung K4-22). In 1.0 antworten `pause_crawl`/`stop_crawl` bei einem in einem anderen Prozess laufenden Crawl mit einem MCP-Fehler ohne Code `busy` (`crates/os-mcp/src/crawl_service.rs`, `CrawlService::not_live`); dieses Verhalten nicht ändern und für die KI-Werkzeuge nicht übernehmen – AGENT-030 verlangt dort `busy`. Keine eigene Schwelle (`os_store::resume::HEARTBEAT_TIMEOUT_MS`). Fremden Besitzer auch außerhalb von `Running` (KI-Lauf, 08 AI-020 Unterpunkt „Aktiver Besitzer außerhalb von `Running`“) mit der Prüfung „belegt“ aus M4-K11 (`os_store::owner`) erkennen und `busy` liefern.",
   "release": "1.2 (P1) bzw. nach 1.2 (P2-IDs), E-1 b"
  },
  {
