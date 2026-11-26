@@ -111,3 +111,51 @@ Vollständiger Lauf `cargo test --locked -p os-ai -p os-store --no-fail-fast` au
 ## Läufe
 
 Lauf 1 (`4b3d3fd9`): fmt/Clippy grün, eigene Ziele 3 rot – neben B1-1/B2-1 ein Fehler im eigenen Test (Kostenvergleich bei Bündelung ohne Rundung je Request; korrigiert, die Spec vergleicht die Tokenschätzung). Lauf 2 (`23181e2a`): Zahlen oben. Build-Maschine Mac mini, eigener Baum `/Volumes/osbuild/openspider/wt/ai-k10-tests`, eigener `CARGO_TARGET_DIR`, jeder Lauf unter `heavy.lock`.
+
+## Nachlauf 26.11.2026
+
+Stand: Bauer `ai/k10` = `efc4b089` (mit `main` = `7331de08`), per `git merge ai/k10` in `ai/k10-tests` geholt (Merge `0e17cba2`). Bauer-Bericht, Bauer-Tests und Commit-Nachrichten weiterhin nicht gelesen. Grundlage sind die Nachträge „26.11.2026 (Abnahme K10)“ in `docs/spec/08-ai.md` (Zeilen 598/599 AI-012, 647/648 AI-014, 669/670 AI-015, 709/710 AI-017).
+
+### Entscheidungen zu den Befunden und Fragen
+
+- **B1-1** (Cache-Preise der Decisions API) bestätigt und vom Bauer behoben: `cost::decisions_billing_rates_follow_the_ai_010_prices` unverändert, jetzt **grün**.
+- **B2-1** durch AI-015, Nachtrag 26.11.2026 (Zeile 669) geklärt: „In der kanonischen Form, aus der der Schlüssel berechnet wird, steht ein Feld mit Wert `null` nicht.“ Der Test `decisions_key_names_reasoning_null_literally` (wörtliche Lesart) ist deshalb ersetzt durch `cache::key_without_level_differs_from_every_key_with_a_level`. Der neue Test prüft, dass dort kein Feld `reasoning` steht, und das neue Kriterium aus Zeile 670. Das ist keine Lockerung, sondern die Folge der Klarstellung.
+- **Frage 2** durch AI-017, Nachtrag 26.11.2026 (Zeile 709) geklärt: „zählt nicht“ heißt weder erhöhen noch zurücksetzen, zurückgesetzt wird nur durch `Success`.
+- **Frage 3** durch AI-012, Nachtrag 26.11.2026 Punkt 2 (Zeile 598) geklärt: interne Spalte `estimated_output_tokens`, Faktor je Protokollzeile. Punkt 1 legt fest, dass Kosten bei Bündelung um höchstens 1 µUSD je Request abweichen dürfen. Meine Toleranz im Bündelungstest steht damit auf genau dieser Grenze (5 Requests → ≤ 5 µUSD; vorher eine eigene, engere Zahl 3 ohne Spec-Grundlage).
+
+### Anpassungen an geänderte Schnittstellen (ohne Änderung der Erwartungen)
+
+- `OutcomeDetails` und `RequestDetails` haben neu das Feld `estimated_output_tokens`.
+- `output_calibration_from_log` nimmt keine Schätzung mehr entgegen; der Kalibriertest speichert die Schätzung A + E je Zeile.
+- `output_calibration_samples` liefert jetzt Paare (Schätzung, Ist).
+- `COLUMNS`: `Refusal Reason` steht jetzt nach `Error Code`, neu ist `Flags` als letzte Spalte. Mein Spaltentest erwartet `Flags` nach `Retries` als letzte Spalte; die Position von `Refusal Reason` legt die Spec nicht fest.
+
+### Neue Prüfpunkte
+
+| Spec-ID | Kriterium vom 26.11.2026 | Test | Ergebnis |
+|---|---|---|---|
+| AI-012 | Zwei Gruppen je 20 Requests derselben (Modell, Aufgabe, Stufe) mit verschiedenem A (W = 14 → 288, W = 16 → 320) und Verhältnis 0,75 → Faktor 0,75 ± 1 %, unabhängig von A | `cost::output_factor_per_row_is_independent_of_the_answer_share` | grün |
+| AI-012 | `estimated_output_tokens` wird gespeichert und gelesen; Zeilen ohne Schätzung zählen nicht | `requests::estimated_output_tokens_roundtrip`, `requests::output_calibration_samples_are_per_level_and_task` | grün |
+| AI-014 | `over_reservation` + `cost_mismatch` → `Flags = over_reservation, cost_mismatch`; ohne Kennzeichen leer; alle drei in Aufzählungsreihenfolge | `requests::flags_cell_lists_the_set_marks`, `log::flags_column_from_logged_rows` | grün |
+| AI-014 | `Flags` letzte Spalte nach `Retries`, keine interne Schätzspalte im Export | `requests::log_columns_follow_the_spec_order` | grün |
+| AI-015 | Schlüssel ohne Stufe ≠ jeder Schlüssel desselben Eintrags mit Stufe (Decisions gegen Ersatzweg, `suggest-title` ohne gegen mit Stufe; alle 8 Stufen); kein Feld `reasoning` ohne Stufe | `cache::key_without_level_differs_from_every_key_with_a_level` | grün |
+| AI-017 | 9 Fehler / Fall / 1 Fehler → Schutzschalter offen; mit `Success` an der Stelle → zu. Für alle vier „zählt nicht“-Fälle über `Limiter::run_provider` mit den Adaptern gegen den ai-mock: `Error: Output limit reached` (Anthropic), Spend-Cap-429 (Anthropic `429-spend-cap`), Refusal (Anthropic `refusal`), endgültiges OpenRouter-402 (`402-credits` und `402-key-limit`) | `status::neutral_cases_neither_count_nor_reset_the_breaker` | grün |
+
+### Nicht geprüft (Nachlauf)
+
+- AI-017: Refusal in Form b (OpenRouter-403 `refusal`) und der Weg über die Aufgabenwarteschlange (D01), der das Ergebnis je Eintrag klassifiziert. An der Schnittstelle des Limiters ist der Refusal über `run_provider` geprüft. Für eigene Aufrufer von `Limiter::run` gilt: dort wird jede erhaltene Antwort als `Reset` gewertet; wer Refusal oder Abbruch als `Ok` zurückgibt, muss `run_classified` verwenden. Das ist ein Hinweis für D01 (B3-5), kein Befund.
+- AI-014: der Export „AI Request Log“ als Datei (gibt es noch nicht). Geprüft sind die Spaltenliste und der Zellenwert `flags_cell` an der Schnittstelle des Protokolls.
+
+### Testzahlen Nachlauf
+
+Eigene Abnahmetests: **59**, alle **grün**, 0 rot, 0 ignoriert (status 10, cache 7, cost 14, log 8, limits 6, policy 4, defaults 2, os-store requests 8). Keine offenen Befunde der Klasse B1 oder B2.
+
+Läufe auf dem Mac mini (eigener Baum, eigener Bauordner, unter `heavy.lock`):
+
+- Lauf 3 (`13087bf5`): Übersetzungsfehler im neuen Schutzschalter-Test (verschobener Wert in der Schleife), korrigiert.
+- Lauf 4 (`67a8b342`): fmt, Clippy und der volle Lauf `cargo test --locked -p os-ai -p os-store --no-fail-fast` grün; 1.096 bestanden, 0 rot, 77 ignoriert.
+- Der Endlauf auf dem Stand mit diesem Bericht steht in der Abschlussnachricht.
+
+### Offene Fragen (Nachlauf)
+
+Keine neuen Fragen an die Spec.
