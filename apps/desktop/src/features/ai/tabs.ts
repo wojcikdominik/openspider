@@ -10,6 +10,8 @@ import { useEffect } from "react";
 import { usePrefs } from "../../state/prefs";
 import { groupOf, groupTabs, MANDATORY_TAB, useTabs, type TabGroupId } from "../../state/tabs";
 import { aiPreviewOn, isAiTab } from "./preview";
+// M4-V01 (additiv): Prüfbereich des Tabs „AI Suggestions“.
+import { useSuggestionsReviewHost } from "./suggestions/host";
 
 /** Stimmt der geladene Katalog mit dem Schalter überein? */
 export function catalogMatchesPreview(catalog: readonly { id: string }[], on: boolean): boolean {
@@ -46,6 +48,7 @@ export function pruneStaleAiTabs(): void {
 
 /** Hält die Tab-Leiste mit dem Schalter in Einklang (einmal in der Tab-Leiste eingebunden). */
 export function useAiTabsSync(): void {
+  useSuggestionsReviewHost();
   useEffect(() => {
     let running = false;
     let pending = false;
