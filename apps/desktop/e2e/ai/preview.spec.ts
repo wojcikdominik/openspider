@@ -116,9 +116,9 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   await page.waitForTimeout(3500); // länger als ein Nachlese-Abstand des Felds (3 s)
   await expect(page.getByTestId("ai-cost")).toHaveCount(0);
   await expect(page.getByText(/^Cost:/)).toHaveCount(0);
-  // Aktive KI-Aufgaben für den geöffneten Crawl: das Feld erscheint ohne Neuladen (Platzhalter bis M4-U01).
+  // Aktive KI-Aufgaben für den geöffneten Crawl: das Feld erscheint ohne Neuladen (Werte aus dem Ledger seit M4-U01).
   await setAiTasks(alpha, true);
-  await expect(page.getByTestId("ai-cost")).toHaveText("Cost: – / – USD", { timeout: 10_000 });
+  await expect(page.getByTestId("ai-cost")).toHaveText("Cost: 0.0000 / 5.0000 USD", { timeout: 10_000 });
   // Ein KI-Tab ist erreichbar und leer (Stub ohne Zeilen bis zum Fachpaket; Leerzustand bzw. Zähler 0, UI-016/UI-014).
   const aiTab = page.getByRole("tablist", { name: /^(Data tabs|Daten-Tabs)$/ }).getByRole("tab", { name: "AI", exact: true });
   await aiTab.click();

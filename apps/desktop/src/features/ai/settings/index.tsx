@@ -1,16 +1,32 @@
+import "./ai.css";
+import { useT } from "../../../i18n";
 import type { ConfigPage } from "../../config/frame/types";
 import type { SettingsSection } from "../../settings/frame/types";
-import { AiPlaceholder } from "../AiPlaceholder";
 import type { AiArea } from "../areas";
+import { AiSettingsSection } from "./AiSettingsSection";
+import { AI_019_ENABLED } from "./api";
+import { BudgetSetting, PolicySetting } from "./PolicyBudget";
+import { TaskTable } from "./TaskTable";
 
-/** Gerüst der KI-Einstellungen (Plan M4 3.3; Inhalt M4-U01, Konten M4-P01): Leerzustand. */
+/** KI-Einstellungen der App (M4-U01; Konten folgen mit M4-P01 unter `./accounts`). */
 function AiSettings() {
-  return <AiPlaceholder area="settings" titleKey="ai-settings-title" state={{ code: "NOT_APPLICABLE" }} heading={false} />;
+  return <AiSettingsSection />;
 }
 
-/** Gerüst der KI-Konfigurationsseite (Fragen, Vorschläge, Modellwahl je Aufgabe; Fachpakete D01/V01/U01). */
+/**
+ * KI-Konfigurationsseite (Profil): Modellwahl je Aufgabe mit Spalte „Reasoning“ (AI-011), Richtlinie (AI-019), Crawl-Budget (AI-013).
+ * Fragen (D01) und Vorschläge (V01) ergänzen weitere Seiten in {@link aiConfigPages}.
+ */
 function AiConfig() {
-  return <AiPlaceholder area="config" titleKey="config-page-ai" state={{ code: "NOT_APPLICABLE" }} heading={false} />;
+  const t = useT();
+  return (
+    <section className="os-cfg-page" aria-label={t("config-page-ai")} data-page-id="ai">
+      <h3 className="os-settings-heading">{t("config-page-ai")}</h3>
+      <TaskTable />
+      {AI_019_ENABLED && <PolicySetting />}
+      <BudgetSetting />
+    </section>
+  );
 }
 
 export const area: AiArea = { id: "settings", titleKey: "ai-settings-title", Component: AiSettings };

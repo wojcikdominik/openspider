@@ -1,0 +1,71 @@
+{
+  "sections": [
+    {
+      "id": "ai",
+      "rows": [
+        {
+          "task": "suggest-title",
+          "model": "mock-claude-b",
+          "reasoning": "low",
+          "items": 3,
+          "cached": 0,
+          "estInputTokens": 1200,
+          "estOutputTokens": 3072,
+          "lowMicroUsd": 7500,
+          "expectedMicroUsd": 10000,
+          "highMicroUsd": 12500,
+          "batchSavingsMicroUsd": null,
+          "executable": true,
+          "reason": "",
+          "calibrated": false,
+          "requests": 3
+        },
+        {
+          "task": "decision",
+          "model": "gpt-6-luna",
+          "reasoning": null,
+          "items": 22,
+          "cached": 2,
+          "estInputTokens": 11000,
+          "estOutputTokens": 0,
+          "lowMicroUsd": 825,
+          "expectedMicroUsd": 1100,
+          "highMicroUsd": 1375,
+          "batchSavingsMicroUsd": 550,
+          "executable": true,
+          "reason": "",
+          "calibrated": false,
+          "requests": 20
+        },
+        {
+          "task": "ask-sql",
+          "model": "claude-sonnet-5-5",
+          "reasoning": "medium",
+          "items": 1,
+          "cached": 0,
+          "estInputTokens": 400,
+          "estOutputTokens": 1536,
+          "lowMicroUsd": null,
+          "expectedMicroUsd": null,
+          "highMicroUsd": null,
+          "batchSavingsMicroUsd": null,
+          "executable": false,
+          "reason": "Missing API key",
+          "calibrated": false,
+          "requests": 1
+        }
+      ],
+      "totals": { "lowMicroUsd": 8325, "expectedMicroUsd": 11100, "highMicroUsd": 13875 }
+    }
+  ],
+  "totals": { "lowMicroUsd": 8325, "expectedMicroUsd": 11100, "highMicroUsd": 13875 },
+  "budget": {
+    "budgetMicroUsd": 5000000,
+    "consumedMicroUsd": 3210000,
+    "remainingMicroUsd": 1790000,
+    "warning": false,
+    "halted": false
+  },
+  "thresholdMicroUsd": 100,
+  "confirmationRequired": true
+}

@@ -6,8 +6,14 @@
 
 /// KI-Command-Katalog (M4-F02, Plan M4 3.3).
 pub mod ai_catalog;
+/// KI-Einwilligung und Datenflussübersicht (M4-U01).
+pub mod ai_consent;
+/// KI-Kosten: Statusleistenfeld und Kostenvoranschlag (M4-U01).
+pub mod ai_cost;
 /// Schalter „KI (Vorschau)“ in der Service-Schicht (M4-F02).
 pub mod ai_preview;
+/// KI-Einstellungen: Modellwahl je Aufgabe, Richtlinie, Budget (M4-U01).
+pub mod ai_settings;
 pub mod analysis;
 pub mod api;
 pub mod app;

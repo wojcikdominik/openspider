@@ -1,1 +1,33 @@
 ai-consent-title = Data flow and consent
+ai-consent-dialog-title = Confirm data flow
+ai-consent-overview-title = AI data flow
+ai-consent-overview-caption = Which data goes to which provider
+ai-consent-redaction-on = Redaction of personal data: on
+ai-consent-redaction-off = Redaction of personal data: off
+ai-consent-first = { $task }: first transfer to { $provider }
+ai-consent-added = { $task }: newly added – { $fields }
+ai-consent-pii-notice = Redaction is off. Pages such as contact and imprint may contain personal data, which is then sent unredacted.
+ai-consent-confirm = Confirm
+ai-consent-cancel = Cancel
+ai-consent-error = The consent could not be saved: { $detail }
+ai-consent-policy = Policy: { $policy }
+ai-consent-copy-csv = Copy CSV
+ai-consent-save-csv = Save as CSV
+ai-consent-copied = Copied to the clipboard
+ai-consent-revoke = Revoke consent for { $provider }
+
+## Fields (AI-030, AI-032)
+ai-field-url = URL
+ai-field-title = Page title
+ai-field-meta-description = Meta description
+ai-field-h1 = H1 heading
+ai-field-h2 = H2 headings
+ai-field-page-text = Page text
+ai-field-word-count = Word count
+ai-field-html-lang = HTML language
+ai-field-hreflang-self = Own hreflang entry
+ai-field-structured-data-types = Structured data types
+ai-field-page-type = Page type
+ai-field-image = Image
+ai-field-alt = Alt text
+ai-field-image-context = Image context
