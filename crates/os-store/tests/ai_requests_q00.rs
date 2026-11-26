@@ -7,8 +7,9 @@ use os_model::budget::MicroUsd;
 use os_model::time::{IdSource, SeededIds};
 use os_model::{CrawlConfig, CrawlMode, Timestamp};
 use os_store::ai::requests::{
-    insert, insert_with_details, list, output_calibration_samples, totals_by_task_and_model,
-    PriceSource, RequestDetails, RequestFilter, RequestRecord, COLUMNS, REASONING_LEVELS,
+    flags_cell, insert, insert_with_details, list, output_calibration_samples,
+    totals_by_task_and_model, PriceSource, RequestDetails, RequestFilter, RequestRecord, COLUMNS,
+    FLAGS, FLAGS_COLUMN, REASONING_LEVELS,
 };
 use os_store::{CrawlFile, CrawlInit, OpenMode, StorageProfile, StoreError};
 
@@ -78,6 +79,7 @@ fn details(level: Option<&str>, reasoning: Option<u64>, computed: Option<u64>) -
         reasoning_tokens: reasoning,
         computed_cost: computed.map(MicroUsd),
         cost_mismatch: false,
+        estimated_output_tokens: None,
     }
 }
 
@@ -94,6 +96,10 @@ fn log_columns_carry_the_new_names_in_place() {
     after("Endpoint", "Reasoning Level");
     after("Output Tokens", "Reasoning Tokens");
     after("Cost (USD)", "Computed Cost (USD)");
+    // Nachtrag 26.11.2026: `Flags` ist die letzte Spalte nach `Retries`; die interne Schätzspalte gehört nicht dazu.
+    assert_eq!(COLUMNS[COLUMNS.len() - 1], FLAGS_COLUMN);
+    assert_eq!(COLUMNS[COLUMNS.len() - 2], "Retries");
+    assert!(!COLUMNS.contains(&"estimated_output_tokens"));
     let mut sorted = COLUMNS.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
@@ -190,41 +196,96 @@ fn invalid_details_are_rejected() {
     assert!(raw("low", "api", -1).is_err());
 }
 
+// spec: AI-014 [M4]
+// Nachtrag 26.11.2026: Zeile mit `over_reservation` und `cost_mismatch` → `Flags = over_reservation, cost_mismatch`;
+// Zeile ohne Kennzeichen → `Flags` leer; Reihenfolge `over_reservation`, `confidence_mismatch`, `cost_mismatch`.
+#[test]
+fn flags_cell_lists_set_flags_in_order() {
+    assert_eq!(
+        FLAGS,
+        ["over_reservation", "confidence_mismatch", "cost_mismatch"]
+    );
+    let mut r = row("t", 1, 500, PriceSource::Reported, "Success");
+    let mut d = RequestDetails::default();
+    assert_eq!(flags_cell(&r, &d), "");
+    r.over_reservation = true;
+    d.cost_mismatch = true;
+    assert_eq!(flags_cell(&r, &d), "over_reservation, cost_mismatch");
+    r.confidence_mismatch = true;
+    assert_eq!(
+        flags_cell(&r, &d),
+        "over_reservation, confidence_mismatch, cost_mismatch"
+    );
+    // Roundtrip über die Crawl-Datei: die Kennzeichen kommen gelesen genauso zurück.
+    let dir = tempfile::tempdir().unwrap();
+    let f = CrawlFile::open(&fresh(dir.path()), OpenMode::ReadWrite).unwrap();
+    r.confidence_mismatch = false;
+    let stored = RequestDetails {
+        computed_cost: Some(MicroUsd(250)),
+        ..d.clone()
+    };
+    insert_with_details(f.conn(), &r, &stored).unwrap();
+    let back = &list(f.conn(), &RequestFilter::default()).unwrap()[0];
+    assert_eq!(
+        flags_cell(&back.record, &back.details),
+        "over_reservation, cost_mismatch"
+    );
+}
+
+/// Aufgabe, Ausgabe-Tokens, Stufe, Status, gespeicherte Ausgabeschätzung.
+type Case<'a> = (&'a str, u64, Option<&'a str>, &'a str, Option<u64>);
+
 // spec: AI-012 [M4]
-// Ausgabe-Kalibrierung: Proben nur aus erfolgreichen Zeilen derselben (Anbieter, Modell, Aufgabe, Stufe), älteste
-// zuerst, höchstens `limit`; Zeilen ohne Stufe sind getrennt abfragbar.
+// Ausgabe-Kalibrierung: Paare (Schätzung, Ist) nur aus erfolgreichen Zeilen derselben (Anbieter, Modell, Aufgabe,
+// Stufe) mit gespeicherter Schätzung (`estimated_output_tokens`, Nachtrag 26.11.2026), älteste zuerst, höchstens
+// `limit`; Zeilen ohne Stufe sind getrennt abfragbar.
 #[test]
 fn output_samples_are_per_model_task_and_level() {
     let dir = tempfile::tempdir().unwrap();
     let f = CrawlFile::open(&fresh(dir.path()), OpenMode::ReadWrite).unwrap();
     let c = f.conn();
-    for (task, out, level, status) in [
-        ("suggest-title", 10, Some("medium"), "Success"),
-        ("suggest-title", 20, Some("medium"), "Success"),
-        ("suggest-title", 30, Some("low"), "Success"),
-        ("suggest-meta", 40, Some("medium"), "Success"),
+    let cases: [Case; 8] = [
+        ("suggest-title", 10, Some("medium"), "Success", Some(100)),
+        ("suggest-title", 20, Some("medium"), "Success", Some(200)),
+        ("suggest-title", 30, Some("low"), "Success", Some(300)),
+        ("suggest-meta", 40, Some("medium"), "Success", Some(400)),
         (
             "suggest-title",
             50,
             Some("medium"),
             "Error: Output limit reached",
+            Some(500),
         ),
-        ("suggest-title", 60, None, "Success"),
-        ("suggest-title", 70, Some("medium"), "Success"),
-    ] {
+        ("suggest-title", 60, None, "Success", Some(600)),
+        ("suggest-title", 65, Some("medium"), "Success", None),
+        ("suggest-title", 70, Some("medium"), "Success", Some(700)),
+    ];
+    for (task, out, level, status, estimate) in cases {
         insert_with_details(
             c,
             &row(task, out, 1, PriceSource::Api, status),
-            &details(level, None, None),
+            &RequestDetails {
+                estimated_output_tokens: estimate,
+                ..details(level, None, None)
+            },
         )
         .unwrap();
     }
     let samples = |task: &str, level: Option<&str>, limit: usize| {
         output_calibration_samples(c, "openrouter", "mock/text", task, level, limit).unwrap()
     };
-    assert_eq!(samples("suggest-title", Some("medium"), 200), [10, 20, 70]);
-    assert_eq!(samples("suggest-title", Some("medium"), 2), [20, 70]);
-    assert_eq!(samples("suggest-title", Some("low"), 200), [30]);
-    assert_eq!(samples("suggest-title", None, 200), [60]);
-    assert_eq!(samples("suggest-meta", Some("medium"), 200), [40]);
+    assert_eq!(
+        samples("suggest-title", Some("medium"), 200),
+        [(100, 10), (200, 20), (700, 70)]
+    );
+    assert_eq!(
+        samples("suggest-title", Some("medium"), 2),
+        [(200, 20), (700, 70)]
+    );
+    assert_eq!(samples("suggest-title", Some("low"), 200), [(300, 30)]);
+    assert_eq!(samples("suggest-title", None, 200), [(600, 60)]);
+    assert_eq!(samples("suggest-meta", Some("medium"), 200), [(400, 40)]);
+    let back = list(c, &RequestFilter::default()).unwrap();
+    assert_eq!(back[0].details.estimated_output_tokens, Some(100));
+    assert_eq!(back[6].details.estimated_output_tokens, None);
 }
