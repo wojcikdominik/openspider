@@ -43,8 +43,7 @@ pub fn repo_file(rel: &str) -> PathBuf {
 
 pub fn repo_json(rel: &str) -> Value {
     let path = repo_file(rel);
-    let text =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
@@ -235,7 +234,8 @@ pub struct AnthropicSet {
 }
 
 pub fn anthropic_set(entries: &[Value]) -> AnthropicSet {
-    let disabled = |e: &Value| e["capabilities"]["thinking"]["types"]["disabled"]["supported"] == true;
+    let disabled =
+        |e: &Value| e["capabilities"]["thinking"]["types"]["disabled"]["supported"] == true;
     let find = |pred: &dyn Fn(&Value) -> bool, what: &str| {
         entries
             .iter()
@@ -250,7 +250,9 @@ pub fn anthropic_set(entries: &[Value]) -> AnthropicSet {
             "B",
         ),
         c: find(
-            &|e| e["capabilities"].is_object() && e["capabilities"]["thinking"]["supported"] == false,
+            &|e| {
+                e["capabilities"].is_object() && e["capabilities"]["thinking"]["supported"] == false
+            },
             "C",
         ),
         d: find(&|e| !e["capabilities"].is_object(), "D"),

@@ -343,9 +343,8 @@ test("Datenfluss bestätigen: Stored by Provider, axe, Escape gibt nichts frei, 
 
 // spec: AI-011 [M4]
 // spec: AI-019 [M4]
-// spec: INTEG-005 [M4]
 // acceptance: independent
-test("Konfigurationsseite KI mit Spalte Reasoning und ohne Richtlinienschalter; Erweitert: Ollama Standard 1, Bereich 1–50", async ({ app, page, context }) => {
+test("Konfigurationsseite KI mit Spalte Reasoning und ohne Richtlinienschalter (AI-019 erst mit 1.2)", async ({ app, page, context }) => {
   await openMain(app, page);
   const core = await probe(context, bridgeOf(page));
   await previewOn(core, page);
@@ -366,8 +365,14 @@ test("Konfigurationsseite KI mit Spalte Reasoning und ohne Richtlinienschalter; 
   await expect(cfg.getByRole("radiogroup", { name: "Where may data go?" })).toHaveCount(0);
   await expect(cfg.getByText("Enforce EU processing")).toHaveCount(0);
   await expect(cfg.getByText("Local only", { exact: true })).toHaveCount(0);
-  await page.keyboard.press("Escape");
+});
 
+// spec: INTEG-005 [M4]
+// acceptance: independent
+test("Erweitert: Ollama Standard 1, übrige KI-Anbieter 4, Bereich 1–50, Eingaben außerhalb abgelehnt", async ({ app, page, context }) => {
+  await openMain(app, page);
+  const core = await probe(context, bridgeOf(page));
+  await previewOn(core, page);
   const settings = await context.newPage();
   await app.open(settings, "settings");
   await settings.getByRole("tablist", { name: "Settings sections" }).getByRole("tab", { name: "AI", exact: true }).click();

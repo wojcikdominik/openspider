@@ -46,7 +46,9 @@ fn col(name: &str) -> usize {
 }
 
 fn rows_of<'a>(view: &'a Value, key: &str) -> &'a Vec<Value> {
-    view[key].as_array().unwrap_or_else(|| panic!("{key} fehlt: {view}"))
+    view[key]
+        .as_array()
+        .unwrap_or_else(|| panic!("{key} fehlt: {view}"))
 }
 
 fn row_for<'a>(view: &'a Value, task: &str) -> &'a Value {
@@ -57,7 +59,10 @@ fn row_for<'a>(view: &'a Value, task: &str) -> &'a Value {
 }
 
 fn cell(row: &Value, name: &str) -> String {
-    row["cells"][col(name)].as_str().unwrap_or_default().to_string()
+    row["cells"][col(name)]
+        .as_str()
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn request_for<'a>(view: &'a Value, task: &str) -> Option<&'a Value> {
@@ -109,12 +114,25 @@ fn page_values() -> FieldValues {
 }
 
 /// Ein Request der Aufgabe `task` über den Wächter, an den ai-mock (Anbieter `openai`).
-async fn guarded(app: &App, mock: &Mock, task: &str, fields: &[InputField]) -> guard::GuardedOutcome {
+async fn guarded(
+    app: &App,
+    mock: &Mock,
+    task: &str,
+    fields: &[InputField],
+) -> guard::GuardedOutcome {
     let gate = consent_gate(app).expect("Gate der App");
     let p = mock.provider("openai");
     let set = FieldSet::new(fields.iter().copied());
     let input = PreparedInput::new(&page_values(), &set, &Redactor::default());
-    guard::execute(PreviewSwitch::ON, &gate, task, &input, &p, p.request("gpt-6-luna")).await
+    guard::execute(
+        PreviewSwitch::ON,
+        &gate,
+        task,
+        &input,
+        &p,
+        p.request("gpt-6-luna"),
+    )
+    .await
 }
 
 // spec: AI-018 [M4]
@@ -130,13 +148,20 @@ async fn ai018_tabelle_spalten_und_stored_by_provider() {
     title_flow(&app);
     edit_config(&app, |cfg| with_question(cfg, "u01-q", &["url", "title"])).await;
     let view = status(&app).await;
-    let columns: Vec<&str> = rows_of(&view, "columns").iter().map(|c| c.as_str().unwrap()).collect();
+    let columns: Vec<&str> = rows_of(&view, "columns")
+        .iter()
+        .map(|c| c.as_str().unwrap())
+        .collect();
     assert_eq!(columns, COLUMNS, "Spalten laut AI-018");
 
     let title = row_for(&view, "suggest-title");
     assert_eq!(cell(title, "Provider"), "openai", "{title}");
     assert_eq!(cell(title, "Model"), "gpt-6-luna");
-    assert_eq!(cell(title, "Stored by Provider"), "no (store: false)", "{title}");
+    assert_eq!(
+        cell(title, "Stored by Provider"),
+        "no (store: false)",
+        "{title}"
+    );
     assert_eq!(cell(title, "Redaction"), "on", "Schwärzung ist Standard an");
     assert!(!cell(title, "Host").is_empty());
     assert!(!cell(title, "Training Use (per provider policy)").is_empty());
@@ -146,15 +171,24 @@ async fn ai018_tabelle_spalten_und_stored_by_provider() {
     let decision = row_for(&view, "decision");
     let stored = cell(decision, "Stored by Provider");
     if decisions_storage.is_null() {
-        assert_eq!(stored, "unknown", "Decisions API ohne `storage` → unknown: {decision}");
+        assert_eq!(
+            stored, "unknown",
+            "Decisions API ohne `storage` → unknown: {decision}"
+        );
     } else {
         assert!(!stored.is_empty() && stored != "unknown", "{decision}");
     }
     for r in rows_of(&view, "rows") {
-        assert!(!cell(r, "Stored by Provider").is_empty(), "leere Zelle: {r}");
+        assert!(
+            !cell(r, "Stored by Provider").is_empty(),
+            "leere Zelle: {r}"
+        );
     }
     let csv = view["csv"].as_str().unwrap();
-    assert!(csv.lines().next().unwrap().contains("Stored by Provider"), "{csv}");
+    assert!(
+        csv.lines().next().unwrap().contains("Stored by Provider"),
+        "{csv}"
+    );
 }
 
 // spec: AI-018 [M4]
@@ -168,10 +202,18 @@ async fn ai018_ohne_einwilligung_kein_request_danach_genau_einer() {
     preview_on(&app).await;
     title_flow(&app);
     let mock = Mock::start().await;
-    let fields = [InputField::Url, InputField::Title, InputField::MetaDescription, InputField::H1];
+    let fields = [
+        InputField::Url,
+        InputField::Title,
+        InputField::MetaDescription,
+        InputField::H1,
+    ];
 
     let view = status(&app).await;
-    assert!(request_for(&view, "suggest-title").is_some(), "Dialog verlangt Bestätigung: {view}");
+    assert!(
+        request_for(&view, "suggest-title").is_some(),
+        "Dialog verlangt Bestätigung: {view}"
+    );
     for _ in 0..3 {
         let out = guarded(&app, &mock, "suggest-title", &fields).await;
         assert_eq!(out.outcome, Outcome::Status(AiStatus::PendingConsent));
@@ -203,13 +245,19 @@ async fn ai018_einwilligung_je_installation_ueberlebt_neustart_und_zweiten_crawl
         confirm_all(&app).await;
     }
     let settings_dir = os_app::AppConfig::new(home.path()).paths.settings;
-    assert!(settings_dir.join(CONSENT_FILE).is_file(), "Einwilligung in den App-Einstellungen");
+    assert!(
+        settings_dir.join(CONSENT_FILE).is_file(),
+        "Einwilligung in den App-Einstellungen"
+    );
 
     // Neustart: neue App auf demselben Einstellungsordner.
     let app = fresh_app(home.path());
     edit_config(&app, |cfg| with_question(cfg, "u01-q", &["url", "title"])).await;
     let view = status(&app).await;
-    assert!(rows_of(&view, "requests").is_empty(), "nach Neustart keine neue Frage: {view}");
+    assert!(
+        rows_of(&view, "requests").is_empty(),
+        "nach Neustart keine neue Frage: {view}"
+    );
     assert_eq!(row_for(&view, "decision")["consentGiven"], true);
 
     // Zweiter Crawl mit derselben Konfiguration (geöffnete Crawl-Datei) → ebenfalls keine neue Frage.
@@ -222,7 +270,10 @@ async fn ai018_einwilligung_je_installation_ueberlebt_neustart_und_zweiten_crawl
     common::open(&app, &path).await;
     let view = status(&app).await;
     assert!(row_for(&view, "decision").is_object());
-    assert!(rows_of(&view, "requests").is_empty(), "zweiter Crawl fragt nicht neu: {view}");
+    assert!(
+        rows_of(&view, "requests").is_empty(),
+        "zweiter Crawl fragt nicht neu: {view}"
+    );
 }
 
 // spec: AI-018 [M4]
@@ -235,12 +286,24 @@ async fn ai018_neues_feld_fragt_erneut() {
     let app = fresh_app(home.path());
     edit_config(&app, |cfg| with_question(cfg, "u01-q", &["url", "title"])).await;
     confirm_all(&app).await;
-    edit_config(&app, |cfg| with_question(cfg, "u01-q", &["url", "title", "page_text"])).await;
+    edit_config(&app, |cfg| {
+        with_question(cfg, "u01-q", &["url", "title", "page_text"])
+    })
+    .await;
     let view = status(&app).await;
-    let req = request_for(&view, "decision").unwrap_or_else(|| panic!("neues Feld → neue Frage: {view}"));
-    let added: Vec<&str> = req["addedFields"].as_array().unwrap().iter().map(|f| f.as_str().unwrap()).collect();
+    let req =
+        request_for(&view, "decision").unwrap_or_else(|| panic!("neues Feld → neue Frage: {view}"));
+    let added: Vec<&str> = req["addedFields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap())
+        .collect();
     assert_eq!(added, vec!["page_text"], "{req}");
-    assert!(!req["previousFields"].is_null(), "frühere Einwilligung bekannt: {req}");
+    assert!(
+        !req["previousFields"].is_null(),
+        "frühere Einwilligung bekannt: {req}"
+    );
 }
 
 // spec: AI-018 [M4]
@@ -254,18 +317,45 @@ async fn ai018_widerruf_je_anbieter_stoppt_sofort() {
     preview_on(&app).await;
     title_flow(&app);
     let mock = Mock::start().await;
-    let fields = [InputField::Url, InputField::Title, InputField::MetaDescription, InputField::H1];
+    let fields = [
+        InputField::Url,
+        InputField::Title,
+        InputField::MetaDescription,
+        InputField::H1,
+    ];
     let granted = confirm_all(&app).await;
-    assert!(rows_of(&granted, "consentedProviders").iter().any(|p| p == "openai"), "{granted}");
+    assert!(
+        rows_of(&granted, "consentedProviders")
+            .iter()
+            .any(|p| p == "openai"),
+        "{granted}"
+    );
     assert!(guarded(&app, &mock, "suggest-title", &fields).await.sent);
     let before = mock.content_requests();
 
-    let revoked = call(&app, "ai.consentGrant", json!({ "revokeProvider": "openai" })).await;
-    assert!(!rows_of(&revoked, "consentedProviders").iter().any(|p| p == "openai"), "{revoked}");
-    assert!(request_for(&revoked, "suggest-title").is_some(), "Bestätigung erneut nötig: {revoked}");
+    let revoked = call(
+        &app,
+        "ai.consentGrant",
+        json!({ "revokeProvider": "openai" }),
+    )
+    .await;
+    assert!(
+        !rows_of(&revoked, "consentedProviders")
+            .iter()
+            .any(|p| p == "openai"),
+        "{revoked}"
+    );
+    assert!(
+        request_for(&revoked, "suggest-title").is_some(),
+        "Bestätigung erneut nötig: {revoked}"
+    );
     let out = guarded(&app, &mock, "suggest-title", &fields).await;
     assert_eq!(out.outcome, Outcome::Status(AiStatus::PendingConsent));
-    assert_eq!(mock.content_requests(), before, "nach Widerruf kein Request");
+    assert_eq!(
+        mock.content_requests(),
+        before,
+        "nach Widerruf kein Request"
+    );
 
     // Widerruf gilt auch nach Neustart (je Installation).
     drop(app);
@@ -301,7 +391,10 @@ async fn ai018_schwaerzung_an_aus_und_pii_hinweis() {
     assert_eq!(off["redaction"], false);
     let req = request_for(&off, "decision").expect("Anfrage");
     assert_eq!(cell(&req["row"], "Redaction"), "off");
-    assert_eq!(req["piiNotice"], true, "Schwärzung aus + page_text → Hinweis: {req}");
+    assert_eq!(
+        req["piiNotice"], true,
+        "Schwärzung aus + page_text → Hinweis: {req}"
+    );
 
     edit_config(&app, |cfg| {
         cfg.ai.questions.clear();
@@ -311,5 +404,8 @@ async fn ai018_schwaerzung_an_aus_und_pii_hinweis() {
     .await;
     let plain = status(&app).await;
     let req = request_for(&plain, "decision").expect("Anfrage");
-    assert_eq!(req["piiNotice"], false, "ohne page_text kein Hinweis: {req}");
+    assert_eq!(
+        req["piiNotice"], false,
+        "ohne page_text kein Hinweis: {req}"
+    );
 }

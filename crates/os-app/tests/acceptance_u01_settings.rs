@@ -54,6 +54,9 @@ fn refs(v: &Value) -> Vec<(String, String, String)> {
         .collect()
 }
 
+type Ref = (String, String, String);
+type DefaultsRow<'a> = (&'a str, &'a Ref, Vec<Ref>, Option<&'a str>);
+
 fn t(p: &str, m: &str, e: &str) -> (String, String, String) {
     (p.into(), m.into(), e.into())
 }
@@ -119,18 +122,48 @@ async fn ai011_tabelle_zeigt_zwoelf_aufgaben_mit_standardmodell_ersatzliste_und_
     let or_luna = t("openrouter", "openai/gpt-6-luna", "chat-completions");
     let sol = t("openai", "gpt-6-sol", "responses");
     let emb = t("openai", "text-embedding-3-small", "embeddings");
-    let table: [(&str, &(String, String, String), Vec<(String, String, String)>, Option<&str>); 12] = [
-        ("decision", &luna_d, vec![haiku.clone(), or_luna.clone()], None),
-        ("decision-vision", &luna_d, vec![haiku.clone(), or_luna.clone()], None),
+    let table: [DefaultsRow; 12] = [
+        (
+            "decision",
+            &luna_d,
+            vec![haiku.clone(), or_luna.clone()],
+            None,
+        ),
+        (
+            "decision-vision",
+            &luna_d,
+            vec![haiku.clone(), or_luna.clone()],
+            None,
+        ),
         ("suggest-title", &luna_r, vec![haiku.clone()], Some("off")),
         ("suggest-meta", &luna_r, vec![haiku.clone()], Some("off")),
         ("suggest-h1", &luna_r, vec![haiku.clone()], Some("off")),
         ("link-anchor", &luna_r, vec![haiku.clone()], Some("off")),
-        ("redirect-confirm", &luna_r, vec![haiku.clone()], Some("off")),
+        (
+            "redirect-confirm",
+            &luna_r,
+            vec![haiku.clone()],
+            Some("off"),
+        ),
         ("suggest-alt", &luna_r, vec![haiku.clone()], Some("off")),
-        ("ask-sql", &sonnet, vec![sol.clone(), luna_r.clone()], Some("medium")),
-        ("audit-summary", &sonnet, vec![sol.clone(), luna_r.clone()], Some("medium")),
-        ("llms-summary", &sonnet, vec![sol.clone(), luna_r.clone()], Some("low")),
+        (
+            "ask-sql",
+            &sonnet,
+            vec![sol.clone(), luna_r.clone()],
+            Some("medium"),
+        ),
+        (
+            "audit-summary",
+            &sonnet,
+            vec![sol.clone(), luna_r.clone()],
+            Some("medium"),
+        ),
+        (
+            "llms-summary",
+            &sonnet,
+            vec![sol.clone(), luna_r.clone()],
+            Some("low"),
+        ),
         ("embedding", &emb, vec![], None),
     ];
     for (task, model, fallback, level) in table {
@@ -171,7 +204,9 @@ async fn ai011_reasoning_dropdown_eines_openai_katalogmodells_nur_mit_verfuegbar
         .as_array()
         .unwrap()
         .iter()
-        .find(|e| e["provider"] == "openai" && e["model"] == "gpt-6-luna" && e["endpoint"] == "responses")
+        .find(|e| {
+            e["provider"] == "openai" && e["model"] == "gpt-6-luna" && e["endpoint"] == "responses"
+        })
         .expect("gpt-6-luna/responses in pricing.json");
     let mut expected: BTreeSet<String> = luna["reasoning_efforts"]
         .as_array()
@@ -187,7 +222,10 @@ async fn ai011_reasoning_dropdown_eines_openai_katalogmodells_nur_mit_verfuegbar
     let view = call(&app, "ai.settingsGet", Value::Null).await;
     let r = row(&view, "suggest-title");
     let dropdown: BTreeSet<String> = levels(&r["reasoning"]["dropdown"]).into_iter().collect();
-    assert_eq!(dropdown, expected, "nur verfügbare Stufen und model-default");
+    assert_eq!(
+        dropdown, expected,
+        "nur verfügbare Stufen und model-default"
+    );
     assert_eq!(r["reasoning"]["effective"], "off");
     assert!(r["reasoning"]["warning"].is_null(), "{}", r["reasoning"]);
     assert_eq!(r["maxTokens"]["standard"], 1024, "2 × 512 + 0");
@@ -214,29 +252,47 @@ async fn ai011_modell_a_b_d_stufen_warnung_und_ausgabegrenze() {
 
     let a = evaluate(&app, "suggest-title", on(&set.a)).await;
     let ra = row(&a, "suggest-title");
-    assert_eq!(ra["reasoning"]["effective"], "off", "A: {}", ra["reasoning"]);
+    assert_eq!(
+        ra["reasoning"]["effective"], "off",
+        "A: {}",
+        ra["reasoning"]
+    );
     assert!(levels(&ra["reasoning"]["dropdown"]).contains(&"off".to_string()));
     assert!(ra["reasoning"]["warning"].is_null(), "A ohne Hinweis");
     assert_eq!(ra["maxTokens"]["value"], 1024, "A: 2 × 512 + 0");
 
     let b = evaluate(&app, "suggest-title", on(&set.b)).await;
     let rb = row(&b, "suggest-title");
-    assert_eq!(rb["reasoning"]["effective"], "low", "B: {}", rb["reasoning"]);
+    assert_eq!(
+        rb["reasoning"]["effective"], "low",
+        "B: {}",
+        rb["reasoning"]
+    );
     assert!(
         !levels(&rb["reasoning"]["dropdown"]).contains(&"off".to_string()),
         "B bietet kein off: {}",
         rb["reasoning"]["dropdown"]
     );
     assert!(levels(&rb["reasoning"]["dropdown"]).contains(&"model-default".to_string()));
-    assert!(!rb["reasoning"]["warning"].is_null(), "B: Warnhinweis fehlt");
+    assert!(
+        !rb["reasoning"]["warning"].is_null(),
+        "B: Warnhinweis fehlt"
+    );
     assert_eq!(rb["maxTokens"]["value"], 2048, "B: 2 × 512 + 1.024");
 
-    let d = evaluate(&app, "suggest-title", on(&set.d)).await;
-    let rd = row(&d, "suggest-title");
+    // D (ohne `capabilities`) ist laut AI-002 nicht zuweisbar; seine Auswahl bietet keine Stufe außer `model-default`.
+    let view = call(&app, "ai.settingsGet", Value::Null).await;
+    let option = row(&view, "ask-sql")["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["provider"] == "anthropic" && o["model"] == id(&set.d).as_str())
+        .cloned()
+        .unwrap_or_else(|| panic!("Modell D fehlt in der Auswahl"));
     assert_eq!(
-        levels(&rd["reasoning"]["dropdown"]),
-        vec!["model-default".to_string()],
-        "D bietet nur model-default"
+        option["reasoningLevels"],
+        json!([]),
+        "D bietet nur model-default: {option}"
     );
 
     // `audit-summary` auf Modell B (max_tokens = 4000 in der Modellliste) → Kappung auf 4000 statt 20.480.
@@ -312,17 +368,37 @@ async fn ai011_ungueltige_zuweisungen_und_werte_werden_abgelehnt() {
         .unwrap_or_else(|| panic!("Modell C fehlt in der Auswahl: {}", alt["models"]));
     assert_eq!(option["assignable"], false, "{option}");
     // … und als Entwurf abgelehnt, mit dem Feld der Aufgabe.
-    let err = try_call(&app, "ai.settingsSet", draft("suggest-alt", json!({ "model": c })))
-        .await
-        .expect_err("Nicht-Vision-Modell für suggest-alt muss abgelehnt werden");
+    let err = try_call(
+        &app,
+        "ai.settingsSet",
+        draft("suggest-alt", json!({ "model": c })),
+    )
+    .await
+    .expect_err("Nicht-Vision-Modell für suggest-alt muss abgelehnt werden");
     assert_eq!(err.code, ErrorCode::InvalidInput, "{err:?}");
-    assert_eq!(err.field.as_deref(), Some("ai.tasks.suggest-alt.model"), "{err:?}");
+    assert_eq!(
+        err.field.as_deref(),
+        Some("ai.tasks.suggest-alt.model"),
+        "{err:?}"
+    );
 
     for (task, cfg, what) in [
-        ("suggest-title", json!({ "effort": "turbo" }), "unbekannte Stufe"),
+        (
+            "suggest-title",
+            json!({ "effort": "turbo" }),
+            "unbekannte Stufe",
+        ),
         ("unknown-task", json!({}), "unbekannte Aufgabe"),
-        ("suggest-title", json!({ "max_tokens": -5 }), "negative Ausgabegrenze"),
-        ("suggest-title", json!({ "max_tokens": "viel" }), "Ausgabegrenze ohne Zahl"),
+        (
+            "suggest-title",
+            json!({ "max_tokens": -5 }),
+            "negative Ausgabegrenze",
+        ),
+        (
+            "suggest-title",
+            json!({ "max_tokens": "viel" }),
+            "Ausgabegrenze ohne Zahl",
+        ),
     ] {
         let err = try_call(&app, "ai.settingsSet", draft(task, cfg))
             .await
@@ -406,7 +482,9 @@ async fn ai011_stufe_und_ausgabegrenze_bleiben_ueber_die_konfiguration_erhalten(
     .await;
     let cfg = window_config(&app).await;
     let toml = cfg.to_osconfig_string().expect("Profil-Export");
-    let back = os_model::CrawlConfig::load_str(&toml).expect("Profil-Import").config;
+    let back = os_model::CrawlConfig::load_str(&toml)
+        .expect("Profil-Import")
+        .config;
     assert_eq!(back.ai.tasks, cfg.ai.tasks, "Roundtrip der Zuordnung");
     let view = call(&app, "ai.settingsGet", Value::Null).await;
     let r = row(&view, "ask-sql");
@@ -436,7 +514,11 @@ async fn ai011_zustand_ohne_schluessel_und_mit_nur_openai_schluessel() {
     let home = tempfile::tempdir().unwrap();
     let openai = app_with_keys(home.path(), &["openai"]);
     let view = call(&openai, "ai.settingsGet", Value::Null).await;
-    assert_eq!(view["keys"]["openai"], "present", "Testschlüssel wird erkannt: {}", view["keys"]);
+    assert_eq!(
+        view["keys"]["openai"], "present",
+        "Testschlüssel wird erkannt: {}",
+        view["keys"]
+    );
     for (task, model, endpoint) in [
         ("decision", "gpt-6-luna", "decisions"),
         ("suggest-title", "gpt-6-luna", "responses"),
@@ -479,7 +561,11 @@ async fn integ005_erweitert_zeigt_ollama_standard_1_und_bereich_1_bis_50() {
         assert_eq!(by(p)["concurrentDefault"], 4, "{p}: Standard aus AI-017");
     }
     for r in advanced {
-        assert_eq!((r["concurrentMin"].as_u64(), r["concurrentMax"].as_u64()), (Some(1), Some(50)), "{r}");
+        assert_eq!(
+            (r["concurrentMin"].as_u64(), r["concurrentMax"].as_u64()),
+            (Some(1), Some(50)),
+            "{r}"
+        );
     }
 }
 
@@ -496,12 +582,22 @@ async fn ai019_befehl_nimmt_in_1_1_keine_richtlinie_an() {
     let app = fresh_app(home.path());
     preview_on(&app).await;
     for policy in ["eu-only", "local-only"] {
-        let res = try_call(&app, "ai.settingsSet", json!({ "ai": { "policy": policy } })).await;
+        let res = try_call(
+            &app,
+            "ai.settingsSet",
+            json!({ "ai": { "policy": policy } }),
+        )
+        .await;
         assert!(
             res.is_err(),
             "Richtlinie {policy} darf in 1.1 nicht angenommen werden: {res:?}"
         );
     }
     // Der Standard bleibt zulässig.
-    call(&app, "ai.settingsSet", json!({ "ai": { "policy": "unrestricted" } })).await;
+    call(
+        &app,
+        "ai.settingsSet",
+        json!({ "ai": { "policy": "unrestricted" } }),
+    )
+    .await;
 }

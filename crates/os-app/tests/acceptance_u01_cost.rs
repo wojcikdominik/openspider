@@ -68,7 +68,12 @@ fn record(task: &str, cost: u64) -> RequestRecord {
 
 /// Crawl-Datei mit protokollierten KI-Kosten (Zeilen in `ai_requests`) und optional gespeicherten Grenzen, geöffnet im
 /// Fenster `main`.
-async fn open_crawl_with_costs(app: &App, dir: &std::path::Path, costs: &[u64], limits: Option<BudgetLimits>) {
+async fn open_crawl_with_costs(
+    app: &App,
+    dir: &std::path::Path,
+    costs: &[u64],
+    limits: Option<BudgetLimits>,
+) {
     let path = dir.join("u01-cost.ospider");
     let file = common::create(&path, common::cfg());
     file.set_meta("state", "Completed").unwrap();
@@ -79,7 +84,18 @@ async fn open_crawl_with_costs(app: &App, dir: &std::path::Path, costs: &[u64], 
         )
         .unwrap();
     for (i, c) in costs.iter().enumerate() {
-        requests::insert(file.conn(), &record(if i % 2 == 0 { "decision" } else { "suggest-title" }, *c)).unwrap();
+        requests::insert(
+            file.conn(),
+            &record(
+                if i % 2 == 0 {
+                    "decision"
+                } else {
+                    "suggest-title"
+                },
+                *c,
+            ),
+        )
+        .unwrap();
     }
     if let Some(l) = limits {
         os_store::ai::budget::save_limits(file.conn(), &l).unwrap();
@@ -163,7 +179,10 @@ async fn ui013_geoeffneter_crawl_zeigt_verbrauch_3_21_von_5_usd_aus_dem_ledger()
     let b = budget(&app).await;
     assert_eq!(b["spentMicroUsd"], 3_210_000, "{b}");
     assert_eq!(b["budgetMicroUsd"], 5 * USD, "{b}");
-    assert_eq!(b["aiMicroUsd"], 3_210_000, "KI-Anteil = Summe des Protokolls: {b}");
+    assert_eq!(
+        b["aiMicroUsd"], 3_210_000,
+        "KI-Anteil = Summe des Protokolls: {b}"
+    );
     assert_eq!(b["dataForSeoMicroUsd"], 0, "{b}");
     assert_eq!(b["reservedMicroUsd"], 0, "{b}");
 }
@@ -194,7 +213,10 @@ async fn ui013_grenzen_der_crawl_datei_und_unbegrenzt() {
     };
     open_crawl_with_costs(&app, home.path(), &[3_210_000], Some(unlimited)).await;
     let b = budget(&app).await;
-    assert!(b["budgetMicroUsd"].is_null(), "unbegrenzt → kein Budget: {b}");
+    assert!(
+        b["budgetMicroUsd"].is_null(),
+        "unbegrenzt → kein Budget: {b}"
+    );
     assert_eq!(b["spentMicroUsd"], 3_210_000);
 }
 
@@ -219,7 +241,12 @@ async fn ai013_budget_erhoehen_wirkt_auf_die_crawl_datei_und_verlangt_einen_craw
     assert_eq!(b["budgetMicroUsd"], 8 * USD, "{b}");
     assert_eq!(b["spentMicroUsd"], 4_900_000, "{b}");
     let view = call(&app, "ai.settingsGet", Value::Null).await;
-    assert_eq!(view["crawlBudget"]["crawl"], 8 * USD, "gespeichert in der Crawl-Datei: {}", view["crawlBudget"]);
+    assert_eq!(
+        view["crawlBudget"]["crawl"],
+        8 * USD,
+        "gespeichert in der Crawl-Datei: {}",
+        view["crawlBudget"]
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -248,7 +275,10 @@ async fn ai012_abschnitt_ki_zeigt_die_werte_des_kern_voranschlags() {
     open_crawl_with_costs(&app, home.path(), &[1_000_000], None).await;
     let v = cost_estimate(&app).await;
     let sections = v["sections"].as_array().unwrap();
-    let ai = sections.iter().find(|s| s["id"] == "ai").expect("Abschnitt KI");
+    let ai = sections
+        .iter()
+        .find(|s| s["id"] == "ai")
+        .expect("Abschnitt KI");
     let rows = ai["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 3);
     for (core, reasoning, r) in [
@@ -258,7 +288,10 @@ async fn ai012_abschnitt_ki_zeigt_die_werte_des_kern_voranschlags() {
     ] {
         assert_eq!(r["task"], core.task.as_str());
         assert_eq!(r["model"], core.model.as_str());
-        assert_eq!(r["reasoning"], reasoning, "Spalte Reasoning = effektive Stufe: {r}");
+        assert_eq!(
+            r["reasoning"], reasoning,
+            "Spalte Reasoning = effektive Stufe: {r}"
+        );
         assert_eq!(r["items"], core.items);
         assert_eq!(r["cached"], core.cached);
         assert_eq!(r["estInputTokens"], core.est_input_tokens);
@@ -270,13 +303,19 @@ async fn ai012_abschnitt_ki_zeigt_die_werte_des_kern_voranschlags() {
     }
     assert_eq!(rows[0]["executable"], true);
     assert_eq!(rows[0]["reason"], "");
-    assert_eq!(rows[2]["executable"], false, "ohne Schlüssel nicht ausführbar");
+    assert_eq!(
+        rows[2]["executable"], false,
+        "ohne Schlüssel nicht ausführbar"
+    );
     assert_eq!(rows[2]["reason"], "Missing API key");
     // Summe nur über ausführbare Aufgaben (nicht ausführbare senden nichts).
     assert_eq!(v["totals"]["expectedMicroUsd"], 100_000, "{}", v["totals"]);
     assert_eq!(v["totals"]["lowMicroUsd"], 30_000 + 45_000);
     assert_eq!(v["totals"]["highMicroUsd"], 50_000 + 75_000);
-    assert_eq!(ai["totals"], v["totals"], "ohne DataForSEO = Summe des Abschnitts KI");
+    assert_eq!(
+        ai["totals"], v["totals"],
+        "ohne DataForSEO = Summe des Abschnitts KI"
+    );
     // Budget, Verbrauch und Rest aus dem Ledger der Crawl-Datei.
     assert_eq!(v["budget"]["budgetMicroUsd"], 5 * USD);
     assert_eq!(v["budget"]["consumedMicroUsd"], USD);
@@ -292,7 +331,10 @@ async fn ai012_bestaetigungsschwelle_und_halbes_restbudget() {
     // Unter der Schwelle (0,90 USD) und unter 50 % von 5,00 USD → keine Bestätigung.
     let home = tempfile::tempdir().unwrap();
     let app = fresh_app(home.path());
-    estimator(&app, vec![(estimate("decision", 900_000, Executable::Yes), None, None)]);
+    estimator(
+        &app,
+        vec![(estimate("decision", 900_000, Executable::Yes), None, None)],
+    );
     let v = cost_estimate(&app).await;
     assert_eq!(v["thresholdMicroUsd"], USD, "Standard 1,00 USD");
     assert_eq!(v["confirmationRequired"], false, "{v}");
@@ -300,23 +342,36 @@ async fn ai012_bestaetigungsschwelle_und_halbes_restbudget() {
     // Über der Schwelle (1,10 USD) → Bestätigung.
     let home = tempfile::tempdir().unwrap();
     let app = fresh_app(home.path());
-    estimator(&app, vec![(estimate("decision", 1_100_000, Executable::Yes), None, None)]);
+    estimator(
+        &app,
+        vec![(estimate("decision", 1_100_000, Executable::Yes), None, None)],
+    );
     assert_eq!(cost_estimate(&app).await["confirmationRequired"], true);
 
     // Unter der Schwelle, aber über 50 % des Restbudgets (0,80 USD von 1,50 USD).
     let home = tempfile::tempdir().unwrap();
     let app = fresh_app(home.path());
     edit_config(&app, |cfg| cfg.ai.budget.crawl = MicroUsd(1_500_000)).await;
-    estimator(&app, vec![(estimate("decision", 800_000, Executable::Yes), None, None)]);
+    estimator(
+        &app,
+        vec![(estimate("decision", 800_000, Executable::Yes), None, None)],
+    );
     let v = cost_estimate(&app).await;
-    assert_eq!(v["budget"]["remainingMicroUsd"], 1_500_000, "{}", v["budget"]);
+    assert_eq!(
+        v["budget"]["remainingMicroUsd"], 1_500_000,
+        "{}",
+        v["budget"]
+    );
     assert_eq!(v["confirmationRequired"], true, "über 50 % des Restbudgets");
 
     // Schwelle aus den App-Einstellungen (Testprofil 0,0001 USD aus AI-012).
     let home = tempfile::tempdir().unwrap();
     let app = fresh_app(home.path());
     patch_settings(&app, json!({ "aiApp": { "confirmationThreshold": 100 } })).await;
-    estimator(&app, vec![(estimate("decision", 200, Executable::Yes), None, None)]);
+    estimator(
+        &app,
+        vec![(estimate("decision", 200, Executable::Yes), None, None)],
+    );
     let v = cost_estimate(&app).await;
     assert_eq!(v["thresholdMicroUsd"], 100);
     assert_eq!(v["confirmationRequired"], true);
