@@ -326,19 +326,24 @@ fn claim_beat_and_release_write_only_owner_fields_in_one_commit_each() {
     // Ein zweiter Prozess (simuliert über eine fremde PID) wird mit Art und PID abgewiesen.
     let other = me.wrapping_add(1);
     let err = owner::claim(file.conn(), "cli", other, t0).unwrap_err();
-    let StoreError::InvalidInput(text) = &err else {
+    let StoreError::Occupied { kind, pid } = &err else {
         panic!("{err:?}");
     };
+    assert_eq!(
+        (kind.as_str(), pid.as_str()),
+        ("app", me.to_string().as_str())
+    );
+    let text = err.to_string();
     assert!(
         text.contains(&me.to_string()) && text.contains("app") && text.contains("läuft noch"),
         "{text}"
     );
-    assert!(!owner::beat(file.conn(), other, t0).unwrap());
+    assert!(!owner::beat(file.conn(), "cli", other, t0).unwrap());
     assert!(!owner::release(file.conn(), other, t0).unwrap());
     assert_eq!(meta(&file, "owner_pid"), me.to_string());
 
     clock.advance(Duration::from_secs(2));
-    assert!(owner::beat(file.conn(), me, clock.now()).unwrap());
+    assert!(owner::beat(file.conn(), "app", me, clock.now()).unwrap());
     assert_eq!(meta(&file, "heartbeat_at"), clock.now().to_db());
 
     clock.advance(Duration::from_millis(500));
@@ -352,10 +357,11 @@ fn claim_beat_and_release_write_only_owner_fields_in_one_commit_each() {
     );
     assert_eq!(meta(&file, "heartbeat_at"), end.to_db());
     assert_eq!(meta(&file, "state"), "Completed");
-    assert!(
-        !owner::beat(file.conn(), me, end).unwrap(),
-        "nach dem Ende kein Heartbeat"
-    );
+    // Leeres `owner_pid` (Ende bzw. Freigabe durch die eigene Engine): `beat` trägt den Prozess wieder ein (Übernahme
+    // nach dem Ende des eigenen Crawls, AI-020); `RunOwner` ruft `beat` nach `finish` nicht mehr auf.
+    assert!(owner::beat(file.conn(), "app", me, end).unwrap());
+    assert_eq!(meta(&file, "owner_pid"), me.to_string());
+    assert!(owner::release(file.conn(), me, end).unwrap());
 
     // Absturz eines fremden KI-Laufs: mehr als 10 s nach dem letzten Heartbeat überschreibt der nächste Lauf.
     file.set_meta("owner_pid", &other.to_string()).unwrap();
@@ -380,7 +386,7 @@ fn claim_beat_and_release_write_only_owner_fields_in_one_commit_each() {
         owner::claim(engine.conn(), "app", me, later).unwrap(),
         Claim::Passive
     );
-    assert!(!owner::beat(engine.conn(), me, later).unwrap());
+    assert!(!owner::beat(engine.conn(), "app", me, later).unwrap());
     assert!(!owner::release(engine.conn(), me, later).unwrap());
     assert_eq!(meta(&engine, "heartbeat_at"), before);
     assert_eq!(meta(&engine, "owner_pid"), me.to_string());
@@ -388,4 +394,41 @@ fn claim_beat_and_release_write_only_owner_fields_in_one_commit_each() {
     // Ein fremd laufender Crawl (CRAWL-125) ist für `claim` fremd geführt.
     engine.set_meta("owner_pid", &other.to_string()).unwrap();
     assert!(owner::claim(engine.conn(), "app", me, later).is_err());
+}
+
+/// Nacharbeit 26.11.2026: `link_index::ensure_if_idle` schreibt nichts, solange ein anderer Prozess aktiver Besitzer
+/// ist (wie bei einem laufenden Crawl); ohne Besitzer baut es den Index wie in 1.0. Die Funktion prüft mit der
+/// Systemuhr; der Heartbeat liegt deshalb in der Zukunft (gilt nach CRAWL-125 als aktuell).
+// spec: AI-020 [M4]
+// spec: PERF-002
+#[test]
+fn the_link_index_is_not_built_while_another_process_is_the_active_owner() {
+    use os_store::link_index;
+    use os_store::{CrawlSink, SqliteSink};
+    use store_common::{batch_with_urls, hyperlink, new_crawl, page};
+    let c = cases();
+    let dir = tempfile::tempdir().unwrap();
+    let path = new_crawl(dir.path(), "idx.ospider", StorageProfile::Balanced);
+    let mut sink = SqliteSink::open(&path, StorageProfile::Balanced).unwrap();
+    let mut batch = batch_with_urls((1..=3).map(|i| (i, true)));
+    for i in 1..=2 {
+        batch.pages.push(page(i, vec![hyperlink(i + 1, 0)]));
+    }
+    batch.meta.push(("state".into(), "Completed".into()));
+    sink.write(batch).unwrap();
+    sink.finish().unwrap();
+    drop(sink);
+    let rw = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    link_index::drop_index(rw.conn()).unwrap();
+    rw.set_meta("state", "Completed").unwrap();
+    rw.set_meta("owner_kind", "cli").unwrap();
+    rw.set_meta("owner_pid", &foreign(&c)).unwrap();
+    rw.set_meta("heartbeat_at", "2099-01-01T00:00:00.000Z")
+        .unwrap();
+    assert!(!link_index::ensure_if_idle(&rw).unwrap());
+    assert!(!link_index::present(rw.conn()).unwrap());
+    // Eigener aktiver Besitzer: der eigene Prozess darf.
+    rw.set_meta("owner_pid", &own()).unwrap();
+    assert!(link_index::ensure_if_idle(&rw).unwrap());
+    assert!(link_index::present(rw.conn()).unwrap());
 }

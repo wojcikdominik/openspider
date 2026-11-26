@@ -85,6 +85,15 @@ pub enum StoreError {
     /// unbekannte Sortierspalte). Die Crawl-Datei bleibt unverändert.
     #[error("ungültige Eingabe: {0}")]
     InvalidInput(String),
+    /// Ein anderer Prozess führt den Crawl (laufend nach CRAWL-125 oder aktiver Besitzer, 08 AI-020 [M4]); geliefert
+    /// von `owner::claim` bzw. `os_ai::run_owner::RunOwner::start`. Nichts wurde geschrieben.
+    #[error("Der Crawl läuft noch (Prozess {pid}, {kind}) – Steuerung nur dort")]
+    Occupied {
+        /// `owner_kind` des Besitzers (`app`, `cli`, `mcp-stdio`; leer, wenn nicht gesetzt).
+        kind: String,
+        /// `owner_pid` des Besitzers (Dezimalzahl wie gespeichert; leer, wenn nicht gesetzt).
+        pid: String,
+    },
     /// Noch nicht umgesetzt (Stub, `STUB(M1-Pxx)`).
     #[error("nicht implementiert: {0}")]
     NotImplemented(&'static str),

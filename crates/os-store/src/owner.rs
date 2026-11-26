@@ -115,13 +115,12 @@ impl Occupancy {
         self.active_owner && !is_own_pid(self.owner_pid.as_deref(), own_pid)
     }
 
-    /// Meldung für einen fremd geführten Crawl mit Art und PID (Fehler von [`claim`]).
-    pub fn foreign_message(&self) -> String {
-        format!(
-            "Der Crawl läuft noch (Prozess {}, {}) – Steuerung nur dort",
-            self.owner_pid.as_deref().unwrap_or("?"),
-            self.owner_kind.as_deref().unwrap_or("?")
-        )
+    /// Fehler für einen fremd geführten Crawl mit Art und PID (Fehler von [`claim`]).
+    pub fn occupied_error(&self) -> StoreError {
+        StoreError::Occupied {
+            kind: self.owner_kind.clone().unwrap_or_default(),
+            pid: self.owner_pid.clone().unwrap_or_default(),
+        }
     }
 }
 
@@ -204,7 +203,7 @@ fn immediate(conn: &Connection) -> Result<Transaction<'_>, StoreError> {
 /// Trägt den Prozess `own_pid` als Besitzer ein (Beginn eines KI-Laufs, AI-020): ein Commit unter
 /// `BEGIN IMMEDIATE`, der zuerst „fremd geführt“ prüft.
 ///
-/// * fremd geführt ([`Occupancy::foreign_led`]) → `StoreError::InvalidInput` mit PID und Art des Besitzers, nichts
+/// * fremd geführt ([`Occupancy::foreign_led`]) → [`StoreError::Occupied`] mit Art und PID des Besitzers, nichts
 ///   geschrieben;
 /// * laufend nach CRAWL-125 mit eigener PID → [`Claim::Passive`], nichts geschrieben;
 /// * sonst → `owner_kind`, `owner_pid` = `own_pid`, `heartbeat_at` = `now`; [`Claim::Claimed`]. Ein veralteter
@@ -220,7 +219,7 @@ pub fn claim(
     let tx = immediate(conn)?;
     let occupancy = read_occupancy(&tx, now)?;
     if occupancy.foreign_led(own_pid) {
-        return Err(StoreError::InvalidInput(occupancy.foreign_message()));
+        return Err(occupancy.occupied_error());
     }
     if occupancy.running {
         return Ok(Claim::Passive);
@@ -232,13 +231,26 @@ pub fn claim(
     Ok(Claim::Claimed)
 }
 
-/// Ein Heartbeat des Besitzers `own_pid`: `heartbeat_at` = `now`, ein Commit. Geschrieben wird nur, solange
-/// `owner_pid` den eigenen Prozess nennt und der Crawl nicht nach CRAWL-125 läuft (dann schreibt allein die Engine).
-/// Liefert, ob geschrieben wurde.
-pub fn beat(conn: &Connection, own_pid: u32, now: Timestamp) -> Result<bool, StoreError> {
+/// Ein Heartbeat des Besitzers `own_pid` (ein Commit). Läuft der Crawl nach CRAWL-125, schreibt allein die Engine:
+/// nichts geschrieben. Nennt `owner_pid` den eigenen Prozess → `heartbeat_at` = `now`. Ist `owner_pid` leer (die eigene
+/// Engine hat beim Ende oder bei der Pause freigegeben), trägt sich der Prozess neu ein (`owner_kind`, `owner_pid`,
+/// `heartbeat_at`; 08 AI-020 [M4], „Übernahme nach dem Ende des eigenen Crawls“). Einen anderen Prozess überschreibt
+/// `beat` nie. Liefert, ob geschrieben wurde.
+pub fn beat(
+    conn: &Connection,
+    owner_kind: &str,
+    own_pid: u32,
+    now: Timestamp,
+) -> Result<bool, StoreError> {
     let tx = immediate(conn)?;
     let occupancy = read_occupancy(&tx, now)?;
-    if !is_own_pid(occupancy.owner_pid.as_deref(), own_pid) || occupancy.running {
+    if occupancy.running {
+        return Ok(false);
+    }
+    if occupancy.owner_pid.is_none() {
+        set_meta(&tx, "owner_kind", owner_kind)?;
+        set_meta(&tx, "owner_pid", &own_pid.to_string())?;
+    } else if !is_own_pid(occupancy.owner_pid.as_deref(), own_pid) {
         return Ok(false);
     }
     set_meta(&tx, "heartbeat_at", &now.to_db())?;
