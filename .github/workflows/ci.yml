@@ -162,6 +162,15 @@ jobs:
           done
           sleep 1
 
+      # 26.11.2026: Der Job scheitert seit dem 25.11. wiederholt mit wechselndem Bild (SIGBUS, "database disk image is malformed",
+      # "Input/output error" beim Linken, beschädigte Programmdatei). Am Jobende sind über 100 GB frei, zu Beginn aber nur rund
+      # 44 GB, und das Löschen oben läuft im Hintergrund. Diese Aufzeichnung belegt den tatsächlichen Tiefststand während des
+      # Jobs (alle 20 s freier Platz in KiB und Zahl der noch laufenden Löschprozesse); sie ändert am Ablauf nichts.
+      - name: "Plattenplatz mitschreiben (macOS, Diagnose)"
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          nohup sh -c 'while true; do printf "%s %s %s\n" "$(date -u +%H:%M:%S)" "$(df -k /System/Volumes/Data | tail -n 1 | tr -s " " | cut -d " " -f 4)" "$(pgrep -f "[r]m -rf|[s]imctl runtime delete" | wc -l | tr -d " ")"; sleep 20; done' > "$RUNNER_TEMP/df-monitor.log" 2>&1 &
+
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: "1.99.1"
@@ -213,6 +222,17 @@ jobs:
         timeout-minutes: 50
         # --no-fail-fast: Ein roter Test verdeckt sonst alle Testbinaries dahinter (10.11.: Windows).
         run: cargo test --workspace --locked --no-fail-fast
+
+      - name: "Plattenplatz: Tiefststand bis nach den Rust-Tests (macOS, Diagnose)"
+        if: ${{ always() && runner.os == 'macOS' }}
+        run: |
+          f="$RUNNER_TEMP/df-monitor.log"
+          [ -s "$f" ] || { echo "keine Aufzeichnung"; exit 0; }
+          echo "Messpunkte: $(wc -l < "$f" | tr -d ' ')"
+          echo "Tiefststand (Zeit UTC, frei in KiB, laufende Löschprozesse): $(sort -k2,2n "$f" | head -n 1)"
+          echo "Löschprozesse zuletzt aktiv: $(awk '$3 > 0' "$f" | tail -n 1)"
+          echo "Verlauf (jede dritte Minute):"; awk 'NR % 9 == 1' "$f"
+          df -h /System/Volumes/Data | tail -n 1
 
       - name: Tauri build check (debug, no bundle)
         if: ${{ !cancelled() }}
