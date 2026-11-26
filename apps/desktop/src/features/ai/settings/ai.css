@@ -1,0 +1,15 @@
+/* KI-Einstellungen, Kostenvoranschlag und Datenfluss (M4-U01). */
+.os-ai-table { border-collapse:collapse; width:100%; font-size:var(--os-font-small); }
+.os-ai-table th, .os-ai-table td { border-bottom:var(--os-line) solid var(--os-border); padding:var(--os-space-4) var(--os-space-8); text-align:start; vertical-align:top; }
+.os-ai-table caption { text-align:start; font-weight:600; padding-block:var(--os-space-4); }
+.os-ai-row { display:flex; gap:var(--os-space-8); align-items:flex-end; margin-block:var(--os-space-8); }
+.os-ai-actions { display:flex; gap:var(--os-space-8); align-items:center; margin-block:var(--os-space-8); flex-wrap:wrap; }
+.os-ai-fieldset { border:var(--os-line) solid var(--os-border); border-radius:var(--os-radius); margin-block:var(--os-space-8); padding:var(--os-space-8); display:grid; gap:var(--os-space-8); }
+.os-ai-textarea { width:100%; font-family:var(--os-font-mono); }
+.os-ai-warning { color:var(--os-badge-warning); }
+.os-ai-fallback ol { margin:0; padding-inline-start:var(--os-space-16); }
+.os-ai-fallback li { display:flex; gap:var(--os-space-4); align-items:center; }
+.os-ai-estimate-summary { display:grid; grid-template-columns:max-content 1fr; gap:var(--os-space-4) var(--os-space-12); margin-block:var(--os-space-12); }
+.os-ai-estimate-summary dd { margin:0; }
+.os-status-cost-warning { color:var(--os-badge-warning); font-weight:600; }
+.os-ai-scroll { overflow:auto; max-width:100%; }

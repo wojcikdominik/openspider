@@ -1,1 +1,33 @@
 ai-consent-title = Datenfluss und Einwilligung
+ai-consent-dialog-title = Datenfluss bestätigen
+ai-consent-overview-title = KI-Datenfluss
+ai-consent-overview-caption = Welche Daten an welchen Anbieter gehen
+ai-consent-redaction-on = Schwärzung personenbezogener Daten: an
+ai-consent-redaction-off = Schwärzung personenbezogener Daten: aus
+ai-consent-first = { $task }: erste Übertragung an { $provider }
+ai-consent-added = { $task }: neu hinzugekommen – { $fields }
+ai-consent-pii-notice = Die Schwärzung ist aus. Seiten wie Kontakt und Impressum können personenbezogene Daten enthalten, die dann ungeschwärzt übertragen werden.
+ai-consent-confirm = Bestätigen
+ai-consent-cancel = Abbrechen
+ai-consent-error = Die Einwilligung konnte nicht gespeichert werden: { $detail }
+ai-consent-policy = Richtlinie: { $policy }
+ai-consent-copy-csv = CSV kopieren
+ai-consent-save-csv = Als CSV speichern
+ai-consent-copied = In die Zwischenablage kopiert
+ai-consent-revoke = Einwilligung für { $provider } widerrufen
+
+## Felder (AI-030, AI-032)
+ai-field-url = Adresse (URL)
+ai-field-title = Seitentitel
+ai-field-meta-description = Meta-Beschreibung
+ai-field-h1 = Überschrift H1
+ai-field-h2 = Überschriften H2
+ai-field-page-text = Seitentext
+ai-field-word-count = Wortzahl
+ai-field-html-lang = Sprachangabe im HTML
+ai-field-hreflang-self = Eigener hreflang-Eintrag
+ai-field-structured-data-types = Typen strukturierter Daten
+ai-field-page-type = Seitentyp
+ai-field-image = Bild
+ai-field-alt = Alternativtext
+ai-field-image-context = Bildumgebung
