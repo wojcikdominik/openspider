@@ -571,6 +571,14 @@ pub fn add_urls_to_file(
     if meta.end_reason == Some(EndReason::Stopped) {
         return Err(stopped_error());
     }
+    // 08 AI-020 [M4] (Wirkung b, „URLs hinzufügen“): ein anderer Prozess führt den Crawl als aktiver Besitzer.
+    let occupancy = file.occupancy(&os_model::SystemClock)?;
+    if occupancy.foreign_active_owner(std::process::id()) {
+        return Err(EngineError::Invalid(format!(
+            "Der Crawl läuft noch (Prozess {}) – pausieren oder beenden, dann URLs hinzufügen",
+            occupancy.owner_pid.as_deref().unwrap_or_default()
+        )));
+    }
     let start = meta
         .start_url
         .ok_or_else(|| EngineError::Invalid("Start-URL fehlt".into()))?;

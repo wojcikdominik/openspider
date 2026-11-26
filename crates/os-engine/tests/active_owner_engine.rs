@@ -212,3 +212,30 @@ fn the_engine_interval_is_the_shared_constant() {
     );
     assert_eq!(os_engine::crawl::HEARTBEAT_INTERVAL, Duration::from_secs(2));
 }
+
+/// Nacharbeit 26.11.2026: `add_urls_to_file` schreibt nicht, solange ein anderer Prozess aktiver Besitzer ist
+/// (Wirkung b, „URLs hinzufügen“); ohne Besitzer wie 1.0. Systemuhr: Heartbeat in der Zukunft (CRAWL-125, aktuell).
+// spec: AI-020 [M4]
+// spec: CRAWL-131
+#[test]
+fn adding_urls_is_rejected_while_another_process_is_the_active_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let pid = foreign_pid();
+    let path = crawl(dir.path(), "Paused", &pid, "2099-01-01T00:00:00.000Z");
+    let mut file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    let cfg = file.config().unwrap();
+    let urls = vec!["https://site.test/neu".to_string()];
+    let count = |f: &CrawlFile| -> i64 {
+        f.conn()
+            .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
+            .unwrap()
+    };
+    let before = count(&file);
+    let err = os_engine::lifecycle::add_urls_to_file(&mut file, &urls, &cfg).unwrap_err();
+    assert_running_elsewhere(err, &pid, "URLs hinzufügen");
+    assert_eq!(count(&file), before);
+    file.set_meta("owner_pid", "").unwrap();
+    let summary = os_engine::lifecycle::add_urls_to_file(&mut file, &urls, &cfg).unwrap();
+    assert_eq!(summary.added, 1);
+    assert_eq!(count(&file), before + 1);
+}
