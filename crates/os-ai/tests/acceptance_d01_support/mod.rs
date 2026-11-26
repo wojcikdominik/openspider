@@ -550,8 +550,13 @@ pub fn site(marker: impl Fn(i64) -> String) -> Vec<RunItem> {
 /// Preise nach `tests/fixtures/ai/pricing-test.json` (08 Konventionen) bzw. Mock-Modellliste (OpenRouter).
 pub fn test_prices(provider: &str, model: &str, endpoint: &str) -> Option<Rates> {
     match (provider, model, endpoint) {
+        // Bild-Schätzwert wie die Mock-Zählung (85 Tokens je Bild, 08 Konventionen), damit die Reservierung
+        // den Bildanteil deckt (AI-012, AI-013).
         ("openai", "gpt-6-luna", "decisions") => {
-            Rates::per_million("0.10", "0", PriceSource::Table)
+            Rates::per_million("0.10", "0", PriceSource::Table).map(|r| Rates {
+                image_token_estimate: 85,
+                ..r
+            })
         }
         ("openai", "gpt-6-luna", "responses") => {
             Rates::per_million("0.10", "0.50", PriceSource::Table)
