@@ -61,7 +61,7 @@ const test = base.extend<{ app: App }>({
         await grid.click({ position: { x: 160, y: 32 + 14 } });
         for (let i = 0; i < first; i++) await page.keyboard.press("ArrowDown");
         for (let i = 1; i < count; i++) await page.keyboard.press("Shift+ArrowDown");
-        await expect(page.getByRole("complementary", { name: "Review AI suggestions" }).locator(".os-ai-sugg-address")).toHaveText(`${BASE}${PATHS[first]}`);
+        await expect(page.getByRole("complementary", { name: "Review AI suggestions" }).locator(".os-ai-sugg-address")).toHaveText(`${BASE}${PATHS[first + count - 1]}`);
       },
       region: () => page.getByRole("complementary", { name: "Review AI suggestions" }),
     };
