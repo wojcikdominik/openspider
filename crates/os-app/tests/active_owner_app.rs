@@ -265,7 +265,7 @@ async fn resume_and_stop_of_an_open_crawl_are_rejected_while_another_process_own
 
 /// Nacharbeit 26.11.2026: `crawl.addUrls` ohne Engine auf einem schreibend geöffneten Crawl, den danach ein anderer
 /// Prozess als aktiver Besitzer führt, wird abgewiesen wie in einer nur lesend geöffneten Sitzung (`Permission`,
-/// `err-crawl-readonly`); keine URL wird geschrieben. 11 s später gelingt das Nachreichen.
+/// `err-crawl-readonly`); keine URL wird geschrieben. Nach dem Ende des fremden Laufs gelingt das Nachreichen.
 // spec: AI-020 [M4]
 // spec: CRAWL-131
 #[tokio::test]
@@ -301,9 +301,51 @@ async fn adding_urls_is_rejected_while_another_process_owns_the_open_crawl() {
             .unwrap()
     };
     assert_eq!(count(&path), 1);
+    // Der fremde Lauf endet (owner_pid leer): danach gelingt das Nachreichen. (Die Engine prüft hier mit der
+    // Systemuhr; ein bloßes Vorstellen der App-Uhr reicht deshalb nicht.)
     clock.advance(Duration::from_secs(11));
+    let f = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadWrite).unwrap();
+    f.set_meta("owner_pid", "").unwrap();
+    drop(f);
     let op = call(&app, "crawl.addUrls", urls()).await;
     let status = app.ops().wait(op["opId"].as_str().unwrap()).await.unwrap();
     assert!(status.error.is_none(), "{:?}", status.error);
     assert_eq!(count(&path), 2);
+}
+
+/// Abnahmebefund B3-2: Ein eigener, gerade angelegter Crawl (gespeichertes `Running`, frisches `created_at`, noch ohne
+/// `owner_pid`, Sitzung mit eigener Engine) ist in der Verwaltungsliste wie in 1.0 steuerbar.
+// spec: AI-020 [M4]
+// spec: CRAWL-125
+#[tokio::test]
+async fn a_just_created_own_crawl_stays_controllable_in_the_list() {
+    let dir = tempfile::tempdir().unwrap();
+    let (app, _clock) = manual_app(dir.path());
+    let id = "0199f000-0000-7000-8000-0000000c0014";
+    let crawls = app.config().paths.crawls.clone();
+    std::fs::create_dir_all(&crawls).unwrap();
+    let path = crawls.join(format!("{id}.ospider"));
+    let f = create(&path, cfg());
+    f.set_meta("crawl_id", id).unwrap();
+    drop(f);
+    app.sessions().set_current(
+        window(),
+        os_app::runtime::sessions::SessionInfo {
+            key: os_app::pool::CrawlKey(id.into()),
+            path: path.clone(),
+            config: std::sync::Arc::new(cfg()),
+            state: os_model::CrawlState::Running,
+            writable: true,
+            engine: Some(std::sync::Arc::new(
+                os_app::runtime::sessions::EngineControl {
+                    handle: std::sync::Mutex::new(None),
+                },
+            )),
+        },
+    );
+    let list = call(&app, "crawls.list", json!({"show":"all"})).await;
+    let i = item(&list, id);
+    assert_eq!(i["crawl"]["phase"], "running");
+    assert_eq!(i["crawl"]["owner"]["live"], true);
+    assert_eq!(i["crawl"]["owner"]["controllable"], true, "wie 1.0");
 }

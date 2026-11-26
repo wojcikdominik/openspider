@@ -194,7 +194,9 @@ async fn listing(app: &App, args: serde_json::Value) -> CmdResult {
         // 08 AI-020 [M4]: „live“ auch bei einem aktiven Besitzer außerhalb von `Running`; steuerbar nur, solange kein
         // anderer Prozess den Crawl führt. Art und PID bleiben wie 1.0 (K4-22, Hinweis i).
         let live = state == CrawlState::Running || l.active_owner(now).is_some();
-        let foreign_led = l.foreign_led(now);
+        // Nur der neue Teil von (b): ein eigener, gerade angelegter Crawl (gespeichertes `Running` noch ohne
+        // `owner_pid`) bleibt wie in 1.0 steuerbar.
+        let foreign_led = l.occupancy(now).foreign_active_owner(std::process::id());
         let end_reason = l.meta.end_reason.map(|r| r.as_str().to_string());
         let duration_ms = l.duration_ms.or_else(|| {
             l.meta.started_at.map(|start| {
