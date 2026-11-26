@@ -1,0 +1,86 @@
+{
+  "v01-a": {
+    "default": {"candidates": [
+      "Leichte Wanderschuhe für Damen und Herren",
+      "Wanderschuhe im Test: die besten Modelle 2026",
+      "Wanderschuhe für jeden Weg – Ratgeber und Test"
+    ]}
+  },
+  "v01-b": {
+    "default": {"candidates": [
+      "Leichte Wanderschuhe für Damen und Herren",
+      "Rucksäcke für Wanderungen im großen Vergleich",
+      "Rucksack"
+    ]}
+  },
+  "v01-c": {
+    "default": {"candidates": [
+      "Regenjacken für Wanderer: wasserdicht und leicht",
+      "Regenjacken mit hoher Wassersäule im Vergleich",
+      "Die beste Regenjacke für nasse Herbsttage"
+    ]}
+  },
+  "v01-d": {
+    "default": {"candidates": [
+      "Schlafsäcke für Sommer und Winter im Vergleich",
+      "Zelte für Camping und Trekking im Vergleich",
+      "Kuppelzelte und Tunnelzelte für jede Tour"
+    ]}
+  },
+  "v01-e": {
+    "default": {"candidates": [
+      "Daunenschlafsäcke und Kunstfaserschlafsäcke im Test",
+      "Schlafsäcke nach Komforttemperatur auswählen",
+      "Schlafsack kaufen: Füllung, Gewicht und Packmaß"
+    ]}
+  },
+  "v01-f": {
+    "default": {"candidates": [
+      "Isomatten und Luftmatratzen für Zelt und Hütte",
+      "Isomatten mit hohem R-Wert für kalte Nächte",
+      "Luftmatratze oder Isomatte? Der große Vergleich"
+    ]}
+  },
+  "v01-g": {
+    "default": {"candidates": [
+      "Wanderstöcke: Carbon oder Aluminium im Vergleich",
+      "Teleskop- und Faltstöcke für Wanderer im Test",
+      "Wanderstöcke richtig einstellen und auswählen"
+    ]}
+  },
+  "v01-m1": {
+    "default": {"candidates": [
+      "Stirnlampen für Wanderer und Camper im Vergleich: Leuchtweite, Akkulaufzeit, Rotlicht und Gewicht auf einen Blick.",
+      "Welche Stirnlampe passt zu Ihrer Tour? Modelle mit Akku, Rotlicht und hoher Leuchtweite im ausführlichen Test.",
+      "Hell, leicht und ausdauernd: Stirnlampen für Nachtwanderungen und Hüttentouren mit Akku und Rotlicht im Vergleich."
+    ]}
+  },
+  "v01-m2": {
+    "default": {"candidates": [
+      "Trinkflaschen und Trinkblasen aus Edelstahl, Aluminium und Kunststoff für Wanderungen und Radtouren im Vergleich.",
+      "Die passende Trinkflasche für jede Tour: Volumen, Material, Gewicht und Isolierung übersichtlich erklärt.",
+      "Trinkblase oder Flasche? Vor- und Nachteile für Tagestouren und Mehrtagestouren mit Tipps zur Reinigung."
+    ]}
+  },
+  "v01-m3": {
+    "default": {"candidates": [
+      "\"Wandersocken aus Merinowolle halten warm, riechen kaum und polstern Ferse und Zehen –\nfür lange Touren ohne Blasen.\"",
+      "Merinosocken für Wanderer: weich, geruchsarm und mit Polsterung an Ferse und Zehen für lange Touren im Gebirge.",
+      "Wandersocken richtig wählen: Material, Polsterung und Passform für Damen, Herren und Kinder einfach erklärt."
+    ]}
+  },
+  "v01-m4": {
+    "default": {"candidates": [
+      "Orientierung ohne Netz: Kompass und Wanderkarten richtig lesen und auf Tour sicher den richtigen Weg finden.",
+      "Kompass, Höhenmesser und Wanderkarte im Vergleich – so orientieren Sie sich auf Touren auch ohne GPS sicher.",
+      "Wanderkarten im Maßstab 1:25.000 und Kompass mit Spiegel: die wichtigste Ausrüstung für Ihre Orientierung."
+    ]}
+  },
+  "v01-m5": {
+    "default": {"candidates": [
+      "Orientierung ohne Netz: Kompass und Wanderkarten richtig lesen und auf Tour sicher den richtigen Weg finden.",
+      "Erste-Hilfe-Sets für Wanderer und Familien mit Pflaster, Verband, Rettungsdecke und Zeckenzange im Vergleich.",
+      "Was gehört ins Erste-Hilfe-Set für Touren? Checkliste mit Pflaster, Verband, Rettungsdecke und Schmerzmittel."
+    ]}
+  }
+}

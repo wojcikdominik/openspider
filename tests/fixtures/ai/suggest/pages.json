@@ -1,0 +1,91 @@
+{
+  "_comment": "M4-V01 (08 AI-070 ff.): 12 Seiten mit je einem Title-, Meta- oder H1-Problem, eine noindex-Seite und vier Bilder ohne bzw. mit schlechtem Alt (Bilder für M4-V02). Host ai.test:8080. Jede Seite trägt im Text eine Markierung MOCK-ID:<id>; die Antworten stehen in tests/fixtures/ai/mock-answers.d/v01.json. Eigene Testtexte.",
+  "host": "http://ai.test:8080",
+  "pages": [
+    {
+      "path": "/a/", "mock_id": "v01-a", "problem": "title:below-min-chars",
+      "title": "Wanderschuhe", "meta": "Leichte Wanderschuhe für Damen und Herren mit Testberichten, Größentabellen und Pflegetipps für lange Touren.",
+      "h1": "Wanderschuhe für jeden Weg", "lang": "de",
+      "text": "MOCK-ID:v01-a Wanderschuhe für Damen und Herren. Wir vergleichen leichte und schwere Modelle für Tagestouren und Mehrtagestouren."
+    },
+    {
+      "path": "/b/", "mock_id": "v01-b", "problem": "title:below-min-px",
+      "title": "Rucksäcke Shop", "meta": "Tagesrucksäcke, Trekkingrucksäcke und Kinderrucksäcke im Überblick mit Volumen, Gewicht und Tragesystem erklärt.",
+      "h1": "Rucksäcke", "lang": "de",
+      "text": "MOCK-ID:v01-b Rucksäcke für Wanderungen: Volumen, Rückensystem und Gewicht im Vergleich."
+    },
+    {
+      "path": "/c/", "mock_id": "v01-c", "problem": "title:missing",
+      "title": null, "meta": "Regenjacken mit Wassersäule ab 20.000 mm, atmungsaktiv und leicht – die richtige Jacke für nasse Herbsttage finden.",
+      "h1": "Regenjacken", "lang": "de",
+      "text": "MOCK-ID:v01-c Regenjacken für Wanderer: Wassersäule, Atmungsaktivität und Packmaß."
+    },
+    {
+      "path": "/d/", "mock_id": "v01-d", "problem": "title:over-max-chars",
+      "title": "Zelte für Camping, Trekking, Festivals und Familienurlaub im großen Vergleich aller Hersteller", "meta": "Kuppelzelte, Tunnelzelte und Ultraleichtzelte für zwei bis sechs Personen mit Aufbauzeit, Gewicht und Packmaß im Vergleich.",
+      "h1": "Zelte", "lang": "de",
+      "text": "MOCK-ID:v01-d Zelte für jede Tour: Kuppelzelt, Tunnelzelt oder Ultraleichtzelt."
+    },
+    {
+      "path": "/e/", "mock_id": "v01-e", "problem": "title:duplicate",
+      "title": "Schlafsäcke für Sommer und Winter im Vergleich", "meta": "Daunenschlafsäcke und Kunstfaserschlafsäcke mit Komforttemperatur, Gewicht und Packmaß für Touren im Sommer und Winter.",
+      "h1": "Schlafsäcke", "lang": "de",
+      "text": "MOCK-ID:v01-e Schlafsäcke: Komforttemperatur, Füllung und Gewicht."
+    },
+    {
+      "path": "/f/", "mock_id": "v01-f", "problem": "title:duplicate",
+      "title": "Schlafsäcke für Sommer und Winter im Vergleich", "meta": "Isomatten und Luftmatratzen für Zelt und Hütte mit R-Wert, Gewicht und Packmaß – so liegen Sie auf Tour bequem und warm.",
+      "h1": "Isomatten", "lang": "de",
+      "text": "MOCK-ID:v01-f Isomatten und Luftmatratzen: R-Wert, Gewicht und Packmaß."
+    },
+    {
+      "path": "/g/", "mock_id": "v01-g", "problem": "title:same-as-h1",
+      "title": "Wanderstöcke aus Carbon und Aluminium", "meta": "Wanderstöcke aus Carbon und Aluminium mit Teleskop- oder Faltmechanismus, Griffmaterial und Gewicht im ausführlichen Vergleich.",
+      "h1": "Wanderstöcke aus Carbon und Aluminium", "lang": "de",
+      "text": "MOCK-ID:v01-g Wanderstöcke: Carbon oder Aluminium, Teleskop oder Falt."
+    },
+    {
+      "path": "/m1/", "mock_id": "v01-m1", "problem": "meta:missing",
+      "title": "Stirnlampen mit Akku und Rotlicht im Vergleich", "meta": null,
+      "h1": "Stirnlampen", "lang": "de",
+      "text": "MOCK-ID:v01-m1 Stirnlampen für Wanderer: Leuchtweite, Akku und Gewicht."
+    },
+    {
+      "path": "/m2/", "mock_id": "v01-m2", "problem": "meta:below-min-chars",
+      "title": "Trinkflaschen und Trinkblasen für Touren", "meta": "Trinkflaschen kaufen.",
+      "h1": "Trinkflaschen", "lang": "de",
+      "text": "MOCK-ID:v01-m2 Trinkflaschen aus Edelstahl, Aluminium und Kunststoff."
+    },
+    {
+      "path": "/m3/", "mock_id": "v01-m3", "problem": "meta:over-max-chars",
+      "title": "Wandersocken aus Merinowolle für lange Touren", "meta": "Wandersocken aus Merinowolle, Kunstfaser und Mischgewebe für Damen, Herren und Kinder in allen Größen, mit Polsterung an Ferse und Zehen, verstärkter Sohle, flachen Nähten und Garantie.",
+      "h1": "Wandersocken", "lang": "de",
+      "text": "MOCK-ID:v01-m3 Wandersocken aus Merinowolle: warm, geruchsarm und weich."
+    },
+    {
+      "path": "/m4/", "mock_id": "v01-m4", "problem": "meta:duplicate",
+      "title": "Kompass und Karten für die Orientierung", "meta": "Alles für Ihre nächste Tour: Ausrüstung, Tipps und Ratgeber rund ums Wandern, Trekking und Camping in den Bergen.",
+      "h1": "Kompass und Karten", "lang": "de",
+      "text": "MOCK-ID:v01-m4 Kompass und Wanderkarten: Orientierung ohne Netz."
+    },
+    {
+      "path": "/m5/", "mock_id": "v01-m5", "problem": "meta:duplicate",
+      "title": "Erste-Hilfe-Sets für Wanderer und Familien", "meta": "Alles für Ihre nächste Tour: Ausrüstung, Tipps und Ratgeber rund ums Wandern, Trekking und Camping in den Bergen.",
+      "h1": "Erste-Hilfe-Sets", "lang": "de",
+      "text": "MOCK-ID:v01-m5 Erste-Hilfe-Sets für unterwegs: Pflaster, Verband und Rettungsdecke."
+    },
+    {
+      "path": "/noindex/", "mock_id": "v01-noindex", "problem": "none (noindex)", "indexable": false,
+      "title": "Noindex Ratgeber für Wanderer und Bergsteiger", "meta": "Interne Merkliste für Wanderer und Bergsteiger mit Ausrüstungslisten, Packlisten und Tourenvorschlägen für jede Jahreszeit.",
+      "h1": "Merkliste", "lang": "de",
+      "text": "MOCK-ID:v01-noindex Merkliste."
+    }
+  ],
+  "images": [
+    {"page": "/a/", "src": "/img/wanderschuh.png", "alt": null},
+    {"page": "/b/", "src": "/img/rucksack.png", "alt": ""},
+    {"page": "/c/", "src": "/img/jacke.png", "alt": "IMG_2034"},
+    {"page": "/d/", "src": "/img/zelt.png", "alt": null}
+  ],
+  "h1_problem_note": "Die H1-Probleme (/g/ gleicht dem Title) gehören zu AI-074 (M4-V02)."
+}
