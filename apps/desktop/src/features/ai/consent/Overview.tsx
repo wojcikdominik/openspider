@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useT } from "../../../i18n";
 import { Button } from "../../../ui/primitives";
 import { EmptyState } from "../../../ui/primitives/EmptyState";
-import { aiApi, providerName, type ConsentView } from "../settings/api";
+import { AI_019_ENABLED, aiApi, providerName, type ConsentView } from "../settings/api";
 import { DataFlowTable } from "./DataFlowTable";
 
 export const CSV_FILE_NAME = "ai-data-flow.csv";
@@ -45,7 +45,7 @@ export function DataFlowOverview() {
   return (
     <div data-ai-dataflow-overview>
       <h4 className="os-settings-heading">{t("ai-consent-overview-title")}</h4>
-      <p data-ai-policy={view.policy}>{t("ai-consent-policy", { policy: t(`ai-policy-${view.policy}`) })}</p>
+      {AI_019_ENABLED && <p data-ai-policy={view.policy}>{t("ai-consent-policy", { policy: t(`ai-policy-${view.policy}`) })}</p>}
       <p data-ai-redaction={view.redaction ? "on" : "off"}>{t(view.redaction ? "ai-consent-redaction-on" : "ai-consent-redaction-off")}</p>
       {view.rows.length === 0 ? (
         <EmptyState state={{ code: "NO_DATA_YET" }} />

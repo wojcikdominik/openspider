@@ -39,6 +39,12 @@ use crate::registry::{CmdResult, Handler};
 use crate::runtime::error::{internal, parse_args, to_json};
 use crate::{App, CallCtx};
 
+/// AI-019 (Richtlinie „EU-Verarbeitung erzwingen“ / „Nur lokal“, EU-Endpunkte) in diesem Release verfügbar? In 1.1 aus:
+/// Der Kern setzt die Richtlinie erst mit der 1.2-Etappe von M4-K07 durch (`release_split`); bis dahin erscheint keine Zusage
+/// zu Datenort oder „nur lokal“, und `ai.settingsSet` lehnt eine andere Richtlinie als „Keine Einschränkung“ ab
+/// (Entscheidung des Orchestrators, 26.11.2026). 1.2 schaltet hier ein.
+pub const AI_019_ENABLED: bool = false;
+
 /// EU-Basis-URLs laut AI-019 (vorbelegt; überschreibbar für Tests nach INTEG-019 über `base_url`).
 pub const EU_ENDPOINTS: [(&str, &str); 2] = [
     ("openai", "https://eu.api.openai.com"),
@@ -572,6 +578,8 @@ pub struct SettingsView {
     pub lists_loaded: BTreeMap<String, bool>,
     pub tasks: Vec<TaskRow>,
     pub policy: AiPolicy,
+    /// Richtlinie und EU-Endpunkte (AI-019) wählbar ([`AI_019_ENABLED`]); sonst sind `eu` leer und die Oberfläche ohne Schalter.
+    pub policy_available: bool,
     /// Grenzen im Profil des Fensters (`ai.budget`).
     pub budget: BudgetLimits,
     /// Grenzen der geöffneten Crawl-Datei (`api_budget`), falls dort gespeichert.
@@ -622,9 +630,14 @@ pub fn settings_view(
         tasks: task_rows(&config.ai, defaults, lists, &has_key)?,
         keys: key_text,
         policy: config.ai.policy.clone(),
+        policy_available: AI_019_ENABLED,
         budget: config.ai.budget.clone(),
         crawl_budget,
-        eu: eu_rows(app),
+        eu: if AI_019_ENABLED {
+            eu_rows(app)
+        } else {
+            Vec::new()
+        },
         advanced: advanced_rows(app),
         confirmation_threshold_micro_usd: app.confirmation_threshold.0,
         redact_personal_data: app.redact_personal_data,
@@ -707,6 +720,22 @@ pub fn check_assignments(rows: &[TaskRow]) -> Result<(), CmdError> {
     Ok(())
 }
 
+/// In 1.1 ([`AI_019_ENABLED`] aus) ist nur „Keine Einschränkung“ zulässig: eine andere Richtlinie würde eine Zusage machen,
+/// die kein Lauf durchsetzt (`InvalidInput`, `err-ai-policy-unavailable`, Feld `ai.policy`).
+pub fn check_policy(policy: &AiPolicy) -> Result<(), CmdError> {
+    if AI_019_ENABLED || *policy == AiPolicy::Unrestricted {
+        return Ok(());
+    }
+    Err(
+        CmdError::invalid_input("err-ai-policy-unavailable", "ai.policy")
+            .with_arg(
+                "policy",
+                serde_json::to_value(policy).unwrap_or(Value::Null),
+            )
+            .with_detail("AI-019 (EU processing, local only) is not enforced in this release"),
+    )
+}
+
 /// Prüft eine Musterliste; Fehler mit Zeile und Position (AI-024).
 pub fn check_patterns(text: &str) -> Result<Vec<String>, CmdError> {
     PatternList::parse(text).map_err(|e| {
@@ -729,6 +758,7 @@ fn settings_set<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, Cm
         if let Some(ai) = args.ai {
             let ai: AiConfig = serde_json::from_value(ai)
                 .map_err(|_| CmdError::invalid_input("err-config-type", "ai"))?;
+            check_policy(&ai.policy)?;
             let defaults = TaskDefaults::bundled().map_err(catalog_error)?;
             let lists = lists_for(app)?;
             let (_, has) = key_states(&AiKeyStore::new(app.config().secrets.clone()));

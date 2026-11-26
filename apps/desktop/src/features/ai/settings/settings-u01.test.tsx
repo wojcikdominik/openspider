@@ -15,7 +15,8 @@ import { resolvePages } from "../../config/frame/registry";
 import { resolveSections } from "../../settings/frame/registry";
 import { setAiPreview } from "../preview";
 import { AiSettingsSection } from "./AiSettingsSection";
-import type { SettingsView, TaskRow } from "./api";
+import { AI_019_ENABLED, type SettingsView, type TaskRow } from "./api";
+import { aiConfigPages } from "./index";
 import { BudgetSetting, PolicySetting } from "./PolicyBudget";
 import { patchTasks, resetTask, TaskTableView, warningText } from "./TaskTable";
 import { makeT } from "../../../i18n";
@@ -149,7 +150,7 @@ function draftContext(values: Record<string, unknown>) {
 
 describe("Richtlinie und Crawl-Budget im Entwurf", () => {
   // spec: AI-019
-  it("drei Richtlinien, Standard „Keine Einschränkung“; Auswahl schreibt ai.policy", () => {
+  it.skip("wartet auf M4-K07 (1.2): AI-019 – drei Richtlinien, Standard „Keine Einschränkung“; Auswahl schreibt ai.policy", () => {
     const ctx = draftContext({});
     render(<ConfigProvider value={ctx.value}><PolicySetting /></ConfigProvider>);
     const radios = screen.getAllByRole("radio").map((r) => r.closest("label")!.textContent);
@@ -182,6 +183,7 @@ const VIEW: SettingsView = {
   listsLoaded: { anthropic: false, openai: true, openrouter: false, ollama: false },
   tasks: [],
   policy: "unrestricted",
+  policyAvailable: false,
   budget: { crawl: 5_000_000, unlimited: false, areas: {}, tasks: {}, warning_percent: 80 },
   crawlBudget: null,
   eu: [
@@ -220,7 +222,7 @@ describe("App-Einstellungen KI", () => {
   });
 
   // spec: AI-019
-  it("EU-Endpunkt je Anbieter mit vorbelegter URL; Schalten schreibt providerEndpoints in die App-Einstellungen", async () => {
+  it.skip("wartet auf M4-K07 (1.2): AI-019 – EU-Endpunkt je Anbieter mit vorbelegter URL; Schalten schreibt providerEndpoints in die App-Einstellungen", async () => {
     render(<AiSettingsSection />);
     const sw = await screen.findByRole("switch", { name: "Use the EU endpoint (https://eu.api.openai.com)" });
     fireEvent.click(sw);
@@ -237,6 +239,29 @@ describe("App-Einstellungen KI", () => {
     render(<AiSettingsSection />);
     fireEvent.click(await screen.findByRole("button", { name: "Save patterns" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid pattern in line 3, position 1.");
+  });
+});
+
+describe("AI-019 in 1.1 ausgeblendet", () => {
+  // spec: AI-019
+  it("Konfigurationsseite KI ohne Richtlinie, Einstellungen KI ohne EU-Endpunkte; Schwärzung bleibt", async () => {
+    expect(AI_019_ENABLED).toBe(false);
+    core.handlers.set("ai.settingsGet", () => ({ ...VIEW, eu: [] }));
+    core.handlers.set("ai.settingsSet", () => ({ tasks: [] }));
+    core.handlers.set("ai.consentStatus", () => ({ columns: [], rows: [], requests: [], redaction: true, policy: "unrestricted", consentedProviders: [], csv: "" }));
+    const page = aiConfigPages.find((p) => p.id === "ai")!;
+    const ctx = draftContext({ ai: { tasks: {}, policy: "unrestricted" }, "ai.budget": { crawl: 5_000_000, unlimited: false, areas: {}, tasks: {}, warning_percent: 80 } });
+    const { container, unmount } = render(<ConfigProvider value={ctx.value}><page.Component /></ConfigProvider>);
+    expect(container.querySelector("[data-ai-budget-setting]")).not.toBeNull();
+    expect(container.querySelector("[data-ai-policy-setting]")).toBeNull();
+    expect(screen.queryAllByRole("radio")).toEqual([]);
+    expect(container.textContent).not.toMatch(/Enforce EU processing|Local only|EU-Verarbeitung|Nur lokal/);
+    unmount();
+    render(<AiSettingsSection />);
+    expect(await screen.findByRole("switch", { name: "Redact personal data before sending" })).toBeVisible();
+    expect(screen.queryByRole("switch", { name: /EU endpoint/ })).toBeNull();
+    expect(document.querySelector("[data-ai-eu]")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/EU processing|eu\.api\.openai\.com/);
   });
 });
 

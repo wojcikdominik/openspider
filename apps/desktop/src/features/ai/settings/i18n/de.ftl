@@ -32,6 +32,7 @@ ai-settings-accounts-later = Schlüssel und Verbindungstest der KI-Anbieter folg
 ## Konfigurationsseite KI: Modellwahl je Aufgabe (AI-011)
 ai-tasks-title = Modellwahl je Aufgabe
 ai-tasks-hint = Je Aufgabentyp ein Modell mit Ersatzliste. Die Reasoning-Stufe gilt für den Aufgabentyp, nicht für einzelne Fragen.
+ai-tasks-policy-unavailable = Die Richtlinie dieses Profils (EU-Verarbeitung bzw. Nur lokal) wird in dieser Version nicht unterstützt; bitte „Keine Einschränkung“ verwenden.
 ai-tasks-error = Die Modellwahl konnte nicht geprüft werden.
 ai-col-task = Aufgabe
 ai-col-model = Modell
@@ -80,7 +81,6 @@ ai-policy-eu-only = EU-Verarbeitung erzwingen
 ai-policy-local-only = Nur lokal
 ai-policy-unrestricted-hint = Alle verbundenen Anbieter sind zulässig.
 ai-policy-eu-only-hint = Nur Endpunkte mit Verarbeitung in der EU; sonst „Skipped (policy)“. Kein stiller Rückfall auf den globalen Endpunkt.
-ai-policy-not-enforced = Vorschau: Die Ausführung setzt die Richtlinie noch nicht durch (EU-Verarbeitung und Nur lokal folgen mit Release 1.2). Bis dahin gehen Daten an den gewählten Anbieter, auch unter „EU-Verarbeitung erzwingen“ oder „Nur lokal“.
 ai-policy-local-only-hint = Nur lokale Modelle (Ollama); kein KI-Request verlässt den Rechner.
 ai-budget-title = Crawl-Budget bezahlter APIs
 ai-budget-crawl = Budget je Crawl (USD)

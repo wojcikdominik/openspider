@@ -29,7 +29,9 @@ use os_model::config::{AiAppSettings, AiPolicy, CrawlConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::ai_settings::{key_states, live_models, window_config, ModelLists, EU_ENDPOINTS};
+use super::ai_settings::{
+    key_states, live_models, window_config, ModelLists, AI_019_ENABLED, EU_ENDPOINTS,
+};
 use crate::dto::{CmdError, ErrorCode};
 use crate::registry::{CmdResult, Handler};
 use crate::runtime::error::{internal, parse_args, to_json};
@@ -52,11 +54,13 @@ pub fn default_base_url(provider: &str) -> &'static str {
 /// Basis-URL und Region eines Anbieters laut App-Einstellungen: eigene `base_url` (Tests, INTEG-019) vor dem
 /// EU-Endpunkt (Schalter „EU-Endpunkt verwenden“, AI-019) vor dem Standard. Region `EU` nur über den EU-Endpunkt.
 pub fn endpoint_of(provider: &str, app: &AiAppSettings) -> (String, Option<String>) {
-    let e = app
+    let mut e = app
         .provider_endpoints
         .get(provider)
         .cloned()
         .unwrap_or_default();
+    // AI-019 erst mit 1.2: ohne Durchsetzung keine EU-Angabe in der Übersicht (Host und Region wie gesendet).
+    e.use_eu_endpoint &= AI_019_ENABLED;
     let eu = EU_ENDPOINTS
         .iter()
         .find(|(p, _)| *p == provider)
