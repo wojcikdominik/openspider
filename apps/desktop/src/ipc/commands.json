@@ -1354,5 +1354,41 @@
     "args": "AiRunArgs",
     "ret": "JsonValue",
     "longRunning": true
+  },
+  {
+    "name": "ai.suggestPlan",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.suggestDetail",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.suggestReview",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.suggestCheck",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.suggestRecheck",
+    "args": "void",
+    "ret": "JsonValue",
+    "longRunning": false
+  },
+  {
+    "name": "ai.suggestFocusImport",
+    "args": "JsonValue",
+    "ret": "JsonValue",
+    "longRunning": false
   }
 ]
