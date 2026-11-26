@@ -68,7 +68,8 @@ impl AnswerRow {
     }
 }
 
-const COLUMNS: &str = "url_id, question_id, question_version, params_hash, params_json, answer_json, \
+const COLUMNS: &str =
+    "url_id, question_id, question_version, params_hash, params_json, answer_json, \
      raw_confidence, source, model, status, request_id";
 
 fn read_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<AnswerRow> {
@@ -235,8 +236,7 @@ pub fn begin_run(
     budget_at_start_microusd: Option<u64>,
     config_json: &str,
 ) -> Result<i64, StoreError> {
-    let budget = budget_at_start_microusd
-        .map(|v| i64::try_from(v).unwrap_or(i64::MAX));
+    let budget = budget_at_start_microusd.map(|v| i64::try_from(v).unwrap_or(i64::MAX));
     conn.prepare_cached(
         "INSERT INTO ai_runs (started_at, budget_at_start_microusd, config_json) VALUES (?1, ?2, ?3)",
     )?
@@ -346,7 +346,11 @@ mod tests {
     fn commit_is_atomic_and_links_the_request() {
         let db = db();
         let run = begin_run(&db, "2026-11-26T10:00:00Z", Some(5_000_000), "{}").unwrap();
-        upsert(&db, &AnswerRow::status_only(1, "page-type", "1.0.0", "", "{}", "Pending")).unwrap();
+        upsert(
+            &db,
+            &AnswerRow::status_only(1, "page-type", "1.0.0", "", "{}", "Pending"),
+        )
+        .unwrap();
         let rows = [(record(run), RequestDetails::default())];
         let answers = [answer("Success")];
         let caches = [cache_row()];
@@ -360,7 +364,10 @@ mod tests {
         });
         assert!(failed.is_err());
         assert_eq!(
-            get(&db, 1, "page-type", "1.0.0", "").unwrap().unwrap().status,
+            get(&db, 1, "page-type", "1.0.0", "")
+                .unwrap()
+                .unwrap()
+                .status,
             "Pending"
         );
         assert!(cache::get(&db, "k").unwrap().is_none());
@@ -374,7 +381,11 @@ mod tests {
         assert_eq!(requests::total_cost(&db).unwrap(), MicroUsd(10));
         finish_run(&db, run, "2026-11-26T10:01:00Z").unwrap();
         let spent: i64 = db
-            .query_row("SELECT spent_microusd FROM ai_runs WHERE id = ?1", [run], |r| r.get(0))
+            .query_row(
+                "SELECT spent_microusd FROM ai_runs WHERE id = ?1",
+                [run],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(spent, 10);
     }
@@ -398,7 +409,12 @@ mod tests {
             )
             .unwrap();
         }
-        assert_eq!(list_for_question(&db, "page-type", Some("1.0.0")).unwrap().len(), 30);
+        assert_eq!(
+            list_for_question(&db, "page-type", Some("1.0.0"))
+                .unwrap()
+                .len(),
+            30
+        );
         assert_eq!(list_for_url(&db, 1).unwrap().len(), 30);
         let counts = status_counts(&db, "page-type", "1.0.0").unwrap();
         assert_eq!(counts["Success"], 10);

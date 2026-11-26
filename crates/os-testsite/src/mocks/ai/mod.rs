@@ -234,7 +234,12 @@ async fn handle(
             },
             (Method::POST, "/release") => match serde_json::from_slice::<Release>(&body) {
                 Ok(r) if PROVIDERS.contains(&r.provider.as_str()) => {
-                    let released = mock.data.lock().unwrap().holds.release(&r.provider, r.count);
+                    let released = mock
+                        .data
+                        .lock()
+                        .unwrap()
+                        .holds
+                        .release(&r.provider, r.count);
                     Json(json!({"released": released})).into_response()
                 }
                 _ => response::error(

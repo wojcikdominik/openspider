@@ -54,7 +54,11 @@ pub fn ensure(
 }
 
 /// Liest eine Fragenversion.
-pub fn get(conn: &Connection, id: &str, version: &str) -> Result<Option<StoredQuestion>, StoreError> {
+pub fn get(
+    conn: &Connection,
+    id: &str,
+    version: &str,
+) -> Result<Option<StoredQuestion>, StoreError> {
     Ok(conn
         .prepare_cached(
             "SELECT id, version, definition_json FROM ai_questions WHERE id = ?1 AND version = ?2",
@@ -71,8 +75,9 @@ pub fn get(conn: &Connection, id: &str, version: &str) -> Result<Option<StoredQu
 
 /// Alle gespeicherten Versionen, sortiert nach `id` und `version` (Textvergleich).
 pub fn list(conn: &Connection) -> Result<Vec<StoredQuestion>, StoreError> {
-    let mut stmt = conn
-        .prepare_cached("SELECT id, version, definition_json FROM ai_questions ORDER BY id, version")?;
+    let mut stmt = conn.prepare_cached(
+        "SELECT id, version, definition_json FROM ai_questions ORDER BY id, version",
+    )?;
     let rows = stmt.query_map([], |r| {
         Ok(StoredQuestion {
             id: r.get(0)?,
@@ -122,7 +127,10 @@ mod tests {
         );
         assert_eq!(count_versions(&db, "page-type").unwrap(), 2);
         assert_eq!(
-            get(&db, "page-type", "1.0.0").unwrap().unwrap().definition_json,
+            get(&db, "page-type", "1.0.0")
+                .unwrap()
+                .unwrap()
+                .definition_json,
             r#"{"a":1}"#
         );
         // Der Trigger aus 0006 verhindert jede Änderung, auch an der SQL-Schicht vorbei.

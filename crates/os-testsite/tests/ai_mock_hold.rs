@@ -112,7 +112,14 @@ async fn hold_keeps_requests_until_release_in_arrival_order() {
     assert!(log[3].get("held").is_none());
     assert!(!first.is_finished() && !second.is_finished());
 
-    let r = json_of(&control(addr, "/__mock/release", json!({"provider":"openai","count":1})).await);
+    let r = json_of(
+        &control(
+            addr,
+            "/__mock/release",
+            json!({"provider":"openai","count":1}),
+        )
+        .await,
+    );
     assert_eq!(r, json!({"released": 1}));
     let first = first.await.unwrap();
     assert_eq!(first.status, 200);
@@ -123,14 +130,30 @@ async fn hold_keeps_requests_until_release_in_arrival_order() {
     b.as_object_mut().unwrap().remove("id");
     assert_eq!(a, b, "Antwort wie ohne hold");
     assert!(!second.is_finished());
-    let r = json_of(&control(addr, "/__mock/release", json!({"provider":"openai","count":1})).await);
+    let r = json_of(
+        &control(
+            addr,
+            "/__mock/release",
+            json!({"provider":"openai","count":1}),
+        )
+        .await,
+    );
     assert_eq!(r, json!({"released": 1}));
     assert_eq!(second.await.unwrap().status, 200);
-    let r = json_of(&control(addr, "/__mock/release", json!({"provider":"openai","count":1})).await);
+    let r = json_of(
+        &control(
+            addr,
+            "/__mock/release",
+            json!({"provider":"openai","count":1}),
+        )
+        .await,
+    );
     assert_eq!(r, json!({"released": 0}));
     // Unbekannter Anbieter → 400 wie bei `/__mock/scenario`.
     assert_eq!(
-        control(addr, "/__mock/release", json!({"provider":"nope"})).await.status,
+        control(addr, "/__mock/release", json!({"provider":"nope"}))
+            .await
+            .status,
         400
     );
 }
@@ -157,7 +180,10 @@ async fn aborted_held_request_is_marked_and_not_released() {
     })
     .await;
     drop(doomed);
-    until(addr, "abgebrochen", |l| l.iter().any(|e| e["aborted"] == true)).await;
+    until(addr, "abgebrochen", |l| {
+        l.iter().any(|e| e["aborted"] == true)
+    })
+    .await;
     let log = log_entries(addr, DECISIONS).await;
     assert_eq!(log[0]["aborted"], true);
     assert!(log[1].get("aborted").is_none());
