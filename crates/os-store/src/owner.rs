@@ -151,7 +151,10 @@ pub enum Claim {
 }
 
 /// Liest die für beide Prüfungen nötigen Schlüssel über eine beliebige Verbindung.
-fn read_occupancy(conn: &Connection, now: Timestamp) -> Result<Occupancy, StoreError> {
+fn read_occupancy(
+    conn: &Connection,
+    now: Timestamp,
+) -> Result<(Occupancy, CrawlState), StoreError> {
     let mut stmt = conn.prepare_cached(
         "SELECT key, value FROM crawl_meta WHERE key IN \
          ('state', 'heartbeat_at', 'started_at', 'created_at', 'owner_kind', 'owner_pid')",
@@ -183,13 +186,16 @@ fn read_occupancy(conn: &Connection, now: Timestamp) -> Result<Occupancy, StoreE
         .get("created_at")
         .and_then(|v| Timestamp::from_db(v).ok());
     let reference = heartbeat_at.or(ts("started_at")?).or(created_at);
-    Ok(Occupancy::at(
+    Ok((
+        Occupancy::at(
+            state,
+            reference,
+            heartbeat_at,
+            map.get("owner_kind").map(String::as_str),
+            map.get("owner_pid").map(String::as_str),
+            now,
+        ),
         state,
-        reference,
-        heartbeat_at,
-        map.get("owner_kind").map(String::as_str),
-        map.get("owner_pid").map(String::as_str),
-        now,
     ))
 }
 
@@ -206,6 +212,8 @@ fn immediate(conn: &Connection) -> Result<Transaction<'_>, StoreError> {
 /// * fremd geführt ([`Occupancy::foreign_led`]) → [`StoreError::Occupied`] mit Art und PID des Besitzers, nichts
 ///   geschrieben;
 /// * laufend nach CRAWL-125 mit eigener PID → [`Claim::Passive`], nichts geschrieben;
+/// * unterbrochen (gespeichertes `Running` mit veraltetem Heartbeat) → [`StoreError::Interrupted`], nichts geschrieben
+///   (08 AI-020 [M4], „Kein KI-Lauf auf einem unterbrochenen Crawl“);
 /// * sonst → `owner_kind`, `owner_pid` = `own_pid`, `heartbeat_at` = `now`; [`Claim::Claimed`]. Ein veralteter
 ///   fremder Eintrag (Absturz) wird dabei überschrieben. `state` bleibt unverändert.
 ///
@@ -217,12 +225,16 @@ pub fn claim(
     now: Timestamp,
 ) -> Result<Claim, StoreError> {
     let tx = immediate(conn)?;
-    let occupancy = read_occupancy(&tx, now)?;
+    let (occupancy, stored) = read_occupancy(&tx, now)?;
     if occupancy.foreign_led(own_pid) {
         return Err(occupancy.occupied_error());
     }
     if occupancy.running {
         return Ok(Claim::Passive);
+    }
+    if stored == CrawlState::Running {
+        // Unterbrochen (CRAWL-125): ein frischer Heartbeat ließe den Crawl für jeden Leser wieder laufend erscheinen.
+        return Err(StoreError::Interrupted);
     }
     set_meta(&tx, "owner_kind", owner_kind)?;
     set_meta(&tx, "owner_pid", &own_pid.to_string())?;
@@ -231,24 +243,42 @@ pub fn claim(
     Ok(Claim::Claimed)
 }
 
-/// Ein Heartbeat des Besitzers `own_pid` (ein Commit). Läuft der Crawl nach CRAWL-125, schreibt allein die Engine:
-/// nichts geschrieben. Nennt `owner_pid` den eigenen Prozess → `heartbeat_at` = `now`. Ist `owner_pid` leer (die eigene
-/// Engine hat beim Ende oder bei der Pause freigegeben), trägt sich der Prozess neu ein (`owner_kind`, `owner_pid`,
-/// `heartbeat_at`; 08 AI-020 [M4], „Übernahme nach dem Ende des eigenen Crawls“). Einen anderen Prozess überschreibt
-/// `beat` nie. Liefert, ob geschrieben wurde.
-pub fn beat(
+/// Ein Heartbeat des Besitzers `own_pid` (ein Commit); wie [`beat_as`], ohne `owner_kind` zu schreiben (bei einer
+/// Übernahme bleibt die Art des letzten Besitzers stehen – nach dem Ende der eigenen Engine die eigene).
+pub fn beat(conn: &Connection, own_pid: u32, now: Timestamp) -> Result<bool, StoreError> {
+    beat_inner(conn, None, own_pid, now)
+}
+
+/// Ein Heartbeat des Besitzers `own_pid` (ein Commit). Bei gespeichertem `Running` schreibt er nie: läuft der Crawl,
+/// schreibt allein die Engine; ein unterbrochener Crawl bekommt keinen KI-Lauf ([`claim`]). Nennt `owner_pid` den
+/// eigenen Prozess → `heartbeat_at` = `now`. Ist `owner_pid` leer (die eigene Engine hat beim Ende oder bei der Pause
+/// freigegeben), trägt sich der Prozess neu ein (`owner_pid`, `heartbeat_at`, mit `owner_kind`; 08 AI-020 [M4],
+/// „Übernahme nach dem Ende des eigenen Crawls“). Einen anderen Prozess überschreibt er nie. Liefert, ob geschrieben
+/// wurde.
+pub fn beat_as(
     conn: &Connection,
     owner_kind: &str,
     own_pid: u32,
     now: Timestamp,
 ) -> Result<bool, StoreError> {
+    beat_inner(conn, Some(owner_kind), own_pid, now)
+}
+
+fn beat_inner(
+    conn: &Connection,
+    owner_kind: Option<&str>,
+    own_pid: u32,
+    now: Timestamp,
+) -> Result<bool, StoreError> {
     let tx = immediate(conn)?;
-    let occupancy = read_occupancy(&tx, now)?;
-    if occupancy.running {
+    let (occupancy, stored) = read_occupancy(&tx, now)?;
+    if stored == CrawlState::Running {
         return Ok(false);
     }
     if occupancy.owner_pid.is_none() {
-        set_meta(&tx, "owner_kind", owner_kind)?;
+        if let Some(kind) = owner_kind {
+            set_meta(&tx, "owner_kind", kind)?;
+        }
         set_meta(&tx, "owner_pid", &own_pid.to_string())?;
     } else if !is_own_pid(occupancy.owner_pid.as_deref(), own_pid) {
         return Ok(false);
@@ -259,13 +289,13 @@ pub fn beat(
 }
 
 /// Ende des KI-Laufs (AI-020): `heartbeat_at` = `now` und leeres `owner_pid` in einem Commit; `owner_kind` bleibt
-/// (nennt den letzten Besitzer, CRAWL-125). Wie [`beat`] nur, solange `owner_pid` den eigenen Prozess nennt und der
-/// Crawl nicht nach CRAWL-125 läuft – den Besitz einer laufenden Engine gibt erst ihr letzter Batch frei.
+/// (nennt den letzten Besitzer, CRAWL-125). Nur, solange `owner_pid` den eigenen Prozess nennt und `state` nicht
+/// `Running` ist – den Besitz einer laufenden Engine gibt erst ihr letzter Batch frei.
 /// Liefert, ob geschrieben wurde.
 pub fn release(conn: &Connection, own_pid: u32, now: Timestamp) -> Result<bool, StoreError> {
     let tx = immediate(conn)?;
-    let occupancy = read_occupancy(&tx, now)?;
-    if !is_own_pid(occupancy.owner_pid.as_deref(), own_pid) || occupancy.running {
+    let (occupancy, stored) = read_occupancy(&tx, now)?;
+    if !is_own_pid(occupancy.owner_pid.as_deref(), own_pid) || stored == CrawlState::Running {
         return Ok(false);
     }
     set_meta(&tx, "heartbeat_at", &now.to_db())?;

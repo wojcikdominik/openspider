@@ -338,12 +338,12 @@ fn claim_beat_and_release_write_only_owner_fields_in_one_commit_each() {
         text.contains(&me.to_string()) && text.contains("app") && text.contains("läuft noch"),
         "{text}"
     );
-    assert!(!owner::beat(file.conn(), "cli", other, t0).unwrap());
+    assert!(!owner::beat(file.conn(), other, t0).unwrap());
     assert!(!owner::release(file.conn(), other, t0).unwrap());
     assert_eq!(meta(&file, "owner_pid"), me.to_string());
 
     clock.advance(Duration::from_secs(2));
-    assert!(owner::beat(file.conn(), "app", me, clock.now()).unwrap());
+    assert!(owner::beat(file.conn(), me, clock.now()).unwrap());
     assert_eq!(meta(&file, "heartbeat_at"), clock.now().to_db());
 
     clock.advance(Duration::from_millis(500));
@@ -359,7 +359,7 @@ fn claim_beat_and_release_write_only_owner_fields_in_one_commit_each() {
     assert_eq!(meta(&file, "state"), "Completed");
     // Leeres `owner_pid` (Ende bzw. Freigabe durch die eigene Engine): `beat` trägt den Prozess wieder ein (Übernahme
     // nach dem Ende des eigenen Crawls, AI-020); `RunOwner` ruft `beat` nach `finish` nicht mehr auf.
-    assert!(owner::beat(file.conn(), "app", me, end).unwrap());
+    assert!(owner::beat_as(file.conn(), "app", me, end).unwrap());
     assert_eq!(meta(&file, "owner_pid"), me.to_string());
     assert!(owner::release(file.conn(), me, end).unwrap());
 
@@ -386,7 +386,7 @@ fn claim_beat_and_release_write_only_owner_fields_in_one_commit_each() {
         owner::claim(engine.conn(), "app", me, later).unwrap(),
         Claim::Passive
     );
-    assert!(!owner::beat(engine.conn(), "app", me, later).unwrap());
+    assert!(!owner::beat(engine.conn(), me, later).unwrap());
     assert!(!owner::release(engine.conn(), me, later).unwrap());
     assert_eq!(meta(&engine, "heartbeat_at"), before);
     assert_eq!(meta(&engine, "owner_pid"), me.to_string());
@@ -431,4 +431,54 @@ fn the_link_index_is_not_built_while_another_process_is_the_active_owner() {
     rw.set_meta("owner_pid", &own()).unwrap();
     assert!(link_index::ensure_if_idle(&rw).unwrap());
     assert!(link_index::present(rw.conn()).unwrap());
+}
+
+/// Nacharbeit 26.11.2026 (Abnahmebefunde B1-5/B2-1, 08 AI-020 [M4] „Kein KI-Lauf auf einem unterbrochenen Crawl“):
+/// Auf einem unterbrochenen Crawl (gespeichertes `Running`, Heartbeat veraltet – fremde, eigene oder keine PID) trägt
+/// `claim` keinen Besitzer ein und liefert `StoreError::Interrupted`; die Datei bleibt byte-gleich. Ein gespeichertes
+/// `Incomplete` und ein laufender fremder Crawl fallen nicht darunter.
+// spec: AI-020 [M4]
+// spec: CRAWL-125
+#[test]
+fn claim_refuses_an_interrupted_crawl_and_leaves_the_file_unchanged() {
+    let c = cases();
+    let now = now(&c);
+    let dir = tempfile::tempdir().unwrap();
+    let me = std::process::id();
+    for (seed, pid) in [(1, Some("FOREIGN")), (2, Some("OWN")), (3, None)] {
+        let case = serde_json::json!({"owner_pid": pid, "heartbeat_age_ms": 60_000});
+        let (_, path) = file_for(dir.path(), seed, "Running", &case, &c);
+        let before = std::fs::read(&path).unwrap();
+        let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+        assert_eq!(
+            file.effective_state(&ManualClock::new(now)).unwrap(),
+            CrawlState::Incomplete
+        );
+        let err = owner::claim(file.conn(), "app", me, now).unwrap_err();
+        assert!(matches!(err, StoreError::Interrupted), "{pid:?}: {err:?}");
+        assert!(!owner::beat(file.conn(), me, now).unwrap(), "{pid:?}");
+        drop(file);
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "{pid:?}: byte-gleich"
+        );
+    }
+    // Gespeichertes `Incomplete` ist kein `Running`: dort darf ein KI-Lauf beginnen.
+    let case = serde_json::json!({"owner_pid": "", "heartbeat_age_ms": 60_000});
+    let (_, path) = file_for(dir.path(), 4, "Incomplete", &case, &c);
+    let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    assert_eq!(
+        owner::claim(file.conn(), "app", me, now).unwrap(),
+        Claim::Claimed
+    );
+    // Ein fremd laufender Crawl bleibt „fremd geführt“ (Art und PID).
+    let case = serde_json::json!({"owner_pid": "FOREIGN", "heartbeat_age_ms": 0});
+    let (_, path) = file_for(dir.path(), 5, "Running", &case, &c);
+    let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
+    let err = owner::claim(file.conn(), "app", me, now).unwrap_err();
+    assert!(
+        matches!(&err, StoreError::Occupied { kind, pid } if kind == "cli" && *pid == foreign(&c)),
+        "{err:?}"
+    );
 }
