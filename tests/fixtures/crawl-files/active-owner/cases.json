@@ -1,0 +1,40 @@
+{
+  "_doc": "M4-K11 (08 AI-020 [M4], Unterpunkt „Aktiver Besitzer außerhalb von Running“; 01 CRAWL-125, Nachtrag K4-22). Zustandsfälle für Crawl-Dateien mit simuliertem Heartbeat. Die Tests legen je Fall eine Crawl-Datei an und setzen die genannten crawl_meta-Schlüssel; Alter in Millisekunden relativ zu 'now' (negativ = in der Zukunft, null = Schlüssel fehlt). owner_pid: 'OWN' = PID des Testprozesses, 'FOREIGN' = eine fremde PID, '' = leer (wie 1.0 nach jedem geordneten Ende), null = Schlüssel fehlt.",
+  "now": "2026-11-26T12:00:00.000Z",
+  "foreign_pid": "4294967294",
+  "boundaries": {
+    "_doc": "Kriterium 1 (Grenzwerte): je Zustand Completed und Paused; 'active' = aktiver Besitzer erwartet. Der abgeleitete Zustand ist in allen Fällen der gespeicherte.",
+    "states": ["Completed", "Paused"],
+    "cases": [
+      { "name": "jetzt", "owner_pid": "FOREIGN", "heartbeat_age_ms": 0, "active": true },
+      { "name": "9 999 ms", "owner_pid": "FOREIGN", "heartbeat_age_ms": 9999, "active": true },
+      { "name": "10 000 ms", "owner_pid": "FOREIGN", "heartbeat_age_ms": 10000, "active": true },
+      { "name": "10 001 ms", "owner_pid": "FOREIGN", "heartbeat_age_ms": 10001, "active": false },
+      { "name": "owner_pid leer", "owner_pid": "", "heartbeat_age_ms": 0, "active": false },
+      { "name": "Zukunft (CRAWL-125, Hinweis iv)", "owner_pid": "FOREIGN", "heartbeat_age_ms": -1, "active": true },
+      { "name": "ohne heartbeat_at, started_at jetzt (keine Ersatzkette)", "owner_pid": "FOREIGN", "heartbeat_age_ms": null, "started_age_ms": 0, "active": false },
+      { "name": "eigener Prozess", "owner_pid": "OWN", "heartbeat_age_ms": 0, "active": true }
+    ]
+  },
+  "v1_0": {
+    "_doc": "Kriterium 5 (Datei aus 1.0, alle Zustände): Formen, die Version 1.0 schreibt (owner_pid gesetzt nur bei gespeichertem Running). 'running' = laufend nach CRAWL-125 allein (Bezugszeit heartbeat_at, ersatzweise started_at, ersatzweise created_at). Für jeden Fall muss die Prüfung „belegt“ dasselbe liefern wie 'running', „fremd geführt“ dasselbe wie 'running' mit fremder PID.",
+    "cases": [
+      { "name": "Running live, fremde PID", "state": "Running", "owner_pid": "FOREIGN", "heartbeat_age_ms": 0, "running": true },
+      { "name": "Running live, eigene PID", "state": "Running", "owner_pid": "OWN", "heartbeat_age_ms": 0, "running": true },
+      { "name": "Running 10 000 ms", "state": "Running", "owner_pid": "FOREIGN", "heartbeat_age_ms": 10000, "running": true },
+      { "name": "Running Zukunft", "state": "Running", "owner_pid": "FOREIGN", "heartbeat_age_ms": -1, "running": true },
+      { "name": "Running abgestürzt (10 001 ms)", "state": "Running", "owner_pid": "FOREIGN", "heartbeat_age_ms": 10001, "running": false },
+      { "name": "Running abgestürzt (1 h)", "state": "Running", "owner_pid": "FOREIGN", "heartbeat_age_ms": 3600000, "running": false },
+      { "name": "Running ohne Heartbeat, started_at jetzt", "state": "Running", "owner_pid": "FOREIGN", "heartbeat_age_ms": null, "started_age_ms": 0, "running": true },
+      { "name": "Running ohne Heartbeat und Start, created_at alt", "state": "Running", "owner_pid": null, "heartbeat_age_ms": null, "running": false },
+      { "name": "Paused direkt nach der Pause", "state": "Paused", "owner_pid": "", "heartbeat_age_ms": 0, "running": false },
+      { "name": "Paused alt", "state": "Paused", "owner_pid": "", "heartbeat_age_ms": 86400000, "running": false },
+      { "name": "Completed direkt nach dem Ende", "state": "Completed", "owner_pid": "", "heartbeat_age_ms": 0, "running": false },
+      { "name": "Completed gestoppt", "state": "Completed", "owner_pid": "", "heartbeat_age_ms": 0, "end_reason": "stopped", "running": false },
+      { "name": "Completed mit Restwarteschlange (Limit)", "state": "Completed", "owner_pid": "", "heartbeat_age_ms": 5000, "end_reason": "limit_reached", "queued": 1, "running": false },
+      { "name": "Completed ohne Besitzerangaben", "state": "Completed", "owner_pid": null, "heartbeat_age_ms": null, "running": false },
+      { "name": "Failed", "state": "Failed", "owner_pid": "", "heartbeat_age_ms": 0, "running": false },
+      { "name": "Incomplete gespeichert", "state": "Incomplete", "owner_pid": "", "heartbeat_age_ms": 0, "running": false }
+    ]
+  }
+}

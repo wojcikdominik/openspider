@@ -458,7 +458,8 @@ impl Manager {
             .filter(|l| {
                 !l.locked
                     && !open.contains(&l.meta.crawl_id)
-                    && l.effective_state(now) != CrawlState::Running
+                    // OUT-229, 08 AI-020 [M4] (Wirkung a): laufend nach CRAWL-125 oder aktiver Besitzer.
+                    && !l.occupied(now)
             })
             .collect();
         let reference = |l: &CrawlListing| {
@@ -497,7 +498,8 @@ impl Manager {
 }
 
 fn guard(l: &CrawlListing, now: Timestamp, protect: bool) -> Result<(), StoreError> {
-    if l.effective_state(now) == CrawlState::Running {
+    // OUT-228; 08 AI-020 [M4] (Wirkung a): ein aktiver Besitzer schützt wie ein laufender Crawl, auch der eigene.
+    if l.occupied(now) {
         return Err(StoreError::InvalidInput(
             "Crawl läuft – erst pausieren".into(),
         ));

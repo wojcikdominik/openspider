@@ -20,6 +20,7 @@ pub mod files;
 pub mod link_index;
 pub mod meta;
 pub mod open;
+pub mod owner;
 pub mod paths;
 pub mod profile;
 pub mod queries;
