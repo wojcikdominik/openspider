@@ -379,3 +379,12 @@ async fn cost_estimate_collects_registered_estimators() {
     assert_eq!(view["totals"]["expectedMicroUsd"], json!(11_100));
     assert_eq!(view["budget"]["budgetMicroUsd"], json!(5_000_000));
 }
+
+// spec: UI-013 [M4]
+// `--json-progress` liefert die Beträge des Felds `Kosten` als Zahl mit Punkt unabhängig von der UI-Sprache (3.21 bzw. 5.0).
+// Die Zeile schreibt `os-cli` (Reporter, nicht in M4-U01); Rohwerte liefert `ai_cost::cost_snapshot`.
+#[test]
+#[ignore = "wartet auf M4-C01: Kostenfeld in --json-progress (os-cli Reporter)"]
+fn json_progress_writes_raw_amounts() {
+    unimplemented!("M4-C01");
+}
