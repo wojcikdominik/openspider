@@ -9,7 +9,7 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
 use os_app::settings_store::SettingsStore;
