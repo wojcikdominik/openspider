@@ -141,19 +141,21 @@ pub fn decisions_body(model: &str, input: &DecisionInput, questions: &[Question]
     })
 }
 
-/// Geschätzte Eingabe-Tokens eines Requests (AI-012: ⌈Zeichen / 3,5⌉ + Bild-Schätzwert je Bild) über Eingabe und
-/// alle gesendeten Fragentexte.
+/// Geschätzte Eingabe-Tokens eines Requests je Frage (AI-012, Nachtrag 24.11.2026, Q00-M1): Σ über die Fragen
+/// [⌈Z_E / 3,5⌉ + b × B + ⌈Z_q / 3,5⌉ + G], G aus `provider-limits.json` (M4-K10, freigegeben 26.11.2026). Gilt für
+/// TPM-Begrenzung (AI-017) und Kosten ohne `usage` (`Price Source = estimate`).
 pub fn estimate_input_tokens(
     input: &DecisionInput,
     questions: &[Question],
     image_token_estimate: u64,
 ) -> u64 {
-    let chars = input.text_chars() + questions.iter().map(Question::text_chars).sum::<u64>();
-    tokens::estimate_input_tokens(
-        chars,
+    let question_chars: Vec<u64> = questions.iter().map(Question::text_chars).collect();
+    crate::cost::decisions_input_tokens(
+        input.text_chars(),
         u64::from(input.image_count()),
         image_token_estimate,
-        0,
+        &question_chars,
+        crate::cost::decisions::bundled_question_overhead(),
     )
 }
 

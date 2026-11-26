@@ -10,6 +10,20 @@
 //! Request spart Requests, aber keine Tokens. Ausgabe-Tokens über die Decisions API: 0.
 use super::tokens::text_tokens;
 use serde_json::Value;
+use std::sync::OnceLock;
+
+/// Standard des Grundanteils G, falls die ausgelieferte `provider-limits.json` nicht lesbar wäre (AI-012: 100).
+pub const DEFAULT_QUESTION_OVERHEAD_TOKENS: u64 = 100;
+
+/// G aus der ausgelieferten `provider-limits.json` (`decisions_question_overhead_tokens`), einmal gelesen.
+pub fn bundled_question_overhead() -> u64 {
+    static G: OnceLock<u64> = OnceLock::new();
+    *G.get_or_init(|| {
+        crate::catalog::ProviderLimitsFile::bundled()
+            .map(|f| f.decisions_question_overhead())
+            .unwrap_or(DEFAULT_QUESTION_OVERHEAD_TOKENS)
+    })
+}
 
 fn chars(value: &Value) -> u64 {
     value.as_str().map_or(0, |s| s.chars().count() as u64)
