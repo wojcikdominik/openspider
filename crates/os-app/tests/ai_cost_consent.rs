@@ -155,6 +155,43 @@ fn stored_by_provider_follows_the_endpoint_of_each_task() {
     );
 }
 
+// spec: AI-019
+// 1.1: Der Schalter „EU-Endpunkt verwenden“ ist ausgeblendet und wird nicht durchgesetzt – die Übersicht macht keine
+// EU-Zusage (Host des Standardendpunkts, Region leer); eine eigene Basis-URL (INTEG-019) gilt weiter.
+#[test]
+fn no_eu_promise_in_the_overview_in_1_1() {
+    let mut s = AiAppSettings::default();
+    let mut e = s
+        .provider_endpoints
+        .get("openai")
+        .cloned()
+        .unwrap_or_default();
+    e.use_eu_endpoint = true;
+    e.eu_account_confirmed = true;
+    s.provider_endpoints.insert("openai".into(), e.clone());
+    assert_eq!(
+        endpoint_of("openai", &s),
+        ("https://api.openai.com/v1".into(), None)
+    );
+    let f = flows(&config_with_question(), &s, vec![]);
+    let gate = ConsentGate::dialog(ConsentBook::new());
+    let view = consent_view(
+        &f,
+        &ProviderPolicies::embedded(),
+        &gate,
+        true,
+        AiPolicy::Unrestricted,
+    );
+    assert_eq!(cell(&view, "decision", "Host"), "api.openai.com");
+    assert_eq!(cell(&view, "decision", "Region"), "");
+    e.base_url = Some("http://openai.mock.test:4545/v1".into());
+    s.provider_endpoints.insert("openai".into(), e);
+    assert_eq!(
+        endpoint_of("openai", &s),
+        ("http://openai.mock.test:4545/v1".into(), None)
+    );
+}
+
 // spec: AI-018 [M4]
 // Schwärzung an + `page_text` → `Redaction = on` ohne PII-Hinweis; aus → `off` mit Hinweis; ohne `page_text`/`h2`/
 // `image_context` nie ein Hinweis.
@@ -198,6 +235,7 @@ fn redaction_state_and_pii_notice_in_the_dialog() {
 // EU-Endpunkt eingeschaltet: Host und Region der Zeile folgen (`eu.api.openai.com`, `EU`); eigene Basis-URL (INTEG-019)
 // geht vor; Anthropic hat keinen EU-Weg.
 #[test]
+#[ignore = "wartet auf M4-K07 (1.2): AI-019 EU-Verarbeitung und Nur lokal werden in 1.1 nicht durchgesetzt"]
 fn eu_endpoint_sets_host_and_region() {
     let mut s = AiAppSettings::default();
     let mut e = s

@@ -335,6 +335,7 @@ fn advanced_tab_shows_the_ollama_default_of_one() {
 // EU-Schalter je Anbieter mit vorbelegter Basis-URL laut Tabelle; zulässig unter „EU erzwingen“ nur mit Schalter und
 // bestätigtem Konto.
 #[test]
+#[ignore = "wartet auf M4-K07 (1.2): AI-019 EU-Verarbeitung und Nur lokal werden in 1.1 nicht durchgesetzt"]
 fn eu_rows_carry_prefilled_urls_and_confirmation() {
     let mut s = AiAppSettings::default();
     let rows = eu_rows(&s);
@@ -367,9 +368,8 @@ fn eu_rows_carry_prefilled_urls_and_confirmation() {
 }
 
 // spec: AI-011 [M4]
-// spec: AI-019
 // `ai.settingsGet` über den Command-Weg: Schalter, zwölf Aufgaben, Schlüssel ohne Wert, Richtlinie „Keine Einschränkung“,
-// Crawl-Budget 5,00 USD und Bestätigungsschwelle 1,00 USD (E-5 a); die Richtlinie des Fensters folgt `config.set`.
+// Crawl-Budget 5,00 USD und Bestätigungsschwelle 1,00 USD (E-5 a); in 1.1 keine Richtlinie und keine EU-Endpunkte zur Wahl.
 #[tokio::test]
 async fn settings_get_reflects_window_config_and_app_settings() {
     let home = tempfile::tempdir().unwrap();
@@ -387,7 +387,17 @@ async fn settings_get_reflects_window_config_and_app_settings() {
     assert_eq!(v["budget"]["warning_percent"], json!(80));
     assert_eq!(v["confirmationThresholdMicroUsd"], json!(1_000_000));
     assert_eq!(v["advanced"].as_array().unwrap().len(), 4);
+    assert_eq!(v["policyAvailable"], json!(false));
+    assert_eq!(v["eu"], json!([]));
+}
 
+// spec: AI-019
+// Die Richtlinie des Fensters folgt `config.set` (wählbar erst mit der Durchsetzung in 1.2).
+#[tokio::test]
+#[ignore = "wartet auf M4-K07 (1.2): AI-019 Richtlinie wählbar erst mit Durchsetzung"]
+async fn settings_get_follows_the_window_policy() {
+    let home = tempfile::tempdir().unwrap();
+    let app = app(home.path());
     let mut dto = app
         .dispatch(ctx(), "config.get", Value::Null)
         .await
@@ -401,6 +411,39 @@ async fn settings_get_reflects_window_config_and_app_settings() {
         .await
         .unwrap();
     assert_eq!(v["policy"], json!("local-only"));
+}
+
+// spec: AI-019
+// 1.1 (Entscheidung des Orchestrators 26.11.2026): Eine Richtlinie außer „Keine Einschränkung“ würde eine Zusage machen, die
+// kein Lauf durchsetzt – `ai.settingsSet` lehnt sie mit Feld `ai.policy` ab; „Keine Einschränkung“ geht durch.
+#[tokio::test]
+async fn policy_other_than_unrestricted_is_rejected_in_1_1() {
+    const { assert!(!os_app::commands::ai_settings::AI_019_ENABLED) };
+    let home = tempfile::tempdir().unwrap();
+    let app = app(home.path());
+    for policy in ["eu-only", "local-only"] {
+        let err = app
+            .dispatch(
+                ctx(),
+                "ai.settingsSet",
+                json!({ "ai": { "policy": policy } }),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidInput, "{policy}");
+        assert_eq!(err.message_key, "err-ai-policy-unavailable");
+        assert_eq!(err.field.as_deref(), Some("ai.policy"));
+        assert_eq!(err.args["policy"], json!(policy));
+    }
+    let ok = app
+        .dispatch(
+            ctx(),
+            "ai.settingsSet",
+            json!({ "ai": { "policy": "unrestricted" } }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ok["tasks"].as_array().unwrap().len(), 12);
 }
 
 // spec: AI-024

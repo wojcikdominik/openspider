@@ -150,7 +150,7 @@ test("Datenfluss bestätigen: Stored by Provider, PII-Hinweis bei Schwärzung au
 
 // spec: AI-011 [M4]
 // spec: AI-019
-test("Konfigurationsseite KI: Spalte Reasoning, Stufe im Entwurf, Richtlinie; axe ohne critical/serious", async ({ alpha }) => {
+test("Konfigurationsseite KI: Spalte Reasoning, Stufe im Entwurf, keine Richtlinie in 1.1; axe ohne critical/serious", async ({ alpha }) => {
   const { page } = alpha;
   await alpha.open();
   await setPreview(alpha, true);
@@ -170,19 +170,23 @@ test("Konfigurationsseite KI: Spalte Reasoning, Stufe im Entwurf, Richtlinie; ax
   expect(options).toEqual(["Task default (off)", "model default", "off", "low", "medium", "high", "xhigh", "max"]);
   await page.getByRole("listbox").getByRole("option", { name: "medium", exact: true }).click();
   await expect(title.locator("[data-ai-effective]")).toHaveAttribute("data-ai-effective", "medium");
-  await expect(page.locator("[data-ai-policy-setting]").getByRole("radio", { name: "No restriction" })).toBeChecked();
+  // AI-019 in 1.1 ausgeblendet (keine Durchsetzung): keine Richtlinie, kein „Nur lokal“; das Budget bleibt.
+  await expect(page.locator("[data-ai-budget-setting]")).toBeVisible();
+  await expect(page.locator("[data-ai-policy-setting]")).toHaveCount(0);
+  await expect(page.getByText(/Enforce EU processing|Local only/)).toHaveCount(0);
   await axe(page, "[data-page-id='ai']");
 });
 
 // spec: INTEG-005 [M4]
 // spec: AI-019
-test("Einstellungen KI: Reiter Erweitert zeigt die Ollama-Vorgabe 1, EU-Endpunkt mit vorbelegter URL; axe ohne critical/serious", async ({ alpha }) => {
+test("Einstellungen KI: Reiter Erweitert zeigt die Ollama-Vorgabe 1, keine EU-Endpunkte in 1.1, Schwärzung bleibt; axe ohne critical/serious", async ({ alpha }) => {
   await alpha.open();
   await setPreview(alpha, true);
   const settings = await alpha.openSettings();
   await settings.getByRole("tab", { name: "AI", exact: true }).click();
-  const eu = settings.getByRole("switch", { name: "Use the EU endpoint (https://eu.api.openai.com)" });
-  await expect(eu).toBeVisible();
+  await expect(settings.getByRole("switch", { name: "Redact personal data before sending" })).toBeVisible();
+  await expect(settings.getByRole("switch", { name: /EU endpoint/ })).toHaveCount(0);
+  await expect(settings.locator("[data-ai-eu]")).toHaveCount(0);
   await axe(settings, "[data-ai-area='settings']");
   await settings.getByRole("tab", { name: "Advanced" }).click();
   const ollama = settings.getByRole("textbox", { name: "Concurrent requests to Ollama" });
@@ -201,3 +205,8 @@ test.fixme("wartet auf M4-D01: Kostenvoranschlag beim Start eines KI-Laufs mit P
 // spec: AI-018 [M4]
 // Vor dem ersten Lauf einer KI-Aufgabe erscheint „Datenfluss bestätigen“; ohne Bestätigung `Pending (consent)`, Mock-Zähler 0.
 test.fixme("wartet auf M4-D01: Dialog Datenfluss bestätigen vor dem ersten KI-Lauf mit Pending (consent)", async () => {});
+
+// spec: AI-019
+// Richtlinie „Keine Einschränkung / EU-Verarbeitung erzwingen / Nur lokal“ auf der Konfigurationsseite KI und „EU-Endpunkt verwenden“
+// mit vorbelegter URL in den Einstellungen; Host und Region `EU` in der Datenflussübersicht.
+test.fixme("wartet auf M4-K07 (1.2): AI-019 Richtlinie und EU-Endpunkte sichtbar und durchgesetzt", async () => {});
