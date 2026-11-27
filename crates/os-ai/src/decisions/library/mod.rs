@@ -3,7 +3,8 @@
 //! * Systemfragen liegen als `*.question.json` unter `resources/ai/questions/` (Inhalte: M4-D03) und sind
 //!   schreibgeschützt; „Bearbeiten“ erzeugt eine Benutzerkopie mit Suffix `-custom` ([`Library::edit_copy`]).
 //! * Jede inhaltliche Änderung (`instructions`, `choices`, `levels`, `inputs`, `type`, bei Vorlagen `params`) erhöht
-//!   die Version: Minor (OS-Festlegung), Typwechsel oder entfernter `choice`-Wert Major; Anzeige- und
+//!   die Version: Minor (OS-Festlegung), Typwechsel, entfernter `choice`-Wert, entferntes Level oder geänderter
+//!   `subject` Major (Nachtrag 26.11.2026); Anzeige-, Geltungsbereichs- und
 //!   Schwellwertänderungen nicht ([`next_version`]).
 //! * Für jede in einem Crawl verwendete Version steht genau eine unveränderliche Kopie in `ai_questions`
 //!   ([`record_used`]); ein Crawl behält seine Version, bis neu analysiert wird ([`update_notice`]).
@@ -292,7 +293,7 @@ pub enum ChangeKind {
     None,
     /// Inhaltliche Änderung: Minor.
     Content,
-    /// Typwechsel oder entfernter `choice`-Wert: Major.
+    /// Typwechsel, entfernter `choice`-Wert, entferntes Level oder geänderter `subject`: Major.
     Breaking,
 }
 
@@ -316,6 +317,14 @@ pub fn change_kind(old: &QuestionDef, new: &QuestionDef) -> ChangeKind {
     if old_values.iter().any(|v| !new_values.contains(v)) {
         return ChangeKind::Breaking;
     }
+    // AI-031, Nachtrag 26.11.2026: Entfernen eines Levels und Ändern von `subject` sind Major-Änderungen.
+    let labels = |q: &QuestionDef| -> Vec<String> {
+        q.levels.iter().flatten().map(|l| l.label.clone()).collect()
+    };
+    let new_labels = labels(new);
+    if old.subject != new.subject || labels(old).iter().any(|l| !new_labels.contains(l)) {
+        return ChangeKind::Breaking;
+    }
     let content = |q: &QuestionDef| {
         serde_json::json!({
             "instructions": q.instructions,
@@ -332,8 +341,8 @@ pub fn change_kind(old: &QuestionDef, new: &QuestionDef) -> ChangeKind {
     }
 }
 
-/// Version nach einer Änderung (AI-031): 1.2.0 → 1.3.0 bei inhaltlicher Änderung, → 2.0.0 bei Typwechsel bzw.
-/// entferntem `choice`-Wert, sonst unverändert.
+/// Version nach einer Änderung (AI-031): 1.2.0 → 1.3.0 bei inhaltlicher Änderung, → 2.0.0 bei Typwechsel,
+/// entferntem `choice`-Wert, entferntem Level oder geändertem `subject` (Nachtrag 26.11.2026), sonst unverändert.
 pub fn next_version(old: &QuestionDef, new: &QuestionDef) -> Version {
     match change_kind(old, new) {
         ChangeKind::None => old.version,

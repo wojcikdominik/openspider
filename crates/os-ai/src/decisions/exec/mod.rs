@@ -145,8 +145,8 @@ pub enum Selection {
 pub enum Confirmation {
     /// Bestätigt bzw. Fortsetzen eines bestätigten Laufs: kein Voranschlag (AI-020, Nachtrag 26.11.2026).
     Granted,
-    /// Neuer Lauf: Voranschlag; liegt er über der Schwelle (oder über 50 % des Restbudgets), werden die Einträge
-    /// `Pending (confirmation)` und nichts wird gesendet.
+    /// Neuer Lauf: Voranschlag; erreicht er die Schwelle (≥, Nachtrag 26.11.2026) oder liegt er über 50 % des
+    /// Restbudgets, werden die Einträge `Pending (confirmation)` und nichts wird gesendet.
     AskAbove(MicroUsd),
 }
 
@@ -519,6 +519,7 @@ impl<'a> DecisionRun<'a> {
             Some(start) => Some(start()?),
             None => None,
         };
+        self.reset_run_latches();
         let result = self.run_owned(&mut report).await;
         // `finish` in jedem Ende-Pfad: fertig, Pause, Stopp, Budget, Bestätigung, Abbruch und Fehler des Laufs.
         let finished = lease.map(|l| l.finish()).transpose();
@@ -538,7 +539,10 @@ impl<'a> DecisionRun<'a> {
             all.extend(self.build_wave(&plan, true)?);
             let estimate = self.estimate_bundles(&plan, &all);
             let remaining = self.ledger.snapshot().ok().and_then(|s| s.remaining);
-            let needs = confirmation_required(estimate.totals.expected, threshold, remaining);
+            // AI-012, Nachtrag 26.11.2026: „Bestätigung verlangen ab“ gilt einschließlich (≥ Schwelle); die Regel
+            // „über 50 % des Restbudgets“ bleibt echt größer (`cost::confirmation_required`, Kostenkern K05).
+            let needs = !all.is_empty() && estimate.totals.expected >= threshold
+                || confirmation_required(estimate.totals.expected, threshold, remaining);
             report.estimate = Some(estimate);
             if needs {
                 let rows: Vec<AnswerRow> = all
@@ -991,6 +995,27 @@ impl<'a> DecisionRun<'a> {
         answers::upsert_all(self.conn, &rows)
     }
 
+    /// Kontingent- und Erreichbarkeitssperren gelten je KI-Lauf (AI-020, Entscheidung 27.11.2026): Die Sperren liegen
+    /// in den Adapter-Instanzen (K01–K03); ein neuer Lauf mit wiederverwendeten Adaptern beginnt ohne alte Sperre.
+    /// Laufen zwei Läufe gleichzeitig mit denselben Adaptern, teilen sie sich die Sperre (Auslegung, Bericht d01).
+    fn reset_run_latches(&self) {
+        if let Some(a) = self.adapters.anthropic {
+            a.quota().reset();
+        }
+        if let Some(a) = self.adapters.openrouter {
+            a.quota().reset();
+        }
+        if let Some(a) = self.adapters.ollama {
+            a.unreachable().reset();
+        }
+        if let Some(d) = self.adapters.decisions {
+            d.http().account().clear_quota_stop();
+        }
+        if let Some(r) = self.adapters.responses {
+            r.http().account().clear_quota_stop();
+        }
+    }
+
     fn quota_blocked(&self, provider: &str) -> bool {
         match provider {
             "anthropic" => self
@@ -1429,12 +1454,16 @@ impl<'a> DecisionRun<'a> {
                     } else {
                         AiStatus::Success
                     };
-                    let outcome = sent.meta.request_outcome(
+                    let mut outcome = sent.meta.request_outcome(
                         status,
                         done.estimated_input_tokens,
                         done.estimated_output_tokens.unwrap_or(0),
                         images,
                     );
+                    // AI-021: der Validator-Fehler steht im Protokoll (Spalte `Error Message`).
+                    if let Some(error) = &sent.validator_error {
+                        outcome.error_message = Some(format!("schema violation: {error}"));
+                    }
                     let input_tokens = sent
                         .meta
                         .usage
