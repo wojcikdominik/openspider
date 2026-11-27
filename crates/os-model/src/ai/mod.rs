@@ -1,6 +1,7 @@
 //! Shared AI values; usable by analysis and storage without depending on os-ai.
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+pub mod hook;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum AiStatus {
     #[serde(rename = "Success")]
@@ -53,6 +54,10 @@ pub enum AiStatus {
     /// Reparaturversuch, keine Wiederholung, nicht im Schutzschalter (AI-020, Nachtrag 24.11.2026, Q00-H1).
     #[serde(rename = "Error: Output limit reached")]
     OutputLimitReached,
+    /// Ein Eingabefeld der Frage ist für die URL weder gespeichert noch ableitbar (AI-020, Nachtrag 26.11.2026; AI-032,
+    /// Nachtrag „Quelle der Eingabefelder“). Übersprungen, kein Request; zählt nicht zum Filter „Errors“.
+    #[serde(rename = "Skipped (input unavailable)")]
+    SkippedInputUnavailable,
     Timeout {
         seconds: u64,
     },
@@ -105,6 +110,7 @@ impl std::fmt::Display for AiStatus {
             Self::BatchExpired => f.write_str("Error: Batch expired"),
             Self::ConnectionFailed => f.write_str("Error: Connection failed"),
             Self::OutputLimitReached => f.write_str("Error: Output limit reached"),
+            Self::SkippedInputUnavailable => f.write_str("Skipped (input unavailable)"),
             Self::Timeout { seconds } => write!(f, "Error: Timeout nach {seconds} s"),
             Self::HttpError { code, message } => write!(f, "Error: {code} {message}"),
         }
