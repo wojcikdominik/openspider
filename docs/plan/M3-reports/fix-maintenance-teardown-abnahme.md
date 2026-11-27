@@ -173,3 +173,52 @@ Gelesen wurde `git diff 78c42aea..74a6094d`, nur der Produktcode, nicht der Test
 - Die Zusammenfassung ohne Register ist spec-konform.
 - Das Festhalten der Richtlinie zum Zeitpunkt der Änderung kann aber Crawls nach einer zurückgenommenen Einstellung unwiederbringlich löschen. Das ist eine Regression gegenüber main.
 - Die Korrektur ist klein: Nach dem Gate die aktuelle Richtlinie lesen, den festgehaltenen Stand nur für den Speicherort nutzen. Danach den Lauf von `acceptance_maintenance_teardown_stale` und meinen übrigen 12 Abnahmetests prüfen.
+
+## Dritte Durchsicht 27.11.2026
+
+Gelesen wurde `git diff 74a6094d..93792720`, nur der Produktcode. Es gab keinen eigenen Lauf auf dem Mini.
+
+**(a) Lösch-Eingaben nach dem Gate – in Ordnung.**
+- `retention_round` (`crawls.rs:681–744`) nimmt zuerst Gate und Register-Sperre und liest erst danach den geltenden Stand:
+  - Richtlinie, Tage und Höchstzahl aus `ManagementState.retention_settings` (Z. 690);
+  - den aktuellen Speicherort (Z. 699);
+  - die geöffneten Sitzungen (Z. 723);
+  - „jetzt“ (Z. 731).
+- Sperren, Projektsperren und Zustände (laufend/Heartbeat) liest der Auftrag selbst in `retain_with` aus den Dateien und dem Register.
+- Beim Auslösen festgehalten wird nur noch `location`. Sie geht ausschließlich in `add_location` und in die Ausstiegsbedingung (Z. 707) ein, nicht in Tage, Höchstzahl oder die geöffneten Crawls.
+- Indirekt wirkt der Ort auf das Löschen, weil die Runde dort gelistete Crawls nach der *geltenden* Richtlinie prüft. Das entspricht CRAWL-124 (die Verwaltung umfasst beide Orte) und war auf main ebenso, sobald der Ort vermerkt war.
+- **B3:** Ein irrtümlich gesetzter und sofort korrigierter Ordner (z. B. ein fremder Ordner mit `.ospider`-Dateien) kommt jetzt sicher ins Register. Bei aktiver Frist prüft die Aufbewahrung danach auch dessen Crawls. Auf main geschah das nur, wenn die Runde vor der Korrektur lief. Das ist spec-konform; ein Kandidat für die Hinweis-UI ist es nicht.
+
+**(b) Wann `retention_settings` gesetzt wird – in Ordnung, ein theoretisches Rennen (B3).**
+- **Anfangswert:** `start_retention` (Z. 750ff.) setzt ihn synchron in `services::start`, vor der Startrunde. Fehlt er doch, gilt `unwrap_or_default()` = „Nie“, es wird also nichts gelöscht.
+- **Änderungen:** Jede Änderung der App-Einstellungen läuft über `App::apply_settings_patch` oder `reload_settings` (`runtime/mod.rs:690/712`) und damit über `services::settings_changed` → `on_settings_changed`. Dort wird der Stand vor dem Spawn synchron gesetzt (Z. 777–783).
+- **Direkte Patches:** Die `apply_patch`-Aufrufe in `commands/update.rs` ändern nur `updates.*`.
+- **Import, Zurücksetzen, verwaltete Richtlinie:** Einen Import oder ein „Zurücksetzen auf Standard“ der App-Einstellungen gibt es nicht. Die Spec-Stellen dazu betreffen die Crawl-Konfiguration, die vorhandenen Import-Befehle betreffen Zertifikate. Eine verwaltete Richtlinie gibt es nur für `DisableUpdateCheck`, nicht für die Aufbewahrung.
+- **B3:** `on_settings_changed` liest den Schnappschuss (Z. 778) außerhalb der Sperre von `retention_settings`. Bei zwei gleichzeitigen `settings.set` (zwei Fenster, je `spawn_blocking`) kann der ältere Schnappschuss zuletzt gespeichert werden. Dann löscht die stündliche Runde nach einem veralteten Stand, bis zur nächsten Änderung oder zum nächsten Neustart. Das Fenster ist wenige Anweisungen lang. Abhilfe: den Schnappschuss unter der Sperre lesen und vergleichen, oder dass die Runde `settings_snapshot()` über eine schwache Referenz auf den Einstellungsspeicher liest. Ohne Testhaken ist das nicht deterministisch prüfbar, deshalb gibt es keinen Test.
+
+**(c) Wenn das Hochstufen scheitert – in Ordnung.**
+- Scheitert `state.upgrade()` vor dem Gate oder nach dem Gate, endet die Runde mit `internal("Aufbewahrung", "App abgebaut")` (Z. 682, `?`). Dasselbe gilt für `sessions.upgrade()` (Z. 725).
+- Es läuft also nichts mit leerer Liste geöffneter Crawls weiter: Ohne Sitzungen gibt es kein `enqueue` und keine Löschung.
+- `sessions_shared()` hat außer der schwachen Referenz keinen weiteren Halter. Damit kann die Registry die `App` nicht überleben, während die App weg ist.
+- Die stündliche Aufgabe hält `ManagementState` nur schwach (Z. 635). `ManagementState::drop` bricht sie mitten im `sleep` ab. Damit ist B3 „1-h-Leck“ aus der zweiten Durchsicht erledigt.
+
+**(d) MCP-Schleife – in Ordnung.**
+- Die Schleife (`mcp/mod.rs:172–186`) hält über `state.lock().await` und `status().await` nur noch `Arc<Service>`. Für `flush_tick` stuft sie danach erneut hoch (Z. 184); ist die App inzwischen weg, endet die Schleife.
+- MCP-Start und -Stopp (`mcp.start`/`mcp.stop`, Autostart in Z. 128ff.) laufen nicht über diese Schleife und sind unverändert.
+- Statuswechsel landen wie vorher in `service.status`. Der Tick wird wie vorher nur ohne Sitzungstakt gesendet.
+- Einziger Unterschied: Nach einem Abbau während `status()` entfällt der letzte `flush_tick`. Das ist ohne Wirkung, denn es gibt kein Fenster mehr.
+
+**Windows-Befund (`dropping_the_last_app_inside_a_maintenance_job_does_not_hang`) – Präzisierung der Zusicherung, keine Lockerung.**
+- Die Momentaufnahme `weak.upgrade().is_none()` direkt nach dem Ergebnis des Auftrags kann einen synchronen Tick der Takt-Schleifen (`session` 100 ms, `segment` 250 ms, `update/install` 500 ms, `mcp` 100 ms) treffen.
+- Neue Zusicherung nach Entscheidung des Orchestrators: Die `App` ist **innerhalb von 1 s** nach dem Abbau durch den Besitzer abgebaut. Geprüft wird in einer Schleife ohne feste Wartezeit, mit Abbruch, sobald sie weg ist.
+- „Hängt nicht“ (Zeitgrenze 30 s für das Ergebnis) und „Ergebnis 7“ bleiben unverändert.
+- Gleich angepasst wurden alle Tests mit derselben Momentaufnahme:
+  - `acceptance_maintenance_teardown.rs`: `dropping_the_last_app_inside_a_maintenance_job_does_not_hang` und `startup_reconcile_completes_when_the_app_is_dropped_right_after_it_started` (Hilfsfunktion `gone_within_one_second`);
+  - `acceptance_maintenance_teardown_planner_env.rs`: `start_and_drop`;
+  - `acceptance_maintenance_teardown_race.rs`: Die Runde steht dort beliebig lange an der Uhr. Hielte sie die `App`, überlebte diese die ganze Sekunde; die Aussage bleibt also scharf.
+- Nicht geändert ist `acceptance_maintenance_teardown_cycles`. Er prüft eine stärkere Aussage: Wenn der Abbau durch den Besitzer zurückkehrt, sind alle Löschungen fertig und keine Begleitdateien mehr offen. Trifft der Abbau dort einen Takt-Tick, kehrt er zurück, bevor der eigentliche Abbau im Worker gelaufen ist, und der Test kann auf einem ausgelasteten Runner aus demselben Grund wackeln. Das ist dasselbe Restfenster, das ein Test hat, der sein Verzeichnis sofort nach dem Abbau löscht. Ob dort ebenfalls „innerhalb von 1 s“ gelten soll, entscheidet der Orchestrator; ich habe es nicht von mir aus abgeschwächt.
+
+**Empfehlung dritte Durchsicht: mergen.**
+- Datenverlust-Befund und B1 sind behoben, alle Lösch-Eingaben werden nach dem Gate gelesen, Abbruch ohne Hochstufen bricht ohne Löschen ab, MCP verhält sich unverändert.
+- Offen bleiben nur Hinweise (B3): das Schnappschuss-Rennen bei gleichzeitigen Änderungen, der sicher vermerkte irrtümliche Ordner, das Takt-Tick-Fenster.
+- Voraussetzung: Der Lauf der angepassten Tests (13 Abnahmetests) ist grün, auch unter Windows.
