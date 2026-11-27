@@ -41,6 +41,14 @@ fn version_rules() {
     let mut inputs = old.clone();
     inputs.inputs.pop();
     assert_eq!(next_version(&old, &inputs), Version::new(1, 3, 0));
+    // Nachtrag 26.11.2026: geänderter `subject` → Major.
+    let mut subject = old.clone();
+    subject.subject = format::Subject::Image;
+    subject.inputs = vec![format::InputSpec::field(os_ai::policy::InputField::Image)];
+    assert_eq!(next_version(&old, &subject), Version::new(2, 0, 0));
+    let mut scoped = old.clone();
+    scoped.scope.indexable_only = Some(false);
+    assert_eq!(next_version(&old, &scoped), Version::new(1, 2, 0));
 
     // Über die Benutzerbibliothek angewendet.
     let mut lib = Library::new(vec![], vec![old.clone()]).unwrap();
@@ -48,6 +56,27 @@ fn version_rules() {
         lib.save_user(changed).unwrap().version,
         Version::new(1, 3, 0)
     );
+}
+
+// spec: AI-031 [M4]
+// Nachtrag 26.11.2026: Entfernen eines Levels → Major; geänderte Level-Beschreibung oder ein neues Level → Minor.
+#[test]
+fn level_rules() {
+    let mut old = question("quality");
+    old.id = "my-quality".into();
+    old.version = Version::new(1, 4, 2);
+    let mut removed = old.clone();
+    removed.levels.as_mut().unwrap().pop();
+    assert_eq!(next_version(&old, &removed), Version::new(2, 0, 0));
+    let mut described = old.clone();
+    described.levels.as_mut().unwrap()[0].description = "Very low.".into();
+    assert_eq!(next_version(&old, &described), Version::new(1, 5, 0));
+    let mut added = old.clone();
+    added.levels.as_mut().unwrap().push(format::LevelDef {
+        label: "excellent".into(),
+        description: "Excellent.".into(),
+    });
+    assert_eq!(next_version(&old, &added), Version::new(1, 5, 0));
 }
 
 // spec: AI-031 [M4]

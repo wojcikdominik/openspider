@@ -1,5 +1,5 @@
 //! Platzhalter von M4-D01 für Kriterien, die erst spätere Pakete prüfbar machen (Plan M4, E4; Auflösung durch
-//! M4-N01 bzw. die genannten Pakete, Testinhalt dann unverändert übernehmen). Die Datei heißt nicht
+//! die genannten Pakete, Testinhalt dann unverändert übernehmen). Die Datei heißt nicht
 //! `pending_m4_d01.rs`, weil `owns` von D01 nur `crates/os-ai/tests/decisions_*.rs` umfasst (Bericht d01).
 
 // spec: AI-020 [M4]
@@ -16,7 +16,7 @@ fn ai_run_during_a_paused_crawl() {
 // CLI: SIGINT während offener KI-Einträge → Exit-Code 130, Einträge `Pending`; `--load-crawl <ID> --resume` sendet
 // genau diese und endet mit allen Einträgen fertig.
 #[test]
-#[ignore = "wartet auf M4-N01: CLI-Anbindung der Decision-Engine (os-cli, nicht in owns von D01)"]
+#[ignore = "wartet auf M4-D05: CLI-Anbindung des KI-Laufs (SIGINT → RunControl::pause, Fortsetzen)"]
 fn cli_sigint_and_resume() {
     unimplemented!("RunControl::pause aus dem SIGINT-Handler, Fortsetzen mit Selection::Open");
 }
@@ -25,7 +25,7 @@ fn cli_sigint_and_resume() {
 // Crawl-Ende ohne Stoppen (`limit_reached`, `limits.max_urls` = 10, `hold`): nach dem Ende werden alle offenen
 // Einträge der 10 URLs gesendet, bis die Warteschlange leer ist; Mock-Log = Zahl der Einträge im Geltungsbereich.
 #[test]
-#[ignore = "wartet auf M4-N01: automatische Ausführung während des Crawls (Engine ↔ KI-Warteschlange, E-6 a)"]
+#[ignore = "wartet auf M4-D05: automatische Ausführung während des Crawls (Engine ↔ KI-Warteschlange, E-6 a)"]
 fn crawl_end_without_stop_drains_the_queue() {
     unimplemented!("Engine-Hook ruft DecisionRun nach jeder gecrawlten URL bzw. nach dem Ende auf");
 }
@@ -34,7 +34,7 @@ fn crawl_end_without_stop_drains_the_queue() {
 // Absturz per SIGKILL eines echten Prozesses, während der Mock Request n hält (das Verhalten der Crawl-Datei prüft
 // `decisions_lifecycle::crash_while_a_request_is_held` im selben Prozess).
 #[test]
-#[ignore = "wartet auf M4-N01: Prozess mit KI-Lauf (CLI) für den SIGKILL-Test"]
+#[ignore = "wartet auf M4-D05: Prozess mit KI-Lauf (CLI) für den SIGKILL-Test"]
 fn crash_by_sigkill() {
     unimplemented!("CLI-Kindprozess mit hold, SIGKILL, Öffnen, Fortsetzen");
 }
@@ -44,7 +44,7 @@ fn crash_by_sigkill() {
 // KI-Einträge, alle Schlüssel verbunden → die App zeigt Ergebnisse und den Hinweis, alle KI-Aktionen deaktiviert, der
 // ai-mock der App zählt 0 Requests.
 #[test]
-#[ignore = "wartet auf M4-K11: Leseseite „aktiver Besitzer“ (App nur lesend); Zähler der App: M4-N01"]
+#[ignore = "wartet auf M4-D05: App mit KI-Lauf, nur lesend bei fremdem aktivem Besitzer, ai-mock-Zähler der App"]
 fn foreign_writer_is_read_only() {
     unimplemented!("RunOwner::start meldet den fremden Besitzer; DecisionRun::run gibt den Fehler unverändert zurück");
 }

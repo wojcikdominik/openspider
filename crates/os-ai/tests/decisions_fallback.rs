@@ -303,6 +303,20 @@ async fn invalid_zero_abstain_and_missing_abstain() {
         .filter(|r| r.body.contains("d01-fb-noabstain"))
         .count();
     assert_eq!(requests_for_3, 2, "ein Reparaturversuch");
+    // AI-021: der Validator-Fehler steht im Protokoll.
+    let rows: Vec<_> = logged(file.conn())
+        .into_iter()
+        .filter(|r| r.record.url_id == Some(3))
+        .collect();
+    assert_eq!(rows.len(), 2);
+    assert!(rows
+        .iter()
+        .all(|r| r.record.status == "Error: Invalid output"));
+    assert!(rows.iter().all(|r| r
+        .record
+        .error_message
+        .as_deref()
+        .is_some_and(|m| m.contains("schema violation"))));
 }
 
 fn sent_schema(provider: &str, body: &Value) -> Value {

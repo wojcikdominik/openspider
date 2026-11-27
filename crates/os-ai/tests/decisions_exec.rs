@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use os_ai::adapters::openai_decisions::MaxQuestionsPerRequest;
 use os_ai::decisions::exec::{
-    ActiveQuestion, Confirmation, DecisionRun, RunControl, RunEnd, RunItem, RunOptions,
+    ActiveQuestion, Confirmation, DecisionRun, RunControl, RunEnd, RunItem, RunOptions, Selection,
 };
 use os_ai::decisions::format::{InputSpec, QuestionDef};
 use os_ai::policy::InputField;
@@ -569,4 +569,115 @@ async fn unreachable_provider_ends_as_connection_failed() {
     assert_eq!(r.error_code.as_deref(), Some("transport/connect"));
     assert_eq!(r.retries, 5);
     assert_eq!(r.cost.0, 0);
+}
+
+// spec: AI-012 [M4]
+// Nachtrag 26.11.2026: „Bestätigung verlangen ab“ gilt einschließlich – erwartete Kosten gleich der Schwelle sind
+// bestätigungspflichtig, 1 µUSD darüber nicht.
+#[tokio::test]
+async fn confirmation_threshold_is_inclusive() {
+    let env = Env::new(&["openai"]).await;
+    let pt = question("page-type");
+    let qs = [active(pt.clone())];
+    let items = vec![text_item(1, "Text"), text_item(2, "Text 2")];
+    let dir = TempDir::new("inclusive");
+    let (file, run) = crawl_file(&dir.0, &items);
+    let ledger = support::ledger(file.conn(), 5_000_000);
+    let expected = env
+        .run(
+            file.conn(),
+            run,
+            &qs,
+            &items,
+            &ledger,
+            RunControl::new(),
+            RunOptions::default(),
+        )
+        .estimate()
+        .unwrap()
+        .totals
+        .expected;
+    assert!(expected.0 > 0);
+    let ask = |t: u64| RunOptions {
+        confirmation: Confirmation::AskAbove(os_model::budget::MicroUsd(t)),
+        ..RunOptions::default()
+    };
+    let report = env
+        .run(
+            file.conn(),
+            run,
+            &qs,
+            &items,
+            &ledger,
+            RunControl::new(),
+            ask(expected.0),
+        )
+        .run()
+        .await
+        .unwrap();
+    assert_eq!(report.end, RunEnd::NeedsConfirmation);
+    assert_eq!(env.mock.posts(DECISIONS).len(), 0);
+    let report = env
+        .run(
+            file.conn(),
+            run,
+            &qs,
+            &items,
+            &ledger,
+            RunControl::new(),
+            ask(expected.0 + 1),
+        )
+        .run()
+        .await
+        .unwrap();
+    assert_eq!(report.end, RunEnd::Completed);
+    assert_eq!(env.mock.posts(DECISIONS).len(), 2);
+}
+
+// spec: AI-020 [M4]
+// Kontingentsperre je KI-Lauf (Entscheidung 27.11.2026): Ein neuer Lauf mit wiederverwendeten Adaptern beginnt ohne
+// die Sperre des vorigen Laufs.
+#[tokio::test]
+async fn quota_latch_lasts_one_run() {
+    let env = Env::new(&["openai"]).await;
+    env.mock.scenario("openai", "insufficient-quota", 1).await;
+    let pt = question("page-type");
+    let qs = [active(pt.clone())];
+    let items = vec![text_item(1, "Text"), text_item(2, "Text 2")];
+    let dir = TempDir::new("latch");
+    let (file, run) = crawl_file(&dir.0, &items);
+    let ledger = support::ledger(file.conn(), 5_000_000);
+    env.run(
+        file.conn(),
+        run,
+        &qs,
+        &items,
+        &ledger,
+        RunControl::new(),
+        RunOptions::default(),
+    )
+    .run()
+    .await
+    .unwrap();
+    assert_eq!(count(&counts(file.conn(), &pt), "Quota exceeded"), 2);
+    assert_eq!(env.mock.posts(DECISIONS).len(), 1);
+    assert!(env.decisions.http().account().quota_stop().is_some());
+    let retry = RunOptions {
+        selection: Selection::Failed,
+        ..RunOptions::default()
+    };
+    env.run(
+        file.conn(),
+        run,
+        &qs,
+        &items,
+        &ledger,
+        RunControl::new(),
+        retry,
+    )
+    .run()
+    .await
+    .unwrap();
+    assert_eq!(env.mock.posts(DECISIONS).len(), 3);
+    assert_eq!(count(&counts(file.conn(), &pt), "Success"), 2);
 }
