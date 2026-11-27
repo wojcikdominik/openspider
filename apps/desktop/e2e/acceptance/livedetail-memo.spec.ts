@@ -42,6 +42,9 @@ test("a language change relabels the open tables, the detail window and the Over
   await startGated(alpha, gate);
   await crawlTo(page, gate, 4);
   await selectHomeInlinks(page, gate.startUrl);
+  // Ausgangsstand erst nehmen, wenn die Overview gezeichnet ist: Ein leerer Ausgangsstand ließe den Vergleich nach dem
+  // Sprachwechsel schon bei der ersten (englischen) Zeile bestehen und den Rückweg auf Englisch scheitern.
+  await expect.poll(async () => (await overviewLabels(page)).length, { timeout: 15_000 }).toBe(6);
 
   const en = {
     upper: strip(await upperHeaders(page)),
