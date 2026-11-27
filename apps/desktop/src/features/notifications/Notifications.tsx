@@ -8,7 +8,7 @@ import { diag } from "../../ipc/diag";
 import type { Notice } from "../../ipc/gen/Notice";
 import { isTauri, sendDesktopNotification, copyDesktopText } from "../../ipc/transport/tauri";
 import { usePrefs } from "../../state/prefs";
-import { useSession } from "../../state/session";
+import { resumeHere, useSession } from "../../state/session";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { Banner, ToastRegion } from "../../ui/primitives/Feedback";
@@ -93,7 +93,7 @@ export function Notifications() {
   }
   function dismiss() { if (current && !busyRef.current) useSession.getState().dismissNotice(current); }
   function cancelDialog() {
-    if (isAuth) { setPassword(""); void action(() => crawl.resume(), true); }
+    if (isAuth) { setPassword(""); void action(() => resumeHere(() => crawl.resume()), true); }
     else dismiss();
   }
   async function submitAuth() {
@@ -107,7 +107,7 @@ export function Notifications() {
     const authCfg = asObject(cfg.auth);
     const refs = Array.isArray(authCfg.profile_refs) ? authCfg.profile_refs : [];
     await config.set({ ...dto, config: { ...cfg, auth: { ...authCfg, profile_refs: [...new Set([...refs, profile.name])] } } as never });
-    await crawl.resume();
+    await resumeHere(() => crawl.resume());
   }
   const httpsFailure = current && ["start-connection", "start-dns", "err-start-connection"].includes(current.code) && String(current.args.startUrl ?? "").startsWith("https:");
   return <>
