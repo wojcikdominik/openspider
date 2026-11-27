@@ -25,6 +25,22 @@ use serde_json::{json, Value};
 
 const DAY_MS: i64 = 86_400_000;
 
+/// Zusicherung (präzisiert 27.11.2026): Nach dem Abbau durch den Besitzer ist die `App` innerhalb von 1 s abgebaut. Takt-
+/// Schleifen dürfen sie für einen synchronen Tick hochstufen; eine Momentaufnahme direkt nach dem Abbau kann das treffen.
+/// Abbruch, sobald sie weg ist: die Grenze ist die Zusicherung, keine feste Wartezeit.
+async fn gone_within_one_second(weak: &os_app::runtime::WeakApp) -> bool {
+    let start = std::time::Instant::now();
+    loop {
+        if weak.upgrade().is_none() {
+            return true;
+        }
+        if start.elapsed() >= Duration::from_secs(1) {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+}
+
 fn app_with_clock(dir: &Path, clock: Arc<ManualClock>) -> App {
     let config = AppConfig::new(dir)
         .with_ids(Arc::new(SeededIds::new(7)))
@@ -418,7 +434,10 @@ async fn dropping_the_last_app_inside_a_maintenance_job_does_not_hang() {
             .unwrap(),
         7
     );
-    assert!(weak.upgrade().is_none());
+    assert!(
+        gone_within_one_second(&weak).await,
+        "App nach dem Abbau im Wartungsauftrag nicht innerhalb von 1 s abgebaut"
+    );
 }
 
 // (v) Startabgleich der Aufgaben bei sofortigem Abbau der App: abgestürzte Läufe werden abgeglichen, Planer-Einträge
@@ -474,7 +493,10 @@ async fn startup_reconcile_completes_when_the_app_is_dropped_right_after_it_star
     os_app::commands::tasks::on_startup(&app);
     let weak = app.downgrade();
     drop(app);
-    assert!(weak.upgrade().is_none(), "Startabgleich hält die App");
+    assert!(
+        gone_within_one_second(&weak).await,
+        "Startabgleich hält die App länger als 1 s"
+    );
 
     let current = planner::cli_binary();
     assert!(

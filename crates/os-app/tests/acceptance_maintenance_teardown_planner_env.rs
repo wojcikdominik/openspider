@@ -46,12 +46,20 @@ async fn reconciled(settings: &Path, task: &str) -> bool {
     .await
 }
 
-/// Start und sofortiger Abbau; der Abbau darf nicht hängen und die App nicht überleben.
-fn start_and_drop(dir: &Path) {
+/// Start und sofortiger Abbau; der Abbau darf nicht hängen, und die App ist innerhalb von 1 s abgebaut (Zusicherung
+/// präzisiert 27.11.2026: Takt-Schleifen dürfen sie für einen synchronen Tick hochstufen). Abbruch, sobald sie weg ist.
+async fn start_and_drop(dir: &Path) {
     let app = App::new(config(dir)).expect("App::new");
     let weak = app.downgrade();
     drop(app);
-    assert!(weak.upgrade().is_none(), "Startarbeit hält die App");
+    let start = std::time::Instant::now();
+    while weak.upgrade().is_some() {
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "Startarbeit hält die App länger als 1 s"
+        );
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
 }
 
 // spec: OUT-166
@@ -96,7 +104,7 @@ async fn startup_reconcile_with_planner_dry_and_off_survives_an_immediate_drop()
         .unwrap();
     dead_run(dir.path(), &id);
 
-    start_and_drop(dir.path());
+    start_and_drop(dir.path()).await;
 
     let current = planner::cli_binary();
     assert!(
@@ -123,7 +131,7 @@ async fn startup_reconcile_with_planner_dry_and_off_survives_an_immediate_drop()
     std::env::set_var("OPENSPIDER_PLANNER", "off");
     let off = tempfile::tempdir().unwrap();
     dead_run(off.path(), "task-off");
-    start_and_drop(off.path());
+    start_and_drop(off.path()).await;
     assert!(
         reconciled(off.path(), "task-off").await,
         "off: abgestürzter Lauf nicht abgeglichen"

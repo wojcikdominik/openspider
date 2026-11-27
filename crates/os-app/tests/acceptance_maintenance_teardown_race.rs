@@ -128,7 +128,17 @@ async fn owner_drop_is_the_last_reference_even_while_a_round_reads_its_settings(
     // Der Besitzer baut ab, wie ein Test vor dem Löschen seines Verzeichnisses.
     let weak = app.downgrade();
     drop(app);
-    let survived = weak.upgrade().is_some();
+    // Die Runde steht beliebig lange an der Uhr; hielte sie die App, überlebte diese die ganze Frist. Takt-Schleifen
+    // stufen höchstens einen synchronen Tick hoch (Zusicherung präzisiert 27.11.2026: abgebaut innerhalb von 1 s).
+    let start = std::time::Instant::now();
+    let mut survived = true;
+    while start.elapsed() < Duration::from_secs(1) {
+        if weak.upgrade().is_none() {
+            survived = false;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
     clock.release();
     assert!(
         !survived,
