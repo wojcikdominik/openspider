@@ -167,8 +167,11 @@ pub fn init(app: &App) {
         timer.tick().await;
         loop {
             timer.tick().await;
-            let Some(app) = weak.upgrade() else { break };
-            let service = app.ext::<Service>();
+            // Über die `await`s nur den Dienst halten, nicht die `App` (OUT-229: ein Abbau durch ihren Besitzer bleibt
+            // der letzte, auch wenn die Sperre des Dienstes gerade belegt ist).
+            let Some(service) = weak.upgrade().map(|app| app.ext::<Service>()) else {
+                break;
+            };
             let current = status(&*service.state.lock().await).await;
             if previous.as_ref() != Some(&current) {
                 *service.status.lock().unwrap_or_else(|p| p.into_inner()) = Some(current.clone());
@@ -178,6 +181,7 @@ pub fn init(app: &App) {
             // including an unchanged Off status after a failed start. While a crawl session is
             // active its loop delivers every due tick (MCP status included); a second flusher would
             // send that tick before the session's poll and split status and table totals (UI-018).
+            let Some(app) = weak.upgrade() else { break };
             if !crate::session::delivers_ticks(&app) {
                 app.flush_tick();
             }
