@@ -667,6 +667,25 @@ async fn k_html_lang_and_hreflang_self_after_the_crawl_match_the_crawl() {
         rows
     };
     eprintln!("D05-HREFLANG: {hreflang_rows:?}");
+    // Tatsächlich ausgelieferter Selbstverweis der Seite `/french` (ersetzt die Testsite `{{PORT}}`?).
+    let served = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(format!("http://127.0.0.1:{}/french", site.port()))
+        .header("host", format!("ai.test:{}", site.port()))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let links: Vec<&str> = served
+        .match_indices("<link")
+        .filter_map(|(i, _)| served[i..].find('>').map(|j| &served[i..=i + j]))
+        .filter(|l| l.contains("alternate"))
+        .collect();
+    eprintln!("D05-HREFLANG-AUSGELIEFERT: {links:?} (Seiten-URL {start}french)");
     assert_eq!(
         labelled(&french, "Hreflang Self").as_deref(),
         Some("fr"),
@@ -904,13 +923,32 @@ async fn c_ai_run_during_a_paused_crawl() {
     assert_eq!(meta(&path, "state").as_deref(), Some("Paused"));
 }
 
+/// Statusabfrage der Sitzung (`session::poll`, wie der Takt der Oberfläche) mit Messung; Rückgabe der Dauer (höchstens
+/// 3 s, dann gilt sie als blockiert).
+async fn timed_poll(app: &os_app::App) -> Duration {
+    let t0 = Instant::now();
+    let _ = tokio::time::timeout(Duration::from_secs(3), os_app::session::poll(app)).await;
+    t0.elapsed()
+}
+
+/// Crawl-Analyse begonnen oder fertig (`crawl_meta.analysis_state`, CRAWL-141)?
+fn analysis_started(path: &std::path::Path) -> bool {
+    matches!(
+        meta(path, "analysis_state").as_deref(),
+        Some("running") | Some("completed")
+    )
+}
+
 // spec: AI-020 [M4]
 // spec: CRAWL-128
+// spec: CRAWL-141
+// spec: UI-018 [M4]
 // acceptance: independent
-// (c) crawl_end_without_stop_drains_the_queue – „Crawl der Fixture-Site mit `limits.max_urls` = 10 und Szenario `hold`;
-// nach dem Ende (`limit_reached`) gibt der Test die gehaltenen Requests nacheinander frei → alle offenen Einträge der 10
-// URLs werden gesendet, bis die Warteschlange leer ist; Mock-Log = Zahl der Einträge im Geltungsbereich dieser 10 URLs.“
-// Dazu: „der Crawl gilt erst dann als vollständig“ – solange Requests gehalten werden, ist der Crawl nicht `Completed`.
+// (c) crawl_end_without_stop_drains_the_queue, gefasst nach AI-020 Nachtrag 28.11.2026 („Vollständig“ beim Crawl-Ende ohne
+// Stoppen): `limits.max_urls` = 10, Szenario `hold`. Solange ein Request gehalten wird, ist der gespeicherte Zustand
+// `Completed`, die Statusabfrage der Sitzung antwortet innerhalb von 500 ms, die Crawl-Analyse hat nicht begonnen; nach
+// der Freigabe werden alle offenen Einträge gesendet (Mock-Log = Einträge im Geltungsbereich der 10 URLs), danach läuft
+// die Analyse. Der CLI-Teil (Export) steht in `acceptance_d05_cli.rs`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn c_crawl_end_without_stop_drains_the_queue() {
     let _s = serial().await;
@@ -919,23 +957,18 @@ async fn c_crawl_end_without_stop_drains_the_queue() {
     let h = home(&mock, Opts::default());
     let mut cfg = profile(&site, &[question("d05-drain", &["url", "title"])]);
     cfg.limits.max_urls = 10;
+    cfg.analysis.auto_at_end = true;
     h.profile(&cfg);
     mock.hold(1_000).await;
     start_crawl(&h.app, START).await;
     let path = crawl_path(&h.app);
-    // `session::poll` darf das Testende nicht blockieren: jeder Aufruf mit Frist, blockierte Aufrufe werden gezählt.
-    let mut blocked_polls = 0usize;
+    let mut slowest = Duration::ZERO;
     // Ende der Abrufe abwarten (keine neue Seite in 1,5 s) bei gehaltenem Request.
     let mut last = page_fetches(&site);
     let mut stable_since = Instant::now();
     let start = Instant::now();
     loop {
-        if tokio::time::timeout(Duration::from_secs(3), os_app::session::poll(&h.app))
-            .await
-            .is_err()
-        {
-            blocked_polls += 1;
-        }
+        slowest = slowest.max(timed_poll(&h.app).await);
         let now = page_fetches(&site);
         if now != last {
             last = now;
@@ -944,73 +977,143 @@ async fn c_crawl_end_without_stop_drains_the_queue() {
         if mock.held() >= 1 && stable_since.elapsed() > Duration::from_millis(1_500) {
             break;
         }
-        assert!(
-            start.elapsed() < Duration::from_secs(60),
-            "Crawl ruft weiter ab"
-        );
+        assert!(start.elapsed() < Duration::from_secs(60), "Crawl ruft weiter ab");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    let mut findings: Vec<String> = Vec::new();
-    if state(&h.app) == Some(CrawlState::Completed) {
-        findings.push(format!(
-            "Sitzung meldet `Completed`, während {} Request(s) gehalten werden (Warteschlange nicht leer)",
-            mock.held()
-        ));
-    }
-    if meta(&path, "state").as_deref() == Some("Completed") {
-        findings.push("Crawl-Datei trägt `Completed`, während Requests gehalten werden".into());
-    }
-    let start = Instant::now();
-    loop {
-        mock.release(Some(1)).await;
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        if tokio::time::timeout(Duration::from_secs(3), os_app::session::poll(&h.app))
-            .await
-            .is_err()
-        {
-            blocked_polls += 1;
-        }
-        let open = q_i64(
-            &path,
-            "SELECT COUNT(*) FROM ai_answers WHERE question_id = 'd05-drain' AND status = 'Pending'",
+    // Phase „nur noch KI-Warteschlange“: 1 s beobachten, ohne freizugeben.
+    let watch = Instant::now();
+    while watch.elapsed() < Duration::from_secs(1) {
+        slowest = slowest.max(timed_poll(&h.app).await);
+        assert_eq!(
+            meta(&path, "state").as_deref(),
+            Some("Completed"),
+            "gespeicherter Endzustand mit dem Ende der Abrufe"
         );
-        if (state(&h.app) == Some(CrawlState::Completed)
-            || meta(&path, "state").as_deref() == Some("Completed"))
-            && open == 0
-            && count_status(&path, "d05-drain", "Success") as i64 >= q_i64(&path, IN_SCOPE)
-        {
-            break;
-        }
-        assert!(
-            start.elapsed() < Duration::from_secs(90),
-            "Warteschlange wird nicht leer (Zustand {:?}, Datei {:?}, gehalten {}, gesendet {}, blockierte poll-Aufrufe {blocked_polls})",
-            state(&h.app),
-            meta(&path, "state"),
-            mock.held(),
-            mock.decisions().len()
-        );
+        assert_eq!(meta(&path, "end_reason").as_deref(), Some("limit_reached"));
+        assert!(!analysis_started(&path), "Crawl-Analyse wartet auf die leere Warteschlange");
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    eprintln!("D05-DRAIN: blockierte poll-Aufrufe {blocked_polls}");
-    if blocked_polls > 0 {
-        findings.push(format!(
-            "{blocked_polls} Aufruf(e) von session::poll länger als 3 s blockiert"
-        ));
-    }
+    assert_eq!(state(&h.app), Some(CrawlState::Completed), "Sitzung meldet den Endzustand");
+    let open_before = q_i64(
+        &path,
+        "SELECT COUNT(*) FROM ai_answers WHERE question_id = 'd05-drain' AND status = 'Pending'",
+    );
+    assert!(open_before >= 1, "offene Einträge, solange gehalten wird");
+
+    // Freigabe nacheinander, bis alle Einträge im Geltungsbereich fertig sind.
     let in_scope = q_i64(&path, IN_SCOPE) as usize;
     assert!(in_scope >= 1);
-    assert_eq!(
-        mock.decisions().len(),
-        in_scope,
-        "Mock-Log = Einträge im Geltungsbereich der 10 URLs"
+    let start = Instant::now();
+    while (count_status(&path, "d05-drain", "Success") as usize) < in_scope {
+        assert!(
+            !analysis_started(&path),
+            "Analyse beginnt erst mit leerer Warteschlange"
+        );
+        mock.release(Some(1)).await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        slowest = slowest.max(timed_poll(&h.app).await);
+        assert!(
+            start.elapsed() < Duration::from_secs(90),
+            "Warteschlange wird nicht leer (gehalten {}, gesendet {}, Success {})",
+            mock.held(),
+            mock.decisions().len(),
+            count_status(&path, "d05-drain", "Success")
+        );
+    }
+    wait_until("Crawl-Analyse nach leerer Warteschlange", Duration::from_secs(60), || {
+        meta(&path, "analysis_state").as_deref() == Some("completed")
+    })
+    .await;
+    eprintln!("D05-DRAIN: längste Statusabfrage {slowest:?}");
+    assert!(
+        slowest <= Duration::from_millis(500),
+        "Statusabfrage antwortet ohne Wartezeit (längste {slowest:?})"
     );
-    assert_eq!(
-        count_status(&path, "d05-drain", "Success") as usize,
-        in_scope
-    );
+    assert_eq!(mock.decisions().len(), in_scope, "Mock-Log = Einträge im Geltungsbereich der 10 URLs");
     assert_eq!(count_status(&path, "d05-drain", "Pending"), 0);
-    assert_eq!(meta(&path, "end_reason").as_deref(), Some("limit_reached"));
     assert_no_duplicate_urls(&mock);
-    assert!(findings.is_empty(), "{findings:#?}");
+}
+
+// spec: AI-020 [M4]
+// spec: AI-012 [M4]
+// spec: CRAWL-141
+// acceptance: independent
+// AI-020 Nachtrag 28.11.2026, „Einträge `Pending (confirmation)` am Crawl-Ende“: Einträge, die auf die Kostenbestätigung
+// warten, halten das Crawl-Ende und die Folgeschritte nicht auf; sie behalten ihren Status und werden nach erteilter
+// Bestätigung gesendet („KI-Analyse starten“). Schwelle 1 µUSD: der Crawl wird `Completed`, die Crawl-Analyse läuft, 0
+// Requests, 22 × `Pending (confirmation)`; danach „KI-Analyse starten“ mit Bestätigung → 22 Requests.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn c_pending_confirmation_does_not_hold_the_crawl_end() {
+    let _s = serial().await;
+    let mock = Mock::start().await;
+    let site = ai_site().await;
+    let h = home(
+        &mock,
+        Opts {
+            threshold: 1,
+            ..Opts::default()
+        },
+    );
+    let mut cfg = profile(&site, &[question("d05-wait", &["url", "title"])]);
+    cfg.analysis.auto_at_end = true;
+    h.profile(&cfg);
+    crawl_to_end(&h.app, START).await;
+    let path = crawl_path(&h.app);
+    wait_until("Crawl-Analyse läuft trotz wartender Einträge", Duration::from_secs(60), || {
+        meta(&path, "analysis_state").as_deref() == Some("completed")
+    })
+    .await;
+    assert_eq!(mock.provider_requests(), 0, "ohne Bestätigung kein Request");
+    assert_eq!(
+        count_status(&path, "d05-wait", "Pending (confirmation)"),
+        22,
+        "{:?}",
+        statuses(&path, "d05-wait")
+    );
+    run_ai(&h.app, true).await.expect("KI-Analyse starten mit Bestätigung");
+    assert_eq!(mock.decisions().len(), 22);
+    assert_eq!(count_status(&path, "d05-wait", "Success"), 22);
+}
+
+// spec: AI-020 [M4]
+// spec: AI-039 [M4]
+// acceptance: independent
+// AI-020 Nachtrag 28.11.2026, „Start während des eigenen laufenden Crawls“: `ai.decisionsRun` wird bei laufendem Crawl
+// desselben Prozesses mit einem Fehler abgewiesen (Zustand unverändert, kein Request, keine Laufzeile) – unabhängig von
+// der automatischen Ausführung; kein Start wird gemeldet. Mit automatischer Ausführung an hält die Schwelle 1 µUSD deren
+// Einträge zurück, damit „kein Request“ dem Start zugerechnet werden kann. Der Fehlercode ist nicht festgelegt.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn c_start_during_the_own_running_crawl_is_refused() {
+    let _s = serial().await;
+    let site = ai_site().await;
+    for auto in [false, true] {
+        let mock = Mock::start().await;
+        let h = home(
+            &mock,
+            Opts {
+                threshold: 1,
+                ..Opts::default()
+            },
+        );
+        let mut cfg = profile(&site, &[question("d05-busy", &["url", "title"])]);
+        cfg.ai.auto_run.0 = auto;
+        slow(&mut cfg);
+        h.profile(&cfg);
+        start_crawl(&h.app, START).await;
+        let path = crawl_path(&h.app);
+        wait_until("einige URLs", Duration::from_secs(60), || q_i64(&path, CRAWLED) >= 4).await;
+        let runs = q_i64(&path, "SELECT COUNT(*) FROM ai_runs");
+        for confirmed in [true, false] {
+            let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": confirmed })).await;
+            assert!(r.is_err(), "auto {auto}, confirmed {confirmed}: Fehler statt Start ({r:?})");
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(mock.provider_requests(), 0, "auto {auto}: kein Request");
+        assert_eq!(q_i64(&path, "SELECT COUNT(*) FROM ai_runs"), runs, "auto {auto}: keine Laufzeile");
+        let _ = os_app::session::poll(&h.app).await;
+        assert_eq!(state(&h.app), Some(CrawlState::Running), "auto {auto}: Zustand unverändert");
+        call(&h.app, "crawl.stop", Value::Null).await;
+    }
 }
 
 // spec: AI-020 [M4]

@@ -65,6 +65,18 @@ impl Mock {
         assert!(resp.status().is_success());
     }
 
+    async fn release(&self, count: usize) {
+        let url = format!("{}/release", self.server.base_url("__mock"));
+        let resp = self
+            .client
+            .post(&url)
+            .json(&json!({"provider": "openai", "count": count}))
+            .send()
+            .await
+            .unwrap();
+        assert!(resp.status().is_success());
+    }
+
     fn decisions(&self) -> Vec<RequestRecord> {
         self.mock
             .requests()
@@ -125,6 +137,11 @@ fn page_fetches(site: &TestSite) -> usize {
 
 /// Einstellungen, Einwilligung und Standardprofil im Datenordner des CLI.
 fn prepare(env: &Env, mock: &Mock, site: &TestSite) {
+    prepare_with(env, mock, site, |_| {});
+}
+
+/// Wie [`prepare`], das Profil lässt sich danach anpassen.
+fn prepare_with(env: &Env, mock: &Mock, site: &TestSite, adjust: impl FnOnce(&mut CrawlConfig)) {
     let dir = env.home.path();
     let mut s = AppSettings::load(dir).unwrap_or_default();
     s.ai_app.preview_enabled = true;
@@ -166,6 +183,7 @@ fn prepare(env: &Env, mock: &Mock, site: &TestSite) {
         "inputs": ["url", "title"],
     })];
     cfg.ai.active_questions = vec![QUESTION.into()];
+    adjust(&mut cfg);
     cfg.save_default(dir).unwrap();
 }
 
@@ -176,6 +194,30 @@ fn spawn_crawl(env: &Env) -> Child {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     cmd.spawn().expect("openspider startbar")
+}
+
+/// Crawl mit Export-Tab `Internal:All` nach `env.out()`; Ausgaben in Dateien (kein volles Pipe-Puffer).
+fn spawn_crawl_with_export(env: &Env) -> Child {
+    let log = |name: &str| std::fs::File::create(env.work.path().join(name)).unwrap();
+    let mut cmd = env.command();
+    cmd.env("OPENSPIDER_AI_KEY_OPENAI", TEST_KEY)
+        .args(["--crawl", "http://ai.test/", "--output-folder"])
+        .arg(env.out())
+        .args(["--export-tabs", "Internal:All"])
+        .stdout(Stdio::from(log("stdout.txt")))
+        .stderr(Stdio::from(log("stderr.txt")));
+    cmd.spawn().expect("openspider startbar")
+}
+
+/// Dateien im Ausgabeordner (fehlender Ordner = keine).
+fn exported(env: &Env) -> Vec<PathBuf> {
+    std::fs::read_dir(env.out())
+        .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path()).collect())
+        .unwrap_or_default()
+}
+
+fn count_rows(path: &Path, sql: &str) -> i64 {
+    ro(path).conn().query_row(sql, [], |r| r.get(0)).unwrap()
 }
 
 async fn run(env: &Env, args: &[&str]) -> Run {
@@ -280,75 +322,192 @@ fn meta(path: &Path, key: &str) -> Option<String> {
 // spec: AI-020 [M4]
 // spec: CRAWL-126 [M4]
 // acceptance: independent
-// (c) cli_sigint_and_resume: SIGINT während offener KI-Einträge (Antworten des Mocks mit 1 s Verzögerung, der Crawl ruft noch
-// Seiten ab) → Exit-Code 130, Crawl „Pausiert“, nicht beantwortete Einträge `Pending`, laufende Requests zu Ende geführt;
-// `--load-crawl <ID> --resume` → Exit 0, alle 22 Einträge `Success`, keine URL doppelt im Mock-Log.
+// (c) cli_sigint_and_resume, gefasst nach AI-020 Nachtrag 28.11.2026 („Ein offener Eintrag ist eine Zeile“): SIGINT,
+// nachdem mindestens 8 Seiten aus S gecrawlt und 2 KI-Requests beantwortet sind, während Request 3 unterwegs ist (ai-mock
+// mit 1 s Antwortzeit) → Exit-Code 130, Zustand `Paused`; Request 3 ist übernommen (3 Protokollzeilen, 3 × `Success`), die
+// übrigen gecrawlten Seiten aus S haben je einen Eintrag `Pending`; nach `--resume` 22 × `Success`, Mock-Log genau 22
+// Requests, keine URL doppelt. Alle Abweichungen werden gesammelt gemeldet.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn c_cli_sigint_and_resume() {
     let mock = Mock::start().await;
     let site = ai_site().await;
     let env = Env::new();
-    prepare(&env, &mock, &site);
+    prepare_with(&env, &mock, &site, |c| c.speed.max_urls_per_sec = Some(6.0));
     mock.scenario("delay=1", 1_000).await;
     let child = spawn_crawl(&env);
-    wait_until(
-        "KI-Requests und Seitenabrufe",
-        Duration::from_secs(60),
-        || mock.decisions().len() >= 2 && page_fetches(&site) >= 8,
-    )
+    let success = |env: &Env| -> u64 {
+        env.crawl_files()
+            .first()
+            .map(|p| statuses(p).get("Success").copied().unwrap_or(0))
+            .unwrap_or(0)
+    };
+    wait_until("2 beantwortet, Request 3 unterwegs", Duration::from_secs(60), || {
+        mock.decisions().len() == 3 && success(&env) == 2
+    })
     .await;
-    assert!(page_fetches(&site) < 25, "der Crawl läuft noch");
-    let sigint_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+    let (path, id) = only_file(&env);
+    let crawled_s = in_scope(&path).len();
+    assert!(crawled_s >= 3, "Vorbedingung: Seiten aus S gecrawlt ({crawled_s})");
+    eprintln!("D05-SIGINT: {crawled_s} Seiten aus S beim SIGINT gecrawlt");
     signal(&child, libc::SIGINT);
     let out = finish(child).await;
     assert_eq!(out.code, 130, "{}", out.dump());
-    let (path, id) = only_file(&env);
     assert_eq!(meta(&path, "state").as_deref(), Some("Paused"));
     let mut findings: Vec<String> = Vec::new();
     let st = statuses(&path);
-    let success = st.get("Success").copied().unwrap_or(0);
+    let ok = st.get("Success").copied().unwrap_or(0);
     let pending = st.get("Pending").copied().unwrap_or(0);
     let scope = in_scope(&path).len() as u64;
-    assert!(pending >= 1, "offene Einträge bleiben `Pending`: {st:?}");
-    if success + pending != scope {
+    let logged = count_rows(&path, "SELECT COUNT(*) FROM ai_requests");
+    if ok != 3 || logged != 3 {
         findings.push(format!(
-            "nach SIGINT: {} Einträge (fertig oder `Pending`) für {scope} gecrawlte Seiten im Geltungsbereich: {st:?}",
-            success + pending
+            "Request 3 nicht übernommen: {ok} × Success, {logged} Protokollzeilen (erwartet je 3): {st:?}"
         ));
     }
-    let sent = mock.decisions();
-    let after_sigint = sent.iter().filter(|r| r.timestamp_ms > sigint_ms).count();
-    if after_sigint > 0 {
+    if pending != scope.saturating_sub(ok) || ok + pending != scope {
         findings.push(format!(
-            "{after_sigint} Request(s) nach dem SIGINT gesendet"
+            "übrige gecrawlte Seiten aus S ohne Eintrag `Pending`: {scope} Seiten, {st:?}"
         ));
     }
-    if success as usize != sent.len() {
-        findings.push(format!(
-            "{} Requests gesendet, {success} übernommen: laufende Requests nicht abgewartet ({st:?})",
-            sent.len()
-        ));
+    if mock.decisions().len() != 3 {
+        findings.push(format!("{} Requests bis zum Ende (erwartet 3)", mock.decisions().len()));
     }
 
     mock.scenario("ok", 1_000).await;
     let resumed = run(&env, &["--load-crawl", &id, "--resume"]).await;
     assert_eq!(resumed.code, 0, "{}", resumed.dump());
     let st = statuses(&path);
-    assert_eq!(st.get("Success").copied(), Some(22), "{st:?}");
-    assert_eq!(st.get("Pending").copied().unwrap_or(0), 0, "{st:?}");
+    if st.get("Success").copied() != Some(22) || st.get("Pending").copied().unwrap_or(0) != 0 {
+        findings.push(format!("nach --resume nicht 22 × Success: {st:?}"));
+    }
     let urls = mock.urls();
     let set: BTreeSet<&String> = urls.iter().collect();
     if set.len() != urls.len() || urls.len() != 22 {
         findings.push(format!(
-            "Mock-Log nach dem Fortsetzen: {} Requests für {} URLs (erwartet 22, keine doppelt)",
+            "Mock-Log nach dem Fortsetzen: {} Requests für {} URLs (erwartet genau 22, keine doppelt)",
             urls.len(),
             set.len()
         ));
     }
     assert!(findings.is_empty(), "{findings:#?}");
+}
+
+// spec: AI-020 [M4]
+// spec: CRAWL-126 [M4]
+// spec: OUT-206
+// acceptance: independent
+// AI-020 Nachtrag 28.11.2026, „SIGINT, während nur noch die KI-Warteschlange läuft“: Crawl bereits `Completed`
+// (`--max-urls`-Grenze über das Profil, 10 URLs), ai-mock mit 2 s Antwortzeit, ein Request unterwegs → Exit-Code 130,
+// Zustand bleibt `Completed`, der laufende Request ist übernommen, offene Einträge `Pending`, keine Exporte, danach kein
+// weiterer Request.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn c_cli_sigint_while_only_the_ai_queue_runs() {
+    let mock = Mock::start().await;
+    let site = ai_site().await;
+    let env = Env::new();
+    prepare_with(&env, &mock, &site, |c| {
+        c.speed.max_urls_per_sec = None;
+        c.limits.max_urls = 10;
+    });
+    mock.scenario("delay=2", 1_000).await;
+    let child = spawn_crawl_with_export(&env);
+    wait_until("Crawl `Completed`, KI-Warteschlange läuft", Duration::from_secs(60), || {
+        env.crawl_files().first().is_some_and(|p| {
+            meta(p, "state").as_deref() == Some("Completed")
+                && !mock.decisions().is_empty()
+                && statuses(p).get("Success").copied().unwrap_or(0) as usize + 1 == mock.decisions().len()
+        })
+    })
+    .await;
+    let (path, _) = only_file(&env);
+    let sent_at_sigint = mock.decisions().len();
+    signal(&child, libc::SIGINT);
+    let out = finish(child).await;
+    assert_eq!(out.code, 130, "{}", out.dump());
+    assert_eq!(meta(&path, "state").as_deref(), Some("Completed"), "Zustand bleibt `Completed`");
+    let st = statuses(&path);
+    let ok = st.get("Success").copied().unwrap_or(0);
+    let pending = st.get("Pending").copied().unwrap_or(0);
+    let scope = in_scope(&path).len() as u64;
+    assert_eq!(ok as usize, sent_at_sigint, "laufender Request übernommen: {st:?}");
+    assert_eq!(
+        count_rows(&path, "SELECT COUNT(*) FROM ai_requests") as usize,
+        sent_at_sigint,
+        "Protokollzeilen = gesendete Requests"
+    );
+    assert!(pending >= 1, "offene Einträge bleiben `Pending`: {st:?}");
+    assert_eq!(ok + pending, scope, "jede gecrawlte Seite aus S hat einen Eintrag: {st:?}");
+    assert!(exported(&env).is_empty(), "keine Exporte nach dem ersten SIGINT: {:?}", exported(&env));
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(mock.decisions().len(), sent_at_sigint, "kein weiterer Request");
+}
+
+// spec: AI-020 [M4]
+// spec: AI-022 [M4]
+// acceptance: independent
+// AI-020 Nachtrag 28.11.2026, „Vollständig“ beim Crawl-Ende ohne Stoppen (CLI-Teil): `limits.max_urls` = 10, Szenario
+// `hold` → solange ein Request gehalten wird, ist der gespeicherte Zustand `Completed`, der CLI-Lauf mit Export hat weder
+// exportiert noch sich beendet; nach der Freigabe aller Requests läuft der Export, der Prozess endet mit 0. „Der Export
+// enthält die KI-Ergebnisse“ ist nicht prüfbar, solange die KI-Exporte Stubs sind (M4-D02); geprüft wird stattdessen,
+// dass der Export nach der letzten KI-Antwort entsteht und alle Einträge im Geltungsbereich `Success` sind.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn c_cli_export_waits_for_the_empty_queue() {
+    let mock = Mock::start().await;
+    let site = ai_site().await;
+    let env = Env::new();
+    prepare_with(&env, &mock, &site, |c| {
+        c.speed.max_urls_per_sec = None;
+        c.limits.max_urls = 10;
+    });
+    mock.scenario("hold", 1_000).await;
+    let mut child = spawn_crawl_with_export(&env);
+    let mut last = page_fetches(&site);
+    let mut stable_since = Instant::now();
+    let start = Instant::now();
+    loop {
+        let now = page_fetches(&site);
+        if now != last {
+            last = now;
+            stable_since = Instant::now();
+        }
+        if mock.decisions().iter().any(|r| r.held) && stable_since.elapsed() > Duration::from_millis(1_500) {
+            break;
+        }
+        assert!(start.elapsed() < Duration::from_secs(60), "Crawl ruft weiter ab");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let (path, _) = only_file(&env);
+    assert_eq!(meta(&path, "state").as_deref(), Some("Completed"), "gespeicherter Endzustand");
+    assert!(child.try_wait().unwrap().is_none(), "der Prozess endet erst mit leerer Warteschlange");
+    assert!(exported(&env).is_empty(), "noch kein Export: {:?}", exported(&env));
+
+    let start = Instant::now();
+    let status = loop {
+        if let Some(s) = child.try_wait().unwrap() {
+            break s;
+        }
+        mock.release(1).await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(start.elapsed() < Duration::from_secs(90), "CLI endet nicht");
+    };
+    assert_eq!(status.code(), Some(0), "Exit 0");
+    let files = exported(&env);
+    assert!(!files.is_empty(), "Export geschrieben");
+    let scope = in_scope(&path).len() as u64;
+    let st = statuses(&path);
+    assert_eq!(st.get("Success").copied(), Some(scope), "alle Einträge fertig: {st:?}");
+    assert_eq!(mock.decisions().len() as u64, scope);
+    let last_answer = mock.decisions().iter().map(|r| r.timestamp_ms).max().unwrap_or(0);
+    for f in &files {
+        let modified = std::fs::metadata(f)
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        assert!(modified >= last_answer, "{} nach dem letzten KI-Request geschrieben", f.display());
+    }
 }
 
 // spec: AI-020 [M4]
