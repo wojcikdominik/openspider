@@ -190,3 +190,38 @@ Ordnung. Pfad 3 tauscht aber einen kurz leeren Stand gegen einen gemischten Stan
 Crawl). Das widerspricht dem Ziel von UI-018, dass die gezeigten Werte zum gezeigten Stand gehören. Wird B2-7 nicht
 rechtzeitig behoben, ist es besser, `e86bd12c`/`d85cf9b1` (Pfad 3) aus dem Merge zu lassen und den Rest zu mergen.
 B3-4 und B3-6 können nachgezogen werden.
+
+### Nachtrag 27.11.2026: Entscheidung und Anpassung der Abnahme
+
+**Entscheidung des Orchestrators:** Pfad 3 kommt wieder heraus. Der Bauer nimmt `e86bd12c` und `d85cf9b1` per Revert zurück,
+damit entfallen B2-7 und B3-4. Die Spec ist klargestellt (main `fda6f861`, `docs/spec/05-ui.md` UI-018, Klarstellung
+26.11.2026): Sieht ein Fenster einen Crawl zum ersten Mal schon im Endzustand, erscheint der Endstatus sofort. Übersicht und
+Issues laden ohne Nutzeraktion nach und zeigen bis dahin keine Werte, nie Werte eines anderen Crawls oder eines früheren
+Stands.
+
+**Anpassung der Tests (nur geschrieben, nicht gelaufen):**
+- `e2e/alpha/acceptance-overview-end.spec.ts`: Beim Erscheinen des Endstatus gilt in allen Szenarien: Der exakte Endstand
+  ist gezeichnet, **oder** (nur wenn der erste für diesen Crawl gesehene Status schon der Endstatus war) Overview, Issues bzw.
+  die Dashboard-Karten zeigen noch keine Werte. Falsche oder veraltete Zahlen sind in keinem Fall erlaubt. Danach muss der
+  exakte Endstand ohne Nutzeraktion erscheinen (`expect.poll` mit dem Standard-Timeout der Fixture). Den Fall „erster
+  gesehener Status = Endstatus“ erkennt die Seite am Sitzungszustand (erster Tick je Crawl-ID im Wrapper um `applyTick`),
+  nicht über Zeitmessung. Das ist keine Lockerung, sondern die Umsetzung der Klarstellung. Die Fälle mit erstem Status
+  `running` prüfen unverändert „exakt beim Erscheinen“. Die Latenzgrenze von 1500 ms bleibt. Die beiden roten Läufe aus
+  B2-3 (Chromium, eingeklappt, Overview ohne Zahlen) passen vermutlich zu diesem Fall; der Lauf zeigt es über
+  `firstSeenEnd` im Log.
+- `src/state/acceptance-end-barrier-pfad3.test.tsx`:
+  - P3-1: Crawl A wird angezeigt, der erste Status von Crawl B ist sein Ende. Der Endstatus erscheint sofort. Nach jedem
+    Timer stehen nie A-Zahlen unter B und nie B-Zahlen unter A, und danach erscheint B's Endstand ohne Nutzeraktion.
+  - P3-2 neu gefasst: Ohne gesehenen Laufstatus wird nichts gehalten, auch nicht bei angemeldeter Schranke.
+
+**Neuer Hinweis B2-8 (nur gelesen, vermutlich schon vorher vorhanden):** Die Seitenleiste zeigt `useDeferredValue(overview.data) ??
+overview.data` (`SidebarFrame.tsx`). Wechselt der Crawl, ist `overview.data` für den neuen Schlüssel `undefined`. Der
+zurückgestellte Wert liefert im dringenden Render aber noch das Objekt des **vorigen** Crawls, bis der zurückgestellte Render
+committet. Unter Last kann das länger dauern; der Kommentar dort nennt genau dieses Aushungern. Damit stehen kurz Werte
+eines anderen Crawls unter dem neuen, was der Klarstellung widerspricht. In Vitest ist das nicht fassbar, weil `act()`
+dringenden und zurückgestellten Commit zusammenführt. P3-1 deckt es deshalb nicht sicher ab. Vorschlag: den
+zurückgestellten Wert nur verwenden, wenn er zum aktuellen Crawl bzw. Schlüssel gehört, zum Beispiel den Crawl mit
+ablegen und vergleichen.
+
+**Empfehlung nach dem Revert:** mergen, sofern die gebündelte Runde mit den unveränderten Abnahmetests grün ist. B2-8 sollte
+vor dem nächsten Release gesondert nachgezogen werden, weil es die Klarstellung „nie Werte eines anderen Crawls“ berührt.
