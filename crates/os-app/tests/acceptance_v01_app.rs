@@ -276,7 +276,9 @@ fn mcp_catalog_hides_ai_suggestions_when_off() {
         let hits: Vec<&String> = off.iter().filter(|n| is_suggestions(n)).collect();
         assert!(hits.is_empty(), "MCP {kind}: {hits:?}");
     }
-    assert!(names(PreviewSwitch::ON, "tabs").iter().any(|n| n == "AI Suggestions"));
+    assert!(names(PreviewSwitch::ON, "tabs")
+        .iter()
+        .any(|n| n == "AI Suggestions"));
     assert!(names(PreviewSwitch::ON, "bulk_exports")
         .iter()
         .any(|n| n == "AI Suggestions:Accepted Suggestions"));

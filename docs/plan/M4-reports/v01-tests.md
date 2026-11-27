@@ -27,6 +27,26 @@
 | `apps/desktop/e2e/ai-suggestions/acceptance-v01.spec.ts` | Playwright gegen die Bridge (7 Tests je Engine) |
 | `tests/fixtures/ai/v01-acceptance/` | `states.rs` (Zustands-Fixture), `mock-answers.d/v01-acceptance.json`, `e2e/v01-states.ospider` |
 
+## Schlussrunde (Runde 3, Prüfstand `e0ab3e17`, BAUER=`1ec778d0`, geprüfter Code `f0a1a18d`)
+
+| Ziel | grün | rot | ignoriert |
+|---|---|---|---|
+| os-ai `acceptance_v01_core` | 35 | 0 | 0 |
+| os-ai `acceptance_v01_mock` | 6 | 0 | 2 (`hold`: wartet auf M4-D01; Ausgabegrenze: wartet auf M4-N01) |
+| os-store `acceptance_v01_store` | 2 | 0 | 0 |
+| os-analyze `acceptance_v01_tab` | 4 | 0 | 0 |
+| os-export `acceptance_v01_export` | 4 | 0 | 0 |
+| os-app `acceptance_v01_app` | 13 | 0 | 0 |
+| os-app `acceptance_v01_mail` | 1 | 0 | 0 |
+| os-app `acceptance_v01_e2e_fixture` | 1 | 0 | 0 |
+| Playwright chromium | 7 | 0 | 0 |
+| Playwright webkit | 7 | 0 | 0 |
+
+`cargo fmt --all --check`, Clippy der fünf Crates (`-D warnings`) und `typecheck` grün (Log `v01t-log/r3*`). Gesamt: Rust 66
+grün, 0 rot, 2 ignoriert; Playwright 14 grün. B1-2 (XLSX ohne `'`) und B1-3 (Neuprüfung nach `config.set`) sind behoben und
+mit den unveränderten Tests bestätigt. Verbleibend: B1-1 (Auflage M4-N01), `hold`-Fall (M4-D01), B2-2 und B2-5 (Klärung
+Orchestrator/Planer), B3-1, B3-2.
+
 ## Testzahlen (Runde 2, Prüfstand `ddbaca5a`, BAUER=`919bf2cb`)
 
 | Ziel | grün | rot | ignoriert |
