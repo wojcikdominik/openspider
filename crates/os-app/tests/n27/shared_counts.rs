@@ -437,3 +437,64 @@ async fn a_request_right_after_a_pause_shares_the_one_count_and_writes_nothing()
     );
     assert_eq!(service.last_seq(&key), Some(paused));
 }
+
+// spec: UI-018
+// spec: CRAWL-141
+#[tokio::test]
+async fn a_final_version_changed_after_the_end_count_is_counted_before_the_end_status() {
+    let (_dir, app, path) = fixture();
+    let session = opened(&app, &path).await;
+    let service = app.ext::<SharedCounts>();
+    let key = session.key.clone();
+    call(&app, "sidebar.countCancel", Value::Null).await;
+    // The crawl ends: leaving `Running` counts the final version at once.
+    let ended = new_version(&path);
+    app.sessions().update_state(&key, CrawlState::Running);
+    super::observe_state(&app, &key, CrawlState::Running);
+    crate::session::state(&app, &key, CrawlState::Completed);
+    tokio::time::timeout(Duration::from_secs(60), async {
+        while service.settling(&key) > 0 || service.flight(&key).is_some() {
+            match service.flight(&key) {
+                Some(flight) => flight.ended().await,
+                None => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("the count of the final version ends");
+    assert_eq!(service.last_seq(&key), Some(ended));
+    // The automatic analysis commits afterwards: a new final version, nobody has counted it yet.
+    let analysed = new_version(&path);
+    let (started, modes) = (service.started(), service.modes().len());
+    tokio::time::timeout(Duration::from_secs(60), super::count_final(&app))
+        .await
+        .expect("the final count ends");
+    assert_eq!(
+        service.last_seq(&key),
+        Some(analysed),
+        "the analysed version is counted"
+    );
+    assert_eq!(service.started() - started, 1);
+    assert_eq!(
+        service.modes()[modes..],
+        [Mode::Settled],
+        "taken without writing"
+    );
+    app.write_queue()
+        .submit_file(&key, |_| Ok(()))
+        .await
+        .unwrap();
+    assert_eq!(
+        cached_at(&path, analysed),
+        0,
+        "no view_cache write right after the end"
+    );
+    // The UI's reload on the end status is answered from that count; an unchanged version is not counted again.
+    let counted = service.started();
+    let overview = call(&app, "sidebar.overview", json!({})).await;
+    assert!(overview.get("ageMs").is_none(), "exact after the end");
+    let counts = call(&app, "catalog.filterCounts", json!({})).await;
+    assert_eq!(counts["version"], json!(analysed));
+    super::count_final(&app).await;
+    assert_eq!(service.started(), counted, "no further count");
+}
