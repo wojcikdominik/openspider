@@ -254,6 +254,28 @@ pub fn finish_run(conn: &Connection, run_id: i64, ended_at: &str) -> Result<(), 
     Ok(())
 }
 
+/// Vermerkt die erteilte Kostenbestätigung eines KI-Laufs (08 AI-020, Nachtrag 27.11.2026, K4-27): Zeitpunkt in
+/// `ai_runs.confirmed_at`. Fortsetzen setzt dieselbe Zeile fort und übernimmt die Bestätigung.
+pub fn set_confirmed_at(
+    conn: &Connection,
+    run_id: i64,
+    confirmed_at: &str,
+) -> Result<(), StoreError> {
+    conn.prepare_cached("UPDATE ai_runs SET confirmed_at = ?2 WHERE id = ?1")?
+        .execute(params![run_id, confirmed_at])?;
+    Ok(())
+}
+
+/// Zeitpunkt der erteilten Kostenbestätigung eines KI-Laufs (`None` = nicht bestätigt bzw. keine Bestätigung nötig,
+/// K4-27).
+pub fn confirmed_at(conn: &Connection, run_id: i64) -> Result<Option<String>, StoreError> {
+    Ok(conn
+        .prepare_cached("SELECT confirmed_at FROM ai_runs WHERE id = ?1")?
+        .query_row([run_id], |r| r.get::<_, Option<String>>(0))
+        .optional()?
+        .flatten())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

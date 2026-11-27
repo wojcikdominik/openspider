@@ -4,6 +4,7 @@ pub mod batches;
 pub mod budget;
 pub mod cache;
 pub mod embeddings;
+pub mod inputs;
 pub mod link_suggestions;
 pub mod prompt_results;
 pub mod queries;
