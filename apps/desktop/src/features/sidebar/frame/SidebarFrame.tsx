@@ -33,8 +33,10 @@ export function SidebarFrame({ panels = Object.values(modules).flatMap(m => m.pa
   const overview = useOverview();
   // Defer refreshes behind control acknowledgements, but publish the first
   // response immediately: continuous ticks can starve its background render.
-  const deferredOverview = useDeferredValue(overview.data);
-  const overviewData = deferredOverview ?? overview.data;
+  // UI-018 (Klarstellung 27.11.2026): a deferred answer of another crawl is never shown, not even for one render.
+  const current = useMemo(() => ({ crawl, data: overview.data }), [crawl, overview.data]);
+  const deferred = useDeferredValue(current);
+  const overviewData = deferred.crawl === crawl ? deferred.data ?? overview.data : overview.data;
   // UI-018 (B4-LAGFIX2): „Completed“ waits until the deferred Overview has committed the reloaded answer.
   useRenderedAnswer(overview, overviewData);
   const analysis = useAnalysis();
