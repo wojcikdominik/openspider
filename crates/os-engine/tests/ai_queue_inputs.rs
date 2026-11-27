@@ -31,9 +31,16 @@ async fn fields_are_derived_from_page_html_or_unavailable() {
     assert!(f.page_text.as_deref().unwrap().contains("MARK-TEXT"));
     assert_eq!(f.h2, ["Pflege MARK-H2", "Größen MARK-H2"]);
     assert_eq!(f.html_lang.as_deref(), Some("MARK-LANG"));
-    assert_eq!(f.hreflang_self, ["MARK-HREFLANG"], "aus der Tabelle hreflang");
+    assert_eq!(
+        f.hreflang_self,
+        ["MARK-HREFLANG"],
+        "aus der Tabelle hreflang"
+    );
     assert_eq!(f.title.as_deref(), Some("Wanderschuhe MARK-TITLE"));
-    assert_eq!(f.images[0].context.as_deref(), Some("Bildunterschrift MARK-CONTEXT"));
+    assert_eq!(
+        f.images[0].context.as_deref(),
+        Some("Bildunterschrift MARK-CONTEXT")
+    );
     assert_eq!(find(&pages, &base, "/gone").status_code, Some(404));
     assert_eq!(fx.site.requests().len(), site_requests, "kein Seitenabruf");
     // Nichts wurde nachgespeichert.
@@ -41,12 +48,23 @@ async fn fields_are_derived_from_page_html_or_unavailable() {
 
     let fx = crawl_fixture_with("ai/run/site", "/", CrawlConfig::default(), test_deps()).await;
     let base = fx.site.base_url();
-    let pages = load_pages(&fx.dir.path().join("crawl.ospider"), &CrawlConfig::default()).unwrap();
+    let pages = load_pages(
+        &fx.dir.path().join("crawl.ospider"),
+        &CrawlConfig::default(),
+    )
+    .unwrap();
     let f = find(&pages, &base, "/fields");
     assert_eq!(f.source, InputSource::Unavailable);
     assert_eq!(f.page_text, None);
-    assert_eq!(f.title.as_deref(), Some("Wanderschuhe MARK-TITLE"), "Spalten von urls");
-    assert_eq!(f.meta_description.as_deref(), Some("Leichte Schuhe MARK-META"));
+    assert_eq!(
+        f.title.as_deref(),
+        Some("Wanderschuhe MARK-TITLE"),
+        "Spalten von urls"
+    );
+    assert_eq!(
+        f.meta_description.as_deref(),
+        Some("Leichte Schuhe MARK-META")
+    );
     assert_eq!(f.h1, ["Wanderschuhe MARK-H1"]);
     assert!(f.word_count.unwrap() > 0);
 }
@@ -63,12 +81,20 @@ async fn stored_inputs_take_precedence() {
     let id: i64 = fx
         .file
         .conn()
-        .query_row("SELECT id FROM urls WHERE address = ?1", [format!("{base}/fields")], |r| r.get(0))
+        .query_row(
+            "SELECT id FROM urls WHERE address = ?1",
+            [format!("{base}/fields")],
+            |r| r.get(0),
+        )
         .unwrap();
     let p1: i64 = fx
         .file
         .conn()
-        .query_row("SELECT id FROM urls WHERE address = ?1", [format!("{base}/p1")], |r| r.get(0))
+        .query_row(
+            "SELECT id FROM urls WHERE address = ?1",
+            [format!("{base}/p1")],
+            |r| r.get(0),
+        )
         .unwrap();
     inputs::write(
         fx.file.conn(),
@@ -96,5 +122,8 @@ async fn stored_inputs_take_precedence() {
     assert_eq!(f.page_text.as_deref(), Some("gespeicherter Text"));
     assert_eq!(f.h2, ["gespeichert"]);
     assert_eq!(f.structured_data_types, None);
-    assert_eq!(find(&pages, &base, "/p1").structured_data_types.as_deref(), Some(&[][..]));
+    assert_eq!(
+        find(&pages, &base, "/p1").structured_data_types.as_deref(),
+        Some(&[][..])
+    );
 }

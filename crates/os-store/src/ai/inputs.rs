@@ -237,13 +237,24 @@ mod tests {
         assert_eq!(got.images, a.images);
         assert_eq!(got.html_lang.as_deref(), Some("de-DE"));
         assert_eq!(got.structured_data_types, None);
-        assert_eq!(read(&db, 2).unwrap().unwrap().structured_data_types, Some(Vec::new()));
+        assert_eq!(
+            read(&db, 2).unwrap().unwrap().structured_data_types,
+            Some(Vec::new())
+        );
         let raw: Option<String> = db
-            .query_row("SELECT structured_data_types FROM ai_inputs WHERE url_id = 1", [], |r| r.get(0))
+            .query_row(
+                "SELECT structured_data_types FROM ai_inputs WHERE url_id = 1",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert!(raw.is_none());
         let compression: String = db
-            .query_row("SELECT compression FROM ai_inputs WHERE url_id = 1", [], |r| r.get(0))
+            .query_row(
+                "SELECT compression FROM ai_inputs WHERE url_id = 1",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(compression, "zstd");
         let size = size(&db).unwrap();

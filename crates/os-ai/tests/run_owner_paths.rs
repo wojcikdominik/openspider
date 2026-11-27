@@ -18,12 +18,24 @@ async fn while_held(mock: &Mock, path: &std::path::Path, n: usize, then: impl Fn
     mock.until("Request gehalten", |_| mock.held(DECISIONS) >= n)
         .await;
     let (kind, owner_pid, state) = owner(path);
-    assert_eq!((kind.as_str(), owner_pid.as_str()), ("app", pid().as_str()), "Besitz während des gehaltenen Requests");
+    assert_eq!(
+        (kind.as_str(), owner_pid.as_str()),
+        ("app", pid().as_str()),
+        "Besitz während des gehaltenen Requests"
+    );
     assert_eq!(state, "Completed", "Zustand unverändert");
     then();
 }
 
-async fn setup(budget: u64) -> (Mock, TempDir, std::path::PathBuf, os_model::CrawlConfig, Vec<os_model::ai::hook::PageAiFields>) {
+async fn setup(
+    budget: u64,
+) -> (
+    Mock,
+    TempDir,
+    std::path::PathBuf,
+    os_model::CrawlConfig,
+    Vec<os_model::ai::hook::PageAiFields>,
+) {
     let mock = Mock::start().await;
     let dir = tmp("d05-owner");
     let pages = site_pages("site");
@@ -68,7 +80,11 @@ async fn paused_run_releases_the_owner() {
     let (outcome, ()) = tokio::join!(run, driver);
     let outcome = outcome.unwrap();
     assert_eq!(outcome.end, RunEnd::Paused);
-    assert_eq!(decisions_posts(&mock), 1, "nach der Pause kein weiterer Request");
+    assert_eq!(
+        decisions_posts(&mock),
+        1,
+        "nach der Pause kein weiterer Request"
+    );
     released(&path);
 }
 
@@ -160,7 +176,10 @@ async fn failed_run_releases_the_owner() {
 }
 
 /// Crawl-Datei unter dem Registernamen (`registry::path_for`) im Ordner `dir`, damit die Crawl-Verwaltung sie kennt.
-fn registered(dir: &std::path::Path, pages: &[os_model::ai::hook::PageAiFields]) -> (os_model::CrawlId, std::path::PathBuf) {
+fn registered(
+    dir: &std::path::Path,
+    pages: &[os_model::ai::hook::PageAiFields],
+) -> (os_model::CrawlId, std::path::PathBuf) {
     let path = crawl_file(dir, pages);
     let id = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly)
         .unwrap()
@@ -190,13 +209,17 @@ async fn delete_protection_during_an_ai_run_via_the_run_frame() {
         mock.until("gehalten", |_| mock.held(DECISIONS) >= 1).await;
         let mut m = os_store::registry::Manager::open(&dir.0).unwrap();
         let now = os_model::Clock::now(&os_model::SystemClock);
-        assert!(m.delete(&id, now).is_err(), "Löschen während des KI-Laufs abgelehnt");
+        assert!(
+            m.delete(&id, now).is_err(),
+            "Löschen während des KI-Laufs abgelehnt"
+        );
         mock.release("openai", 1).await;
     };
     let (outcome, ()) = tokio::join!(run, driver);
     outcome.unwrap();
     let mut m = os_store::registry::Manager::open(&dir.0).unwrap();
-    m.delete(&id, os_model::Clock::now(&os_model::SystemClock)).unwrap();
+    m.delete(&id, os_model::Clock::now(&os_model::SystemClock))
+        .unwrap();
     assert!(!path.exists());
 }
 
@@ -230,7 +253,10 @@ async fn heartbeat_of_an_ai_run_via_the_run_frame() {
             assert_eq!(owner(&path).2, "Completed");
         }
         seen.dedup();
-        assert!(seen.len() >= 3, "Heartbeats während des gehaltenen Requests: {seen:?}");
+        assert!(
+            seen.len() >= 3,
+            "Heartbeats während des gehaltenen Requests: {seen:?}"
+        );
         mock.release("openai", 1).await;
     };
     let (outcome, ()) = tokio::join!(run, driver);

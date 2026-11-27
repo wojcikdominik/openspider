@@ -72,7 +72,12 @@ fn deps_with(rec: &Arc<Rec>) -> EngineDeps {
 fn page<'a>(rec: &'a [PageAiFields], base: &str, path: &str) -> &'a PageAiFields {
     rec.iter()
         .find(|p| p.url == format!("{base}{path}"))
-        .unwrap_or_else(|| panic!("keine Seitenfelder für {path}: {:?}", rec.iter().map(|p| &p.url).collect::<Vec<_>>()))
+        .unwrap_or_else(|| {
+            panic!(
+                "keine Seitenfelder für {path}: {:?}",
+                rec.iter().map(|p| &p.url).collect::<Vec<_>>()
+            )
+        })
 }
 
 // spec: AI-032 [M4]
@@ -92,24 +97,43 @@ async fn page_fields_follow_ai_032_and_cover_exactly_the_base_set() {
         .map(|p| p.url.trim_start_matches(&fx.site.base_url()).to_string())
         .collect();
     paths.sort();
-    assert_eq!(paths, ["/", "/fields", "/gone", "/moved", "/p1", "/p2"], "Grundmenge G");
+    assert_eq!(
+        paths,
+        ["/", "/fields", "/gone", "/moved", "/p1", "/p2"],
+        "Grundmenge G"
+    );
     let f = page(&pages, &base, "/fields");
     assert_eq!(f.source, InputSource::Parsed);
     assert!(f.is_html_200());
     assert_eq!(f.title.as_deref(), Some("Wanderschuhe MARK-TITLE"));
-    assert_eq!(f.meta_description.as_deref(), Some("Leichte Schuhe MARK-META"));
+    assert_eq!(
+        f.meta_description.as_deref(),
+        Some("Leichte Schuhe MARK-META")
+    );
     assert_eq!(f.h1, ["Wanderschuhe MARK-H1"]);
     assert_eq!(f.h2, ["Pflege MARK-H2", "Größen MARK-H2"]);
     let text = f.page_text.as_deref().unwrap();
-    assert!(text.contains("MARK-TEXT") && text.contains("MOCK-ID:fields"), "{text}");
-    assert!(!text.contains("MARK-H1"), "Kopfbereich gehört nicht zum Inhaltsbereich (ONPAGE-140): {text}");
+    assert!(
+        text.contains("MARK-TEXT") && text.contains("MOCK-ID:fields"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("MARK-H1"),
+        "Kopfbereich gehört nicht zum Inhaltsbereich (ONPAGE-140): {text}"
+    );
     assert!(f.word_count.unwrap() > 0);
     assert_eq!(f.html_lang.as_deref(), Some("MARK-LANG"));
     assert_eq!(f.hreflang_self, ["MARK-HREFLANG"]);
-    assert_eq!(f.structured_data_types, None, "Extraktion aus (Standard): nicht vorhanden");
+    assert_eq!(
+        f.structured_data_types, None,
+        "Extraktion aus (Standard): nicht vorhanden"
+    );
     assert_eq!(f.images.len(), 1);
     assert_eq!(f.images[0].alt.as_deref(), Some("Schuh MARK-ALT"));
-    assert_eq!(f.images[0].context.as_deref(), Some("Bildunterschrift MARK-CONTEXT"));
+    assert_eq!(
+        f.images[0].context.as_deref(),
+        Some("Bildunterschrift MARK-CONTEXT")
+    );
     assert!(f.indexable);
     let gone = page(&pages, &base, "/gone");
     assert_eq!(gone.status_code, Some(404));
@@ -129,10 +153,15 @@ async fn structured_data_types_follow_the_extraction_switch() {
     let pages = rec.pages.lock().unwrap().clone();
     let base = fx.site.base_url();
     assert_eq!(
-        page(&pages, &base, "/fields").structured_data_types.as_deref(),
+        page(&pages, &base, "/fields")
+            .structured_data_types
+            .as_deref(),
         Some(&["Product".to_string(), "MARK-SD".to_string()][..])
     );
-    assert_eq!(page(&pages, &base, "/p1").structured_data_types.as_deref(), Some(&[][..]));
+    assert_eq!(
+        page(&pages, &base, "/p1").structured_data_types.as_deref(),
+        Some(&[][..])
+    );
 }
 
 // spec: AI-020 [M4]
@@ -143,7 +172,10 @@ async fn crawl_end_waits_for_the_queue_before_on_finished() {
     let fx = crawl_fixture_with("ai/run/site", "/", CrawlConfig::default(), deps_with(&rec)).await;
     assert_eq!(fx.summary.state, CrawlState::Completed);
     assert_eq!(*rec.ends.lock().unwrap(), [AiQueueEnd::Drain]);
-    assert!(rec.hook_saw_drained.load(Ordering::SeqCst), "on_finished erst nach leerer Warteschlange");
+    assert!(
+        rec.hook_saw_drained.load(Ordering::SeqCst),
+        "on_finished erst nach leerer Warteschlange"
+    );
     assert_eq!(*rec.begins.lock().unwrap(), [(false, false)]);
 }
 
@@ -174,7 +206,10 @@ async fn pause_resume_and_stop_reach_the_queue() {
     let stopped = support::run_to_end(handle).await;
     assert_eq!(stopped.end_reason, Some(os_model::EndReason::Stopped));
     assert_eq!(*rec.begins.lock().unwrap(), [(false, false), (true, true)]);
-    assert_eq!(*rec.ends.lock().unwrap(), [AiQueueEnd::Paused, AiQueueEnd::Stopped]);
+    assert_eq!(
+        *rec.ends.lock().unwrap(),
+        [AiQueueEnd::Paused, AiQueueEnd::Stopped]
+    );
     assert!(rec.pages.lock().unwrap().len() > crawled_before);
 }
 

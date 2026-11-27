@@ -228,7 +228,12 @@ pub fn begin_run(
         .ok()
         .and_then(|s| s.remaining)
         .map(|m| m.0);
-    answers::begin_run(conn, &env.clock.now().to_db(), budget, &snapshot.to_string())
+    answers::begin_run(
+        conn,
+        &env.clock.now().to_db(),
+        budget,
+        &snapshot.to_string(),
+    )
 }
 
 /// Ledger der Datei: Grenzen aus der Datei bzw. – ohne gespeicherte Grenzen – aus `ai.budget`, das dabei gespeichert

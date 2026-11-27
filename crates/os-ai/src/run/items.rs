@@ -44,7 +44,10 @@ pub fn active_questions(cfg: &CrawlConfig, only: &[String]) -> (Vec<ActiveQuesti
             }),
             Err(e) => errors.push(format!(
                 "{id}: {}",
-                e.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ")
+                e.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("; ")
             )),
         }
     }

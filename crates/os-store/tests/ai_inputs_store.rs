@@ -54,22 +54,36 @@ fn stored_inputs_roundtrip_with_limit_and_null_types() {
     drop(file);
     let file = CrawlFile::open(&dir.path().join("d05.ospider"), OpenMode::ReadOnly).unwrap();
     let got = inputs::read(file.conn(), 1).unwrap().unwrap();
-    assert_eq!(got.page_text.as_ref().unwrap().chars().count(), STORED_PAGE_TEXT_MAX_CHARS);
+    assert_eq!(
+        got.page_text.as_ref().unwrap().chars().count(),
+        STORED_PAGE_TEXT_MAX_CHARS
+    );
     assert!(text.starts_with(got.page_text.as_deref().unwrap()));
     assert_eq!(got.h2, a.h2);
     assert_eq!(got.images, a.images);
     assert_eq!(got.html_lang.as_deref(), Some("de-DE"));
     assert_eq!(got.structured_data_types, None);
-    assert_eq!(inputs::read(file.conn(), 2).unwrap().unwrap().structured_data_types, Some(Vec::new()));
     assert_eq!(
-        inputs::read(file.conn(), 3).unwrap().unwrap().structured_data_types,
+        inputs::read(file.conn(), 2)
+            .unwrap()
+            .unwrap()
+            .structured_data_types,
+        Some(Vec::new())
+    );
+    assert_eq!(
+        inputs::read(file.conn(), 3)
+            .unwrap()
+            .unwrap()
+            .structured_data_types,
         Some(vec!["Product".to_string(), "Offer".to_string()])
     );
     let (compression, sd): (String, Option<String>) = file
         .conn()
-        .query_row("SELECT compression, structured_data_types FROM ai_inputs WHERE url_id = 1", [], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
+        .query_row(
+            "SELECT compression, structured_data_types FROM ai_inputs WHERE url_id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .unwrap();
     assert_eq!((compression.as_str(), sd), ("zstd", None));
     let size = inputs::size(file.conn()).unwrap();
@@ -83,16 +97,25 @@ fn stored_inputs_roundtrip_with_limit_and_null_types() {
 fn confirmed_at_is_kept_in_the_run_row() {
     let dir = tempfile::tempdir().unwrap();
     let file = fresh(dir.path());
-    let run = os_store::ai::answers::begin_run(file.conn(), "2026-11-27T10:00:00Z", None, "{}").unwrap();
-    assert_eq!(os_store::ai::answers::confirmed_at(file.conn(), run).unwrap(), None);
+    let run =
+        os_store::ai::answers::begin_run(file.conn(), "2026-11-27T10:00:00Z", None, "{}").unwrap();
+    assert_eq!(
+        os_store::ai::answers::confirmed_at(file.conn(), run).unwrap(),
+        None
+    );
     os_store::ai::answers::set_confirmed_at(file.conn(), run, "2026-11-27T10:00:05Z").unwrap();
     drop(file);
     let file = CrawlFile::open(&dir.path().join("d05.ospider"), OpenMode::ReadOnly).unwrap();
     assert_eq!(
-        os_store::ai::answers::confirmed_at(file.conn(), run).unwrap().as_deref(),
+        os_store::ai::answers::confirmed_at(file.conn(), run)
+            .unwrap()
+            .as_deref(),
         Some("2026-11-27T10:00:05Z")
     );
-    assert_eq!(os_store::ai::answers::confirmed_at(file.conn(), run + 1).unwrap(), None);
+    assert_eq!(
+        os_store::ai::answers::confirmed_at(file.conn(), run + 1).unwrap(),
+        None
+    );
 }
 
 // spec: AI-032 [M4]
@@ -100,7 +123,8 @@ fn confirmed_at_is_kept_in_the_run_row() {
 // Spalte `confirmed_at`; eine Datei mit Schema v5 erhält beides bei der Migration.
 #[test]
 fn schema_v6_archive_and_migrated_v5_have_the_new_table_and_column() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/migrations");
+    let root =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/migrations");
     let dir = tempfile::tempdir().unwrap();
     for v in ["schema-v6", "schema-v5"] {
         let path = dir.path().join(format!("{v}.ospider"));
@@ -108,12 +132,20 @@ fn schema_v6_archive_and_migrated_v5_have_the_new_table_and_column() {
         let file = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
         let tables: i64 = file
             .conn()
-            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ai_inputs'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ai_inputs'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(tables, 1, "{v}");
         let cols: i64 = file
             .conn()
-            .query_row("SELECT COUNT(*) FROM pragma_table_info('ai_runs') WHERE name = 'confirmed_at'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('ai_runs') WHERE name = 'confirmed_at'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(cols, 1, "{v}");
     }

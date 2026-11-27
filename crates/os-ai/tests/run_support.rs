@@ -11,10 +11,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use os_ai::decisions::exec::Selection;
 use os_ai::limits::{BackoffPolicy, LimitsConfig, ProviderLimits};
 use os_ai::policy::{ConsentGate, RedactionSettings};
 use os_ai::run::{DecisionsJob, JobConfirmation, ProviderSetup, RunEnv};
-use os_ai::decisions::exec::Selection;
 use os_ai::PreviewSwitch;
 use os_model::ai::hook::{InputSource, PageAiFields};
 use os_model::budget::MicroUsd;
@@ -27,7 +27,10 @@ pub use d01::{Mock, TempDir, DECISIONS};
 /// Nanosekunde).
 pub fn tmp(tag: &str) -> TempDir {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    TempDir::new(&format!("{tag}-{}", N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)))
+    TempDir::new(&format!(
+        "{tag}-{}",
+        N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ))
 }
 
 /// Begrenzung wie in den D01-Tests: eine gleichzeitige Anfrage, kurze Backoff-Pausen, Timeout 20 s.
@@ -168,7 +171,12 @@ pub fn crawl_file(dir: &Path, pages: &[PageAiFields]) -> PathBuf {
 }
 
 /// Auftrag eines neuen Laufs.
-pub fn job(path: &Path, cfg: &CrawlConfig, pages: &[PageAiFields], confirmation: JobConfirmation) -> DecisionsJob {
+pub fn job(
+    path: &Path,
+    cfg: &CrawlConfig,
+    pages: &[PageAiFields],
+    confirmation: JobConfirmation,
+) -> DecisionsJob {
     DecisionsJob {
         crawl_path: path.to_path_buf(),
         config: cfg.clone(),

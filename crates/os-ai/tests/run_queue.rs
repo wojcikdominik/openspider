@@ -19,14 +19,20 @@ fn queue(env: RunEnv) -> DecisionQueue {
     DecisionQueue::new(factory)
 }
 
-fn start(path: &std::path::Path, cfg: &CrawlConfig, resumed: bool, pages: Option<Vec<PageAiFields>>) -> AiQueueStart {
+fn start(
+    path: &std::path::Path,
+    cfg: &CrawlConfig,
+    resumed: bool,
+    pages: Option<Vec<PageAiFields>>,
+) -> AiQueueStart {
     AiQueueStart {
         crawl_file: path.to_path_buf(),
         config: cfg.clone(),
         resumed,
         owner_kind: "app",
         existing: pages.map(|p| {
-            Arc::new(move |_: &std::path::Path, _: &CrawlConfig| Ok(p.clone())) as os_model::ai::hook::PageLoader
+            Arc::new(move |_: &std::path::Path, _: &CrawlConfig| Ok(p.clone()))
+                as os_model::ai::hook::PageLoader
         }),
     }
 }
@@ -61,7 +67,11 @@ async fn inputs_are_stored_for_html_200_pages_without_active_questions() {
         session.page(p.clone());
     }
     session.end(AiQueueEnd::Drain).await;
-    assert_eq!(stored_inputs(&path), 23, "23 interne HTML-Seiten mit Status 200 (ohne 404 und 301)");
+    assert_eq!(
+        stored_inputs(&path),
+        23,
+        "23 interne HTML-Seiten mit Status 200 (ohne 404 und 301)"
+    );
     assert_eq!(mock.log().len(), 0, "kein KI-Request");
 
     let mut off = CrawlConfig::default();
@@ -92,7 +102,9 @@ async fn automatic_run_drains_before_the_end_is_reported() {
     let mut end = session.end(AiQueueEnd::Drain);
     mock.until("gehalten", |_| mock.held(DECISIONS) >= 1).await;
     assert!(
-        tokio::time::timeout(Duration::from_millis(300), &mut end).await.is_err(),
+        tokio::time::timeout(Duration::from_millis(300), &mut end)
+            .await
+            .is_err(),
         "Ende erst mit leerer Warteschlange"
     );
     mock.release("openai", 1).await;
@@ -144,10 +156,12 @@ async fn pause_and_resume_send_each_entry_once() {
         session.page(p.clone());
     }
     for i in 1..=5 {
-        mock.until("Request gehalten", |_| mock.posts(DECISIONS).len() >= i).await;
+        mock.until("Request gehalten", |_| mock.posts(DECISIONS).len() >= i)
+            .await;
         mock.release("openai", 1).await;
     }
-    mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6).await;
+    mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6)
+        .await;
     let paused = session.end(AiQueueEnd::Paused);
     paused.await;
     mock.release("openai", 1).await;
@@ -160,15 +174,23 @@ async fn pause_and_resume_send_each_entry_once() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     assert!(runs_before <= 1);
-    assert_eq!(decisions_posts(&mock), 6, "nach der Pause kein weiterer Request");
+    assert_eq!(
+        decisions_posts(&mock),
+        6,
+        "nach der Pause kein weiterer Request"
+    );
     let c = counts(&path, "page-type");
     assert_eq!(c.get("Success"), Some(&6), "{c:?}");
     let run_id = {
         let f = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly).unwrap();
-        os_ai::run::job::open_run(f.conn()).unwrap().expect("offene Laufzeile")
+        os_ai::run::job::open_run(f.conn())
+            .unwrap()
+            .expect("offene Laufzeile")
     };
     // Fortsetzen.
-    let resumed = q.begin(start(&path, &cfg, true, Some(pages.clone()))).unwrap();
+    let resumed = q
+        .begin(start(&path, &cfg, true, Some(pages.clone())))
+        .unwrap();
     resumed.end(AiQueueEnd::Drain).await;
     assert_eq!(decisions_posts(&mock), 22, "genau 16 weitere");
     assert_eq!(logged(&path), 22);
@@ -179,7 +201,11 @@ async fn pause_and_resume_send_each_entry_once() {
         .map(|b| {
             let text = b.to_string();
             let at = text.find("MOCK-ID:").unwrap();
-            text[at..].split(|c: char| c.is_whitespace() || c == '"' || c == '\\').next().unwrap().to_string()
+            text[at..]
+                .split(|c: char| c.is_whitespace() || c == '"' || c == '\\')
+                .next()
+                .unwrap()
+                .to_string()
         })
         .collect();
     ids.sort();
@@ -189,7 +215,11 @@ async fn pause_and_resume_send_each_entry_once() {
     let f = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly).unwrap();
     let rows: i64 = f
         .conn()
-        .query_row("SELECT COUNT(*) FROM ai_requests WHERE run_id = ?1", [run_id], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM ai_requests WHERE run_id = ?1",
+            [run_id],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(rows, 22, "dieselbe Laufzeile");
 }
@@ -242,7 +272,12 @@ async fn confirmation_during_the_crawl_and_resume_without_a_new_estimate() {
     for p in &pages {
         session.page(p.clone());
     }
-    let waiting = || counts(&path, "page-type").get("Pending (confirmation)").copied() == Some(22);
+    let waiting = || {
+        counts(&path, "page-type")
+            .get("Pending (confirmation)")
+            .copied()
+            == Some(22)
+    };
     for _ in 0..1000 {
         if waiting() {
             break;
@@ -254,10 +289,12 @@ async fn confirmation_during_the_crawl_and_resume_without_a_new_estimate() {
     mock.hold("openai", 6).await;
     assert!(os_ai::run::confirm_running(&path));
     for i in 1..=5 {
-        mock.until("Request gehalten", |_| mock.posts(DECISIONS).len() >= i).await;
+        mock.until("Request gehalten", |_| mock.posts(DECISIONS).len() >= i)
+            .await;
         mock.release("openai", 1).await;
     }
-    mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6).await;
+    mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6)
+        .await;
     session.end(AiQueueEnd::Paused).await;
     mock.release("openai", 1).await;
     for _ in 0..500 {
@@ -270,7 +307,12 @@ async fn confirmation_during_the_crawl_and_resume_without_a_new_estimate() {
     {
         let f = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly).unwrap();
         let run = os_ai::run::job::open_run(f.conn()).unwrap().unwrap();
-        assert!(os_store::ai::answers::confirmed_at(f.conn(), run).unwrap().is_some(), "confirmed_at");
+        assert!(
+            os_store::ai::answers::confirmed_at(f.conn(), run)
+                .unwrap()
+                .is_some(),
+            "confirmed_at"
+        );
     }
     // Fortsetzen (wie nach einem Neustart: neue Sitzung) mit derselben Schwelle: kein neuer Voranschlag.
     let resumed = queue(env(&mock, &["openai"], threshold))

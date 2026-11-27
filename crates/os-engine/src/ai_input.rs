@@ -16,9 +16,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use os_model::ai::hook::{
-    ImageAiContext, InputSource, PageAiFields, IMAGE_CONTEXT_MAX_CHARS,
-};
+use os_model::ai::hook::{ImageAiContext, InputSource, PageAiFields, IMAGE_CONTEXT_MAX_CHARS};
 use os_model::{ContentClass, CrawlConfig, Indexability, ParsedPage};
 use os_parse::{ParseConfig, ParseInput};
 use os_store::{CrawlFile, OpenMode, StoreError};
@@ -89,11 +87,9 @@ fn image_contexts(doc: &os_parse::dom::Document, base: &Url) -> Vec<ImageAiConte
             .map(|u| u.to_string())
             .unwrap_or_else(|_| src.to_string());
         // 1. Bildunterschrift der umgebenden `figure`.
-        let figure = node.ancestors().find(|a| {
-            a.value()
-                .as_element()
-                .is_some_and(|e| e.name() == "figure")
-        });
+        let figure = node
+            .ancestors()
+            .find(|a| a.value().as_element().is_some_and(|e| e.name() == "figure"));
         let caption = figure.and_then(|f| {
             f.descendants()
                 .find(|d| {
@@ -211,21 +207,28 @@ fn url_rows(file: &CrawlFile) -> Result<Vec<UrlRow>, StoreError> {
     let rows = stmt
         .query_map([], |r| {
             let class: String = r.get(3)?;
-            let h1: Vec<String> = [r.get::<_, Option<String>>(7)?, r.get::<_, Option<String>>(8)?]
-                .into_iter()
-                .flatten()
-                .collect();
+            let h1: Vec<String> = [
+                r.get::<_, Option<String>>(7)?,
+                r.get::<_, Option<String>>(8)?,
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
             Ok(UrlRow {
                 id: r.get(0)?,
                 address: r.get(1)?,
-                status: r.get::<_, Option<i64>>(2)?.and_then(|s| u16::try_from(s).ok()),
+                status: r
+                    .get::<_, Option<i64>>(2)?
+                    .and_then(|s| u16::try_from(s).ok()),
                 class: class.parse().unwrap_or_default(),
                 indexable: r.get::<_, Option<String>>(4)?.as_deref()
                     == Some(Indexability::Indexable.as_str()),
                 title: r.get(5)?,
                 meta: r.get(6)?,
                 h1,
-                word_count: r.get::<_, Option<i64>>(9)?.and_then(|w| u64::try_from(w).ok()),
+                word_count: r
+                    .get::<_, Option<i64>>(9)?
+                    .and_then(|w| u64::try_from(w).ok()),
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -320,13 +323,18 @@ pub fn load_pages(path: &Path, cfg: &CrawlConfig) -> Result<Vec<PageAiFields>, S
                         headers: &[],
                         cfg: &pcfg,
                     });
-                    let (text, _) = os_parse::charset::decode(
-                        &html.bytes,
-                        content_type.as_deref(),
-                        &[],
+                    let (text, _) =
+                        os_parse::charset::decode(&html.bytes, content_type.as_deref(), &[]);
+                    let derived = from_page(
+                        row.id,
+                        &url,
+                        200,
+                        row.indexable,
+                        &text,
+                        &page,
+                        &pcfg,
+                        sd_enabled,
                     );
-                    let derived =
-                        from_page(row.id, &url, 200, row.indexable, &text, &page, &pcfg, sd_enabled);
                     fields.page_text = derived.page_text;
                     fields.h2 = derived.h2;
                     fields.html_lang = derived.html_lang;

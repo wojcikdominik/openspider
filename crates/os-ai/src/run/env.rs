@@ -16,7 +16,9 @@ use crate::adapters::ollama::{OllamaAdapter, OllamaConfig};
 use crate::adapters::openai_decisions::OpenAiDecisions;
 use crate::adapters::openai_responses::{OpenAiAccount, OpenAiConfig, OpenAiHttp, OpenAiResponses};
 use crate::adapters::openrouter::{OpenRouterAdapter, OpenRouterConfig};
-use crate::catalog::{Endpoint, PriceKey, PriceTable, ProviderState, TaskDefaults, TaskSettings, TaskType};
+use crate::catalog::{
+    Endpoint, PriceKey, PriceTable, ProviderState, TaskDefaults, TaskSettings, TaskType,
+};
 use crate::cost::Rates;
 use crate::decisions::exec::{Adapters, PriceLookup};
 use crate::decisions::routing::{RoutingContext, RoutingPolicy};
@@ -108,7 +110,8 @@ impl ProviderSetup {
     pub fn adapters(&self) -> AdapterSet {
         let base = |p: &str| self.base_urls.get(p).cloned();
         let openai = self.keys.get("openai").map(|key| {
-            let mut config = OpenAiConfig::new(crate::adapters::openai_responses::ApiKey::new(key.clone()));
+            let mut config =
+                OpenAiConfig::new(crate::adapters::openai_responses::ApiKey::new(key.clone()));
             if let Some(url) = base("openai") {
                 config = config.with_base_url(url);
             }
@@ -307,14 +310,16 @@ impl RunEnv {
             prices: Arc::new(prices),
             consent,
             switch: PreviewSwitch::from_ai_settings(settings),
-            redaction: RedactionSettings::from_app_settings(settings)
-                .unwrap_or_else(|_| RedactionSettings::from_app_settings_with(
+            redaction: RedactionSettings::from_app_settings(settings).unwrap_or_else(|_| {
+                RedactionSettings::from_app_settings_with(
                     &AiAppSettings {
                         redaction_patterns: Vec::new(),
                         ..settings.clone()
                     },
                     &crate::policy::FancyRegexEngine,
-                ).unwrap_or_else(|_| RedactionSettings::off())),
+                )
+                .unwrap_or_else(|_| RedactionSettings::off())
+            }),
             threshold: settings.confirmation_threshold,
             concurrency: usize::from(
                 settings

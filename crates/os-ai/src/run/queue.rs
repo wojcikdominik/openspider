@@ -165,7 +165,10 @@ impl AiQueue for DecisionQueue {
             match (self.env)(cfg, start.owner_kind) {
                 Ok(env) => Some(env),
                 Err(e) => {
-                    super::note(format!("KI-Umgebung nicht verfügbar; nur Speicherung der KI-Eingaben: {}", e));
+                    super::note(format!(
+                        "KI-Umgebung nicht verfügbar; nur Speicherung der KI-Eingaben: {}",
+                        e
+                    ));
                     None
                 }
             }
@@ -272,7 +275,10 @@ impl Worker {
         let file = match CrawlFile::open(&path, OpenMode::ReadWrite) {
             Ok(f) => f,
             Err(e) => {
-                super::note(format!("KI-Warteschlange: Crawl-Datei nicht geöffnet: {}", e));
+                super::note(format!(
+                    "KI-Warteschlange: Crawl-Datei nicht geöffnet: {}",
+                    e
+                ));
                 while let Some(msg) = rx.recv().await {
                     if matches!(msg, Msg::End(_)) {
                         break;
@@ -305,7 +311,11 @@ impl Worker {
             self.flush(conn, &mut inbox);
             if let (Some(env), Some(state), true) = (&self.env, run.as_mut(), inbox.confirm) {
                 inbox.confirm = false;
-                if let Err(e) = os_store::ai::answers::set_confirmed_at(conn, state.run_id, &env.clock.now().to_db()) {
+                if let Err(e) = os_store::ai::answers::set_confirmed_at(
+                    conn,
+                    state.run_id,
+                    &env.clock.now().to_db(),
+                ) {
                     super::note(format!("Kostenbestätigung nicht gespeichert: {}", e));
                 }
                 state.confirmed = true;
@@ -353,8 +363,13 @@ impl Worker {
         }
     }
 
-    fn prepare(&self, env: &RunEnv, conn: &os_store::ai::cache::Connection) -> Result<RunState, os_store::StoreError> {
-        let ledger = job::shared_ledger(&self.start.crawl_file, conn, &self.start.config.ai.budget)?;
+    fn prepare(
+        &self,
+        env: &RunEnv,
+        conn: &os_store::ai::cache::Connection,
+    ) -> Result<RunState, os_store::StoreError> {
+        let ledger =
+            job::shared_ledger(&self.start.crawl_file, conn, &self.start.config.ai.budget)?;
         let run_id = match (self.start.resumed, job::open_run(conn)?) {
             (true, Some(id)) => id,
             _ => job::begin_run(conn, env, &self.start.config, &*ledger)?,
@@ -391,7 +406,10 @@ impl Worker {
         ki: bool,
     ) -> Option<RunEnd> {
         if let Err(e) = items::mark_unavailable(conn, &self.questions, chunk) {
-            super::note(format!("Skipped (input unavailable) nicht geschrieben: {}", e));
+            super::note(format!(
+                "Skipped (input unavailable) nicht geschrieben: {}",
+                e
+            ));
         }
         let run_items: Vec<RunItem> = chunk.iter().map(items::run_item).collect();
         let confirmation = if state.confirmed {
@@ -403,6 +421,15 @@ impl Worker {
             Confirmation::AskAbove(env.threshold)
         };
         let tools = Tools::new(env);
+        // Während des eigenen Crawls schreibt allein die Engine die Besitzerangaben (08 AI-020, „Wer schreibt“); erst
+        // nach ihrem Ende (Warteschlange läuft leer) trägt sich der KI-Lauf selbst ein.
+        let owner = (inbox.end == Some(AiQueueEnd::Drain)).then(|| {
+            job::owner_start(
+                self.start.crawl_file.clone(),
+                self.start.owner_kind,
+                env.clock.clone(),
+            )
+        });
         let fut = job::run_chunk(
             env,
             &tools,
@@ -414,11 +441,7 @@ impl Worker {
             Selection::Open,
             confirmation,
             self.control.clone(),
-            Some(job::owner_start(
-                self.start.crawl_file.clone(),
-                self.start.owner_kind,
-                env.clock.clone(),
-            )),
+            owner,
         );
         tokio::pin!(fut);
         let result = loop {

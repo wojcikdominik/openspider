@@ -5,7 +5,9 @@
 mod rs;
 
 use os_ai::decisions::exec::{RunEnd, Selection};
-use os_ai::run::{controls, run_decisions, JobConfirmation, JobError, INTERRUPTED_DE, INTERRUPTED_EN};
+use os_ai::run::{
+    controls, run_decisions, JobConfirmation, JobError, INTERRUPTED_DE, INTERRUPTED_EN,
+};
 use os_model::ai::hook::InputSource;
 use os_model::budget::MicroUsd;
 use rs::*;
@@ -44,12 +46,19 @@ async fn interrupted_crawl_is_rejected_without_request_and_unchanged() {
     let path = crawl_file(&dir.0, &pages);
     meta_set(
         &path,
-        &[("state", "Running"), ("owner_kind", "app"), ("owner_pid", "424242"), ("heartbeat_at", &iso(-11_000))],
+        &[
+            ("state", "Running"),
+            ("owner_kind", "app"),
+            ("owner_pid", "424242"),
+            ("heartbeat_at", &iso(-11_000)),
+        ],
     );
     {
         // WAL in die Hauptdatei übernehmen, damit der Vergleich nur echte Schreibzugriffe sieht.
         let f = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadWrite).unwrap();
-        f.conn().execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        f.conn()
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .unwrap();
     }
     let before = bytes(&path);
     let cfg = config(&[question_json("page-type")], 5_000_000);
@@ -59,8 +68,14 @@ async fn interrupted_crawl_is_rejected_without_request_and_unchanged() {
         .unwrap_err();
     assert_eq!(err, JobError::Interrupted);
     assert_eq!(err.to_string(), INTERRUPTED_DE);
-    assert_eq!(INTERRUPTED_DE, "Crawl ist unterbrochen – zuerst fortsetzen oder stoppen");
-    assert_eq!(INTERRUPTED_EN, "Crawl was interrupted – resume or stop it first");
+    assert_eq!(
+        INTERRUPTED_DE,
+        "Crawl ist unterbrochen – zuerst fortsetzen oder stoppen"
+    );
+    assert_eq!(
+        INTERRUPTED_EN,
+        "Crawl was interrupted – resume or stop it first"
+    );
     assert_eq!(bytes(&path), before, "Datei byte-gleich");
     assert_eq!(decisions_posts(&mock), 0);
     // Nach „Stoppen“ ohne Engine: abgeschlossener Crawl, der Lauf startet.
@@ -81,14 +96,29 @@ async fn foreign_active_owner_is_rejected_without_request() {
     let pages = site_pages("site");
     let path = crawl_file(&dir.0, &pages);
     for kind in ["cli", "mcp-stdio"] {
-        meta_set(&path, &[("owner_kind", kind), ("owner_pid", "424242"), ("heartbeat_at", &iso(0))]);
+        meta_set(
+            &path,
+            &[
+                ("owner_kind", kind),
+                ("owner_pid", "424242"),
+                ("heartbeat_at", &iso(0)),
+            ],
+        );
         let cfg = config(&[question_json("page-type")], 5_000_000);
         let env = env(&mock, &["openai"], NO_CONFIRMATION);
         let err = run_decisions(&env, job(&path, &cfg, &pages, JobConfirmation::Confirmed))
             .await
             .unwrap_err();
-        assert_eq!(err, JobError::Occupied { kind: kind.into(), pid: "424242".into() });
-        assert!(err.to_string().contains(&format!("gestartet von {kind} (PID 424242)")));
+        assert_eq!(
+            err,
+            JobError::Occupied {
+                kind: kind.into(),
+                pid: "424242".into()
+            }
+        );
+        assert!(err
+            .to_string()
+            .contains(&format!("gestartet von {kind} (PID 424242)")));
     }
     assert_eq!(decisions_posts(&mock), 0);
 }
@@ -115,7 +145,10 @@ async fn confirmation_is_kept_in_the_run_row_across_a_restart() {
         assert_eq!(outcome.end, RunEnd::NeedsConfirmation);
         assert!(outcome.estimate.is_some(), "Voranschlag");
         assert_eq!(decisions_posts(&mock), 0, "kein Request vor „Starten“");
-        assert_eq!(counts(&path, "page-type").get("Pending (confirmation)"), Some(&22));
+        assert_eq!(
+            counts(&path, "page-type").get("Pending (confirmation)"),
+            Some(&22)
+        );
     }
     let first_run;
     {
@@ -124,10 +157,12 @@ async fn confirmation_is_kept_in_the_run_row_across_a_restart() {
         let run = run_decisions(&env, job(&path, &cfg, &pages, JobConfirmation::Confirmed));
         let driver = async {
             for i in 1..=5 {
-                mock.until("Request gehalten", |_| mock.posts(DECISIONS).len() >= i).await;
+                mock.until("Request gehalten", |_| mock.posts(DECISIONS).len() >= i)
+                    .await;
                 mock.release("openai", 1).await;
             }
-            mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6).await;
+            mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6)
+                .await;
             controls().pause(&path);
             mock.release("openai", 1).await;
         };
@@ -137,7 +172,9 @@ async fn confirmation_is_kept_in_the_run_row_across_a_restart() {
         assert!(outcome.estimate.is_none());
         first_run = outcome.run_id;
         let f = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly).unwrap();
-        assert!(os_store::ai::answers::confirmed_at(f.conn(), first_run).unwrap().is_some());
+        assert!(os_store::ai::answers::confirmed_at(f.conn(), first_run)
+            .unwrap()
+            .is_some());
     }
     assert_eq!(decisions_posts(&mock), 6);
     assert_eq!(counts(&path, "page-type").get("Success"), Some(&6));
@@ -178,10 +215,26 @@ async fn quota_latch_is_per_run() {
     a.unwrap();
     b.unwrap();
     let (ca, cb) = (counts(&pa, "page-type"), counts(&pb, "page-type"));
-    let (tripped, other) = if ca.get("Quota exceeded") == Some(&22) { (&pa, cb.clone()) } else { (&pb, ca.clone()) };
-    assert_eq!(counts(tripped, "page-type").get("Quota exceeded"), Some(&22), "{ca:?} {cb:?}");
-    assert_eq!(other.get("Success"), Some(&22), "der andere Lauf sendet weiter: {other:?}");
-    assert_eq!(decisions_posts(&mock), 23, "1 Kontingent-Antwort + 22 Requests des anderen Laufs");
+    let (tripped, other) = if ca.get("Quota exceeded") == Some(&22) {
+        (&pa, cb.clone())
+    } else {
+        (&pb, ca.clone())
+    };
+    assert_eq!(
+        counts(tripped, "page-type").get("Quota exceeded"),
+        Some(&22),
+        "{ca:?} {cb:?}"
+    );
+    assert_eq!(
+        other.get("Success"),
+        Some(&22),
+        "der andere Lauf sendet weiter: {other:?}"
+    );
+    assert_eq!(
+        decisions_posts(&mock),
+        23,
+        "1 Kontingent-Antwort + 22 Requests des anderen Laufs"
+    );
     // Ein danach gestarteter Lauf („Fehlgeschlagene erneut anfragen“) versucht es wieder.
     let mut retry = job(tripped, &cfg, &pages, JobConfirmation::Confirmed);
     retry.selection = Selection::Failed;
@@ -205,9 +258,14 @@ async fn active_ledger_shows_open_reservations_of_a_running_run() {
     let run = run_decisions(&env, job(&path, &cfg, &pages, JobConfirmation::Confirmed));
     let driver = async {
         mock.until("gehalten", |_| mock.held(DECISIONS) >= 1).await;
-        let ledger = controls().active_ledger(&path).expect("Ledger des laufenden Laufs");
+        let ledger = controls()
+            .active_ledger(&path)
+            .expect("Ledger des laufenden Laufs");
         let snapshot = os_model::budget::BudgetLedger::snapshot(&*ledger).unwrap();
-        assert!(snapshot.reserved.0 > 0, "offene Reservierung sichtbar: {snapshot:?}");
+        assert!(
+            snapshot.reserved.0 > 0,
+            "offene Reservierung sichtbar: {snapshot:?}"
+        );
         mock.release("openai", 1).await;
     };
     let (outcome, ()) = tokio::join!(run, driver);
@@ -230,7 +288,11 @@ async fn missing_inputs_are_skipped_and_title_questions_run() {
     }
     let path = crawl_file(&dir.0, &pages);
     let cfg = config(
-        &[run_question("text-only"), run_question("title-only"), run_question("structured-types")],
+        &[
+            run_question("text-only"),
+            run_question("title-only"),
+            run_question("structured-types"),
+        ],
         5_000_000,
     );
     let env = env(&mock, &["openai"], NO_CONFIRMATION);
@@ -238,8 +300,14 @@ async fn missing_inputs_are_skipped_and_title_questions_run() {
         .await
         .unwrap();
     assert_eq!(outcome.end, RunEnd::Completed);
-    assert_eq!(counts(&path, "text-only").get("Skipped (input unavailable)"), Some(&22));
-    assert_eq!(counts(&path, "structured-types").get("Skipped (input unavailable)"), Some(&22));
+    assert_eq!(
+        counts(&path, "text-only").get("Skipped (input unavailable)"),
+        Some(&22)
+    );
+    assert_eq!(
+        counts(&path, "structured-types").get("Skipped (input unavailable)"),
+        Some(&22)
+    );
     assert_eq!(counts(&path, "title-only").get("Success"), Some(&22));
     assert_eq!(counts(&path, "title-only").get("Skipped (scope)"), Some(&3));
     // Mit Extraktion (leere Liste = extrahiert, nichts gefunden) läuft die Frage.
@@ -250,9 +318,12 @@ async fn missing_inputs_are_skipped_and_title_questions_run() {
     }
     let path2 = crawl_file(&dir2.0, &with_types);
     let cfg2 = config(&[run_question("structured-types")], 5_000_000);
-    run_decisions(&env, job(&path2, &cfg2, &with_types, JobConfirmation::Confirmed))
-        .await
-        .unwrap();
+    run_decisions(
+        &env,
+        job(&path2, &cfg2, &with_types, JobConfirmation::Confirmed),
+    )
+    .await
+    .unwrap();
     assert_eq!(counts(&path2, "structured-types").get("Success"), Some(&22));
 }
 

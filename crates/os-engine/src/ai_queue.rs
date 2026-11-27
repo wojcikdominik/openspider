@@ -12,9 +12,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use os_fetch::{FetchOutcome, FetchResult};
-use os_model::ai::hook::{
-    AiQueue, AiQueueEnd, AiQueueSession, AiQueueStart, PageAiFields,
-};
+use os_model::ai::hook::{AiQueue, AiQueueEnd, AiQueueSession, AiQueueStart, PageAiFields};
 use os_model::{CrawlConfig, CrawlState, EndReason, Indexability, WriteBatch};
 use url::Url;
 
@@ -137,11 +135,7 @@ pub(crate) fn page_fields(
 
 /// Übernimmt Status und Indexierbarkeit aus dem geschriebenen Datensatz der URL.
 pub(crate) fn with_batch(mut page: PageAiFields, batch: &WriteBatch) -> PageAiFields {
-    if let Some(p) = batch
-        .pages
-        .iter()
-        .find(|p| p.url_id.0 == page.url_id)
-    {
+    if let Some(p) = batch.pages.iter().find(|p| p.url_id.0 == page.url_id) {
         page.indexable = p.indexability == Indexability::Indexable;
         if p.fetch.status_code != 0 {
             page.status_code = Some(p.fetch.status_code);
