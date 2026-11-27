@@ -17,6 +17,10 @@ on:
         description: "Vorher wie im Job ci aufräumen (Xcode-Versionen, Simulatoren, Werkzeuge)"
         type: boolean
         default: true
+      keep:
+        description: "Dateien behalten (belegter Platz wächst; Ende bei weniger als 20 GiB frei)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,6 +59,7 @@ jobs:
       - name: Schreiben, prüfen, löschen
         env:
           LIMIT_GIB: ${{ inputs.limit_gib }}
+          KEEP: ${{ inputs.keep }}
         run: |
           set -u
           d="$RUNNER_TEMP/io-probe"; mkdir -p "$d"
@@ -78,7 +83,13 @@ jobs:
               "$n" "$([ "$got" = "$want" ] && echo gleich || echo ABWEICHEND)"
             [ "$got" = "$want" ] || { status="Inhalt abweichend"; break; }
             [ "$n" = 0 ] || { status="Kernel meldet E/A-Fehler"; break; }
-            rm -f "$f"
+            # 27.11.2026, erster Lauf: 240 GiB geschrieben und wieder gelöscht, kein Fehler – der freie Platz blieb dabei
+            # gleich, APFS hat also dieselben Blöcke wiederverwendet. Mit `keep` wächst der belegte Platz wie im Job ci.
+            if [ "$KEEP" = true ]; then
+              [ "$(df -k /System/Volumes/Data | tail -n 1 | tr -s " " | cut -d " " -f 4)" -gt 20971520 ] || { echo "weniger als 20 GiB frei"; break; }
+            else
+              rm -f "$f"
+            fi
           done
           echo "Ergebnis: $status nach $written GiB"
           echo "--- Kernel (letzte 30 min, gefiltert, erste und letzte Zeilen) ---"

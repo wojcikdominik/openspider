@@ -100,13 +100,16 @@ pub fn fake_px(text: &str, size: f64) -> u32 {
 pub struct TempDir(pub PathBuf);
 impl TempDir {
     pub fn new(name: &str) -> Self {
+        // Laufende Nummer: Die Systemuhr allein trennt gleichzeitig startende Tests nicht sicher (macOS: Mikrosekunden).
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let p = std::env::temp_dir().join(format!(
-            "os-ai-v01-{name}-{}-{}",
+            "os-ai-v01-{name}-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
         ));
         std::fs::create_dir_all(&p).unwrap();
         Self(p)
