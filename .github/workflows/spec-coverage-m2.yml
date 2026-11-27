@@ -98,6 +98,13 @@ jobs:
           status=0
           cargo test --workspace --exclude openspider-desktop --locked --no-fail-fast > rust-tests.txt 2>&1 || status=$?
           tail -n 40 rust-tests.txt
+          if [[ "$status" -ne 0 ]]; then
+            # Das Ende der Ausgabe nennt nur das rote Testprogramm; hier stehen die roten Tests samt ihrer Ausgabe.
+            echo "::group::Rote Tests (Auszug aus rust-tests.txt)"
+            grep -nE '^test .* \.\.\. FAILED|^test result: FAILED|^error: test failed' rust-tests.txt | head -n 100 || true
+            grep -n -A 30 -E '^---- .* stdout ----' rust-tests.txt | head -n 400 || true
+            echo "::endgroup::"
+          fi
           echo "Rust-Test-Exit: $status" >> "$GITHUB_STEP_SUMMARY"
           # B3-COV: Fehlschläge immer rot, nicht nur im Gate; der vitest-Schritt und der Upload laufen trotzdem.
           exit "$status"
