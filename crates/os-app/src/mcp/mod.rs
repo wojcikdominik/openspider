@@ -122,33 +122,37 @@ pub fn init(app: &App) {
     let startup = load(app);
     let weak = app.downgrade();
     app.handle().spawn(async move {
-        let Some(app) = weak.upgrade() else { return };
-        match startup {
-            Ok(settings) if settings.http.autostart => {
-                let service = app.ext::<Service>();
-                if let Err(e) = start(&app, &mut *service.state.lock().await, None).await {
+        // Nur hochstufen, wenn der Start etwas zu melden oder zu starten hat: ein sofortiger Abbau durch den Besitzer
+        // bleibt so der letzte (OUT-229).
+        if !matches!(&startup, Ok(settings) if !settings.http.autostart) {
+            let Some(app) = weak.upgrade() else { return };
+            match startup {
+                Ok(settings) if settings.http.autostart => {
+                    let service = app.ext::<Service>();
+                    if let Err(e) = start(&app, &mut *service.state.lock().await, None).await {
+                        app.push_notice(Notice {
+                            level: NoticeLevel::Error,
+                            code: "mcp-start-failed".into(),
+                            args: std::collections::BTreeMap::from([(
+                                "detail".into(),
+                                serde_json::json!(e.detail),
+                            )]),
+                        });
+                        app.flush_tick();
+                    };
+                }
+                Err(_) => {
                     app.push_notice(Notice {
                         level: NoticeLevel::Error,
-                        code: "mcp-start-failed".into(),
-                        args: std::collections::BTreeMap::from([(
-                            "detail".into(),
-                            serde_json::json!(e.detail),
-                        )]),
+                        code: "mcp-settings-invalid".into(),
+                        args: Default::default(),
                     });
                     app.flush_tick();
-                };
+                }
+                _ => {}
             }
-            Err(_) => {
-                app.push_notice(Notice {
-                    level: NoticeLevel::Error,
-                    code: "mcp-settings-invalid".into(),
-                    args: Default::default(),
-                });
-                app.flush_tick();
-            }
-            _ => {}
+            drop(app);
         }
-        drop(app);
         let mut previous = Some(McpStatus::Off);
         let mut timer = tokio::time::interval(std::time::Duration::from_millis(100));
         // Tokio's first interval tick is immediate. Startup already delivers its

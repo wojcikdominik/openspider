@@ -167,6 +167,9 @@ pub fn init(app: &App) {
     let weak = app.downgrade();
     app.handle().spawn(async move {
         let mut timer = tokio::time::interval(std::time::Duration::from_millis(500));
+        // Der erste Tick kommt sofort: nicht gleich beim Start hochstufen (ein sofortiger Abbau durch den Besitzer
+        // bleibt der letzte, OUT-229).
+        timer.tick().await;
         loop {
             timer.tick().await;
             let Some(app) = weak.upgrade() else { break };
