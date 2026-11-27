@@ -31,6 +31,11 @@ export interface SessionState {
   ops: Record<string, OpStatus>;
   /** Neue Meldungen des letzten Ticks (Startfehler, Plattenplatz, Crawl-Ende …); Verbraucher quittieren sie. */
   notices: Notice[];
+  /**
+   * UI-018 (Pfad 3): a crawl this window started whose first status is already its end. Its shared-count views load it
+   * (`viewCrawlId`) while the window still shows the previous crawl; crawl and end status appear together once they drew it.
+   */
+  pendingCrawlId: string | null;
   applyTick(tick: Tick): void;
   clearNotices(): void;
   pushNotice(notice: Notice): void;
@@ -53,12 +58,43 @@ let heldEnd: CrawlStatus | null = null;
 let heldAnalysis: AnalysisStatus | null = null;
 /** Each held end gets its own release; a release of an earlier end (another crawl) must not apply a later one. */
 let endRelease = 0;
+/** Seq of the last tick that carried each crawl's status (a held end status included). */
+const statusSeq = new Map<string, number>();
+/**
+ * Runs this window started or resumed itself whose first status after the command has not arrived yet (see `runHere`),
+ * with the seq the window had when it sent the command. Only a later tick of an unbroken tick sequence counts.
+ */
+const startedHere = new Map<string, number>();
+/**
+ * UI-018 (B4-LAGFIX2, Abnahme fix/overview-stale Pfad 3): a run this window starts or resumes itself. A very short crawl
+ * can end before any running status reaches the window; its first status is then already the end status, and nothing
+ * would hold it. After the command has answered, the window remembers the run (unless a status of it arrived meanwhile,
+ * which is newer); if its first status is the end status, the crawl is shown as running (views mount and load) and the
+ * end status waits for the reloaded views like any other end. Nothing is shown before a status arrives. Runs started
+ * elsewhere (MCP or CLI in this app, another window) keep the previous behaviour: their first status may be the end.
+ */
+export async function runHere<T>(command: () => Promise<T>, crawlOf: (result: T) => string | null | undefined): Promise<T> {
+  const sent = useSession.getState().seq;
+  const result = await command();
+  const crawlId = crawlOf(result);
+  if (crawlId && (statusSeq.get(crawlId) ?? -Infinity) <= sent) startedHere.set(crawlId, sent);
+  return result;
+}
+/** The crawl the shared-count views (Overview, Issues) load: a pending new crawl (Pfad 3) before the shown one. */
+export const viewCrawlId = (s: SessionState): string | undefined => s.pendingCrawlId ?? s.crawl?.crawlId;
+/** `runHere` for resuming the crawl this window shows. */
+export function resumeHere<T>(command: () => Promise<T>): Promise<T> {
+  const crawlId = useSession.getState().crawl?.crawlId;
+  return runHere(command, () => crawlId);
+}
 export function registerEndBarrier(refresh: () => Promise<unknown>): () => void {
   endBarriers.add(refresh);
   return () => { endBarriers.delete(refresh); };
 }
-async function releaseEnd(apply: (crawl: CrawlStatus, analysis: AnalysisStatus | null) => void) {
+async function releaseEnd(apply: (crawl: CrawlStatus, analysis: AnalysisStatus | null) => void, afterRender = false) {
   const release = ++endRelease;
+  // A crawl shown just now (Pfad 3): its views register in the effects of the next render.
+  if (afterRender) await new Promise(resolve => setTimeout(resolve, 0));
   await Promise.race([Promise.allSettled([...endBarriers].map(refresh => refresh())), new Promise(resolve => setTimeout(resolve, END_GATE_MS))]);
   // Shared-count views publish their answer in the next task (query notifications); the status follows after them.
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -86,19 +122,39 @@ export const useSession = create<SessionState>((set, get) => ({
   views: {},
   ops: {},
   notices: [],
+  pendingCrawlId: null,
   applyTick(tick) {
     if (tick.seq <= get().seq) return;
     const current = get().crawl;
-    if (tick.crawl && current?.crawlId === tick.crawl.crawlId && (heldEnd || current.phase === "running" && tick.crawl.phase === "completed" && endBarriers.size > 0)) {
+    // Pfad 3: the first status of a run this window started or resumed (no running status seen since the command).
+    const sent = tick.crawl ? startedHere.get(tick.crawl.crawlId) : undefined;
+    if (tick.crawl) startedHere.delete(tick.crawl.crawlId);
+    const local = sent !== undefined && tick.seq > sent && get().seq >= sent;
+    if (tick.crawl) statusSeq.set(tick.crawl.crawlId, tick.seq);
+    const applyEnd = (crawl: CrawlStatus, analysis: AnalysisStatus | null) => {
+      if (get().crawl?.crawlId === crawl.crawlId) set(s => ({ crawl, throttled: Object.keys(s.throttled).length ? {} : s.throttled,
+        ...(analysis ? { analysis, analysisStarting: false } : {}) }));
+      // Pfad 3: the new crawl appears with its end status, as a first status of another crawl would (see below).
+      else if (get().pendingCrawlId === crawl.crawlId) set({ crawl, pendingCrawlId: null, throttled: {}, crawlDelays: {},
+        analysis, analysisStarting: false });
+    };
+    const pending = get().pendingCrawlId;
+    if (tick.crawl && (current?.crawlId === tick.crawl.crawlId || pending === tick.crawl.crawlId) && (heldEnd || (current?.phase === "running" || local) && tick.crawl.phase === "completed" && endBarriers.size > 0)) {
       const start = !heldEnd;
       heldEnd = tick.crawl;
       heldAnalysis = tick.analysis ?? heldAnalysis;
       tick = { ...tick, crawl: null, analysis: null };
-      if (start) queueMicrotask(() => void releaseEnd((crawl, analysis) => {
-        if (get().crawl?.crawlId === crawl.crawlId) set(s => ({ crawl, throttled: Object.keys(s.throttled).length ? {} : s.throttled,
-          ...(analysis ? { analysis, analysisStarting: false } : {}) }));
-      }));
-    } else if (tick.crawl) { heldEnd = null; heldAnalysis = null; }
+      if (start) queueMicrotask(() => void releaseEnd(applyEnd));
+    } else if (tick.crawl && local && tick.crawl.phase === "completed") {
+      // A crawl this window started that is new to it ends with its first status: its views load it first (pending), the
+      // window keeps showing the previous state until they drew it; then crawl and end status apply together.
+      heldEnd = tick.crawl;
+      heldAnalysis = tick.analysis ?? null;
+      const crawlId = tick.crawl.crawlId;
+      tick = { ...tick, crawl: null, analysis: null };
+      set({ pendingCrawlId: crawlId });
+      queueMicrotask(() => void releaseEnd(applyEnd, true));
+    } else if (tick.crawl) { heldEnd = null; heldAnalysis = null; if (pending) set({ pendingCrawlId: null }); }
     else if (heldEnd && tick.analysis) { heldAnalysis = tick.analysis; tick = { ...tick, analysis: null }; }
     set((s) => {
       let views = s.views;

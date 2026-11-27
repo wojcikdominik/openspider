@@ -1,6 +1,7 @@
 // APIs-Modus (INTEG-012): URL-Liste hochladen, nur API-Daten abrufen, kein Abruf der Zielseiten. Start über
 // `crawl.start` mit `source: { kind: "apis" }` (M2.md 3.6a); ohne verbundene Integration startet kein Lauf.
 import { crawl } from "../../ipc/crawl";
+import { runHere } from "../../state/session";
 import type { ApiSourceInfo } from "../../ipc/gen/ApiSourceInfo";
 import type { CrawlRef } from "../../ipc/gen/CrawlRef";
 import { isDialogKind } from "./sources";
@@ -44,6 +45,6 @@ export async function startApisMode(text: string, sources: readonly ApiSourceInf
   if (connectedSources(sources).length === 0) return { started: false, reason: "no-integration" };
   const { items } = parseUrlLines(text);
   if (items.length === 0) return { started: false, reason: "empty-list" };
-  const ref = await crawl.start({ source: { kind: "apis", items }, scope: "domain" });
+  const ref = await runHere(() => crawl.start({ source: { kind: "apis", items }, scope: "domain" }), r => r.crawlId);
   return { started: true, ref };
 }
