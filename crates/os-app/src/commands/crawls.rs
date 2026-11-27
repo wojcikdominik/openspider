@@ -25,6 +25,8 @@ struct ManagementState {
     /// gleichzeitig schreibend auf den Index zu, und die Hauptspur wartet nie im `busy_timeout` auf die Aufbewahrung.
     registry: Arc<tokio::sync::RwLock<()>>,
     retention_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Zuletzt gemeldeter Stand, nur um zu entscheiden, ob eine Änderung eine Runde auslöst. Gelöscht wird nie danach:
+    /// Die Runde liest Richtlinie und Speicherort aus dem Einstellungsspeicher (OUT-229).
     retention_settings: Mutex<Option<AppSettings>>,
 }
 impl ManagementState {
@@ -629,10 +631,11 @@ pub async fn run_retention(app: &App) -> Result<usize, CmdError> {
 /// stündliche Aufgabe ab (auch mitten in ihrer Wartezeit).
 ///
 /// Was eine Runde löscht, liest sie erst nach Gate und Register-Sperre aus dem dann geltenden Stand: Richtlinie,
-/// Höchstzahl und Speicherort ([`ManagementState::update_retention_settings`], bei jeder Änderung synchron gesetzt),
-/// geöffnete Sitzungen und „jetzt“. Sperren und Zustände der Crawls liest der Auftrag selbst aus den Dateien.
+/// Höchstzahl und Speicherort aus dem Einstellungsspeicher selbst (derselbe, aus dem `settings_snapshot` liest; keine
+/// Kopie, deren Stand von der Reihenfolge gleichzeitiger Änderungen abhinge), geöffnete Sitzungen und „jetzt“. Sperren und Zustände der Crawls liest der Auftrag selbst aus den Dateien.
 struct RetentionInputs {
     state: std::sync::Weak<ManagementState>,
+    settings: std::sync::Weak<crate::settings_store::SettingsStore>,
     sessions: std::sync::Weak<crate::runtime::sessions::SessionRegistry>,
     clock: Arc<dyn os_model::Clock>,
     /// Ort von Register und Index (`paths.crawls`); fest je App, wird immer gelistet.
@@ -647,6 +650,7 @@ impl RetentionInputs {
     fn of(app: &App, location: Option<PathBuf>) -> RetentionInputs {
         RetentionInputs {
             state: Arc::downgrade(&app.ext::<ManagementState>()),
+            settings: Arc::downgrade(&app.settings_shared()),
             sessions: Arc::downgrade(&app.sessions_shared()),
             clock: Arc::clone(&app.config().clock),
             root: app.config().paths.crawls.clone(),
@@ -687,15 +691,7 @@ async fn retention_round(inputs: &RetentionInputs) -> Result<usize, CmdError> {
     let _guard = gate.lock_owned().await;
     let _registry = registry.write_owned().await;
     // Ab hier der geltende Stand (nicht der beim Auslösen).
-    let all = inputs
-        .state
-        .upgrade()
-        .ok_or_else(gone)?
-        .retention_settings
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .clone()
-        .unwrap_or_default();
+    let all = inputs.settings.upgrade().ok_or_else(gone)?.get();
     let mut locations = vec![location_in(&all, &inputs.root)];
     if let Some(at_trigger) = &inputs.location {
         if !locations.contains(at_trigger) {

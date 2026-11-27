@@ -235,7 +235,8 @@ struct Inner {
     read_pool: ReadPool,
     write_queue: WriteQueue,
     ops: Ops,
-    settings: SettingsStore,
+    /// Geteilt, damit die Aufbewahrung nach dem Gate aus dem maßgeblichen Stand liest, ohne die `App` zu halten (OUT-229).
+    settings: Arc<SettingsStore>,
     uistate: UiStateStore,
     windows: Windows,
     assembler: Mutex<TickAssembler>,
@@ -310,7 +311,7 @@ impl App {
             write_queue: WriteQueue::new(),
             ops,
             uistate: UiStateStore::new(config.paths.settings.clone()),
-            settings,
+            settings: Arc::new(settings),
             windows: Windows::default(),
             assembler: Mutex::new(TickAssembler::new()),
             pending_ticks: Mutex::new(HashMap::new()),
@@ -352,6 +353,10 @@ impl App {
     /// Sitzungen ohne die `App` (Hintergrundarbeit, die sie nicht am Leben halten soll).
     pub(crate) fn sessions_shared(&self) -> Arc<SessionRegistry> {
         Arc::clone(&self.0.sessions)
+    }
+    /// Einstellungsspeicher ohne die `App` (derselbe, aus dem [`App::settings_snapshot`] liest).
+    pub(crate) fn settings_shared(&self) -> Arc<SettingsStore> {
+        Arc::clone(&self.0.settings)
     }
     /// Ereignisse des Crawl-Lebenszyklus.
     pub fn crawl_events(&self) -> &CrawlEventBus {
