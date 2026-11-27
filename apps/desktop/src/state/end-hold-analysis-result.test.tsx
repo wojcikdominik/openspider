@@ -49,7 +49,7 @@ it("applies the analysis result of the held end tick together with the end statu
 });
 
 // spec: UI-018
-// spec: CRAWL-130
+// spec: UI-013
 it("the status bar paints the released end status at once, not one paint slot after the end tick", async () => {
   let finish = () => {};
   offs.push(registerEndBarrier(() => new Promise<void>(resolve => { finish = resolve; })));
@@ -61,5 +61,72 @@ it("the status bar paints the released end status at once, not one paint slot af
   expect(screen.getByTestId("crawl-phase")).toHaveTextContent("Running");
   // The shared-count views answer 20 ms after the end tick: „Completed“ follows without waiting for a paint slot.
   await act(async () => { finish(); await vi.advanceTimersByTimeAsync(1); });
+  expect(screen.getByTestId("crawl-phase")).toHaveTextContent("Completed");
+});
+
+// spec: UI-018
+it("a tick of a new crawl while an end is held drops the held analysis result: it never appears with the new crawl", async () => {
+  let finish = () => {};
+  offs.push(registerEndBarrier(() => new Promise<void>(resolve => { finish = resolve; })));
+  apply(status("running", "crawl-a"));
+  apply(status("completed", "crawl-a"), [done]);
+  await vi.advanceTimersByTimeAsync(0);
+  apply(status("running", "crawl-b"));
+  expect(useSession.getState().crawl).toMatchObject({ crawlId: "crawl-b", phase: "running" });
+  expect(useSession.getState().analysisResult).toBeNull();
+  // Crawl A's release ends (barrier answers, and later the upper bound): nothing of crawl A reaches crawl B.
+  finish();
+  await vi.advanceTimersByTimeAsync(3_100);
+  expect(useSession.getState().crawl).toMatchObject({ crawlId: "crawl-b", phase: "running" });
+  expect(useSession.getState().analysisResult).toBeNull();
+});
+
+// spec: UI-018
+it("analysis-completed in a later tick without a crawl status, while the end is held, applies with the end status", async () => {
+  let finish = () => {};
+  offs.push(registerEndBarrier(() => new Promise<void>(resolve => { finish = resolve; })));
+  apply(status("running", "crawl-c"));
+  apply(status("completed", "crawl-c"));
+  await vi.advanceTimersByTimeAsync(0);
+  apply(null, [done]);
+  expect(useSession.getState().crawl).toMatchObject({ phase: "running" });
+  expect(useSession.getState().analysisResult, "held with the end status").toBeNull();
+  finish();
+  await vi.advanceTimersByTimeAsync(10);
+  expect(useSession.getState().crawl).toMatchObject({ phase: "completed" });
+  expect(useSession.getState().analysisResult).toBe("done");
+});
+
+// spec: UI-018
+it("released by the 3 s upper bound (a barrier never answers): end status and held analysis result appear together", async () => {
+  offs.push(registerEndBarrier(() => new Promise<void>(() => {})));
+  apply(status("running", "crawl-d"));
+  apply(status("completed", "crawl-d"), [done]);
+  await vi.advanceTimersByTimeAsync(2_990);
+  expect(useSession.getState().crawl).toMatchObject({ phase: "running" });
+  expect(useSession.getState().analysisResult).toBeNull();
+  await vi.advanceTimersByTimeAsync(20);
+  expect(useSession.getState().crawl).toMatchObject({ phase: "completed" });
+  expect(useSession.getState().analysisResult).toBe("done");
+});
+
+// spec: UI-018
+// spec: UI-013
+it("with the last running paint about 100 ms before the release, Completed appears at the latest 250 ms after that paint", async () => {
+  let finish = () => {};
+  offs.push(registerEndBarrier(() => new Promise<void>(resolve => { finish = resolve; })));
+  act(() => { apply(status("running", "crawl-e")); });
+  render(<Statusbar />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+  // The last running tick after a quiet phase: painted at once (t = 0).
+  act(() => { apply({ ...status("running", "crawl-e"), crawled: 4242 }); vi.advanceTimersByTime(0); });
+  expect(screen.getByText(/Done 4,242 of/)).toBeVisible();
+  await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+  act(() => { apply(status("completed", "crawl-e"), [done]); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+  // Released at t ≈ 100 ms: the rest of the paint gap (UI-013) is the only wait.
+  await act(async () => { finish(); await vi.advanceTimersByTimeAsync(1); });
+  expect(screen.getByTestId("crawl-phase")).toHaveTextContent("Running");
+  await act(async () => { await vi.advanceTimersByTimeAsync(149); });
   expect(screen.getByTestId("crawl-phase")).toHaveTextContent("Completed");
 });
