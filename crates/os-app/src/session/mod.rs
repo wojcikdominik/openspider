@@ -100,6 +100,9 @@ pub fn init(app: &App) {
         let mut interval = tokio::time::interval(Duration::from_millis(100));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut sent = tokio::time::Instant::now();
+        // Der erste Tick kommt sofort: nicht gleich beim Start hochstufen (ein sofortiger Abbau durch den Besitzer
+        // bleibt der letzte, OUT-229).
+        interval.tick().await;
         loop {
             interval.tick().await;
             let Some(app) = weak.upgrade() else { break };

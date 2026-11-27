@@ -128,7 +128,8 @@ type Task = Box<dyn FnOnce() + Send>;
 
 /// Wartungsspur: eigener Thread, Aufträge strikt in Einreihungsreihenfolge, unabhängig von der Hauptspur.
 struct Lane {
-    tx: Mutex<Option<mpsc::Sender<Task>>>,
+    /// Geteilt mit [`MaintenanceLane`]; [`Lane::shutdown`] nimmt den Sender heraus, danach nimmt niemand mehr an.
+    tx: Arc<Mutex<Option<mpsc::Sender<Task>>>>,
     thread: Mutex<Option<std::thread::JoinHandle<()>>>,
     /// Gesetzt beim Abbau: eingereihte, noch nicht begonnene Aufträge werden verworfen statt ausgeführt.
     closed: Arc<AtomicBool>,
@@ -157,16 +158,11 @@ impl Lane {
             })
             .ok();
         Lane {
-            tx: Mutex::new(Some(tx)),
+            tx: Arc::new(Mutex::new(Some(tx))),
             thread: Mutex::new(thread),
             closed,
             finished: Mutex::new(Some(finished)),
         }
-    }
-
-    fn send(&self, task: Task) -> bool {
-        let guard = self.tx.lock().unwrap_or_else(|p| p.into_inner());
-        guard.as_ref().is_some_and(|tx| tx.send(task).is_ok())
     }
 
     /// Schließt die Spur: Noch nicht begonnene Aufträge werden verworfen, ein laufender Auftrag darf höchstens `wait`
@@ -196,6 +192,47 @@ impl Lane {
                 wait_ms = wait.as_millis() as u64,
                 "Wartungsauftrag läuft beim Abbau der Schreibwarteschlange noch; Thread bleibt losgelöst"
             );
+        }
+    }
+}
+
+/// Einreihen auf der Wartungsspur ohne die Warteschlange zu halten: Hintergrundaufgaben (Aufbewahrung) reihen damit ein,
+/// ohne eine `App` hochzustufen. Nach Beginn des Abbaus ([`WriteQueue::shutdown`]) nimmt die Spur nichts mehr an;
+/// ein kurz davor eingereihter, noch nicht begonnener Auftrag wird verworfen, ein laufender beigetreten. So schreibt
+/// kein Wartungsauftrag mehr, nachdem der Abbau durch den Besitzer der `App` zurückgekehrt ist (OUT-229).
+#[derive(Clone)]
+pub(crate) struct MaintenanceLane {
+    tx: Arc<Mutex<Option<mpsc::Sender<Task>>>>,
+}
+
+impl MaintenanceLane {
+    pub(crate) fn enqueue<T: Send + 'static>(
+        &self,
+        f: impl FnOnce() -> Result<T, CmdError> + Send + 'static,
+    ) -> impl std::future::Future<Output = Result<T, CmdError>> + Send + 'static {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let task: Task = Box::new(move || {
+            let result = std::panic::catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|p| {
+                Err(internal(
+                    "WriteQueue::submit_maintenance",
+                    panic_text(p.as_ref()),
+                ))
+            });
+            let _ = tx.send(result);
+        });
+        let sent = {
+            let guard = self.tx.lock().unwrap_or_else(|p| p.into_inner());
+            guard.as_ref().is_some_and(|lane| lane.send(task).is_ok())
+        };
+        async move {
+            if !sent {
+                return Err(internal(
+                    "WriteQueue::submit_maintenance",
+                    "Warteschlange geschlossen",
+                ));
+            }
+            rx.await
+                .map_err(|_| internal("WriteQueue::submit_maintenance", "Auftrag verworfen"))?
         }
     }
 }
@@ -386,25 +423,13 @@ impl WriteQueue {
         &self,
         f: impl FnOnce() -> Result<T, CmdError> + Send + 'static,
     ) -> impl std::future::Future<Output = Result<T, CmdError>> + Send + 'static {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let sent = self.maintenance.send(Box::new(move || {
-            let result = std::panic::catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|p| {
-                Err(internal(
-                    "WriteQueue::submit_maintenance",
-                    panic_text(p.as_ref()),
-                ))
-            });
-            let _ = tx.send(result);
-        }));
-        async move {
-            if !sent {
-                return Err(internal(
-                    "WriteQueue::submit_maintenance",
-                    "Warteschlange geschlossen",
-                ));
-            }
-            rx.await
-                .map_err(|_| internal("WriteQueue::submit_maintenance", "Auftrag verworfen"))?
+        self.maintenance_lane().enqueue(f)
+    }
+
+    /// Griff auf die Wartungsspur, der die Warteschlange (und damit die `App`) nicht am Leben hält (OUT-229).
+    pub(crate) fn maintenance_lane(&self) -> MaintenanceLane {
+        MaintenanceLane {
+            tx: Arc::clone(&self.maintenance.tx),
         }
     }
 

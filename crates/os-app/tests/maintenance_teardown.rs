@@ -258,3 +258,24 @@ async fn the_default_policy_opens_no_management_file_in_the_background() {
         );
     }
 }
+
+// spec: OUT-229
+// spec: CRAWL-124
+#[tokio::test]
+async fn the_default_policy_still_records_a_storage_location_other_than_the_root() {
+    // Abweichender Speicherort: Die Runde vermerkt ihn im Register wie vor der Korrektur, damit die Crawl-Verwaltung
+    // seine Crawls auch nach einem weiteren Wechsel findet (CRAWL-124). Der Stammordner selbst wird immer gelistet.
+    let dir = tempfile::tempdir().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let (settings, _) = SettingsStore::open(dir.path());
+    settings
+        .apply_patch(&json!({"storage":{"crawlsDir":elsewhere.path()}}))
+        .unwrap();
+    drop(settings);
+    let app = common::new_app(dir.path());
+    assert_eq!(
+        os_app::commands::crawls::run_retention(&app).await.unwrap(),
+        0
+    );
+    assert!(app.config().paths.crawls.join(".registry.sqlite").exists());
+}

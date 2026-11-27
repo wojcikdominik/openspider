@@ -337,3 +337,26 @@ fn nothing_is_written_outside_openspider_home() {
     // Ohne Variable gelten wieder die Standardorte.
     assert_ne!(app_paths().crawls, home.path().join("crawls"));
 }
+
+// spec: OUT-228
+// spec: OUT-229
+#[test]
+fn a_folder_without_registry_lists_one_crawl_per_id_like_the_managed_listing() {
+    let dir = tempfile::tempdir().unwrap();
+    let crawls = dir.path().join("crawls");
+    let (id1, p1) = crawl_in(&crawls, 1);
+    // Eine Kopie unter dem Namen einer anderen gültigen Kennung: dieselbe eingebettete Kennung wie die erste Datei.
+    let (other, p2) = crawl_in(&crawls, 2);
+    std::fs::remove_file(&p2).unwrap();
+    std::fs::copy(&p1, registry::path_for(&crawls, &other)).unwrap();
+
+    let raw = registry::list_crawls_report(&crawls).unwrap();
+    assert!(!crawls.join(".registry.sqlite").exists());
+    let managed = registry::Manager::open(&crawls).unwrap().list().unwrap();
+    let paths = |r: &registry::ListingReport| -> Vec<std::path::PathBuf> {
+        r.crawls.iter().map(|c| c.path.clone()).collect()
+    };
+    assert_eq!(raw.crawls.len(), 1);
+    assert_eq!(raw.crawls[0].meta.crawl_id, id1);
+    assert_eq!(paths(&raw), paths(&managed));
+}

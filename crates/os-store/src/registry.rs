@@ -110,10 +110,17 @@ pub fn list_crawls_report(dir: &Path) -> Result<ListingReport, StoreError> {
     if dir.join(".registry.sqlite").exists() {
         return Manager::open(dir)?.list();
     }
+    // Wie `Manager::list`: je Kennung die erste Datei (nach Pfad). So zeigt ein Ordner ohne Register dieselben Crawls
+    // wie mit, auch bevor die App ihr Register anlegt (erste Verwaltungsaktion, OUT-229).
     let mut report = ListingReport::default();
+    let mut seen = std::collections::HashSet::new();
     for path in candidate_files(dir)? {
         match read_listing(&path) {
-            Ok(l) => report.crawls.push(l),
+            Ok(l) => {
+                if seen.insert(l.meta.crawl_id) {
+                    report.crawls.push(l);
+                }
+            }
             Err(e) => report.skipped.push((path, e)),
         }
     }
