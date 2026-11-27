@@ -83,12 +83,24 @@ interface TabsState {
 }
 /** Counts layout and navigation edits: an overlapping `load()` must not undo the user's choice (A01-19, K2-77). */
 let layoutEdits = 0;
+/**
+ * UI-004 (Abnahme fix/overview-stale B2-6): „Übersicht“ chosen before the store had loaded could not be saved then. The
+ * next `load()` (also the one for a new crawl id at a crawl start, TopTabs) read the old file and showed the tabs again.
+ * A load keeps such a choice and saves the view alone (the saved layout stays as it is).
+ */
+let unsavedView: TabsState["view"] | null = null;
 /** The whole `topTabs` section: layout plus navigation state (K2-77: group and tab survive a restart). */
 function persisted(s: Pick<TabsState, "order" | "hidden" | "active" | "view" | "groupActive">): Record<string, JsonValue> {
   return { topTabs: { order: s.order, hidden: s.hidden, active: s.active, view: s.view, groupActive: s.groupActive as Record<string, string> } };
 }
 export const useTabs = create<TabsState>((set, get) => {
   const save = () => saveTableState(persisted(get()));
+  const keepUnsavedView = () => {
+    const view = unsavedView;
+    if (!view) return;
+    unsavedView = null;
+    void saveUiState(state => ({ ...state, topTabs: { ...object(state.topTabs), view } })).catch(() => undefined);
+  };
   /** A hidden active tab falls back to its group's first visible tab, else to Internal. */
   const fallback = (hidden: readonly string[]) => {
     const { active, order } = get();
@@ -105,7 +117,7 @@ export const useTabs = create<TabsState>((set, get) => {
       await flushUiState().catch(() => undefined);
       const [tabs, dto] = await Promise.all([catalog.tabs(), uistate.load()]);
       const defaults = [...tabs].sort((a, b) => a.defaultOrder - b.defaultOrder).map(t => t.id);
-      if (edits !== layoutEdits) { set({ catalog: tabs, order: [...new Set([...get().order, ...defaults])], loaded: true, error: null }); return; }
+      if (edits !== layoutEdits) { set({ catalog: tabs, order: [...new Set([...get().order, ...defaults])], loaded: true, error: null }); keepUnsavedView(); return; }
       const saved = object(object(dto.state).topTabs);
       const order = Array.isArray(saved.order) ? saved.order.filter((v): v is string => typeof v === "string" && defaults.includes(v)) : [];
       const hidden = Array.isArray(saved.hidden) ? saved.hidden.filter((v): v is string => typeof v === "string" && !isMandatory(v, tabs) && defaults.includes(v)) : [];
@@ -115,7 +127,8 @@ export const useTabs = create<TabsState>((set, get) => {
       const fallback = defaults.includes(get().active) ? get().active : defaults.includes(MANDATORY_TAB) ? MANDATORY_TAB : defaults[0] ?? get().active;
       const active = typeof saved.active === "string" && defaults.includes(saved.active) && !hidden.includes(saved.active) ? saved.active : fallback;
       set({ catalog: tabs, order: [...new Set([...order, ...defaults])], hidden, loaded: true, error: null, active, groupActive: { ...groupActive, [groupOf(active)]: active },
-        view: saved.view === "overview" ? "overview" : "tabs" });
+        view: unsavedView ?? (saved.view === "overview" ? "overview" : "tabs") });
+      keepUnsavedView();
     } catch (error) { set({ error }); }
   },
   select(id, filter) {
@@ -125,6 +138,7 @@ export const useTabs = create<TabsState>((set, get) => {
     if (changed) layoutEdits++;
     set({ active: id, view: "tabs", groupActive: { ...get().groupActive, [groupOf(id)]: id }, queries: { ...get().queries, [id]: { ...query, ...(filter ? { filter } : {}) } } });
     if (changed && get().loaded) void save().catch(() => undefined);
+    else if (changed) unsavedView = "tabs";
   },
   selectGroup(group) {
     const { order, hidden, groupActive } = get();
@@ -139,6 +153,7 @@ export const useTabs = create<TabsState>((set, get) => {
     if (get().view !== "overview") layoutEdits++;
     set({ view: "overview" });
     if (get().loaded) void save().catch(() => undefined);
+    else unsavedView = "overview";
   },
   query(patch) { const s = get(); set({ queries: { ...s.queries, [s.active]: { ...(s.queries[s.active] ?? defaultQuery()), ...patch } } }); },
   async reorder(ids) {

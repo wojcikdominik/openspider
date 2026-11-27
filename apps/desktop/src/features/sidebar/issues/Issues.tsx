@@ -10,7 +10,7 @@ import type { IssuePriorityDto } from "../../../ipc/gen/IssuePriorityDto";
 import { useSession } from "../../../state/session";
 import { useSidebarNavigation } from "../frame/state";
 import { QueryFeedback } from "../frame/QueryFeedback";
-import { useIssues } from "../frame/useSidebarQuery";
+import { useIssues, useRenderedAnswer } from "../frame/useSidebarQuery";
 import { CountProgress } from "../frame/CountProgress";
 import { IssueBadge } from "./IssueBadge";
 import { IssueExplanation } from "./IssueExplanation";
@@ -74,6 +74,8 @@ function RegularIssues({ needsAnalysis }: { needsAnalysis: boolean }) {
   const args = { ...scope, type: type || null, priority: priority || null, search: null };
   // UI-018 (M2-N27): new data versions refresh the list in the background; the last list stays visible.
   const query = useIssues(args);
+  // UI-018 (B4-LAGFIX2): the end barrier waits until this list shows the reloaded answer.
+  useRenderedAnswer(query, query.data);
   // Keep the same contract even when a fixture supplies an unfiltered list.
   const root = useIssueConfig();
   const named = (name: string) => resolveThresholds(name, root);
