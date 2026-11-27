@@ -223,3 +223,172 @@ async fn without_a_queue_the_crawl_behaves_like_one_point_zero() {
     let inputs = os_store::ai::inputs::size(fx.file.conn()).unwrap();
     assert_eq!(inputs.entries, 0);
 }
+
+// spec: AI-032 [M4]
+// Befund A4 der Abnahme M4-D05 (K4-26, `hreflang_self`): Ein **absoluter** Selbstverweis mit Port
+// (`http://127.0.0.1:<port>/french.html`, Platzhalter `{{PORT}}` in einer statischen Datei der Testsite ersetzt) ist
+// selbstreferenzierend – während des Crawls (geparste Seite) und nach dem Crawl (Tabelle `hreflang`, `load_pages`).
+// Der Verweis auf eine andere Seite (`de` → `/`) zählt nicht.
+#[tokio::test]
+async fn absolute_self_reference_with_port_is_hreflang_self() {
+    let rec = Arc::new(Rec::default());
+    let fx = crawl_fixture_with(
+        "ai/run/hreflang",
+        "/",
+        CrawlConfig::default(),
+        deps_with(&rec),
+    )
+    .await;
+    assert_eq!(fx.summary.state, CrawlState::Completed);
+    let base = fx.site.base_url();
+    let pages = rec.pages.lock().unwrap().clone();
+    let during = page(&pages, &base, "/french.html");
+    assert_eq!(during.hreflang_self, ["fr"], "während des Crawls");
+    let stored: Vec<(String, Option<String>)> = {
+        let mut stmt = fx
+            .file
+            .conn()
+            .prepare("SELECT h.code_raw, h.url FROM hreflang h JOIN urls u ON u.id = h.url_id WHERE u.address LIKE '%/french.html' ORDER BY h.position")
+            .unwrap();
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        stored,
+        [
+            ("fr".to_string(), Some(format!("{base}/french.html"))),
+            ("de".to_string(), Some(format!("{base}/"))),
+        ],
+        "aufgelöste Ziele in der Tabelle hreflang"
+    );
+    let after = os_engine::ai_input::load_pages(fx.file.path(), &CrawlConfig::default()).unwrap();
+    let french = after
+        .iter()
+        .find(|p| p.url.ends_with("/french.html"))
+        .expect("Seite nach dem Crawl");
+    assert_eq!(french.hreflang_self, ["fr"], "nach dem Crawl");
+}
+
+/// Warteschlange, deren Ende ohne Stoppen erst nach `release` fertig wird (gehaltener Request).
+#[derive(Default)]
+struct Gate {
+    ends: Mutex<Vec<AiQueueEnd>>,
+    release: tokio::sync::Notify,
+    hook_ran: AtomicBool,
+}
+
+struct GateQueue(Arc<Gate>);
+struct GateSession(Arc<Gate>);
+
+impl AiQueue for GateQueue {
+    fn begin(&self, _start: AiQueueStart) -> Option<Arc<dyn AiQueueSession>> {
+        Some(Arc::new(GateSession(self.0.clone())))
+    }
+}
+
+impl AiQueueSession for GateSession {
+    fn page(&self, _page: PageAiFields) {}
+    fn end(&self, end: AiQueueEnd) -> AiQueueDone {
+        self.0.ends.lock().unwrap().push(end);
+        let gate = self.0.clone();
+        Box::pin(async move {
+            if end == AiQueueEnd::Drain {
+                gate.release.notified().await;
+            }
+        })
+    }
+}
+
+fn gate_deps(gate: &Arc<Gate>) -> EngineDeps {
+    let mut deps = test_deps();
+    deps.ai_queue = Some(Arc::new(GateQueue(gate.clone())));
+    let probe = gate.clone();
+    deps.on_finished = Some(Arc::new(move |_| {
+        probe.hook_ran.store(true, Ordering::SeqCst);
+    }));
+    deps
+}
+
+// spec: AI-020 [M4]
+// spec: CRAWL-141
+// Nachtrag 28.11.2026 („Vollständig“ beim Crawl-Ende ohne Stoppen): Mit dem Ende der Abrufe steht `Completed` in der Datei
+// und `CrawlHandle::ended` liefert die Zusammenfassung, während die Warteschlange noch läuft (die Statusabfrage der App
+// wartet darauf, nicht auf `wait()`); `on_finished` (Crawl-Analyse, Exporte der CLI) und `wait()` erst danach.
+#[tokio::test]
+async fn ended_reports_the_end_state_while_the_queue_drains() {
+    let dir = support::slow_site_dir(0);
+    let site = support::start_site(dir.path()).await;
+    let work = tempfile::tempdir().unwrap();
+    let path = work.path().join("crawl.ospider");
+    let gate = Arc::new(Gate::default());
+    let mut cfg = support::config_for(&site, 2);
+    cfg.limits.max_urls = 5;
+    let handle = support::start(cfg, &path, gate_deps(&gate)).await;
+    let summary = tokio::time::timeout(Duration::from_secs(30), handle.ended())
+        .await
+        .expect("Endzustand ohne Warten auf die Warteschlange")
+        .expect("Phase „nur noch KI-Warteschlange“");
+    assert_eq!(summary.state, CrawlState::Completed);
+    assert_eq!(summary.end_reason, Some(os_model::EndReason::LimitReached));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(!handle.is_finished(), "wait() wartet auf die Warteschlange");
+    assert!(
+        !gate.hook_ran.load(Ordering::SeqCst),
+        "on_finished erst mit leerer Warteschlange"
+    );
+    let file = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly).unwrap();
+    assert_eq!(
+        file.get_meta("state").unwrap().as_deref(),
+        Some("Completed")
+    );
+    assert_eq!(file.get_meta("owner_pid").unwrap().as_deref(), Some(""));
+    drop(file);
+    gate.release.notify_one();
+    let done = support::run_to_end(handle).await;
+    assert_eq!(done, summary);
+    assert!(gate.hook_ran.load(Ordering::SeqCst));
+    assert_eq!(*gate.ends.lock().unwrap(), [AiQueueEnd::Drain]);
+}
+
+// spec: AI-020 [M4]
+// spec: CRAWL-126 [M4]
+// Nachtrag 28.11.2026 („SIGINT, während nur noch die KI-Warteschlange läuft“): Pause in dieser Phase → die Warteschlange
+// erhält `Paused` (kein weiterer Request, laufende werden übernommen), der Zustand bleibt `Completed`; `wait()` endet,
+// ohne dass die Warteschlange leer sein muss.
+#[tokio::test]
+async fn pause_while_only_the_queue_runs_keeps_completed() {
+    let dir = support::slow_site_dir(0);
+    let site = support::start_site(dir.path()).await;
+    let work = tempfile::tempdir().unwrap();
+    let path = work.path().join("crawl.ospider");
+    let gate = Arc::new(Gate::default());
+    let mut cfg = support::config_for(&site, 2);
+    cfg.limits.max_urls = 5;
+    let handle = support::start(cfg, &path, gate_deps(&gate)).await;
+    tokio::time::timeout(Duration::from_secs(30), handle.ended())
+        .await
+        .unwrap()
+        .unwrap();
+    let pause = handle.pauser();
+    let wait = tokio::spawn(handle.wait());
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(!wait.is_finished());
+    pause();
+    let summary = tokio::time::timeout(Duration::from_secs(10), wait)
+        .await
+        .expect("Pause beendet das Warten auf die Warteschlange")
+        .unwrap()
+        .unwrap();
+    assert_eq!(summary.state, CrawlState::Completed);
+    assert_eq!(
+        *gate.ends.lock().unwrap(),
+        [AiQueueEnd::Drain, AiQueueEnd::Paused]
+    );
+    let file = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly).unwrap();
+    assert_eq!(
+        file.get_meta("state").unwrap().as_deref(),
+        Some("Completed")
+    );
+}
