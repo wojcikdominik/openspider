@@ -111,8 +111,18 @@ pub fn mask(v: &str) -> String {
     }
 }
 
-fn masked(v: Option<&str>) -> Value {
-    v.map_or(Value::Null, |s| Value::Text(mask(s)))
+/// Maskiert nur im CSV (OUT-016, für die Vorschlagsexporte immer an); im XLSX bleibt der Wert unverändert als Textzelle
+/// (OUT-003). Unbekanntes Format zählt als CSV.
+fn masks(writer: &dyn TableWriter) -> bool {
+    writer.format() != Some(crate::types::Format::Xlsx)
+}
+
+fn cell(csv: bool, v: &str) -> Value {
+    Value::Text(if csv { mask(v) } else { v.to_string() })
+}
+
+fn masked(csv: bool, v: Option<&str>) -> Value {
+    v.map_or(Value::Null, |s| cell(csv, s))
 }
 
 fn int(v: Option<u32>) -> Value {
@@ -141,6 +151,7 @@ fn write_accepted(job: &TableJob<'_>, writer: &mut dyn TableWriter) -> Result<u6
         ColumnKind::Text,
         ColumnKind::Text,
     ];
+    let csv = masks(writer);
     let mut count = 0;
     for (label, r) in records(job)? {
         if !matches!(
@@ -158,8 +169,8 @@ fn write_accepted(job: &TableJob<'_>, writer: &mut dyn TableWriter) -> Result<u6
             &[
                 Value::Text(r.address.clone()),
                 Value::Text(label.to_string()),
-                masked(r.current_value.as_deref()),
-                Value::Text(mask(&a.value)),
+                masked(csv, r.current_value.as_deref()),
+                cell(csv, &a.value),
                 Value::Int(i64::from(a.length)),
                 int(a.pixel_width),
                 Value::Text(a.origin.as_str().to_string()),
@@ -191,6 +202,7 @@ fn write_all(job: &TableJob<'_>, writer: &mut dyn TableWriter) -> Result<u64, Ex
         ColumnKind::Text,
         ColumnKind::Text,
     ];
+    let csv = masks(writer);
     let mut count = 0;
     for (label, r) in records(job)? {
         let rec = &r.record;
@@ -198,7 +210,7 @@ fn write_all(job: &TableJob<'_>, writer: &mut dyn TableWriter) -> Result<u64, Ex
             let mut values = vec![
                 Value::Text(r.address.clone()),
                 Value::Text(label.to_string()),
-                masked(r.current_value.as_deref()),
+                masked(csv, r.current_value.as_deref()),
                 Value::Text(rec.status.clone()),
                 Value::Text(rec.review.label().to_string()),
             ];
@@ -230,7 +242,7 @@ fn write_all(job: &TableJob<'_>, writer: &mut dyn TableWriter) -> Result<u64, Ex
                 writer,
                 [
                     Value::Int(i64::from(c.index)),
-                    Value::Text(mask(&c.value)),
+                    cell(csv, &c.value),
                     Value::Int(i64::from(c.length)),
                     int(c.pixel_width),
                     Value::Bool(c.valid),
@@ -422,5 +434,49 @@ mod tests {
         assert!(crate::catalog::list(crate::catalog::ExportKind::Bulk).contains(&ALL.to_string()));
         assert_eq!(mask("-5"), "'-5");
         assert_eq!(mask("Wanderschuhe"), "Wanderschuhe");
+    }
+
+    // spec: AI-076 [M4]
+    // spec: OUT-003 [M4]
+    // XLSX: formelartige Werte als reine Textzellen, unverändert und ohne `'` (OUT-003); maskiert wird nur im CSV.
+    #[test]
+    fn xlsx_keeps_formula_like_values_as_unmasked_text_cells() {
+        use calamine::{Data, Reader};
+        let dir = tempfile::tempdir().unwrap();
+        let f = file(dir.path());
+        let texts = |name: &str| -> Vec<String> {
+            let out =
+                export_bulk(&f, &CrawlConfig::default(), name, dir.path(), Format::Xlsx).unwrap();
+            let mut book: calamine::Xlsx<_> = calamine::open_workbook(&out[0].path).unwrap();
+            let sheet = book.sheet_names()[0].clone();
+            let range = book.worksheet_range(&sheet).unwrap();
+            let formulas = book.worksheet_formula(&sheet).unwrap();
+            assert!(
+                formulas.rows().all(|r| r.iter().all(String::is_empty)),
+                "keine Formeln"
+            );
+            range
+                .rows()
+                .flatten()
+                .filter_map(|c| match c {
+                    Data::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let accepted = texts(ACCEPTED);
+        let has = |texts: &[String], p: &str| texts.iter().any(|t| t.starts_with(p));
+        assert!(
+            has(&accepted, "=HYPERLINK(\"http://evil\")"),
+            "{accepted:?}"
+        );
+        assert!(has(&accepted, "=SUM(1,2) Rucksäcke"), "{accepted:?}");
+        assert!(
+            !accepted.iter().any(|t| t.starts_with('\'')),
+            "{accepted:?}"
+        );
+        let all = texts(ALL);
+        assert!(has(&all, "-Rabatt"), "{all:?}");
+        assert!(!all.iter().any(|t| t.starts_with('\'')), "{all:?}");
     }
 }

@@ -104,6 +104,9 @@ impl CsvWriter {
 }
 
 impl TableWriter for CsvWriter {
+    fn format(&self) -> Option<crate::types::Format> {
+        Some(crate::types::Format::Csv)
+    }
     fn header(&mut self, columns: &[String]) -> Result<(), ExportError> {
         if self.columns.is_some() || self.rows > 0 {
             return Err(ExportError::Write(
