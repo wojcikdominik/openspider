@@ -20,6 +20,8 @@ pub fn start(app: &App) {
         if let CrawlEvent::ConfigChanged { key, old, new } = event {
             crate::commands::api::on_config_changed(app, key, old, new);
             crate::commands::sidebar_ext::on_config_changed(app, key, old, new);
+            // M4-V01 (AI-075): Neuprüfung der Vorschläge nach Grenzwertänderung.
+            crate::commands::ai_suggest::on_config_changed(app, key, old, new);
         }
     }));
 }

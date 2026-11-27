@@ -46,4 +46,16 @@ export const ai = {
   semanticRun: (args: AiRunArgs, signal?: AbortSignal) => client.invoke<OpHandle>("ai.semanticRun", args, signal),
   /** `ai.searchRun` – lang laufend: liefert sofort `OpHandle`, Ergebnis (JsonValue) über `Tick.ops[].result`. */
   searchRun: (args: AiRunArgs, signal?: AbortSignal) => client.invoke<OpHandle>("ai.searchRun", args, signal),
+  /** `ai.suggestPlan` */
+  suggestPlan: (args: JsonValue, signal?: AbortSignal) => client.invoke<JsonValue>("ai.suggestPlan", args, signal),
+  /** `ai.suggestDetail` */
+  suggestDetail: (args: JsonValue, signal?: AbortSignal) => client.invoke<JsonValue>("ai.suggestDetail", args, signal),
+  /** `ai.suggestReview` */
+  suggestReview: (args: JsonValue, signal?: AbortSignal) => client.invoke<JsonValue>("ai.suggestReview", args, signal),
+  /** `ai.suggestCheck` */
+  suggestCheck: (args: JsonValue, signal?: AbortSignal) => client.invoke<JsonValue>("ai.suggestCheck", args, signal),
+  /** `ai.suggestRecheck` */
+  suggestRecheck: (signal?: AbortSignal) => client.invoke<JsonValue>("ai.suggestRecheck", undefined, signal),
+  /** `ai.suggestFocusImport` */
+  suggestFocusImport: (args: JsonValue, signal?: AbortSignal) => client.invoke<JsonValue>("ai.suggestFocusImport", args, signal),
 } as const;

@@ -283,6 +283,9 @@ impl TableWriter for DeferredWriter<'_, '_> {
             "Deferred writer is finished by its owner".into(),
         ))
     }
+    fn format(&self) -> Option<Format> {
+        Some(self.format)
+    }
 }
 
 /// Runs a table with cancellation, progress, empty suppression and optional workbook consolidation.

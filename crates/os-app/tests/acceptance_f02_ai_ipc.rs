@@ -228,7 +228,17 @@ async fn ai_stubs_answer_not_implemented_with_switch_off_and_on() {
         }
         let names = ai_commands(&app);
         assert!(!names.is_empty());
-        for name in &names {
+        // Von Fachpaketen umgesetzte Commands sind keine Stubs mehr (M4-V01: Optimierungsvorschläge).
+        const IMPLEMENTED: &[&str] = &[
+            "ai.suggestRun",
+            "ai.suggestPlan",
+            "ai.suggestDetail",
+            "ai.suggestReview",
+            "ai.suggestCheck",
+            "ai.suggestRecheck",
+            "ai.suggestFocusImport",
+        ];
+        for name in names.iter().filter(|n| !IMPLEMENTED.contains(&n.as_str())) {
             // M4-U01: diese Commands sind umgesetzt und keine Stubs mehr (eigene Tests in `ai_cost_*.rs`).
             if U01_IMPLEMENTED.contains(&name.as_str()) {
                 continue;

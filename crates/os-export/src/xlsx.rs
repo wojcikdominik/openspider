@@ -354,6 +354,9 @@ impl XlsxWriter {
 }
 
 impl TableWriter for XlsxWriter {
+    fn format(&self) -> Option<crate::types::Format> {
+        Some(crate::types::Format::Xlsx)
+    }
     fn header(&mut self, columns: &[String]) -> Result<(), ExportError> {
         if self.header.is_some() {
             return Err(ExportError::Write(

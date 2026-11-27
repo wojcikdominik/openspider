@@ -14,6 +14,8 @@ pub mod ai_cost;
 pub mod ai_preview;
 /// KI-Einstellungen: Modellwahl je Aufgabe, Richtlinie, Budget (M4-U01).
 pub mod ai_settings;
+/// Optimierungsvorschläge (M4-V01, AI-070 ff.).
+pub mod ai_suggest;
 pub mod analysis;
 pub mod api;
 pub mod app;
@@ -95,6 +97,8 @@ pub fn register_all(r: &mut Registry) {
     crate::crash::commands::register(r);
     // M4-F02 (Plan M4 3.3): KI-Command-Katalog (Stubs, Besitzer je Command).
     ai_catalog::register(r);
+    // M4-V01 (additiv): Prüfen, Übernehmen, Live-Prüfung und Fokus-Begriffe der Vorschläge.
+    ai_suggest::register(r);
 }
 
 pub mod app_quit;

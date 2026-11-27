@@ -314,9 +314,9 @@ fn every_tab_is_a_real_definition_or_a_marked_stub() {
     }
     // Alle 15 neuen Tabs sind in M2-F02 Stubs; die 16 Tabs von M1 sind echte Definitionen.
     // M2-D01 implements Meta Keywords; M2-D05 Pagination, M2-D14 Custom Search, M2-I03 Search Console, M2-I04 PageSpeed, M2-I02 Analytics.
-    // M2-I05 ersetzt den Link-Metrics-Stub (K2-60, INTEG-151).
+    // M2-I05 ersetzt den Link-Metrics-Stub (K2-60, INTEG-151). M4-V01 setzt AI Suggestions um.
     assert_eq!(
-        stubs, 4,
+        stubs, 3,
         "Stub-Tabs (Structured Data: M2-D09, Validation: M2-D10, Custom Extraction: M2-D15)"
     );
 }
@@ -345,7 +345,8 @@ fn stub_filters_are_marked_by_predicate_zero_and_never_all() {
         .iter()
         .filter(|(_, id, ..)| !id.eq_ignore_ascii_case("All"))
         .count();
-    assert_eq!(stub_filters + real_new, m2_without_all + 27);
+    // M4-V01: die neun Filter von AI Suggestions außer `All` sind umgesetzt (27 − 9 = 18 M4-Stubs).
+    assert_eq!(stub_filters + real_new, m2_without_all + 18);
     assert!(stub_filters > 0);
 }
 

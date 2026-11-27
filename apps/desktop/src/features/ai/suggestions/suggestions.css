@@ -1,0 +1,17 @@
+/* Prüfbereich der KI-Vorschläge (M4-V01): rechts unten über der Tabelle, einklappbar. */
+.os-ai-sugg { position:fixed; right:var(--os-size-16); bottom:var(--os-size-40); z-index:20; width:var(--os-size-420); max-height:70vh; overflow:auto; background:var(--os-bg-surface); color:var(--os-text); border:var(--os-line) solid var(--os-border-strong); border-radius:var(--os-radius-card); box-shadow:var(--os-shadow-strong); padding:var(--os-size-12); }
+.os-ai-sugg[data-open="false"] { width:auto; }
+.os-ai-sugg-head { display:flex; align-items:center; justify-content:space-between; gap:var(--os-size-8); }
+.os-ai-sugg-head h2 { margin:0; font-size:var(--os-font-comfortable); }
+.os-ai-sugg-body { display:flex; flex-direction:column; gap:var(--os-size-8); margin-top:var(--os-size-8); }
+.os-ai-sugg-address { margin:0; color:var(--os-text-muted); overflow-wrap:anywhere; }
+.os-ai-sugg-elements { display:flex; gap:var(--os-size-4); }
+.os-ai-sugg-status { display:grid; grid-template-columns:max-content 1fr; gap:var(--os-size-4) var(--os-size-8); margin:0; }
+.os-ai-sugg-status dt { color:var(--os-text-muted); }
+.os-ai-sugg-status dd { margin:0; overflow-wrap:anywhere; }
+.os-ai-sugg-candidates { border:var(--os-line) solid var(--os-border); border-radius:var(--os-radius); padding:var(--os-size-8); margin:0; display:flex; flex-direction:column; gap:var(--os-size-8); }
+.os-ai-sugg-candidate { display:grid; grid-template-columns:auto 1fr auto; gap:var(--os-size-4) var(--os-size-8); align-items:start; }
+.os-ai-sugg-value { overflow-wrap:anywhere; }
+.os-ai-sugg-metrics, .os-ai-sugg-violations { grid-column:2 / 4; color:var(--os-text-muted); }
+.os-ai-sugg-edit { display:flex; flex-direction:column; gap:var(--os-size-4); }
+.os-ai-sugg .os-serp-preview { max-width:none; }

@@ -454,6 +454,8 @@ pub fn dynamic_entries(cfg: &CrawlConfig) -> Vec<DynamicEntry> {
     let mut entries = bulk_custom_search::dynamic_entries(cfg);
     entries.extend(bulk_images::dynamic_entries(cfg));
     entries.extend(bulk_custom_extraction::dynamic_entries(cfg));
+    // M4-V01 (AI-076, additiv): Exporte der Optimierungsvorschläge.
+    entries.extend(bulk_ai_suggestions::dynamic_entries(cfg));
     entries
 }
 

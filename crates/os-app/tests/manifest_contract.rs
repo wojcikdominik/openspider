@@ -255,6 +255,13 @@ const CATALOG_M4: &[&str] = &[
     "ai.promptsList",
     "ai.semanticRun",
     "ai.searchRun",
+    // M4-V01 (AI-070 ff., additiv): Prüfen, Übernehmen, Live-Prüfung, Neuprüfung, Fokus-Begriffe.
+    "ai.suggestPlan",
+    "ai.suggestDetail",
+    "ai.suggestReview",
+    "ai.suggestCheck",
+    "ai.suggestRecheck",
+    "ai.suggestFocusImport",
 ];
 
 /// `long_running` laut den Tabellen (liefert sofort einen `OpHandle`).
