@@ -2,7 +2,7 @@
 // Gültigkeit und Verstößen; „Übernehmen“, „Bearbeiten“ (Live-Prüfung im Kern), „Ablehnen“, „Zurücksetzen“; Massenaktion
 // „Kandidat 1 übernehmen“ für markierte URLs; SERP-Vorschau des gewählten Kandidaten (UI-037/ONPAGE-194) über
 // `detail.serpMeasure` – dieselbe Kürzung wie für einen gleichlautenden echten Title.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { detail as detailApi } from "../../../ipc/detail";
 import { isSilentError, toCmdError } from "../../../ipc/errors";
 import { eventBus } from "../../../ipc/events";
@@ -25,6 +25,11 @@ import {
 } from "./model";
 import "../../detail/serp/serp.css";
 import "./suggestions.css";
+
+/** Gleicher Stand der Prüfansicht (Antworten des Kerns sind reines JSON). */
+function sameDetail(a: SuggestDetail | undefined, b: SuggestDetail): boolean {
+  return a !== undefined && JSON.stringify(a) === JSON.stringify(b);
+}
 
 export interface ReviewPanelProps {
   /** Fokus-URL der oberen Tabelle. */
@@ -50,7 +55,8 @@ export function ReviewPanel({ urlId, selected }: ReviewPanelProps) {
     if (urlId === undefined) { setData(undefined); return; }
     const controller = new AbortController();
     void suggestApi.detail(urlId, controller.signal)
-      .then((value) => { if (!controller.signal.aborted) { setData(value); setError(undefined); } })
+      // Unveränderter Stand (Nachladen nach einem Tick) behält Auswahl und Bearbeitung.
+      .then((value) => { if (!controller.signal.aborted) { setData((prev) => (sameDetail(prev, value) ? prev : value)); setError(undefined); } })
       .catch((e) => { if (!controller.signal.aborted && !isSilentError(e)) setError(t(toCmdError(e).messageKey)); });
     return () => controller.abort();
   }, [urlId, version]);
@@ -59,6 +65,19 @@ export function ReviewPanel({ urlId, selected }: ReviewPanelProps) {
   useEffect(() => eventBus.on("settingsChanged", () => {
     void suggestApi.recheck().then(() => setVersion((v) => v + 1)).catch(() => undefined);
   }), []);
+
+  // Grenzwertänderung über die Crawl-Konfiguration (`config.set`): der Kern prüft selbst neu (AI-075) und meldet den neuen
+  // Datenstand über den Tick (Zähler- bzw. View-Version); dann neu laden – nicht während einer Bearbeitung.
+  const editingRef = useRef(false);
+  editingRef.current = editing !== null;
+  useEffect(() => {
+    let last: number | undefined;
+    return eventBus.on("tick", (tick) => {
+      const changed = (last !== undefined && tick.countsVersion !== last) || tick.views.length > 0;
+      last = tick.countsVersion;
+      if (changed && !editingRef.current) setVersion((v) => v + 1);
+    });
+  }, []);
 
   const el = data?.elements.find((e) => e.element === element);
   useEffect(() => { setChosen(initialCandidate(el)); setEditing(null); setCheck(undefined); }, [data, element]);

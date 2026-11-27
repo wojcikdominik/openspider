@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createClient, setClient } from "../../../ipc/client";
+import { eventBus } from "../../../ipc/events";
+import type { Tick } from "../../../ipc/gen/Tick";
 import { MockCore } from "../../../ipc/transport/mock";
 import { getT, setLanguage } from "../../../i18n";
 import { usePrefs } from "../../../state/prefs";
@@ -153,6 +155,23 @@ describe("Prüfansicht", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Accept candidate 1 for 3 selected URLs" }));
     expect(await screen.findByTestId("ai-sugg-message")).toHaveTextContent("2 accepted, 1 without a valid suggestion (stay open).");
     expect(calls("ai.suggestReview")[0]).toMatchObject({ urlIds: [2, 5, 9], action: "acceptFirst" });
+  });
+
+  // spec: AI-075 [M4]
+  // Grenzwertänderung über die Crawl-Konfiguration: der Kern prüft selbst neu; der nächste Tick mit neuer Zählerversion
+  // lädt die Prüfansicht ohne Nutzeraktion neu (neuer Status sichtbar), ohne eigenen `ai.suggestRecheck`.
+  it("lädt nach einer Grenzwertänderung der Crawl-Konfiguration über den Tick neu", async () => {
+    render(<ReviewPanel urlId={2} selected={[2]} />);
+    expect(await screen.findByTestId("ai-sugg-status")).toHaveTextContent("Valid");
+    const tick = (countsVersion: number) => ({ seq: countsVersion, at: "2026-11-27T09:00:00Z", views: [], countsVersion, issuesVersion: 0, sidebarVersion: 0, ops: [], notices: [] }) as unknown as Tick;
+    await act(async () => eventBus.emit({ kind: "tick", tick: tick(1) }));
+    const before = calls("ai.suggestDetail").length;
+    current = detail("No valid suggestion");
+    await act(async () => eventBus.emit({ kind: "tick", tick: tick(1) }));
+    expect(calls("ai.suggestDetail")).toHaveLength(before);
+    await act(async () => eventBus.emit({ kind: "tick", tick: tick(2) }));
+    await waitFor(() => expect(screen.getByTestId("ai-sugg-status")).toHaveTextContent("No valid suggestion"));
+    expect(calls("ai.suggestRecheck")).toHaveLength(0);
   });
 
   // spec: AI-020 [M4]
