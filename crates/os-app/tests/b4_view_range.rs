@@ -16,6 +16,34 @@ async fn open_view(app: &os_app::App, spec: Value, columns: Value) -> Value {
     handle
 }
 
+/// Die ersten 60 Zeilen der Ansicht in ihrem aktuellen Stand. Der laufende Crawl kann die Version zwischen `view.update`
+/// und `view.rows` weiterzählen; `view.rows` meldet das dann wie der Oberfläche mit `err-view-stale`, und wie sie fragt
+/// der Test den Stand neu ab (27.11.2026: im vollen Workspace-Lauf zweimal an dieser Stelle rot). Jeder andere Fehler
+/// und ein dauerhaft veralteter Stand bleiben rot.
+async fn current_window(app: &os_app::App, id: &Value) -> Value {
+    for _ in 0..50 {
+        let current = call(
+            app,
+            "view.update",
+            json!({"viewId":id,"spec":{"kind":"tab","tab":"Internal","filter":"All","search":null,"sort":[]}}),
+        )
+        .await;
+        let rows = app
+            .dispatch(
+                ctx(),
+                "view.rows",
+                json!({"viewId":id,"version":current["version"],"offset":0,"limit":60,"columns":["Address"]}),
+            )
+            .await;
+        match rows {
+            Ok(window) => return window,
+            Err(e) if e.code == os_app::ErrorCode::Stale => continue,
+            Err(e) => panic!("view.rows: {e:?}"),
+        }
+    }
+    panic!("view.rows: stale in 50 consecutive attempts");
+}
+
 async fn start_live(app: &os_app::App, base: String) {
     let mut config = cfg();
     config.speed.threads = 4;
@@ -74,18 +102,7 @@ async fn a_range_stays_exact_while_the_running_crawl_changes_the_view_version() 
     let mut versions = BTreeSet::new();
     for round in 0..120u64 {
         os_app::session::poll(&app).await.unwrap();
-        let current = call(
-            &app,
-            "view.update",
-            json!({"viewId":id,"spec":{"kind":"tab","tab":"Internal","filter":"All","search":null,"sort":[]}}),
-        )
-        .await;
-        let window = call(
-            &app,
-            "view.rows",
-            json!({"viewId":id,"version":current["version"],"offset":0,"limit":60,"columns":["Address"]}),
-        )
-        .await;
+        let window = current_window(&app, &id).await;
         let keys = window["rowKeys"].as_array().unwrap().clone();
         let (a, b) = (5 + (round as usize % 10), 40 + (round as usize % 15));
         // The opposite direction (Shift+click above the anchor) yields the same table order.
