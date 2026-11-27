@@ -36,6 +36,8 @@ pub fn deps(app: &App) -> EngineDeps {
         on_finished: None,
         owner_kind: "app",
         renderer: None,
+        // M4-D05 (08 AI-020 [M4], AI-039, E-6 a): KI-Warteschlange; ohne Schalter „KI (Vorschau)“ keine.
+        ai_queue: crate::commands::ai_run::app_queue(app),
     }
     .with_form_profile_dir(app.config().paths.settings.join("auth"))
 }
@@ -415,6 +417,10 @@ pub async fn resume(app: &App, ctx: CallCtx) -> Result<(), CmdError> {
         None => fetcher(app, &cfg)?,
     };
     let path = s.path.clone();
+    // M4-D05 (08 AI-020, Nachtrag K4-13): Ein KI-Lauf aus der Pause („KI-Analyse starten“) sendet ab jetzt nichts Neues;
+    // seine offenen Einträge übernimmt die fortgesetzte KI-Warteschlange der Engine (dieselbe Laufzeile, kein neuer
+    // Voranschlag), nachdem er seine laufenden Requests übernommen hat.
+    os_ai::run::controls().pause(&path);
     let deps = deps(app);
     // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Schritte in der Fortsetzung.
     let run = crate::commands::ai_preview::restricted_override(
@@ -468,6 +474,13 @@ pub async fn pause_or_stop(app: &App, ctx: CallCtx, stop: bool) -> Result<(), Cm
             false
         }
     });
+    // M4-D05 (08 AI-020, Nachtrag K4-13): Pause bzw. Stopp gelten auch für einen KI-Lauf auf dieser Crawl-Datei – kein
+    // neuer Request, laufende werden übernommen.
+    if stop {
+        os_ai::run::controls().stop(&requested.path);
+    } else {
+        os_ai::run::controls().pause(&requested.path);
+    }
     super::interrupt_poll(app);
     let service = app.ext::<SessionService>();
     let _guard = service.mutation.lock().await;

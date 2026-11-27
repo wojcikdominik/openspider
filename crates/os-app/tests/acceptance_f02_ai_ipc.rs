@@ -197,23 +197,16 @@ async fn ai_commands_are_in_the_manifest_with_generated_types() {
     }
 }
 
-/// Von M4-U01 umgesetzte Commands des Katalogs (Plan M4 3.3: der Besitzer ersetzt den Stub).
-const U01_IMPLEMENTED: [&str; 6] = [
-    "ai.settingsGet",
-    "ai.settingsSet",
-    "ai.costEstimate",
-    "ai.costBudget",
-    "ai.consentStatus",
-    "ai.consentGrant",
-];
-
 // spec: UI-004 [M4]
 // acceptance: independent
 // M4.md 3.3: die Commands sind Stubs. Ein Stub antwortet in der Form des Command-Vertrags (M2-ui-concept 4.2) mit
 // `Unsupported`/`err-not-implemented` und nennt sich selbst – bei Schalter aus und an; ein bekannter Command ist nie
-// `NotFound`.
+// `NotFound`. Umbau nach K4-28 (M4-D05): geprüft werden genau die Commands, deren Handler noch der Stub ist (Liste aus
+// `ai_catalog`); umgesetzte Commands prüfen ihre Pakete selbst, keine Ausnahmeliste je Paket.
 #[tokio::test]
 async fn ai_stubs_answer_not_implemented_with_switch_off_and_on() {
+    let stubs = os_app::commands::ai_catalog::stub_commands();
+    assert!(!stubs.is_empty());
     for on in [false, true] {
         let home = tempfile::tempdir().unwrap();
         let app = app(home.path());
@@ -228,21 +221,8 @@ async fn ai_stubs_answer_not_implemented_with_switch_off_and_on() {
         }
         let names = ai_commands(&app);
         assert!(!names.is_empty());
-        // Von Fachpaketen umgesetzte Commands sind keine Stubs mehr (M4-V01: Optimierungsvorschläge).
-        const IMPLEMENTED: &[&str] = &[
-            "ai.suggestRun",
-            "ai.suggestPlan",
-            "ai.suggestDetail",
-            "ai.suggestReview",
-            "ai.suggestCheck",
-            "ai.suggestRecheck",
-            "ai.suggestFocusImport",
-        ];
-        for name in names.iter().filter(|n| !IMPLEMENTED.contains(&n.as_str())) {
-            // M4-U01: diese Commands sind umgesetzt und keine Stubs mehr (eigene Tests in `ai_cost_*.rs`).
-            if U01_IMPLEMENTED.contains(&name.as_str()) {
-                continue;
-            }
+        for name in &stubs {
+            assert!(names.iter().any(|n| n == name), "{name} ist registriert");
             let err = match app.dispatch(ctx(), name, json!({})).await {
                 Ok(v) => panic!("{name} (Schalter {on}) ist ein Stub und darf nicht gelingen: {v}"),
                 Err(e) => e,

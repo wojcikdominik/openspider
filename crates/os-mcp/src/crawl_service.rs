@@ -77,6 +77,13 @@ impl CrawlService {
             sink_factory: None,
             owner_kind: "mcp-stdio",
             renderer: None,
+            // M4-D05 (08 AI-020 [M4], AI-039): KI-Warteschlange (automatische Ausführung, Pause/Fortsetzen über die
+            // Engine); ohne Schalter „KI (Vorschau)“ keine. KI-Werkzeuge baut M4-C02.
+            ai_queue: os_ai::run::standalone_queue(
+                &os_store::paths::app_paths().settings,
+                "mcp-stdio",
+                Arc::new(SystemClock),
+            ),
             on_finished: Some(Arc::new(|summary| {
                 if let Err(e) = run_after_crawl(&summary.file, &CancelToken::new()) {
                     tracing::error!(error=%e,"crawl analysis failed");

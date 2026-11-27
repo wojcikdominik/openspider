@@ -46,14 +46,14 @@ pub const CATALOG: &[AiCommand] = &[
     cmd("ai.settingsGet", "void", "JsonValue", false, "M4-U01"),
     cmd("ai.settingsSet", "JsonValue", "JsonValue", false, "M4-U01"),
     // ai.cost.estimate|budget|log – Kostenvoranschlag, Budget, Protokoll (AI-012 – AI-014, UI-013 [M4])
-    cmd("ai.costEstimate", "AiRunArgs", "JsonValue", false, "M4-K05"),
+    cmd("ai.costEstimate", "AiRunArgs", "JsonValue", false, "M4-U01"),
     cmd("ai.costBudget", "void", "AiCostSnapshot", false, "M4-U01"),
     cmd("ai.costLog", "void", "JsonValue", false, "M4-K05"),
     // ai.consent.* – Datenflussübersicht und Einwilligung (AI-018)
     cmd("ai.consentStatus", "void", "JsonValue", false, "M4-U01"),
     cmd("ai.consentGrant", "JsonValue", "JsonValue", false, "M4-U01"),
     // ai.decisions.* / ai.questions.* / ai.tester.run – Decision-Engine (AI-030 ff., AI-042)
-    cmd("ai.decisionsRun", "AiRunArgs", "JsonValue", true, "M4-D01"),
+    cmd("ai.decisionsRun", "AiRunArgs", "JsonValue", true, "M4-D05"),
     cmd("ai.questionsList", "void", "JsonValue", false, "M4-D01"),
     cmd("ai.testerRun", "JsonValue", "JsonValue", true, "M4-D04"),
     // ai.suggest.* – Optimierungsvorschläge (AI-070 ff.)
@@ -109,12 +109,30 @@ stub_handler!(prompts_list, "ai.promptsList");
 stub_handler!(semantic_run, "ai.semanticRun");
 stub_handler!(search_run, "ai.searchRun");
 
-fn handler(name: &str) -> Handler {
+/// Commands, deren Besitzer den Handler im `match` von [`handler`] ersetzt hat (M4-V01).
+const REPLACED_IN_MATCH: [&str; 1] = ["ai.suggestRun"];
+
+/// Umgesetzte Commands der Fachpakete (der Besitzer ersetzt den Stub, Vertrag unverändert).
+fn implemented(name: &str) -> Option<Handler> {
     // M4-U01 (additiv, E3): umgesetzte Commands der Bereiche Einstellungen, Kosten und Einwilligung.
-    if let Some(h) = super::ai_settings::handler(name)
+    super::ai_settings::handler(name)
         .or_else(|| super::ai_cost::handler(name))
         .or_else(|| super::ai_consent::handler(name))
-    {
+        // M4-D05: KI-Lauf der Decision-Fragen (`ai.decisionsRun`).
+        .or_else(|| super::ai_run::handler(name))
+}
+
+/// Commands des Katalogs, deren Handler noch der Stub ist (K4-28: der Stub-Test aus F02 prüft genau diese).
+pub fn stub_commands() -> Vec<&'static str> {
+    CATALOG
+        .iter()
+        .map(|c| c.name)
+        .filter(|n| implemented(n).is_none() && !REPLACED_IN_MATCH.contains(n))
+        .collect()
+}
+
+fn handler(name: &str) -> Handler {
+    if let Some(h) = implemented(name) {
         return h;
     }
     match name {

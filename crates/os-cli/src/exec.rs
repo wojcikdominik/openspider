@@ -371,6 +371,7 @@ fn deps(id: Option<CrawlId>, hook: FinishedHook) -> EngineDeps {
         on_finished: Some(hook),
         owner_kind: "cli",
         renderer: None,
+        ai_queue: None,
     }
 }
 
@@ -383,6 +384,9 @@ fn api_secrets(plan: &Plan) -> Arc<dyn SecretStore> {
 fn deps_with_apis(plan: &Plan, id: Option<CrawlId>, hook: FinishedHook) -> EngineDeps {
     let mut value = deps(id, hook);
     value.secrets = api_secrets(plan);
+    // M4-D05 (08 AI-020 [M4], AI-039): KI-Warteschlange (automatische Ausführung, SIGINT und `--resume` über die
+    // Engine); ohne Schalter „KI (Vorschau)“ keine. Eigene KI-Befehle baut M4-C01.
+    value.ai_queue = os_ai::run::standalone_queue(&plan.paths.settings, "cli", value.clock.clone());
     value
 }
 fn preflight_apis(plan: &Plan, rep: &Reporter) -> Result<(), CliError> {
