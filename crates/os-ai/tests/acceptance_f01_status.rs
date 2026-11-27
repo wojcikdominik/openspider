@@ -76,7 +76,9 @@ fn table_row(s: &AiStatus) -> usize {
         | AiStatus::SkippedNoCapableModel
         | AiStatus::SkippedImageTooLarge
         | AiStatus::SkippedUnsupportedFormat
-        | AiStatus::SkippedNoDeclaredLanguage => 4,
+        | AiStatus::SkippedNoDeclaredLanguage
+        // M4-D05 (AI-020, Nachtrag 26.11.2026): Zeile „Skipped (…)“ der Tabelle.
+        | AiStatus::SkippedInputUnavailable => 4,
         AiStatus::BudgetExceeded => 5,
         AiStatus::QuotaExceeded => 6,
         AiStatus::MissingApiKey => 7,
