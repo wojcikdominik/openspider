@@ -200,7 +200,8 @@ test("switch on: four AI tabs with an empty state, AI settings section, AI confi
   await language(settings, "de");
   if (sectionsOn.includes("KI")) {
     await settings.getByRole("tab", { name: "KI", exact: true }).click();
-    await expect.soft(settings.getByRole("tabpanel")).toBeVisible();
+    // M4-U01: der Abschnitt KI hat eine eigene, benannte Reitergruppe („KI-Einstellungen“); gemeint ist das Panel des Abschnitts.
+    await expect.soft(settings.getByRole("tabpanel", { name: "KI", exact: true })).toBeVisible();
   }
 
   await page.reload();

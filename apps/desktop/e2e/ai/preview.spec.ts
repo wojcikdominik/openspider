@@ -100,7 +100,10 @@ test("ohne Schalter KI (Vorschau) erscheint keine KI-Oberfläche, eingeschaltet 
   await expect(toggle).toBeChecked();
   await expect(nav.getByRole("tab", { name: "AI", exact: true })).toBeVisible();
   await nav.getByRole("tab", { name: "AI", exact: true }).click();
-  await expect(settings.locator('[data-settings-section="ai"] [data-empty-state]')).toBeVisible();
+  // Seit M4-U01 zeigt der Abschnitt die KI-Einstellungen statt des Leerzustands aus F02.
+  const aiSection = settings.locator('[data-settings-section="ai"]');
+  await expect(aiSection.locator('[data-ai-area="settings"]')).toBeVisible();
+  await expect(aiSection.getByRole("tablist", { name: "AI settings" })).toBeVisible();
 
   await expect.poll(async () => (await catalogIds(page)).filter(isAi).sort()).toEqual([...AI_TABS].sort());
   const on = await listedNames(alpha);
