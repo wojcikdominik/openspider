@@ -1,5 +1,6 @@
 //! Unabhängige Abnahme (fix/maintenance-teardown, Teil B i): Fällt die letzte `App`-Referenz während einer laufenden
-//! Aufbewahrungsrunde (OUT-229), endet der Abbau erst, wenn die Wartungsspur nicht mehr in den Crawl-Ordner schreibt.
+//! Aufbewahrungsrunde (OUT-229), schreibt innerhalb von 1 s danach keine Wartungsspur mehr in den Crawl-Ordner (Zusicherung
+//! präzisiert 27.11.2026: höchstens ein synchroner Tick einer Takt-Schleife).
 //!
 //! Eigene Testdatei (eigener Prozess): Ein globaler `tracing`-Subscriber hält die Runde nach der ersten Löschung an
 //! (Ereignis mit Feld `age_days`) und zählt die Löschungen; er bemerkt außerdem, wenn der Abbau den Wartungsthread
@@ -152,18 +153,41 @@ async fn dropping_the_last_app_during_a_running_round_leaves_no_writer_in_the_di
             probe().wait("Beginn des Abbaus", |s| s.dropping);
             probe().with(|s| s.released = true);
         });
+        let weak = app.downgrade();
         probe().with(|s| s.dropping = true);
         drop(app);
-        let (deletions, detached) = probe().with(|s| (s.deletions, s.detached));
         releaser.join().unwrap();
 
+        // Zusicherung (präzisiert 27.11.2026): Innerhalb von 1 s nach dem Abbau durch den Besitzer ist die App weg, die
+        // laufende Runde fertig und keine Verbindung mehr offen (SQLite entfernt -wal/-shm erst mit der letzten
+        // Verbindung). Trifft der Abbau einen Tick einer Takt-Schleife, läuft der eigentliche Abbau wenige
+        // Mikrosekunden später auf deren Thread. Abbruch, sobald der Zustand erreicht ist: keine feste Wartezeit.
+        let companions: Vec<PathBuf> = [".index.sqlite", ".registry.sqlite"]
+            .iter()
+            .flat_map(|name| ["-wal", "-shm"].map(|suffix| crawls.join(format!("{name}{suffix}"))))
+            .collect();
+        let settled = || {
+            weak.upgrade().is_none()
+                && probe().with(|s| s.deletions) == 2
+                && expired.iter().all(|p| !p.exists())
+                && companions.iter().all(|c| !c.exists())
+        };
+        let start = std::time::Instant::now();
+        while !settled() && start.elapsed() < Duration::from_secs(1) {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        let (deletions, detached) = probe().with(|s| (s.deletions, s.detached));
         assert!(
             !detached,
             "Zyklus {cycle}: Abbau ließ den Wartungsthread losgelöst zurück"
         );
+        assert!(
+            weak.upgrade().is_none(),
+            "Zyklus {cycle}: App 1 s nach dem Abbau durch den Besitzer noch nicht abgebaut"
+        );
         assert_eq!(
             deletions, 2,
-            "Zyklus {cycle}: Abbau endete vor dem Ende der laufenden Runde"
+            "Zyklus {cycle}: laufende Runde 1 s nach dem Abbau nicht beendet"
         );
         for p in &expired {
             assert!(
@@ -172,20 +196,16 @@ async fn dropping_the_last_app_during_a_running_round_leaves_no_writer_in_the_di
                 p.display()
             );
         }
-        // Keine offene Verbindung mehr: SQLite entfernt -wal/-shm erst mit der letzten Verbindung.
-        for name in [".index.sqlite", ".registry.sqlite"] {
-            for suffix in ["-wal", "-shm"] {
-                let companion = crawls.join(format!("{name}{suffix}"));
-                assert!(
-                    !companion.exists(),
-                    "Zyklus {cycle}: nach dem Abbau noch geöffnet: {}",
-                    companion.display()
-                );
-            }
+        for companion in &companions {
+            assert!(
+                !companion.exists(),
+                "Zyklus {cycle}: 1 s nach dem Abbau noch geöffnet: {}",
+                companion.display()
+            );
         }
-        // Das Verzeichnis lässt sich sofort entfernen und bleibt weg.
+        // Danach lässt sich das Verzeichnis entfernen und bleibt weg.
         let root = dir.path().to_path_buf();
-        dir.close().expect("Verzeichnis sofort löschbar");
+        dir.close().expect("Verzeichnis löschbar");
         assert!(!root.exists(), "Zyklus {cycle}: Verzeichnis neu angelegt");
     }
 }
