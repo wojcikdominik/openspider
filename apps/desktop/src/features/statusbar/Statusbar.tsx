@@ -9,18 +9,31 @@ import { useHeader } from "../header/model";
 import { useComparison } from "../compare/model";
 import "./statusbar.css";
 
-/** Latest snapshot, at most four paints/s. Notices are handled immediately by their own subscriber. */
+/** Shortest gap between two status paints (at most four paints/s). */
+const STATUS_PAINT_MS = 250;
+
+/**
+ * Latest snapshot, at most four paints/s. Notices are handled immediately by their own subscriber.
+ * UI-018: a change after a quiet phase is painted at once (e.g. the released end status „Completed“); only a change
+ * within 250 ms of the last paint waits for the rest of that gap, and all changes of the gap share one paint.
+ */
 export function useStatusSnapshot(): SessionState {
   const [snapshot, setSnapshot] = useState(useSession.getState);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let painted = Date.now();
+    const paint = () => { timer = undefined; painted = Date.now(); setSnapshot(useSession.getState()); };
     const off = useSession.subscribe((next, before) => {
       if (next.crawl === before.crawl && next.mcp === before.mcp && next.throttled === before.throttled &&
         next.crawlDelays === before.crawlDelays && next.openingCrawl === before.openingCrawl && next.openError === before.openError &&
         next.analysis === before.analysis && next.analysisStarting === before.analysisStarting && next.analysisResult === before.analysisResult) return;
-      timer ??= setTimeout(() => { timer = undefined; setSnapshot(useSession.getState()); }, 250);
+      if (timer !== undefined) return;
+      const since = Date.now() - painted;
+      // A clock set back counts as a quiet phase: never wait longer than one gap.
+      if (since >= STATUS_PAINT_MS || since < 0) paint();
+      else timer = setTimeout(paint, STATUS_PAINT_MS - since);
     });
-    setSnapshot(useSession.getState());
+    paint();
     return () => { off(); clearTimeout(timer); };
   }, []);
   return snapshot;
