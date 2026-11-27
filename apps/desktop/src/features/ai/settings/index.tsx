@@ -6,6 +6,7 @@ import type { AiArea } from "../areas";
 import { AiSettingsSection } from "./AiSettingsSection";
 import { AI_019_ENABLED } from "./api";
 import { BudgetSetting, PolicySetting } from "./PolicyBudget";
+import { StoreInputsSetting } from "./StoreInputs";
 import { TaskTable } from "./TaskTable";
 
 /** KI-Einstellungen der App (M4-U01; Konten folgen mit M4-P01 unter `./accounts`). */
@@ -25,6 +26,7 @@ function AiConfig() {
       <TaskTable />
       {AI_019_ENABLED && <PolicySetting />}
       <BudgetSetting />
+      <StoreInputsSetting />
     </section>
   );
 }
