@@ -244,25 +244,23 @@ fn cli_lists_hide_ai_suggestions_when_off() {
 
 // spec: UI-004 [M4]
 // acceptance: independent
-// MCP-Werkzeug `list_catalog` (Tabs, Bulk-Exporte) bei ausgeschaltetem Schalter (Einstellungen im Datenordner des
-// Servers): keine „AI Suggestions“-Einträge.
+// MCP-Werkzeug `list_catalog` (Tabs, Bulk-Exporte, Reports) in der Werkzeugliste des Servers bei ausgeschaltetem
+// Schalter: keine „AI Suggestions“-Einträge; mit Schalter vorhanden.
 #[test]
 fn mcp_catalog_hides_ai_suggestions_when_off() {
-    use os_mcp::Tool;
-    let home = tempfile::tempdir().unwrap();
-    let mut settings = os_model::settings::AppSettings::default();
-    settings.ai_app.preview_enabled = false;
-    settings.save(home.path()).unwrap();
+    use os_ai::PreviewSwitch;
     let crawls = tempfile::tempdir().unwrap();
-    let mut tool_ctx = os_mcp::ToolContext::new(crawls.path().to_path_buf());
-    tool_ctx.settings_dir = home.path().to_path_buf();
-    let tool = os_mcp::tools::list_catalog::ListCatalog;
-    for kind in ["tabs", "bulk_exports", "reports"] {
+    let tool_ctx = os_mcp::ToolContext::new(crawls.path().to_path_buf());
+    // Werkzeugauswahl des Servers je Schalterstellung (wie `openspider-mcp` beim Start).
+    let names = |preview: PreviewSwitch, kind: &str| -> Vec<String> {
+        let tool = os_mcp::tools::offered(preview)
+            .into_iter()
+            .find(|t| t.name() == "list_catalog")
+            .expect("list_catalog wird immer angeboten");
         let out = tool
             .call(&tool_ctx, json!({"kind": kind, "limit": 500}))
             .unwrap_or_else(|e| panic!("list_catalog {kind}: {e:?}"));
-        let items = out.untrusted.unwrap()["items"].clone();
-        let names: Vec<String> = items
+        out.untrusted.unwrap()["items"]
             .as_array()
             .unwrap()
             .iter()
@@ -271,10 +269,17 @@ fn mcp_catalog_hides_ai_suggestions_when_off() {
                     .map(str::to_string)
                     .unwrap_or_else(|| i["name"].as_str().unwrap_or("").to_string())
             })
-            .collect();
-        let hits: Vec<&String> = names.iter().filter(|n| is_suggestions(n)).collect();
+            .collect()
+    };
+    for kind in ["tabs", "bulk_exports", "reports"] {
+        let off = names(PreviewSwitch::OFF, kind);
+        let hits: Vec<&String> = off.iter().filter(|n| is_suggestions(n)).collect();
         assert!(hits.is_empty(), "MCP {kind}: {hits:?}");
     }
+    assert!(names(PreviewSwitch::ON, "tabs").iter().any(|n| n == "AI Suggestions"));
+    assert!(names(PreviewSwitch::ON, "bulk_exports")
+        .iter()
+        .any(|n| n == "AI Suggestions:Accepted Suggestions"));
 }
 
 // =================================================================================================================
