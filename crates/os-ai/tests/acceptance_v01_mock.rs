@@ -203,6 +203,7 @@ async fn output_limit_is_not_repaired_and_not_cached() {
 // `HTTP Status = 200`, `Error Code` wie oben, `Output Tokens` = gesendete Grenze, `Cost` > 0.“ (Bekannte Lücke über
 // `guard::execute`: keine `usage` verbucht – hier nur bestätigt.)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "wartet auf M4-N01: Lücke im Kern – bei Abbruch an der Ausgabegrenze verbucht guard::execute keine usage (Output Tokens leer, Cost 0); Auflage N01, Entscheidung des Orchestrators 27.11.2026"]
 async fn output_limit_row_books_the_reported_tokens() {
     let mock = Mock::start().await;
     let kit = Kit::new(

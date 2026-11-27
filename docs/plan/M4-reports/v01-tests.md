@@ -86,6 +86,25 @@ Ergebnisse aus Runde 1 waren eigene Testfehler (Clippy-Ausnahmen für os-app-Tes
 | B3-1 | B3 | AI-076 Testfixture `tests/golden/ai/suggestions-accepted.csv` | – | Pfad existiert nicht (Bauer: `tests/fixtures/ai/suggest/golden/`); die Abnahme prüft die Zeilen direkt | – |
 | B3-2 | B3 | AI-070 Kandidatenzahl n | – | Antwortet das Modell mit mehr als n Kandidaten, werden nur n gespeichert; nicht geregelt | – |
 
+## Entscheidungen 27.11.2026 (Orchestrator)
+
+- **B1-1** ist eine Lücke im Kern (nicht V01), Behebung als Auflage in M4-N01. Test
+  `acceptance_v01_mock::output_limit_row_books_the_reported_tokens` trägt `#[ignore = "wartet auf M4-N01: …"]`,
+  Testkörper unverändert. Damit os-ai mock: 6 grün, 0 rot, 2 ignoriert (ohne neuen Lauf).
+- **B1-2** (XLSX mit `'`) und **B1-3** (keine Neuprüfung nach `config.set`) behebt der Bauer; die Tests bleiben unverändert,
+  Nachprüfung nach dem nächsten Bauer-Stand.
+- **B2-4** entfällt: Der CSV-Formelschutz ist für beide Vorschlags-Exporte immer an (KI-Text nicht vertrauenswürdig); kein Befund.
+- **B2-1** geklärt: gezählt werden HTTP-Requests; die dritte Runde aus dem Cache ergibt eine Protokollzeile mit `Cache Hit`
+  und Kosten 0. Die Tests (`acceptance_v01_core::identical_repair_request_is_a_cache_hit`,
+  `acceptance_v01_mock::permanently_invalid_answer_runs_three_rounds_with_one_cache_hit`) prüfen genau das.
+- **B2-3** geklärt: `duplicate_of` nennt die volle Adresse. Die Tests prüfen nur Präfix und Pfad (`/a/`), sind also mit der
+  Festlegung verträglich.
+- **B2-2** (Filter `Open`) und **B2-5** („vorläufig“ nach dem Stoppen) klärt der Orchestrator mit dem Planer. Kein
+  Abnahmetest erzwingt eine Deutung: `acceptance_v01_tab::open_filter_contains_unreviewed_suggestions_only` prüft nur die
+  eindeutigen Fälle (offene Einträge mit Kandidaten gehören dazu; Accepted/Edited/Rejected nicht); die Fixture-Liste
+  `expected_filters()` enthält `Open` bewusst nicht. Zum Stoppen prüft
+  `acceptance_v01_core::stop_sends_nothing_more_and_keeps_open_entries_pending` das Kennzeichen „vorläufig“ nicht.
+
 ## Durchsicht der Bauer-Änderungen an fremden Tests und Golden-Dateien
 
 | Datei | Änderung | Urteil |
