@@ -1,0 +1,417 @@
+{
+  "product-1": {
+    "page_type": {
+      "type": "choice",
+      "choice": "product",
+      "probabilities": [
+        {
+          "value": "product",
+          "probability": 0.93
+        },
+        {
+          "value": "homepage",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "category",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "article",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "landing",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "local",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "contact",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "about",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "legal",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "search-results",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "account",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "media",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "error",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "other",
+          "probability": 0.005384615384615385
+        }
+      ],
+      "confidence": 0.93
+    }
+  },
+  "d01-sum": {
+    "page_type": {
+      "type": "choice",
+      "choice": "product",
+      "probabilities": [
+        {
+          "value": "product",
+          "probability": 0.96
+        },
+        {
+          "value": "homepage",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "category",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "article",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "landing",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "local",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "contact",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "about",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "legal",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "search-results",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "account",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "media",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "error",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "other",
+          "probability": 0.005384615384615385
+        }
+      ],
+      "confidence": 0.93
+    }
+  },
+  "d01-fb-choice": {
+    "default": {
+      "probabilities": {
+        "product": 0.6,
+        "homepage": 0.0,
+        "category": 0.3,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": 0.1
+      },
+      "abstain": false
+    }
+  },
+  "d01-fb-tie": {
+    "default": {
+      "probabilities": {
+        "product": 0.0,
+        "homepage": 0.5,
+        "category": 0.5,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": 0.0
+      },
+      "abstain": false
+    }
+  },
+  "d01-fb-unnorm": {
+    "default": {
+      "probabilities": {
+        "product": 1.2,
+        "homepage": 0.0,
+        "category": 0.6,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": 0.2
+      },
+      "abstain": false
+    }
+  },
+  "d01-fb-zero": {
+    "default": {
+      "probabilities": {
+        "product": 0.0,
+        "homepage": 0.0,
+        "category": 0.0,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": 0.0
+      },
+      "abstain": false
+    }
+  },
+  "d01-fb-negative": {
+    "default": {
+      "probabilities": {
+        "product": 1.2,
+        "homepage": 0.0,
+        "category": 0.0,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": -0.2
+      },
+      "abstain": false
+    }
+  },
+  "d01-fb-abstain": {
+    "default": {
+      "probabilities": {
+        "product": 0.0,
+        "homepage": 0.0,
+        "category": 0.0,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": 1.0
+      },
+      "abstain": true
+    }
+  },
+  "d01-fb-noabstain": {
+    "default": {
+      "probabilities": {
+        "product": 0.0,
+        "homepage": 0.0,
+        "category": 0.0,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": 1.0
+      }
+    }
+  },
+  "d01-fb-score": {
+    "default": {
+      "probabilities": {
+        "0": 0.1,
+        "1": 0.2,
+        "2": 0.4,
+        "3": 0.2,
+        "4": 0.1
+      },
+      "abstain": false
+    }
+  },
+  "d01-fb-predicate": {
+    "default": {
+      "probability": 0.25,
+      "abstain": false
+    }
+  },
+  "d01-fb-bundle": {
+    "default": {
+      "page_type": {
+        "probabilities": {
+          "product": 0.6,
+          "homepage": 0.0,
+          "category": 0.3,
+          "article": 0.0,
+          "landing": 0.0,
+          "local": 0.0,
+          "contact": 0.0,
+          "about": 0.0,
+          "legal": 0.0,
+          "search-results": 0.0,
+          "account": 0.0,
+          "media": 0.0,
+          "error": 0.0,
+          "other": 0.1
+        },
+        "abstain": false
+      },
+      "quality": {
+        "probabilities": {
+          "0": 0.1,
+          "1": 0.2,
+          "2": 0.4,
+          "3": 0.2,
+          "4": 0.1
+        },
+        "abstain": false
+      },
+      "soft_404": {
+        "probability": 0.25,
+        "abstain": false
+      }
+    }
+  },
+  "d01-both": {
+    "page_type": {
+      "type": "choice",
+      "choice": "product",
+      "probabilities": [
+        {
+          "value": "product",
+          "probability": 0.93
+        },
+        {
+          "value": "homepage",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "category",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "article",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "landing",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "local",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "contact",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "about",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "legal",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "search-results",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "account",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "media",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "error",
+          "probability": 0.005384615384615385
+        },
+        {
+          "value": "other",
+          "probability": 0.005384615384615385
+        }
+      ],
+      "confidence": 0.93
+    },
+    "default": {
+      "probabilities": {
+        "product": 0.6,
+        "homepage": 0.0,
+        "category": 0.3,
+        "article": 0.0,
+        "landing": 0.0,
+        "local": 0.0,
+        "contact": 0.0,
+        "about": 0.0,
+        "legal": 0.0,
+        "search-results": 0.0,
+        "account": 0.0,
+        "media": 0.0,
+        "error": 0.0,
+        "other": 0.1
+      },
+      "abstain": false
+    }
+  }
+}

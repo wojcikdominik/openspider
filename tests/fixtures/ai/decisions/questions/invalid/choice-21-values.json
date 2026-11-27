@@ -1,0 +1,106 @@
+{
+  "id": "page-type",
+  "version": "1.0.0",
+  "name": "Page Type",
+  "type": "choice",
+  "instructions": "Classify the main purpose of the page from its visible content and structure.",
+  "choices": [
+    {
+      "value": "v0",
+      "description": "d"
+    },
+    {
+      "value": "v1",
+      "description": "d"
+    },
+    {
+      "value": "v2",
+      "description": "d"
+    },
+    {
+      "value": "v3",
+      "description": "d"
+    },
+    {
+      "value": "v4",
+      "description": "d"
+    },
+    {
+      "value": "v5",
+      "description": "d"
+    },
+    {
+      "value": "v6",
+      "description": "d"
+    },
+    {
+      "value": "v7",
+      "description": "d"
+    },
+    {
+      "value": "v8",
+      "description": "d"
+    },
+    {
+      "value": "v9",
+      "description": "d"
+    },
+    {
+      "value": "v10",
+      "description": "d"
+    },
+    {
+      "value": "v11",
+      "description": "d"
+    },
+    {
+      "value": "v12",
+      "description": "d"
+    },
+    {
+      "value": "v13",
+      "description": "d"
+    },
+    {
+      "value": "v14",
+      "description": "d"
+    },
+    {
+      "value": "v15",
+      "description": "d"
+    },
+    {
+      "value": "v16",
+      "description": "d"
+    },
+    {
+      "value": "v17",
+      "description": "d"
+    },
+    {
+      "value": "v18",
+      "description": "d"
+    },
+    {
+      "value": "v19",
+      "description": "d"
+    },
+    {
+      "value": "v20",
+      "description": "d"
+    }
+  ],
+  "subject": "page",
+  "inputs": [
+    "url",
+    "title",
+    "h1",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ],
+  "thresholds": {
+    "low_confidence_below": 0.6
+  }
+}

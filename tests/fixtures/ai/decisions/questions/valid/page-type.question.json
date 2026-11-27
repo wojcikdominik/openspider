@@ -1,0 +1,78 @@
+{
+  "id": "page-type",
+  "version": "1.0.0",
+  "name": "Page Type",
+  "type": "choice",
+  "instructions": "Classify the main purpose of the page from its visible content and structure.",
+  "choices": [
+    {
+      "value": "product",
+      "description": "The page is mainly of type product."
+    },
+    {
+      "value": "homepage",
+      "description": "The page is mainly of type homepage."
+    },
+    {
+      "value": "category",
+      "description": "The page is mainly of type category."
+    },
+    {
+      "value": "article",
+      "description": "The page is mainly of type article."
+    },
+    {
+      "value": "landing",
+      "description": "The page is mainly of type landing."
+    },
+    {
+      "value": "local",
+      "description": "The page is mainly of type local."
+    },
+    {
+      "value": "contact",
+      "description": "The page is mainly of type contact."
+    },
+    {
+      "value": "about",
+      "description": "The page is mainly of type about."
+    },
+    {
+      "value": "legal",
+      "description": "The page is mainly of type legal."
+    },
+    {
+      "value": "search-results",
+      "description": "The page is mainly of type search-results."
+    },
+    {
+      "value": "account",
+      "description": "The page is mainly of type account."
+    },
+    {
+      "value": "media",
+      "description": "The page is mainly of type media."
+    },
+    {
+      "value": "error",
+      "description": "The page is mainly of type error."
+    },
+    {
+      "value": "other",
+      "description": "The page is mainly of type other."
+    }
+  ],
+  "subject": "page",
+  "inputs": [
+    "url",
+    "title",
+    "h1",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ],
+  "thresholds": {
+    "low_confidence_below": 0.6
+  }
+}

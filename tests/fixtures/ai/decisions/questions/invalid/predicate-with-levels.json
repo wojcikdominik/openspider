@@ -1,0 +1,25 @@
+{
+  "id": "soft-404",
+  "version": "1.0.0",
+  "name": "Soft 404",
+  "type": "predicate",
+  "instructions": "The page tells the visitor that the requested content does not exist or is only a placeholder.",
+  "subject": "page",
+  "inputs": [
+    "title",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ],
+  "levels": [
+    {
+      "label": "a",
+      "description": "a"
+    },
+    {
+      "label": "b",
+      "description": "b"
+    }
+  ]
+}

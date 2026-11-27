@@ -1,0 +1,30 @@
+{
+  "id": "page-type",
+  "version": "1.0.0",
+  "name": "Page Type",
+  "type": "choice",
+  "instructions": "Classify the main purpose of the page from its visible content and structure.",
+  "choices": [
+    {
+      "value": "Product",
+      "description": "a"
+    },
+    {
+      "value": "other",
+      "description": "b"
+    }
+  ],
+  "subject": "page",
+  "inputs": [
+    "url",
+    "title",
+    "h1",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ],
+  "thresholds": {
+    "low_confidence_below": 0.6
+  }
+}

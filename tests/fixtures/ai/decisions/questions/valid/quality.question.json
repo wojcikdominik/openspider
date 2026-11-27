@@ -1,0 +1,37 @@
+{
+  "id": "quality",
+  "version": "1.0.0",
+  "name": "Content Quality",
+  "type": "score",
+  "instructions": "Rate how helpful the main content is for a visitor with the apparent intent.",
+  "levels": [
+    {
+      "label": "very low",
+      "description": "Content quality is very low."
+    },
+    {
+      "label": "low",
+      "description": "Content quality is low."
+    },
+    {
+      "label": "medium",
+      "description": "Content quality is medium."
+    },
+    {
+      "label": "high",
+      "description": "Content quality is high."
+    },
+    {
+      "label": "very high",
+      "description": "Content quality is very high."
+    }
+  ],
+  "subject": "page",
+  "inputs": [
+    "title",
+    {
+      "field": "page_text",
+      "max_chars": 2000
+    }
+  ]
+}

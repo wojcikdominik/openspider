@@ -1,6 +1,7 @@
 //! Offline AI fixtures (08, Konventionen). No provider connections are made.
 mod answers;
 mod batch;
+mod hold;
 mod q00;
 mod response;
 
@@ -33,6 +34,12 @@ pub struct RequestRecord {
     pub host: String,
     pub headers: BTreeMap<String, String>,
     pub body: String,
+    /// Szenario `hold` (Nachtrag 26.11.2026): der Request wurde angenommen und gehalten.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub held: bool,
+    /// Ein gehaltener Request, dessen Verbindung der Client abgebrochen hat (verworfen, nie beantwortet).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub aborted: bool,
 }
 #[derive(Default)]
 struct Data {
@@ -45,6 +52,8 @@ struct Data {
     next_id: usize,
     /// Laufende Nummer der Anbieter-Requests für die Request-IDs (Nachtrag Q00-N2, N6).
     request_seq: usize,
+    /// Gehaltene Requests (Szenario `hold`).
+    holds: hold::Holds,
 }
 #[derive(Clone)]
 pub struct AiMock {
@@ -126,6 +135,15 @@ impl MockApi for Registration {
             .with_state(self.mock.clone())
     }
 }
+/// Anbieter, die `/__mock/scenario` und `/__mock/release` kennen.
+const PROVIDERS: [&str; 4] = ["anthropic", "openai", "openrouter", "ollama"];
+/// `POST /__mock/release {"provider": "...", "count": k}` (Szenario `hold`); ohne `count` alle.
+#[derive(Deserialize)]
+struct Release {
+    provider: String,
+    #[serde(default)]
+    count: Option<usize>,
+}
 #[derive(Deserialize)]
 struct Scenario {
     provider: String,
@@ -180,20 +198,27 @@ async fn handle(
             host: host.clone(),
             headers: redacted,
             body: text.clone(),
+            held: false,
+            aborted: false,
         });
         if provider != "__mock" {
             data.request_seq += 1;
         }
-        data.request_seq
+        (data.request_seq, data.log.len() - 1)
     };
+    let (seq, log_index) = seq;
+    if provider != "__mock" {
+        hold::maybe_hold(&mock.data, provider, log_index).await;
+    }
     if provider == "__mock" {
         return match (method, uri.path()) {
             (Method::GET, "/log") => Json(json!(mock.requests())).into_response(),
             (Method::POST, "/scenario") => match serde_json::from_slice::<Scenario>(&body) {
-                Ok(s)
-                    if ["anthropic", "openai", "openrouter", "ollama"]
-                        .contains(&s.provider.as_str()) =>
-                {
+                Ok(s) if PROVIDERS.contains(&s.provider.as_str()) && s.scenario == "hold" => {
+                    mock.data.lock().unwrap().holds.arm(&s.provider, s.count);
+                    Json(json!({"ok":true})).into_response()
+                }
+                Ok(s) if PROVIDERS.contains(&s.provider.as_str()) => {
                     let mut d = mock.data.lock().unwrap();
                     d.attempts.retain(|(p, _, _, _), _| p != &s.provider);
                     d.scenarios.insert(s.provider, (s.scenario, s.count));
@@ -204,6 +229,24 @@ async fn handle(
                     400,
                     "invalid_request_error",
                     "Invalid scenario control",
+                    None,
+                ),
+            },
+            (Method::POST, "/release") => match serde_json::from_slice::<Release>(&body) {
+                Ok(r) if PROVIDERS.contains(&r.provider.as_str()) => {
+                    let released = mock
+                        .data
+                        .lock()
+                        .unwrap()
+                        .holds
+                        .release(&r.provider, r.count);
+                    Json(json!({"released": released})).into_response()
+                }
+                _ => response::error(
+                    provider,
+                    400,
+                    "invalid_request_error",
+                    "Invalid release control",
                     None,
                 ),
             },

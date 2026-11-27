@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openspider.de/schemas/ai/question.schema.json",
+  "title": "OpenSpider decision question (AI-030)",
+  "description": "Structure of a *.question.json file. Rules that JSON Schema cannot express (unique values and labels, placeholders, candidate templates, subject/input combinations, uniqueness of names among active questions) are checked by os_ai::decisions::format::validate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "name", "type", "instructions", "subject", "inputs"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+    "type": { "enum": ["predicate", "choice", "score"] },
+    "instructions": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "choices": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["value", "description"],
+        "properties": {
+          "value": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "levels": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "description"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "subject": { "enum": ["page", "image"] },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/field" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field"],
+            "properties": {
+              "field": { "$ref": "#/$defs/field" },
+              "max_chars": { "type": "integer", "minimum": 1 }
+            }
+          }
+        ]
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content_types": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "status_codes": { "type": "array", "items": { "type": "integer", "minimum": 100, "maximum": 599 } },
+        "indexable_only": { "type": "boolean" },
+        "segment": { "type": "string", "minLength": 1 }
+      }
+    },
+    "thresholds": { "type": "object" },
+    "issues": {},
+    "segment": {},
+    "params": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "source"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z_][a-z0-9_]{0,31}$" },
+          "type": { "enum": ["string", "candidates"] },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "predicate" } } },
+      "then": { "not": { "anyOf": [ { "required": ["choices"] }, { "required": ["levels"] } ] } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "choice" } } },
+      "then": { "required": ["choices"], "not": { "required": ["levels"] } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "score" } } },
+      "then": { "required": ["levels"], "not": { "required": ["choices"] } }
+    }
+  ],
+  "$defs": {
+    "field": {
+      "enum": [
+        "url", "title", "meta_description", "h1", "h2", "page_text", "word_count", "html_lang",
+        "hreflang_self", "structured_data_types", "page_type", "image", "alt", "image_context"
+      ]
+    }
+  }
+}
