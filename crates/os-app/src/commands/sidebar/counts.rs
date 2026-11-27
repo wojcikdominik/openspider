@@ -457,21 +457,24 @@ pub(crate) fn settled(app: &App) -> bool {
         .all(|c| c.settling == 0)
 }
 
-/// The final data version of every crawl that has left `Running` and kept a count (UI-018, CRAWL-141): the
-/// automatic crawl analysis that the crawl end started commits after the count of leaving `Running`, so the
-/// end status would otherwise announce a version nobody counted yet, and the first reload of Overview and
-/// Issues would count it while „Completed“ waits. Counted at once (no throttle: the crawl no longer runs)
-/// and without writing, like the count of leaving `Running`; an unchanged version is not counted again.
-pub(crate) async fn count_final(app: &App) {
+/// The final data version of the crawls `ended` (those whose end the session loop is about to send), UI-018 and
+/// CRAWL-141: the automatic crawl analysis that the crawl end started commits after the count of leaving `Running`,
+/// so the end status would otherwise announce a version nobody counted yet, and the first reload of Overview and
+/// Issues would count it while „Completed“ waits. Only crawls that left `Running` and kept that count are counted,
+/// at once (no throttle: the crawl no longer runs) and without writing, like the count of leaving `Running`; an
+/// unchanged version is answered from the kept count. Other crawls (e.g. a paused crawl of another window) are
+/// left alone, so their counts cannot use up the deadline of the end tick.
+pub(crate) async fn count_final(app: &App, ended: &[CrawlKey]) {
     let service = app.ext::<SharedCounts>();
-    let ended: Vec<SessionInfo> = {
+    let sessions: Vec<SessionInfo> = {
         let crawls = lock(&service.crawls);
         let mut seen = std::collections::HashSet::new();
         app.sessions()
             .all()
             .into_iter()
             .filter(|s| {
-                s.state != CrawlState::Running
+                ended.contains(&s.key)
+                    && s.state != CrawlState::Running
                     && crawls.get(&s.key).is_some_and(|c| {
                         c.last.is_some() && c.observed.is_some_and(|o| o != CrawlState::Running)
                     })
@@ -479,7 +482,7 @@ pub(crate) async fn count_final(app: &App) {
             })
             .collect()
     };
-    for s in ended {
+    for s in sessions {
         match exact(app, &service, &s, &CancelToken::new(), Mode::Settled).await {
             Ok(_) => {}
             Err(error) if error.code == ErrorCode::Cancelled => {}
