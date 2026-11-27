@@ -243,6 +243,22 @@ jobs:
           echo "Verlauf (jede dritte Minute):"; awk 'NR % 9 == 1' "$f"
           df -h /System/Volumes/Data | tail -n 1
 
+      # 27.11.2026: Zweite Fehlerklasse auf macos-15-arm64 (26. und 27.11., jeweils dieselben os-store-Tests: crawl_files.rs:284
+      # "NotACrawlFile" nach fs::copy, link_index.rs:219 "database disk image is malformed", scale_storage "disk I/O error"
+      # = SQLITE_IOERR_FSYNC, schema_open) bei über 120 GB freiem Platz. Dieser Schritt sammelt nur Belege, wenn zuvor etwas rot
+      # war: Systemversion, Dateisystem des Temp-Ordners und Kernel-/APFS-Meldungen der letzten 40 Minuten.
+      - name: "E/A-Diagnose nach roten Tests (macOS)"
+        if: ${{ failure() && runner.os == 'macOS' }}
+        run: |
+          sw_vers || true
+          echo "TMPDIR=$TMPDIR"; df -h "$TMPDIR" | tail -n 1 || true
+          mount | grep -E " / | /System/Volumes/Data " || true
+          diskutil info / 2> /dev/null | grep -E "File System Personality|Solid State|Virtual|Media Name|Protocol" || true
+          echo "--- Kernel/APFS (letzte 40 min, gefiltert) ---"
+          sudo log show --last 40m --style compact --predicate 'process == "kernel"' 2> /dev/null \
+            | grep -iE "apfs|i/o error|disk[0-9]+.*(error|timeout)|nvme|virtio|EIO|fsync|corrupt" | tail -n 120 || true
+          echo "--- Ende ---"
+
       - name: Tauri build check (debug, no bundle)
         if: ${{ !cancelled() }}
         run: npm run -w apps/desktop tauri -- build --debug --no-bundle
