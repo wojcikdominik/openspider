@@ -170,3 +170,59 @@ pub fn mark_unavailable(
     }
     Ok(rows.len())
 }
+
+/// Eine Zeile je Eintrag (08 AI-020, Nachtrag 28.11.2026 „Ein offener Eintrag ist eine Zeile“): Nach dem geordneten Ende
+/// eines Crawl-Laufs hat jede gecrawlte Seite der Grundmenge G für jede aktive Frage genau einen Eintrag. Für die Paare
+/// ohne Zeile schreibt diese Funktion den Status, den ein Lauf vor dem Senden setzt: `Skipped (scope)` bzw.
+/// `Skipped (segment)` außerhalb des Geltungsbereichs, `Skipped (input unavailable)` ohne Eingabe (siehe
+/// [`mark_unavailable`]), sonst `Pending` (offen, ohne Request und ohne Reservierung). Vorhandene Zeilen bleiben
+/// unverändert. Rückgabe: Zahl der neuen Zeilen.
+pub fn mark_open(
+    conn: &Connection,
+    questions: &[ActiveQuestion],
+    pages: &[PageAiFields],
+) -> Result<usize, StoreError> {
+    let unavailable = mark_unavailable(conn, questions, pages)?;
+    let mut rows = Vec::new();
+    for q in questions
+        .iter()
+        .filter(|q| !q.def.is_template() && q.def.subject != Subject::Image)
+    {
+        let version = q.def.version.to_string();
+        let scope = q.def.scope();
+        for page in pages {
+            if answers::get(conn, page.url_id, &q.def.id, &version, "")?.is_some() {
+                continue;
+            }
+            let item = run_item(page);
+            let in_type = scope.content_types.contains(&item.content_class)
+                && item
+                    .status_code
+                    .is_some_and(|c| scope.status_codes.contains(&c))
+                && (!scope.indexable_only || item.indexable);
+            let status = if !in_type {
+                AiStatus::SkippedScope
+            } else if scope.segment.is_some() {
+                // Segmente entstehen erst in der Analyse (Bericht M4-D05): wie der Lauf `Skipped (segment)`.
+                AiStatus::SkippedSegment
+            } else {
+                AiStatus::Pending
+            };
+            rows.push(AnswerRow::status_only(
+                page.url_id,
+                &q.def.id,
+                &version,
+                "",
+                "{}",
+                &status.to_string(),
+            ));
+        }
+    }
+    if !rows.is_empty() {
+        for q in questions {
+            crate::decisions::library::record_used(conn, &q.def)?;
+        }
+        answers::upsert_all(conn, &rows)?;
+    }
+    Ok(unavailable + rows.len())
+}

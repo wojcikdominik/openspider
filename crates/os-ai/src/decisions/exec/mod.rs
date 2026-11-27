@@ -165,6 +165,10 @@ pub struct RunOptions {
     pub selection: Selection,
     pub confirmation: Confirmation,
     pub resizer: Option<Arc<dyn ImageResizer>>,
+    /// Sperren der Adapter (Kontingent, Erreichbarkeit) zu Beginn **nicht** zurücksetzen: Teil-Läufe desselben KI-Laufs
+    /// mit denselben Adapter-Instanzen (KI-Warteschlange während des Crawls, M4-D05; AI-020, Nachtrag 26.11.2026
+    /// „Kontingentsperre … gilt je KI-Lauf“). Standard `false` (jeder `DecisionRun` ist ein eigener Lauf).
+    pub keep_latches: bool,
 }
 
 impl Default for RunOptions {
@@ -178,6 +182,7 @@ impl Default for RunOptions {
             selection: Selection::Open,
             confirmation: Confirmation::Granted,
             resizer: None,
+            keep_latches: false,
         }
     }
 }
@@ -519,7 +524,9 @@ impl<'a> DecisionRun<'a> {
             Some(start) => Some(start()?),
             None => None,
         };
-        self.reset_run_latches();
+        if !self.options.keep_latches {
+            self.reset_run_latches();
+        }
         let result = self.run_owned(&mut report).await;
         // `finish` in jedem Ende-Pfad: fertig, Pause, Stopp, Budget, Bestätigung, Abbruch und Fehler des Laufs.
         let finished = lease.map(|l| l.finish()).transpose();

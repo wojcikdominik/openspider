@@ -173,6 +173,7 @@ pub(crate) async fn run_chunk(
     confirmation: Confirmation,
     control: RunControl,
     owner: Option<OwnerStart<'_>>,
+    keep_latches: bool,
 ) -> Result<RunReport, StoreError> {
     let now = || env.clock.now();
     let run = DecisionRun {
@@ -193,6 +194,7 @@ pub(crate) async fn run_chunk(
             concurrency: env.concurrency.max(1),
             selection,
             confirmation,
+            keep_latches,
             ..RunOptions::default()
         },
         now: &now,
@@ -347,6 +349,7 @@ pub async fn run_decisions(env: &RunEnv, job: DecisionsJob) -> Result<JobOutcome
         confirmation,
         control,
         Some(owner_of(owner)),
+        false,
     )
     .await?;
     if matches!(report.end, RunEnd::Completed | RunEnd::Stopped) {
