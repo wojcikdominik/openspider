@@ -319,8 +319,14 @@ impl TempDir {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let p =
-            std::env::temp_dir().join(format!("os-ai-d01-{tag}-{}-{nanos}", std::process::id()));
+        // Laufende Nummer: Die Systemuhr löst auf macOS nur in Mikrosekunden auf, zwei gleichzeitig startende Tests
+        // derselben Datei bekämen sonst dasselbe Verzeichnis (27.11.2026: „table crawl_meta already exists“).
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let p = std::env::temp_dir().join(format!(
+            "os-ai-d01-{tag}-{}-{nanos}-{n}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&p).unwrap();
         Self(p)
     }
