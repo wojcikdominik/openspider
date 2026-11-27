@@ -1,10 +1,11 @@
 import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { Providers } from "../../../app/Providers";
 import { setLanguage } from "../../../i18n";
 import { createClient, setClient } from "../../../ipc/client";
 import { MockCore } from "../../../ipc/transport/mock";
-import { useSession } from "../../../state/session";
+import { runHere, useSession } from "../../../state/session";
 import type { CrawlStatus } from "../../../ipc/gen/CrawlStatus";
 import type { OverviewDto } from "../../../ipc/gen/OverviewDto";
 import type { Tick } from "../../../ipc/gen/Tick";
@@ -74,6 +75,8 @@ it("the Overview reaches the final state without user action when the first answ
 // Cause A: the Overview commits its answers deferred (SidebarFrame, useDeferredValue). The probe stands in for such a
 // consumer whose commit of the reloaded answer has not happened yet: it keeps the first answer on screen until released.
 let frozen: OverviewDto | undefined;
+let completedShows: string | undefined;
+let recordFor: string | null = null;
 function DeferredProbe({ hold }: { hold: boolean }) {
   const query = useOverview();
   if (!hold) frozen = undefined;
@@ -81,6 +84,9 @@ function DeferredProbe({ hold }: { hold: boolean }) {
   const shownData = hold ? frozen ?? query.data : query.data;
   useRenderedAnswer(query, shownData);
   const phase = useSession(s => s.crawl?.phase);
+  // What the DOM shows in the very commit in which „completed“ first appears.
+  const crawlId = useSession(s => s.crawl?.crawlId);
+  useLayoutEffect(() => { if (phase === "completed" && crawlId === recordFor && completedShows === undefined) completedShows = String(shownData?.summary[0]?.count ?? ""); });
   return <><span data-testid="phase">{phase}</span><span data-testid="encountered">{shownData?.summary[0]?.count}</span></>;
 }
 
@@ -101,4 +107,28 @@ it("Completed is not in the DOM while the Overview still shows the earlier answe
   await wait(50);
   expect(screen.getByTestId("encountered").textContent).toBe("27");
   expect(screen.getByTestId("phase").textContent).toBe("completed");
+});
+
+// Path 3: a very short crawl this window started ends before any running tick arrives; its first status is the end status.
+// spec: UI-018
+// spec: UI-061
+it("a crawl started here whose first tick is already Completed shows Completed only with the drawn final Overview", async () => {
+  frozen = undefined;
+  completedShows = undefined;
+  recordFor = "crawl-short";
+  const fresh = (phase: CrawlStatus["phase"]): CrawlStatus => ({ ...(tick.crawl as CrawlStatus), crawlId: "crawl-short", phase });
+  core.handlers.set("sidebar.overview", () => (useSession.getState().countsVersion >= 9 ? overview(27, 27) : overview(1, 0)));
+  // The window shows a previous, finished crawl.
+  useSession.setState({ seq: 5, crawl: { ...crawl("completed"), crawlId: "crawl-before" } });
+  render(<Providers><DeferredProbe hold={false} /></Providers>);
+  await wait(50);
+  // This window starts the crawl: the command answers with the new crawl id before any of its ticks.
+  await act(async () => { await runHere(() => Promise.resolve({ crawlId: "crawl-short", file: "short.ospider" }), ref => ref.crawlId); });
+  await wait(100);
+  // Its first tick is the end status.
+  act(() => useSession.getState().applyTick({ ...tick, seq: 6, crawl: fresh("completed"), countsVersion: 9, issuesVersion: 9, sidebarVersion: 9 } as unknown as Tick));
+  for (let i = 0; i < 100 && completedShows === undefined; i++) await wait(10);
+  expect(completedShows).toBe("27");
+  expect(screen.getByTestId("phase").textContent).toBe("completed");
+  expect(useSession.getState().crawl?.crawlId).toBe("crawl-short");
 });
