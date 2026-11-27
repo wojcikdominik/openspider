@@ -631,7 +631,7 @@ pub fn register(r: &mut Registry) {
 /// hinter ihr, auch nicht direkt nach dem Start. Andere Verwaltungsaufträge (Crawl-Liste, Löschen, Verschieben …)
 /// bleiben mit ihr serialisiert.
 pub async fn run_retention(app: &App) -> Result<usize, CmdError> {
-    retention_round(&RetentionInputs::of(app, Some(app.settings_snapshot()))).await
+    retention_round(&RetentionInputs::of(app, None)).await
 }
 
 /// Alles, was eine Aufbewahrungsrunde braucht, ohne die `App` (OUT-229).
@@ -639,39 +639,46 @@ pub async fn run_retention(app: &App) -> Result<usize, CmdError> {
 /// Die Hintergrundaufgaben ([`start_retention`], [`on_settings_changed`]) stufen die `App` nie hoch, auch nicht für einen
 /// synchronen Abschnitt: So ist der Abbau durch ihren Besitzer immer der letzte, er schließt die Wartungsspur (danach
 /// nimmt sie nichts mehr an) und wartet auf den laufenden Auftrag, bevor der Besitzer Verzeichnisse entfernt.
+/// Verwaltungszustand und Sitzungen sind nur schwach gehalten: Mit dem Abbau fällt `ManagementState` und bricht die
+/// stündliche Aufgabe ab (auch mitten in ihrer Wartezeit).
+///
+/// Was eine Runde löscht, liest sie erst nach Gate und Register-Sperre aus dem dann geltenden Stand: Richtlinie,
+/// Höchstzahl und Speicherort ([`ManagementState::update_retention_settings`], bei jeder Änderung synchron gesetzt),
+/// geöffnete Sitzungen und „jetzt“. Sperren und Zustände der Crawls liest der Auftrag selbst aus den Dateien.
 struct RetentionInputs {
-    state: Arc<ManagementState>,
-    sessions: Arc<crate::runtime::sessions::SessionRegistry>,
+    state: std::sync::Weak<ManagementState>,
+    sessions: std::sync::Weak<crate::runtime::sessions::SessionRegistry>,
     clock: Arc<dyn os_model::Clock>,
-    /// Ort von Register und Index (`paths.crawls`); wird immer gelistet.
+    /// Ort von Register und Index (`paths.crawls`); fest je App, wird immer gelistet.
     root: PathBuf,
     lane: crate::write_queue::MaintenanceLane,
-    /// Feste Einstellungen dieser Runde; ohne: der zuletzt gemeldete Stand ([`ManagementState::update_retention_settings`]).
-    settings: Option<AppSettings>,
+    /// Speicherort beim Auslösen (Einstellungsänderung): kommt zusätzlich zum dann geltenden ins Register (CRAWL-124).
+    /// Wirkt nie auf das Löschen.
+    location: Option<PathBuf>,
 }
 
 impl RetentionInputs {
-    fn of(app: &App, settings: Option<AppSettings>) -> RetentionInputs {
+    fn of(app: &App, location: Option<PathBuf>) -> RetentionInputs {
         RetentionInputs {
-            state: app.ext::<ManagementState>(),
-            sessions: app.sessions_shared(),
+            state: Arc::downgrade(&app.ext::<ManagementState>()),
+            sessions: Arc::downgrade(&app.sessions_shared()),
             clock: Arc::clone(&app.config().clock),
             root: app.config().paths.crawls.clone(),
             lane: app.write_queue().maintenance_lane(),
-            settings,
+            location,
         }
     }
+}
 
-    fn settings(&self) -> AppSettings {
-        self.settings.clone().unwrap_or_else(|| {
-            self.state
-                .retention_settings
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .clone()
-                .unwrap_or_default()
-        })
-    }
+/// Speicherort nach den Einstellungen; ohne eigenen: der Stammordner.
+fn location_in(settings: &AppSettings, root: &Path) -> PathBuf {
+    settings
+        .storage
+        .crawls_dir
+        .clone()
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.to_path_buf())
 }
 
 /// Jede automatische Löschung wird geloggt: Name, Kennung, Alter (OUT-229).
@@ -684,20 +691,34 @@ fn log_deletion(d: &registry::RetentionDeletion) {
     );
 }
 
-/// Eine Aufbewahrungsrunde: Speicherort im Register vermerken (CRAWL-124) und nach OUT-229 löschen.
+/// Eine Aufbewahrungsrunde: Speicherorte im Register vermerken (CRAWL-124) und nach OUT-229 löschen.
 async fn retention_round(inputs: &RetentionInputs) -> Result<usize, CmdError> {
-    let _guard = inputs.state.gate.clone().lock_owned().await;
-    let _registry = inputs.state.registry.clone().write_owned().await;
-    let all = inputs.settings();
+    let gone = || internal("Aufbewahrung", "App abgebaut");
+    let (gate, registry) = {
+        let state = inputs.state.upgrade().ok_or_else(gone)?;
+        (state.gate.clone(), state.registry.clone())
+    };
+    let _guard = gate.lock_owned().await;
+    let _registry = registry.write_owned().await;
+    // Ab hier der geltende Stand (nicht der beim Auslösen).
+    let all = inputs
+        .state
+        .upgrade()
+        .ok_or_else(gone)?
+        .retention_settings
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
+        .unwrap_or_default();
+    let mut locations = vec![location_in(&all, &inputs.root)];
+    if let Some(at_trigger) = &inputs.location {
+        if !locations.contains(at_trigger) {
+            locations.push(at_trigger.clone());
+        }
+    }
     let settings = all.retention;
-    let dir = all
-        .storage
-        .crawls_dir
-        .filter(|p| !p.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| inputs.root.clone());
     let nothing_to_do = settings.policy == RetentionPolicy::Never && settings.keep_last.is_none();
-    if nothing_to_do && dir == inputs.root {
+    if nothing_to_do && locations.iter().all(|l| *l == inputs.root) {
         // Nichts zu löschen und kein Ort zu vermerken: Der Stammordner wird immer gelistet (CRAWL-124); ein
         // abweichender Speicherort läuft weiter durch die Runde und kommt so ins Register. Register und Index entstehen
         // mit der ersten Verwaltungsaktion, nicht im Hintergrund jedes Starts; die Liste ohne Register (CLI, MCP) fasst
@@ -715,6 +736,8 @@ async fn retention_round(inputs: &RetentionInputs) -> Result<usize, CmdError> {
     };
     let open: HashSet<CrawlId> = inputs
         .sessions
+        .upgrade()
+        .ok_or_else(gone)?
         .all()
         .iter()
         .filter_map(|s| s.key.0.parse().ok())
@@ -725,7 +748,9 @@ async fn retention_round(inputs: &RetentionInputs) -> Result<usize, CmdError> {
         .lane
         .enqueue(move || {
             let mut manager = Manager::open(&root).map_err(|e| store_error(&e))?;
-            manager.add_location(&dir).map_err(|e| store_error(&e))?;
+            for dir in &locations {
+                manager.add_location(dir).map_err(|e| store_error(&e))?;
+            }
             manager
                 .retain_with(days, settings.keep_last, now, &open, log_deletion)
                 .map_err(|e| store_error(&e))
@@ -760,16 +785,20 @@ pub fn start_retention(app: &App) {
 }
 
 /// Neue Richtlinie/Speicherorte sofort anwenden; ein Speicherortwechsel kopiert keine Crawls.
+///
+/// Die Runde löscht nach dem Stand, der gilt, wenn sie Gate und Register bekommt; festgehalten wird nur der Speicherort
+/// dieser Änderung, damit er auch bei einem schnellen weiteren Wechsel ins Register kommt (CRAWL-124).
 pub fn on_settings_changed(app: &App) {
     let current = app.settings_snapshot();
+    let location = location_in(&current, &app.config().paths.crawls);
     if !app
         .ext::<ManagementState>()
-        .update_retention_settings(current.clone())
+        .update_retention_settings(current)
     {
         return;
     }
     let weak = app.downgrade();
-    let inputs = RetentionInputs::of(app, Some(current));
+    let inputs = RetentionInputs::of(app, Some(location));
     app.handle().spawn(async move {
         if let Err(e) = retention_round(&inputs).await {
             if weak.is_alive() {
