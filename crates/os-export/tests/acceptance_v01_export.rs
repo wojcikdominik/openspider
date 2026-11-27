@@ -49,7 +49,8 @@ fn export(name: &str, format: Format) -> (tempfile::TempDir, std::path::PathBuf)
     let dir = tempfile::tempdir().unwrap();
     let f = create(dir.path(), "export.ospider", config());
     let out = dir.path().join("out");
-    let files = export_bulk(&f, &config(), name, &out, format).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+    let files =
+        export_bulk(&f, &config(), name, &out, format).unwrap_or_else(|e| panic!("{name}: {e:?}"));
     let path = files.last().expect("eine Datei").path.clone();
     (dir, path)
 }
@@ -87,12 +88,19 @@ fn accepted_csv_has_spec_columns_exact_rows_and_formula_protection() {
     assert_eq!(acc[8], GENERATED_AT);
 
     let ed = row("/edited/");
-    assert_eq!(ed[3], format!("'{V_EDITED}"), "OUT-016: führendes = maskiert");
+    assert_eq!(
+        ed[3],
+        format!("'{V_EDITED}"),
+        "OUT-016: führendes = maskiert"
+    );
     assert_eq!(ed[5], "600");
     assert_eq!(ed[6], "edited");
 
     let fo = row("/formula/");
-    assert_eq!(fo[2], "'=HYPERLINK(\"http://evil\")", "aktueller Wert maskiert");
+    assert_eq!(
+        fo[2], "'=HYPERLINK(\"http://evil\")",
+        "aktueller Wert maskiert"
+    );
     assert_eq!(fo[3], format!("'{V_FORMULA}"), "führendes + maskiert");
 }
 
@@ -172,8 +180,16 @@ fn accepted_xlsx_has_spec_columns_numbers_and_no_formulas() {
         .iter()
         .find(|r| cell(&r[0]) == address("/accepted/"))
         .unwrap();
-    assert!(matches!(acc[4], Data::Int(_) | Data::Float(_)), "Length als Zahl: {:?}", acc[4]);
-    assert!(matches!(acc[5], Data::Int(_) | Data::Float(_)), "Pixel Width als Zahl: {:?}", acc[5]);
+    assert!(
+        matches!(acc[4], Data::Int(_) | Data::Float(_)),
+        "Length als Zahl: {:?}",
+        acc[4]
+    );
+    assert!(
+        matches!(acc[5], Data::Int(_) | Data::Float(_)),
+        "Pixel Width als Zahl: {:?}",
+        acc[5]
+    );
 }
 
 // spec: OUT-003 [M4]

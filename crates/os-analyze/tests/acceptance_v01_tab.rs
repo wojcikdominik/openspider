@@ -23,12 +23,17 @@ fn fixture() -> (tempfile::TempDir, os_store::CrawlFile) {
     (dir, f)
 }
 
-fn query(f: &os_store::CrawlFile, filter: &str, sort: Vec<SortKey>) -> (Vec<String>, Vec<Vec<Value>>) {
+fn query(
+    f: &os_store::CrawlFile,
+    filter: &str,
+    sort: Vec<SortKey>,
+) -> (Vec<String>, Vec<Vec<Value>>) {
     let mut q = ViewQuery::new(TAB, filter);
     q.columns = ColumnSelection::All;
     q.sort = sort;
     q.limit = 500;
-    let page = query_view(f, &CrawlConfig::default(), &q).unwrap_or_else(|e| panic!("{filter}: {e:?}"));
+    let page =
+        query_view(f, &CrawlConfig::default(), &q).unwrap_or_else(|e| panic!("{filter}: {e:?}"));
     (page.columns, page.rows)
 }
 
@@ -67,7 +72,11 @@ fn addresses_of(f: &os_store::CrawlFile, filter: &str) -> Vec<String> {
 fn every_filter_yields_exactly_the_expected_rows() {
     let (_d, f) = fixture();
     for (filter, paths) in expected_filters() {
-        assert_eq!(addresses_of(&f, filter), addresses(&paths), "Filter {filter}");
+        assert_eq!(
+            addresses_of(&f, filter),
+            addresses(&paths),
+            "Filter {filter}"
+        );
     }
 }
 
@@ -115,16 +124,37 @@ fn columns_carry_values_of_the_chosen_candidate_and_review() {
         text(&open[col(&c, "Title Suggestion 1 Length")]),
         V_OPEN_1.chars().count().to_string()
     );
-    assert_eq!(text(&open[col(&c, "Title Suggestion 1 Pixel Width")]), "401");
+    assert_eq!(
+        text(&open[col(&c, "Title Suggestion 1 Pixel Width")]),
+        "401"
+    );
     assert_eq!(text(&open[col(&c, "Title Suggestion 2")]), V_OPEN_2);
-    assert_eq!(text(&open[col(&c, "Title Suggestion 2 Pixel Width")]), "399");
+    assert_eq!(
+        text(&open[col(&c, "Title Suggestion 2 Pixel Width")]),
+        "399"
+    );
     assert_eq!(text(&open[col(&c, "Title Suggestion Status")]), "Valid");
     assert_eq!(text(&open[col(&c, "Review Status")]), "Open");
-    assert_eq!(text(&open[col(&c, "Meta Description 1")]), "Alte Beschreibung der Startseite");
-    assert_eq!(text(&open[col(&c, "Meta Description 1 Pixel Width")]), "222");
-    assert_eq!(text(&open[col(&c, "Meta Description Suggestion 1")]), V_META);
-    assert_eq!(text(&open[col(&c, "Meta Description Suggestion 1 Pixel Width")]), "610");
-    assert_eq!(text(&open[col(&c, "Meta Description Suggestion Status")]), "Valid");
+    assert_eq!(
+        text(&open[col(&c, "Meta Description 1")]),
+        "Alte Beschreibung der Startseite"
+    );
+    assert_eq!(
+        text(&open[col(&c, "Meta Description 1 Pixel Width")]),
+        "222"
+    );
+    assert_eq!(
+        text(&open[col(&c, "Meta Description Suggestion 1")]),
+        V_META
+    );
+    assert_eq!(
+        text(&open[col(&c, "Meta Description Suggestion 1 Pixel Width")]),
+        "610"
+    );
+    assert_eq!(
+        text(&open[col(&c, "Meta Description Suggestion Status")]),
+        "Valid"
+    );
 
     // Gewählt ist Kandidat 2 der Antwort → er steht als Kandidat 1 vorn.
     let acc = row("/accepted/");
@@ -136,20 +166,33 @@ fn columns_carry_values_of_the_chosen_candidate_and_review() {
     let ed = row("/edited/");
     assert_eq!(text(&ed[col(&c, "Review Status")]), "Edited");
     assert_eq!(text(&ed[col(&c, "Accepted Title")]), V_EDITED);
-    assert_eq!(text(&row("/rejected/")[col(&c, "Review Status")]), "Rejected");
+    assert_eq!(
+        text(&row("/rejected/")[col(&c, "Review Status")]),
+        "Rejected"
+    );
 
     // Ohne gültigen Kandidaten: sichtbar der mit den wenigsten Verstößen, mit Verstoßliste.
     let nv = row("/novalid/");
-    assert_eq!(text(&nv[col(&c, "Title Suggestion Status")]), "No valid suggestion");
+    assert_eq!(
+        text(&nv[col(&c, "Title Suggestion Status")]),
+        "No valid suggestion"
+    );
     assert_eq!(text(&nv[col(&c, "Title Suggestion 1")]), V_NOVALID_2);
-    assert_eq!(text(&nv[col(&c, "Title Suggestion Violations")]), "length>60");
+    assert_eq!(
+        text(&nv[col(&c, "Title Suggestion Violations")]),
+        "length>60"
+    );
 
     assert_eq!(
         text(&row("/error/")[col(&c, "Title Suggestion Status")]),
         "Error: 500 Internal Server Error"
     );
     for p in ["/pending/", "/error/", "/budget/"] {
-        assert_eq!(text(&row(p)[col(&c, "Title Suggestion 1")]), "", "{p}: leere Ergebniszelle");
+        assert_eq!(
+            text(&row(p)[col(&c, "Title Suggestion 1")]),
+            "",
+            "{p}: leere Ergebniszelle"
+        );
     }
 }
 
@@ -162,7 +205,14 @@ fn sorting_and_counters() {
     let (_d, f) = fixture();
     let key = "Title Suggestion 1 Pixel Width";
     let order = |descending: bool| {
-        let (c, rows) = query(&f, "Titles", vec![SortKey { column: key.into(), descending }]);
+        let (c, rows) = query(
+            &f,
+            "Titles",
+            vec![SortKey {
+                column: key.into(),
+                descending,
+            }],
+        );
         let i = col(&c, key);
         rows.iter()
             .filter_map(|r| match r[i] {

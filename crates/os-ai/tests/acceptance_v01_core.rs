@@ -44,7 +44,13 @@ fn checker<'a>(
 }
 
 fn title_checker<'a>(meter: &'a TableMeter, index: &'a SiteIndex) -> Checker<'a> {
-    checker(Element::Title, TITLE_LIMITS, RuleSet::default(), meter, index)
+    checker(
+        Element::Title,
+        TITLE_LIMITS,
+        RuleSet::default(),
+        meter,
+        index,
+    )
 }
 
 fn rt() -> tokio::runtime::Runtime {
@@ -78,7 +84,12 @@ fn title_length_limits_match_the_filters_plus_minus_one() {
         let text = text_of("Wanderschuhe ", n);
         let checked = c.check(1, None, &text);
         assert_eq!(checked.length, n as u32, "Länge von {text:?}");
-        assert_eq!(checked.valid(), valid, "{n} Zeichen: {:?}", checked.violations);
+        assert_eq!(
+            checked.valid(),
+            valid,
+            "{n} Zeichen: {:?}",
+            checked.violations
+        );
     }
 }
 
@@ -136,9 +147,19 @@ fn meta_description_limits_plus_minus_one() {
     );
     for (n, valid) in [(155, true), (156, false), (70, true), (69, false)] {
         let checked = c.check(1, None, &text_of("Beschreibung ", n));
-        assert_eq!(checked.valid(), valid, "{n} Zeichen: {:?}", checked.violations);
+        assert_eq!(
+            checked.valid(),
+            valid,
+            "{n} Zeichen: {:?}",
+            checked.violations
+        );
     }
-    for (prefix, valid) in [("P985 ", true), ("P986 ", false), ("P400 ", true), ("P399 ", false)] {
+    for (prefix, valid) in [
+        ("P985 ", true),
+        ("P986 ", false),
+        ("P400 ", true),
+        ("P399 ", false),
+    ] {
         let checked = c.check(1, None, &t(prefix));
         assert_eq!(checked.valid(), valid, "{prefix}: {:?}", checked.violations);
     }
@@ -162,8 +183,17 @@ fn every_rule_but_pixel_width_can_be_switched_off() {
     };
     let c = checker(Element::Title, TITLE_LIMITS, off, &meter, &index);
     assert!(c.check(1, None, &text_of("Lang ", 61)).valid());
-    assert!(!c.check(1, None, &t).valid(), "Pixelregel ist nicht abschaltbar");
-    assert!(c.check(1, None, "{{x}} Platzhalter bleibt ohne Regel 4 erlaubt hier").valid());
+    assert!(
+        !c.check(1, None, &t).valid(),
+        "Pixelregel ist nicht abschaltbar"
+    );
+    assert!(c
+        .check(
+            1,
+            None,
+            "{{x}} Platzhalter bleibt ohne Regel 4 erlaubt hier"
+        )
+        .valid());
 }
 
 // spec: AI-075 [M4]
@@ -180,7 +210,8 @@ fn length_counts_codepoints_for_umlauts_cjk_and_emoji() {
     assert_eq!(c.check(1, None, "漢字テスト").length, 5);
     assert_eq!(c.check(1, None, "👨\u{200d}👩\u{200d}👧").length, 5);
     assert_eq!(
-        c.check(1, None, "Ärger über Öl 漢字テスト 👨\u{200d}👩\u{200d}👧").length,
+        c.check(1, None, "Ärger über Öl 漢字テスト 👨\u{200d}👩\u{200d}👧")
+            .length,
         25
     );
     assert_eq!(c.check(1, None, "  Viel   Raum  ").length, 9);
@@ -204,7 +235,10 @@ fn title_format_rule_flags_placeholders_line_breaks_and_quotes() {
         "Wanderschuhe für Damen\nim großen Test 2026",
         "\"Wanderschuhe für Damen im großen Test\"",
     ] {
-        assert!(!c.check(1, None, bad).valid(), "{bad:?} müsste ungültig sein");
+        assert!(
+            !c.check(1, None, bad).valid(),
+            "{bad:?} müsste ungültig sein"
+        );
     }
     assert!(c
         .check(1, None, "Wanderschuhe für Damen im großen Test")
@@ -264,7 +298,11 @@ fn language_rule_uses_page_language_and_skips_short_candidates() {
         v.violations
     );
     let v = m.check(1, Some("de-DE"), long);
-    assert!(v.violations.iter().any(|x| x == "language:en"), "{:?}", v.violations);
+    assert!(
+        v.violations.iter().any(|x| x == "language:en"),
+        "{:?}",
+        v.violations
+    );
     assert!(!m
         .check(1, Some("en"), long)
         .violations
@@ -338,7 +376,10 @@ fn immediately_valid_sends_one_request_and_keeps_answer_order() {
     let provider = Scripted::new().script("/p/", vec![cands(&[&invalid, &v1, &v2])]);
     let meter = TableMeter::default();
     let summary = rt()
-        .block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
+        .block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, options())),
+        )
         .unwrap();
     assert_eq!(provider.count(), 1);
     assert_eq!(summary.requests, 1);
@@ -367,10 +408,12 @@ fn repair_round_example_612_580_590_then_540() {
         .with(&c3, 590)
         .with(&c4, 540);
     let kit = Kit::new("ex", vec![Page::new("/p/", Some("Alt"))]);
-    let provider =
-        Scripted::new().script("/p/", vec![cands(&[&c1, &c2, &c3]), cands(&[&c4])]);
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    let provider = Scripted::new().script("/p/", vec![cands(&[&c1, &c2, &c3]), cands(&[&c4])]);
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     let calls = provider.calls_for("/p/");
     assert_eq!(calls.len(), 2, "2 Requests");
     for px in ["612 px > 561 px", "580 px > 561 px", "590 px > 561 px"] {
@@ -388,7 +431,10 @@ fn repair_round_example_612_580_590_then_540() {
     assert_eq!(first_shown(&r), c4);
     let rows = kit.log_rows("/p/");
     assert_eq!(rows.len(), 2, "eine Protokollzeile je Runde");
-    assert!(rows.iter().all(|(hit, cost, _, _)| !hit && *cost > 0), "{rows:?}");
+    assert!(
+        rows.iter().all(|(hit, cost, _, _)| !hit && *cost > 0),
+        "{rows:?}"
+    );
 }
 
 // spec: AI-075 [M4]
@@ -406,8 +452,11 @@ fn valid_after_two_repair_rounds() {
         ],
     );
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 3);
     let r = kit.record("/p/", Element::Title);
     assert_eq!(r.status, VALID);
@@ -432,15 +481,26 @@ fn never_valid_ends_after_three_requests_with_fewest_violations_visible() {
         vec![cands(&[&a, &b]), cands(&[&c, &d]), cands(&[&e])],
     );
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 3, "1 + 2 Requests");
     let r = kit.record("/p/", Element::Title);
     assert_eq!(r.status, NO_VALID);
     assert_eq!(first_shown(&r), b, "Gleichstand B/C → der erste");
-    let b_violations = &r.candidates.iter().find(|x| x.value == b).unwrap().violations;
+    let b_violations = &r
+        .candidates
+        .iter()
+        .find(|x| x.value == b)
+        .unwrap()
+        .violations;
     assert_eq!(b_violations.len(), 1);
-    assert_eq!(&r.violations, b_violations, "Verstoßliste des sichtbaren Kandidaten");
+    assert_eq!(
+        &r.violations, b_violations,
+        "Verstoßliste des sichtbaren Kandidaten"
+    );
 }
 
 // spec: AI-075 [M4]
@@ -459,21 +519,39 @@ fn repair_round_setting_bounds_the_requests() {
             repair_rounds: rounds,
             ..options()
         };
-        rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, opts)))
-            .unwrap();
+        rt().block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, opts)),
+        )
+        .unwrap();
         assert_eq!(provider.count(), expected, "{rounds} Reparaturrunden");
         assert_eq!(kit.record("/p/", Element::Title).status, NO_VALID);
     }
     for bad in [
-        SuggestOptions { repair_rounds: 4, ..options() },
-        SuggestOptions { candidates: 0, ..options() },
-        SuggestOptions { candidates: 6, ..options() },
+        SuggestOptions {
+            repair_rounds: 4,
+            ..options()
+        },
+        SuggestOptions {
+            candidates: 0,
+            ..options()
+        },
+        SuggestOptions {
+            candidates: 6,
+            ..options()
+        },
     ] {
         let kit = Kit::new("bad", vec![Page::new("/p/", Some("Alt"))]);
         let provider = Scripted::new();
         let meter = TableMeter::default();
-        let result = rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, bad)));
-        assert!(matches!(result, Err(RunError::Options(_))), "{bad:?}: {result:?}");
+        let result = rt().block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, bad)),
+        );
+        assert!(
+            matches!(result, Err(RunError::Options(_))),
+            "{bad:?}: {result:?}"
+        );
         assert_eq!(provider.count(), 0);
     }
 }
@@ -492,7 +570,10 @@ fn identical_repair_request_is_a_cache_hit() {
     let provider = Scripted::new().script("/p/", vec![cands(&[&a])]);
     let meter = TableMeter::default();
     let summary = rt()
-        .block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
+        .block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, options())),
+        )
         .unwrap();
     assert_eq!(provider.count(), 2, "dritte Runde aus dem Cache");
     assert_eq!(summary.cache_hits, 1);
@@ -512,18 +593,30 @@ fn identical_repair_request_is_a_cache_hit() {
 // `Cache Hit = true` und `Cost = 0`.
 #[test]
 fn second_run_is_answered_from_the_cache() {
-    let kit = Kit::new("cache", vec![Page::new("/a/", Some("Alt A")), Page::new("/b/", Some("Alt B"))]);
+    let kit = Kit::new(
+        "cache",
+        vec![
+            Page::new("/a/", Some("Alt A")),
+            Page::new("/b/", Some("Alt B")),
+        ],
+    );
     let provider = Scripted::new()
         .script("/a/", vec![cands(&[&valid_title("a")])])
         .script("/b/", vec![cands(&[&valid_title("b")])]);
     let meter = TableMeter::default();
     let runtime = rt();
     runtime
-        .block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
+        .block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, options())),
+        )
         .unwrap();
     assert_eq!(provider.count(), 2);
     let second = runtime
-        .block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
+        .block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, options())),
+        )
         .unwrap();
     assert_eq!(provider.count(), 2, "kein neuer Request");
     assert_eq!(second.requests, 0);
@@ -543,13 +636,22 @@ fn second_run_is_answered_from_the_cache() {
 // 1 Request (AI-021 Nachtrag 24.11.2026).
 #[test]
 fn refusal_and_output_limit_end_without_repair() {
-    let kit = Kit::new("refusal", vec![Page::new("/r/", Some("Alt")), Page::new("/o/", Some("Alt O"))]);
+    let kit = Kit::new(
+        "refusal",
+        vec![
+            Page::new("/r/", Some("Alt")),
+            Page::new("/o/", Some("Alt O")),
+        ],
+    );
     let provider = Scripted::new()
         .script("/r/", vec![Reply::Refusal])
         .script("/o/", vec![Reply::OutputLimit]);
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.calls_for("/r/").len(), 1);
     assert_eq!(provider.calls_for("/o/").len(), 1);
     assert_eq!(kit.record("/r/", Element::Title).status, "Refusal");
@@ -565,13 +667,25 @@ fn refusal_and_output_limit_end_without_repair() {
 // `Error: Invalid output`.
 #[test]
 fn schema_violation_gets_exactly_one_repair_attempt() {
-    let kit = Kit::new("schema", vec![Page::new("/once/", Some("Alt")), Page::new("/always/", Some("Alt 2"))]);
+    let kit = Kit::new(
+        "schema",
+        vec![
+            Page::new("/once/", Some("Alt")),
+            Page::new("/always/", Some("Alt 2")),
+        ],
+    );
     let provider = Scripted::new()
-        .script("/once/", vec![Reply::Invalid, cands(&[&valid_title("once")])])
+        .script(
+            "/once/",
+            vec![Reply::Invalid, cands(&[&valid_title("once")])],
+        )
         .script("/always/", vec![Reply::Invalid]);
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.calls_for("/once/").len(), 2);
     assert_eq!(kit.record("/once/", Element::Title).status, VALID);
     assert_eq!(provider.calls_for("/always/").len(), 2);
@@ -600,8 +714,11 @@ fn refusals_and_output_limits_do_not_open_the_breaker() {
         }
         let kit = Kit::new("breaker", pages);
         let meter = TableMeter::default();
-        rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-            .unwrap();
+        rt().block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, options())),
+        )
+        .unwrap();
         assert_eq!(provider.count(), 12, "{status}: alle 12 gesendet");
         for p in &kit.pages {
             assert_eq!(kit.record(&p.path, Element::Title).status, status);
@@ -618,7 +735,10 @@ fn preview_switch_off_sends_nothing() {
     kit.switch = PreviewSwitch::OFF;
     let provider = Scripted::new();
     let meter = TableMeter::default();
-    let result = rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())));
+    let result = rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    );
     assert!(matches!(result, Err(RunError::PreviewOff)), "{result:?}");
     assert_eq!(provider.count(), 0);
     assert_eq!(kit.count("SELECT count(*) FROM ai_suggestions"), 0);
@@ -631,12 +751,21 @@ fn preview_switch_off_sends_nothing() {
 // offen.
 #[test]
 fn without_consent_no_request_and_pending_consent() {
-    let mut kit = Kit::new("consent", vec![Page::new("/a/", Some("Alt")), Page::new("/b/", Some("Alt B"))]);
+    let mut kit = Kit::new(
+        "consent",
+        vec![
+            Page::new("/a/", Some("Alt")),
+            Page::new("/b/", Some("Alt B")),
+        ],
+    );
     kit.consent = os_ai::policy::ConsentGate::cli(false);
     let provider = Scripted::new();
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 0, "Mock-Zähler 0");
     for p in ["/a/", "/b/"] {
         assert_eq!(kit.record(p, Element::Title).status, "Pending (consent)");
@@ -644,7 +773,10 @@ fn without_consent_no_request_and_pending_consent() {
     let snap = kit.ledger.snapshot().unwrap();
     assert_eq!(snap.reserved.0, 0);
     assert_eq!(snap.spent.0, 0);
-    assert_eq!(kit.count("SELECT count(*) FROM ai_requests WHERE cost_microusd > 0"), 0);
+    assert_eq!(
+        kit.count("SELECT count(*) FROM ai_requests WHERE cost_microusd > 0"),
+        0
+    );
 }
 
 // spec: AI-070 [M4]
@@ -665,8 +797,11 @@ fn focus_keyword_and_context_reach_the_request() {
         .script("/f/", vec![cands(&[&valid_title("f")])])
         .script("/g/", vec![cands(&[&valid_title("g")])]);
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     let f = &provider.calls_for("/f/")[0];
     let g = &provider.calls_for("/g/")[0];
     let all_f = format!("{}\n{}", f.instructions, f.input);
@@ -701,13 +836,22 @@ fn y() -> String {
 // „Y“ ist Kandidat 1“; der Nachlauf sendet keinen Request.
 #[test]
 fn post_pass_reserves_by_address_order() {
-    let kit = Kit::new("stage2", vec![Page::new("/b/", Some("Alt B")), Page::new("/a/", Some("Alt A"))]);
+    let kit = Kit::new(
+        "stage2",
+        vec![
+            Page::new("/b/", Some("Alt B")),
+            Page::new("/a/", Some("Alt A")),
+        ],
+    );
     let provider = Scripted::new()
         .script("/a/", vec![cands(&[&x(), &valid_title("A zwei")])])
         .script("/b/", vec![cands(&[&x(), &y()])]);
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 2, "Nachlauf ohne Request");
     let a = kit.record("/a/", Element::Title);
     let b = kit.record("/b/", Element::Title);
@@ -733,13 +877,22 @@ fn post_pass_reserves_by_address_order() {
 // (Mock-Zähler unverändert).“
 #[test]
 fn post_pass_without_alternative_gives_no_valid_suggestion_without_request() {
-    let kit = Kit::new("stage2b", vec![Page::new("/a/", Some("Alt A")), Page::new("/b/", Some("Alt B"))]);
+    let kit = Kit::new(
+        "stage2b",
+        vec![
+            Page::new("/a/", Some("Alt A")),
+            Page::new("/b/", Some("Alt B")),
+        ],
+    );
     let provider = Scripted::new()
         .script("/a/", vec![cands(&[&x()])])
         .script("/b/", vec![cands(&[&x()])]);
     let meter = TableMeter::default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 2);
     assert_eq!(kit.record("/a/", Element::Title).status, VALID);
     assert_eq!(kit.record("/b/", Element::Title).status, NO_VALID);
@@ -796,7 +949,9 @@ fn post_pass_is_deterministic_over_20_runs_with_4_workers() {
     let runtime = rt();
     let mut seed: u64 = 0x5eed_0071;
     let mut next = || {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (seed >> 33) % 40
     };
     let mut results = Vec::new();
@@ -805,7 +960,10 @@ fn post_pass_is_deterministic_over_20_runs_with_4_workers() {
         let (kit, provider) = determinism_kit(&delays);
         let meter = TableMeter::default();
         runtime
-            .block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
+            .block_on(
+                kit.engine(&provider, &meter)
+                    .run(&kit.job(Element::Title, options())),
+            )
             .unwrap();
         assert_eq!(provider.count(), 5);
         results.push(outcome(&kit));
@@ -814,7 +972,10 @@ fn post_pass_is_deterministic_over_20_runs_with_4_workers() {
     let (kit, provider) = determinism_kit(&[300, 0, 0, 0, 0]);
     let meter = TableMeter::default();
     runtime
-        .block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
+        .block_on(
+            kit.engine(&provider, &meter)
+                .run(&kit.job(Element::Title, options())),
+        )
         .unwrap();
     results.push(outcome(&kit));
     let first = &results[0];
@@ -823,7 +984,11 @@ fn post_pass_is_deterministic_over_20_runs_with_4_workers() {
     }
     assert_eq!(first["/a/"].1, x());
     assert_eq!(first["/b/"].1, y());
-    assert_eq!(first["/c/"].1, valid_title("C zwei"), "Y ist für /b/ reserviert");
+    assert_eq!(
+        first["/c/"].1,
+        valid_title("C zwei"),
+        "Y ist für /b/ reserviert"
+    );
     assert_eq!(first["/d/"].0, VALID);
     assert_eq!(first["/e/"].0, NO_VALID);
 }
@@ -834,7 +999,10 @@ fn post_pass_is_deterministic_over_20_runs_with_4_workers() {
 // schon fertiger Eintrag vorläufig, nach dem Lauf nicht mehr.
 #[test]
 fn entries_are_provisional_until_the_post_pass() {
-    let pages = vec![Page::new("/a/", Some("Alt A")), Page::new("/b/", Some("Alt B"))];
+    let pages = vec![
+        Page::new("/a/", Some("Alt A")),
+        Page::new("/b/", Some("Alt B")),
+    ];
     let kit = Kit::new("prov", pages);
     let provider = Scripted::new()
         .script("/a/", vec![cands(&[&valid_title("a")])])
@@ -846,7 +1014,10 @@ fn entries_are_provisional_until_the_post_pass() {
     rt().block_on(engine.run(&kit.job(Element::Title, options())))
         .unwrap();
     let committed = tap.committed.lock().unwrap().clone();
-    let with_result: Vec<_> = committed.iter().filter(|(_, status, _)| status == VALID).collect();
+    let with_result: Vec<_> = committed
+        .iter()
+        .filter(|(_, status, _)| status == VALID)
+        .collect();
     assert_eq!(with_result.len(), 2, "{committed:?}");
     assert!(
         with_result.iter().all(|(_, _, provisional)| *provisional),
@@ -868,7 +1039,10 @@ fn five_pages() -> Vec<Page> {
 fn five_valid() -> Scripted {
     let mut provider = Scripted::new();
     for i in 1..=5 {
-        provider = provider.script(&format!("/p{i}/"), vec![cands(&[&valid_title(&format!("p{i}"))])]);
+        provider = provider.script(
+            &format!("/p{i}/"),
+            vec![cands(&[&valid_title(&format!("p{i}"))])],
+        );
     }
     provider
 }
@@ -889,19 +1063,29 @@ fn stop_sends_nothing_more_and_keeps_open_entries_pending() {
         }
     });
     let summary = rt()
-        .block_on(kit.engine(&provider, &meter_default()).run(&kit.job(Element::Title, options())))
+        .block_on(
+            kit.engine(&provider, &meter_default())
+                .run(&kit.job(Element::Title, options())),
+        )
         .unwrap();
     assert!(summary.stopped);
     assert_eq!(provider.count(), 2, "kein Request nach dem Stoppen");
     assert_eq!(kit.record("/p1/", Element::Title).status, VALID);
-    assert_eq!(kit.record("/p2/", Element::Title).status, VALID, "laufender Request übernommen");
+    assert_eq!(
+        kit.record("/p2/", Element::Title).status,
+        VALID,
+        "laufender Request übernommen"
+    );
     assert_eq!(kit.log_rows("/p2/").len(), 1);
     for p in ["/p3/", "/p4/", "/p5/"] {
         assert_eq!(kit.record(p, Element::Title).status, "Pending");
         assert!(kit.log_rows(p).is_empty());
     }
     let snap = kit.ledger.snapshot().unwrap();
-    assert_eq!(snap.reserved.0, 0, "offene Einträge belegen keine Reservierung");
+    assert_eq!(
+        snap.reserved.0, 0,
+        "offene Einträge belegen keine Reservierung"
+    );
 }
 
 fn meter_default() -> TableMeter {
@@ -916,11 +1100,17 @@ fn stopped_before_start_sends_nothing() {
     let kit = Kit::new("stop0", five_pages());
     kit.control.stop();
     let provider = five_valid();
-    rt().block_on(kit.engine(&provider, &meter_default()).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter_default())
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 0);
     for i in 1..=5 {
-        assert_eq!(kit.record(&format!("/p{i}/"), Element::Title).status, "Pending");
+        assert_eq!(
+            kit.record(&format!("/p{i}/"), Element::Title).status,
+            "Pending"
+        );
     }
 }
 
@@ -932,8 +1122,11 @@ fn zero_budget_sends_nothing() {
     let mut kit = Kit::new("budget0", five_pages());
     kit.ledger = CrawlBudgetLedger::new(budget(0));
     let provider = five_valid();
-    rt().block_on(kit.engine(&provider, &meter_default()).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter_default())
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 0);
     for i in 1..=5 {
         assert_eq!(
@@ -952,36 +1145,58 @@ fn zero_budget_sends_nothing() {
 fn tight_budget_sends_exactly_what_fits_and_marks_the_rest() {
     // Vorlauf: Reservierung und Kosten je Request.
     let probe = Kit::new("probe", five_pages());
-    rt().block_on(probe.engine(&five_valid(), &meter_default()).run(&probe.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        probe
+            .engine(&five_valid(), &meter_default())
+            .run(&probe.job(Element::Title, options())),
+    )
+    .unwrap();
     let r: Vec<(i64, i64)> = (1..=5)
         .map(|i| {
             let row = probe.log_rows(&format!("/p{i}/"))[0].clone();
             (row.2, row.1)
         })
         .collect();
-    assert!(r.iter().all(|(res, cost)| *res >= *cost && *cost > 0), "{r:?}");
+    assert!(
+        r.iter().all(|(res, cost)| *res >= *cost && *cost > 0),
+        "{r:?}"
+    );
     let limit = (r[0].1 + r[1].1 + r[2].0 - 1) as u64;
-    assert!(r[0].0 as u64 <= limit && (r[1].0 + r[0].1) as u64 <= limit, "{r:?}");
+    assert!(
+        r[0].0 as u64 <= limit && (r[1].0 + r[0].1) as u64 <= limit,
+        "{r:?}"
+    );
     let mut kit = Kit::new("tight", five_pages());
     kit.ledger = CrawlBudgetLedger::new(budget(limit));
     kit.workers = 1;
     let provider = five_valid();
-    rt().block_on(kit.engine(&provider, &meter_default()).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter_default())
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(provider.count(), 2, "genau zwei Requests passen");
     let statuses: Vec<String> = (1..=5)
         .map(|i| kit.record(&format!("/p{i}/"), Element::Title).status)
         .collect();
     assert_eq!(
         statuses,
-        [VALID, VALID, "Budget exceeded", "Budget exceeded", "Budget exceeded"]
+        [
+            VALID,
+            VALID,
+            "Budget exceeded",
+            "Budget exceeded",
+            "Budget exceeded"
+        ]
     );
     let spent = kit.count("SELECT COALESCE(sum(cost_microusd), 0) FROM ai_requests");
     assert!(spent as u64 <= limit);
     let snap = kit.ledger.snapshot().unwrap();
     assert_eq!(snap.reserved.0, 0);
-    assert_eq!(snap.spent.0 as i64, spent, "Ledger = Summe der Protokollzeilen");
+    assert_eq!(
+        snap.spent.0 as i64, spent,
+        "Ledger = Summe der Protokollzeilen"
+    );
 }
 
 /// Speicher, der jede Übernahme mitschreibt (URL, Status, vorläufig) und optional die Übernahme einer Antwort für eine
@@ -1057,11 +1272,18 @@ fn failed_commit_leaves_no_partial_trace() {
         assert_eq!(kit.log_rows(p).len(), 1, "{p}");
         assert_eq!(kit.record(p, Element::Title).status, VALID, "{p}");
     }
-    assert_eq!(kit.count("SELECT count(*) FROM ai_cache"), 4, "kein Cache-Eintrag für /p3/");
+    assert_eq!(
+        kit.count("SELECT count(*) FROM ai_cache"),
+        4,
+        "kein Cache-Eintrag für /p3/"
+    );
     let snap = kit.ledger.snapshot().unwrap();
     assert_eq!(snap.reserved.0, 0, "Reservierung freigegeben");
     let spent = kit.count("SELECT COALESCE(sum(cost_microusd), 0) FROM ai_requests");
-    assert_eq!(snap.spent.0 as i64, spent, "keine verbuchten Kosten für /p3/");
+    assert_eq!(
+        snap.spent.0 as i64, spent,
+        "keine verbuchten Kosten für /p3/"
+    );
 }
 
 // =================================================================================================================
@@ -1077,15 +1299,26 @@ fn recheck_with_new_limits_changes_status_without_request() {
     let c55 = text_of("Fünfundfünfzig Zeichen ", 55);
     let provider = Scripted::new().script("/p/", vec![cands(&[&c55])]);
     let meter = meter_default();
-    rt().block_on(kit.engine(&provider, &meter).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter)
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     assert_eq!(kit.record("/p/", Element::Title).status, VALID);
     let limits = ElementLimits {
         max_chars: 50,
         ..TITLE_LIMITS
     };
-    let c = checker(Element::Title, limits, RuleSet::default(), &meter, &kit.index);
-    let records = kit.store.with(|f| store::load_all(f.conn(), Element::Title.id()).unwrap());
+    let c = checker(
+        Element::Title,
+        limits,
+        RuleSet::default(),
+        &meter,
+        &kit.index,
+    );
+    let records = kit
+        .store
+        .with(|f| store::load_all(f.conn(), Element::Title.id()).unwrap());
     let languages: BTreeMap<i64, Option<String>> = BTreeMap::new();
     let out = sg::revalidate(records, &c, &languages, &kit.index);
     let r = out.iter().find(|r| r.url_id == kit.id_of("/p/")).unwrap();
@@ -1119,9 +1352,14 @@ fn review_kit() -> (Kit, Scripted) {
 #[test]
 fn bulk_accept_first_takes_only_valid_and_counts_the_rest() {
     let (kit, provider) = review_kit();
-    rt().block_on(kit.engine(&provider, &meter_default()).run(&kit.job(Element::Title, options())))
-        .unwrap();
-    let mut records = kit.store.with(|f| store::load_all(f.conn(), Element::Title.id()).unwrap());
+    rt().block_on(
+        kit.engine(&provider, &meter_default())
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
+    let mut records = kit
+        .store
+        .with(|f| store::load_all(f.conn(), Element::Title.id()).unwrap());
     assert_eq!(records.len(), 10);
     let result = sg::accept_first(&mut records, "2026-11-27T12:00:00Z");
     assert_eq!(result.accepted, 7);
@@ -1147,14 +1385,24 @@ fn bulk_accept_first_takes_only_valid_and_counts_the_rest() {
 #[test]
 fn review_state_transitions() {
     let (kit, provider) = review_kit();
-    rt().block_on(kit.engine(&provider, &meter_default()).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter_default())
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     let meter = meter_default();
     let c = title_checker(&meter, &kit.index);
     let now = "2026-11-27T12:00:00Z";
     let mut r = kit.record("/r01/", Element::Title);
     assert_eq!(r.review, ReviewStatus::Open);
-    sg::apply(&mut r, &ReviewAction::Accept { candidate: None }, &c, None, now).unwrap();
+    sg::apply(
+        &mut r,
+        &ReviewAction::Accept { candidate: None },
+        &c,
+        None,
+        now,
+    )
+    .unwrap();
     assert_eq!(r.review, ReviewStatus::Accepted);
     assert_eq!(r.accepted.as_ref().unwrap().value, first_shown(&r));
     sg::apply(&mut r, &ReviewAction::Reset, &c, None, now).unwrap();
@@ -1163,7 +1411,16 @@ fn review_state_transitions() {
     sg::apply(&mut r, &ReviewAction::Reject, &c, None, now).unwrap();
     assert_eq!(r.review, ReviewStatus::Rejected);
     let edited = valid_title("eigener Text");
-    sg::apply(&mut r, &ReviewAction::Edit { value: edited.clone() }, &c, None, now).unwrap();
+    sg::apply(
+        &mut r,
+        &ReviewAction::Edit {
+            value: edited.clone(),
+        },
+        &c,
+        None,
+        now,
+    )
+    .unwrap();
     assert_eq!(r.review, ReviewStatus::Edited);
     let a = r.accepted.as_ref().unwrap();
     assert_eq!(a.value, edited);
@@ -1173,7 +1430,14 @@ fn review_state_transitions() {
     assert_eq!(r.review, ReviewStatus::Open);
     let mut none = kit.record("/r09/", Element::Title);
     assert_eq!(none.status, NO_VALID);
-    assert!(sg::apply(&mut none, &ReviewAction::Accept { candidate: None }, &c, None, now).is_err());
+    assert!(sg::apply(
+        &mut none,
+        &ReviewAction::Accept { candidate: None },
+        &c,
+        None,
+        now
+    )
+    .is_err());
     assert_eq!(none.review, ReviewStatus::Open);
 }
 
@@ -1184,8 +1448,11 @@ fn review_state_transitions() {
 #[test]
 fn edited_value_with_violations_is_saved_unchanged_and_marked() {
     let (kit, provider) = review_kit();
-    rt().block_on(kit.engine(&provider, &meter_default()).run(&kit.job(Element::Title, options())))
-        .unwrap();
+    rt().block_on(
+        kit.engine(&provider, &meter_default())
+            .run(&kit.job(Element::Title, options())),
+    )
+    .unwrap();
     let meter = meter_default();
     let c = title_checker(&meter, &kit.index);
     let mut r = kit.record("/r09/", Element::Title);
@@ -1193,8 +1460,14 @@ fn edited_value_with_violations_is_saved_unchanged_and_marked() {
     let live = sg::check_text(&c, r.url_id, None, &raw);
     assert!(!live.valid());
     assert_eq!(live.pixel_width, 9 * 70, "Pixelbreite der Live-Prüfung");
-    sg::apply(&mut r, &ReviewAction::Edit { value: raw.clone() }, &c, None, "2026-11-27T12:00:00Z")
-        .unwrap();
+    sg::apply(
+        &mut r,
+        &ReviewAction::Edit { value: raw.clone() },
+        &c,
+        None,
+        "2026-11-27T12:00:00Z",
+    )
+    .unwrap();
     assert_eq!(r.review, ReviewStatus::Edited);
     let a = r.accepted.as_ref().unwrap();
     assert_eq!(a.value, raw, "keine stille Korrektur");

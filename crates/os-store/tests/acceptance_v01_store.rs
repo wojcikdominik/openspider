@@ -26,7 +26,11 @@ fn count(f: &CrawlFile, sql: &str) -> i64 {
 fn suggestions_and_decisions_survive_close_and_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let path = {
-        let f = states::create(dir.path(), "persist.ospider", os_model::CrawlConfig::default());
+        let f = states::create(
+            dir.path(),
+            "persist.ospider",
+            os_model::CrawlConfig::default(),
+        );
         f.path().to_path_buf()
     };
     let f = CrawlFile::open(&path, OpenMode::ReadWrite).unwrap();
@@ -37,7 +41,10 @@ fn suggestions_and_decisions_survive_close_and_reopen() {
         assert_eq!(got.status, expected.status);
         assert_eq!(got.review, expected.review);
         assert_eq!(got.accepted, expected.accepted);
-        assert_eq!(got.candidates, expected.candidates, "Kandidaten in Antwortreihenfolge");
+        assert_eq!(
+            got.candidates, expected.candidates,
+            "Kandidaten in Antwortreihenfolge"
+        );
         assert_eq!(got.selected, expected.selected);
         assert_eq!(
             got.displayed().first().map(|c| c.index),
@@ -123,11 +130,21 @@ fn cache_row(key: &str) -> CacheRow {
 #[test]
 fn commit_is_all_or_nothing() {
     let dir = tempfile::tempdir().unwrap();
-    let f = states::create(dir.path(), "atomic.ospider", os_model::CrawlConfig::default());
+    let f = states::create(
+        dir.path(),
+        "atomic.ospider",
+        os_model::CrawlConfig::default(),
+    );
     let id = states::id("/no-suggestion/");
     let mut record = store::ElementRecord::pending(id, store::ELEMENT_TITLE);
     record.status = "Valid".into();
-    record.candidates = vec![states::cand(1, "Ein neuer gültiger Title für die Seite", 350, &[], 1)];
+    record.candidates = vec![states::cand(
+        1,
+        "Ein neuer gültiger Title für die Seite",
+        350,
+        &[],
+        1,
+    )];
     record.selected = Some(1);
     record.order = vec![1];
     let before_requests = count(&f, "SELECT count(*) FROM ai_requests");
@@ -141,9 +158,17 @@ fn commit_is_all_or_nothing() {
     )
     .unwrap();
     assert_eq!(ids.len(), 1);
-    assert_eq!(count(&f, "SELECT count(*) FROM ai_requests"), before_requests + 1);
-    assert_eq!(count(&f, "SELECT count(*) FROM ai_cache WHERE cache_key = 'k-ok'"), 1);
-    assert!(store::load(f.conn(), id, store::ELEMENT_TITLE).unwrap().is_some());
+    assert_eq!(
+        count(&f, "SELECT count(*) FROM ai_requests"),
+        before_requests + 1
+    );
+    assert_eq!(
+        count(&f, "SELECT count(*) FROM ai_cache WHERE cache_key = 'k-ok'"),
+        1
+    );
+    assert!(store::load(f.conn(), id, store::ELEMENT_TITLE)
+        .unwrap()
+        .is_some());
 
     // Zweite URL, Fehlerinjektion.
     let id2 = states::id("/pending/");
@@ -161,7 +186,10 @@ fn commit_is_all_or_nothing() {
     );
     assert!(result.is_err(), "Fehlerinjektion muss scheitern");
     assert_eq!(
-        count(&f, &format!("SELECT count(*) FROM ai_requests WHERE url_id = {id2}")),
+        count(
+            &f,
+            &format!("SELECT count(*) FROM ai_requests WHERE url_id = {id2}")
+        ),
         0,
         "keine Protokollzeile"
     );

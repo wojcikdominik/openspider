@@ -25,11 +25,11 @@ use os_ai::provider::{
     AiProvider, Capabilities, CapabilitySource, Input, Model, ProviderError, ProviderFuture,
     ReasoningLevel, Request, Response, Usage,
 };
+use os_ai::tasks::suggest::Element;
 use os_ai::tasks::suggest::{
     ElementJob, ElementLimits, Engine, FileStore, NoStyleRules, PageInput, PixelMeter, RunControl,
     SiteIndex, SuggestOptions,
 };
-use os_ai::tasks::suggest::Element;
 use os_ai::PreviewSwitch;
 use os_model::budget::{BudgetLimits, CrawlBudgetLedger, MicroUsd};
 use os_store::ai::suggestions as store;
@@ -658,8 +658,9 @@ pub struct Mock {
 
 impl Mock {
     pub async fn start() -> Self {
-        let mock = os_testsite::mocks::ai::AiMock::from_fragments(fixture_dir().join("mock-answers.d"))
-            .expect("eigene ai-mock-Fragmente lesbar");
+        let mock =
+            os_testsite::mocks::ai::AiMock::from_fragments(fixture_dir().join("mock-answers.d"))
+                .expect("eigene ai-mock-Fragmente lesbar");
         let server = os_testsite::mocks::MockServer::start(mock.registrations())
             .await
             .expect("ai-mock startet");

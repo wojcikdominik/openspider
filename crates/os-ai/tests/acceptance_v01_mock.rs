@@ -28,9 +28,8 @@ fn fragment(id: &str) -> Vec<String> {
 }
 
 fn page(path: &str, marker: &str) -> Page {
-    Page::new(path, Some(&format!("Alt {path}"))).text(&format!(
-        "Seitentext der Seite {path}. {marker} Ende."
-    ))
+    Page::new(path, Some(&format!("Alt {path}")))
+        .text(&format!("Seitentext der Seite {path}. {marker} Ende."))
 }
 
 // spec: AI-070 [M4]
@@ -79,14 +78,20 @@ async fn permanently_invalid_answer_runs_three_rounds_with_one_cache_hit() {
     let first = &fragment("v01acc-invalid")[0];
     let px = 9 * first.chars().count();
     let expected = format!("{px} px > 561 px");
-    assert!(posts[1].contains(&expected), "zweiter Request ohne „{expected}“");
+    assert!(
+        posts[1].contains(&expected),
+        "zweiter Request ohne „{expected}“"
+    );
     assert!(!posts[0].contains(&expected));
     let r = kit.record("/i/", Element::Title);
     assert_eq!(r.status, "No valid suggestion");
     assert_eq!(r.rounds, 3);
     let rows = kit.log_rows("/i/");
     assert_eq!(rows.len(), 3, "{rows:?}");
-    assert!(rows[2].0 && rows[2].1 == 0, "dritte Zeile Cache-Treffer: {rows:?}");
+    assert!(
+        rows[2].0 && rows[2].1 == 0,
+        "dritte Zeile Cache-Treffer: {rows:?}"
+    );
 }
 
 // spec: AI-015 [M4]
@@ -97,7 +102,10 @@ async fn rerun_sends_nothing_to_the_mock() {
     let mock = Mock::start().await;
     let kit = Kit::new(
         "m-rerun",
-        vec![page("/v/", "MOCK-ID:v01acc-valid"), page("/i/", "MOCK-ID:v01acc-invalid")],
+        vec![
+            page("/v/", "MOCK-ID:v01acc-valid"),
+            page("/i/", "MOCK-ID:v01acc-invalid"),
+        ],
     );
     let adapter = mock.anthropic();
     let meter = TableMeter::default();
@@ -109,7 +117,10 @@ async fn rerun_sends_nothing_to_the_mock() {
     }
     assert_eq!(mock.posts().len(), 3, "nur der erste Lauf fragt an (1 + 2)");
     assert_eq!(kit.record("/v/", Element::Title).status, "Valid");
-    assert_eq!(kit.record("/i/", Element::Title).status, "No valid suggestion");
+    assert_eq!(
+        kit.record("/i/", Element::Title).status,
+        "No valid suggestion"
+    );
 }
 
 // spec: AI-070 [M4]
@@ -137,7 +148,10 @@ async fn preview_off_sends_nothing_to_the_mock() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn refusal_is_final_and_cached() {
     let mock = Mock::start().await;
-    let kit = Kit::new("m-refusal", vec![page("/r/", "MOCK-ID:v01acc-valid MOCK-SCENARIO:refusal")]);
+    let kit = Kit::new(
+        "m-refusal",
+        vec![page("/r/", "MOCK-ID:v01acc-valid MOCK-SCENARIO:refusal")],
+    );
     let adapter = mock.anthropic();
     let meter = TableMeter::default();
     for _ in 0..2 {
@@ -158,7 +172,13 @@ async fn refusal_is_final_and_cached() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn output_limit_is_not_repaired_and_not_cached() {
     let mock = Mock::start().await;
-    let kit = Kit::new("m-limit", vec![page("/o/", "MOCK-ID:v01acc-valid MOCK-SCENARIO:output-limit")]);
+    let kit = Kit::new(
+        "m-limit",
+        vec![page(
+            "/o/",
+            "MOCK-ID:v01acc-valid MOCK-SCENARIO:output-limit",
+        )],
+    );
     let adapter = mock.anthropic();
     let meter = TableMeter::default();
     kit.engine(&adapter, &meter)
@@ -185,7 +205,13 @@ async fn output_limit_is_not_repaired_and_not_cached() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn output_limit_row_books_the_reported_tokens() {
     let mock = Mock::start().await;
-    let kit = Kit::new("m-limit-row", vec![page("/o/", "MOCK-ID:v01acc-valid MOCK-SCENARIO:output-limit")]);
+    let kit = Kit::new(
+        "m-limit-row",
+        vec![page(
+            "/o/",
+            "MOCK-ID:v01acc-valid MOCK-SCENARIO:output-limit",
+        )],
+    );
     let adapter = mock.anthropic();
     let meter = TableMeter::default();
     kit.engine(&adapter, &meter)
@@ -226,7 +252,9 @@ async fn held_request_aborted_leaves_entry_pending_without_trace() {
     let kit = Kit::new("m-hold", vec![page("/h/", "MOCK-ID:v01acc-valid")]);
     let adapter = mock.anthropic();
     let meter = TableMeter::default();
-    let run = kit.engine(&adapter, &meter).run(&kit.job(Element::Title, options()));
+    let job = kit.job(Element::Title, options());
+    let engine = kit.engine(&adapter, &meter);
+    let run = engine.run(&job);
     // Abbruch während des gehaltenen Requests (wie geordnetes Beenden/Absturz): die Zukunft wird verworfen.
     let _ = tokio::time::timeout(std::time::Duration::from_millis(500), run).await;
     assert_eq!(kit.record("/h/", Element::Title).status, "Pending");

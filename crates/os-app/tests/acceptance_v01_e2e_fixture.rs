@@ -7,6 +7,7 @@
 //! Tab zeigt. Mit `V01_WRITE_E2E_FIXTURE=1` schreibt er sie nach
 //! `tests/fixtures/ai/v01-acceptance/e2e/v01-states.ospider` (Erzeugung der eingecheckten Fixture).
 // acceptance: independent
+#![allow(clippy::disallowed_types, clippy::disallowed_methods)]
 
 #[path = "../../../tests/fixtures/ai/v01-acceptance/states.rs"]
 mod states;
@@ -99,17 +100,32 @@ async fn e2e_fixture_opens_and_shows_the_tab() {
     std::fs::copy(&path, &copy).unwrap();
     let app = App::new(AppConfig::new(&home)).unwrap();
     let ctx = || CallCtx::for_window("main");
-    app.dispatch(ctx(), "settings.set", json!({"patch": {"aiApp": {"previewEnabled": true}}}))
-        .await
-        .unwrap();
+    app.dispatch(
+        ctx(),
+        "settings.set",
+        json!({"patch": {"aiApp": {"previewEnabled": true}}}),
+    )
+    .await
+    .unwrap();
     app.dispatch(ctx(), "crawl.open", json!({"kind": "path", "path": copy}))
         .await
         .unwrap();
-    let tabs: Value = app.dispatch(ctx(), "catalog.tabs", Value::Null).await.unwrap();
-    assert!(tabs.as_array().unwrap().iter().any(|t| t["id"] == "AI Suggestions"));
+    let tabs: Value = app
+        .dispatch(ctx(), "catalog.tabs", Value::Null)
+        .await
+        .unwrap();
+    assert!(tabs
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|t| t["id"] == "AI Suggestions"));
     let d: Value = app
         .dispatch(ctx(), "ai.suggestDetail", json!({"urlId": SERP_ID}))
         .await
         .unwrap();
-    assert_eq!(d["elements"][0]["candidates"].as_array().unwrap().len(), 2, "{d}");
+    assert_eq!(
+        d["elements"][0]["candidates"].as_array().unwrap().len(),
+        2,
+        "{d}"
+    );
 }

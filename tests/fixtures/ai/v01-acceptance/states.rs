@@ -28,19 +28,97 @@ pub struct Row {
 
 /// Seiten in ID-Reihenfolge (ID = Position + 1).
 pub const ROWS: [Row; 13] = [
-    Row { path: "/valid-open/", title: Some("Startseite"), title_px: Some(99), meta: Some("Alte Beschreibung der Startseite"), meta_px: Some(222) },
-    Row { path: "/accepted/", title: Some("Wanderschuhe"), title_px: Some(120), meta: None, meta_px: None },
-    Row { path: "/edited/", title: Some("Rucksäcke"), title_px: Some(95), meta: None, meta_px: None },
-    Row { path: "/rejected/", title: Some("Zelte"), title_px: Some(55), meta: None, meta_px: None },
-    Row { path: "/novalid/", title: Some("Schlafsäcke"), title_px: Some(110), meta: None, meta_px: None },
-    Row { path: "/pending/", title: Some("Kocher"), title_px: Some(66), meta: None, meta_px: None },
-    Row { path: "/error/", title: Some("Lampen"), title_px: Some(70), meta: None, meta_px: None },
-    Row { path: "/budget/", title: Some("Stöcke"), title_px: Some(64), meta: None, meta_px: None },
-    Row { path: "/refusal/", title: Some("Karten"), title_px: Some(68), meta: None, meta_px: None },
-    Row { path: "/skipped/", title: Some("Kompass"), title_px: Some(80), meta: None, meta_px: None },
-    Row { path: "/meta-only/", title: Some("Nur Meta"), title_px: Some(81), meta: None, meta_px: None },
-    Row { path: "/no-suggestion/", title: Some("Ohne Vorschlag"), title_px: Some(140), meta: None, meta_px: None },
-    Row { path: "/formula/", title: Some("=HYPERLINK(\"http://evil\")"), title_px: Some(250), meta: None, meta_px: None },
+    Row {
+        path: "/valid-open/",
+        title: Some("Startseite"),
+        title_px: Some(99),
+        meta: Some("Alte Beschreibung der Startseite"),
+        meta_px: Some(222),
+    },
+    Row {
+        path: "/accepted/",
+        title: Some("Wanderschuhe"),
+        title_px: Some(120),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/edited/",
+        title: Some("Rucksäcke"),
+        title_px: Some(95),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/rejected/",
+        title: Some("Zelte"),
+        title_px: Some(55),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/novalid/",
+        title: Some("Schlafsäcke"),
+        title_px: Some(110),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/pending/",
+        title: Some("Kocher"),
+        title_px: Some(66),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/error/",
+        title: Some("Lampen"),
+        title_px: Some(70),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/budget/",
+        title: Some("Stöcke"),
+        title_px: Some(64),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/refusal/",
+        title: Some("Karten"),
+        title_px: Some(68),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/skipped/",
+        title: Some("Kompass"),
+        title_px: Some(80),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/meta-only/",
+        title: Some("Nur Meta"),
+        title_px: Some(81),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/no-suggestion/",
+        title: Some("Ohne Vorschlag"),
+        title_px: Some(140),
+        meta: None,
+        meta_px: None,
+    },
+    Row {
+        path: "/formula/",
+        title: Some("=HYPERLINK(\"http://evil\")"),
+        title_px: Some(250),
+        meta: None,
+        meta_px: None,
+    },
 ];
 
 pub fn address(path: &str) -> String {
@@ -48,7 +126,10 @@ pub fn address(path: &str) -> String {
 }
 
 pub fn id(path: &str) -> i64 {
-    ROWS.iter().position(|r| r.path == path).expect("Pfad der Fixture") as i64 + 1
+    ROWS.iter()
+        .position(|r| r.path == path)
+        .expect("Pfad der Fixture") as i64
+        + 1
 }
 
 /// Adressen zu Pfaden (sortiert).
@@ -80,7 +161,11 @@ fn record(path: &str, element: &str, status: &str) -> ElementRecord {
     r
 }
 
-fn with(mut r: ElementRecord, candidates: Vec<StoredCandidate>, selected: Option<u32>) -> ElementRecord {
+fn with(
+    mut r: ElementRecord,
+    candidates: Vec<StoredCandidate>,
+    selected: Option<u32>,
+) -> ElementRecord {
     let visible = selected.or_else(|| candidates.first().map(|c| c.index));
     r.order = visible.into_iter().collect();
     r.violations = visible
@@ -92,7 +177,14 @@ fn with(mut r: ElementRecord, candidates: Vec<StoredCandidate>, selected: Option
     r
 }
 
-fn accept(mut r: ElementRecord, review: ReviewStatus, origin: Origin, value: &str, px: u32, violations: &[&str]) -> ElementRecord {
+fn accept(
+    mut r: ElementRecord,
+    review: ReviewStatus,
+    origin: Origin,
+    value: &str,
+    px: u32,
+    violations: &[&str],
+) -> ElementRecord {
     r.review = review;
     r.accepted = Some(AcceptedValue {
         value: value.to_string(),
@@ -100,7 +192,11 @@ fn accept(mut r: ElementRecord, review: ReviewStatus, origin: Origin, value: &st
         pixel_width: Some(px),
         violations: violations.iter().map(|s| s.to_string()).collect(),
         origin,
-        candidate: if origin == Origin::Ai { r.selected } else { None },
+        candidate: if origin == Origin::Ai {
+            r.selected
+        } else {
+            None
+        },
         at: ACCEPTED_AT.to_string(),
     });
     r
@@ -114,8 +210,10 @@ pub const V_EDITED: &str = "=SUM(A1) Rucksäcke für jede Tour – zu lang für 
 pub const V_REJ: &str = "Zelte für Camping und Trekking im Überblick";
 pub const V_NOVALID_1: &str = "Schlafsäcke für jede Jahreszeit und jedes Budget im großen Test";
 pub const V_NOVALID_2: &str = "Schlafsäcke für Sommer, Winter und Übergang: Modelle und Tipps 2026";
-pub const V_META: &str = "Entdecken Sie unsere Auswahl an Wanderausrüstung: Schuhe, Rucksäcke und Zelte für jede Tour.";
-pub const V_META_ONLY: &str = "Nur eine Meta Description für diese Seite mit genug Text für die Mindestlänge.";
+pub const V_META: &str =
+    "Entdecken Sie unsere Auswahl an Wanderausrüstung: Schuhe, Rucksäcke und Zelte für jede Tour.";
+pub const V_META_ONLY: &str =
+    "Nur eine Meta Description für diese Seite mit genug Text für die Mindestlänge.";
 pub const V_FORMULA: &str = "+Angebote für Outdoor-Ausrüstung im Überblick";
 pub const V_FORMULA_2: &str = "@Outdoor Angebote und Rabatte der Woche";
 pub const V_FORMULA_3: &str = "-50 % auf Outdoor-Ausrüstung in dieser Woche";
@@ -125,25 +223,68 @@ pub fn records() -> Vec<ElementRecord> {
     let t = store::ELEMENT_TITLE;
     let m = store::ELEMENT_META_DESCRIPTION;
     vec![
-        with(record("/valid-open/", t, "Valid"), vec![cand(1, V_OPEN_1, 401, &[], 1), cand(2, V_OPEN_2, 399, &[], 1)], Some(1)),
-        with(record("/valid-open/", m, "Valid"), vec![cand(1, V_META, 610, &[], 1)], Some(1)),
-        accept(
-            with(record("/accepted/", t, "Valid"), vec![cand(1, V_ACC_INVALID, 590, &["length>60", "pixel_width>561"], 1), cand(2, V_ACC, 380, &[], 1)], Some(2)),
-            ReviewStatus::Accepted, Origin::Ai, V_ACC, 380, &[],
+        with(
+            record("/valid-open/", t, "Valid"),
+            vec![
+                cand(1, V_OPEN_1, 401, &[], 1),
+                cand(2, V_OPEN_2, 399, &[], 1),
+            ],
+            Some(1),
+        ),
+        with(
+            record("/valid-open/", m, "Valid"),
+            vec![cand(1, V_META, 610, &[], 1)],
+            Some(1),
         ),
         accept(
-            with(record("/edited/", t, "Valid"), vec![cand(1, "Rucksäcke für jede Tour im großen Vergleich", 410, &[], 1)], Some(1)),
-            ReviewStatus::Edited, Origin::Edited, V_EDITED, 600, &["length>60", "pixel_width>561"],
+            with(
+                record("/accepted/", t, "Valid"),
+                vec![
+                    cand(1, V_ACC_INVALID, 590, &["length>60", "pixel_width>561"], 1),
+                    cand(2, V_ACC, 380, &[], 1),
+                ],
+                Some(2),
+            ),
+            ReviewStatus::Accepted,
+            Origin::Ai,
+            V_ACC,
+            380,
+            &[],
+        ),
+        accept(
+            with(
+                record("/edited/", t, "Valid"),
+                vec![cand(
+                    1,
+                    "Rucksäcke für jede Tour im großen Vergleich",
+                    410,
+                    &[],
+                    1,
+                )],
+                Some(1),
+            ),
+            ReviewStatus::Edited,
+            Origin::Edited,
+            V_EDITED,
+            600,
+            &["length>60", "pixel_width>561"],
         ),
         {
-            let mut r = with(record("/rejected/", t, "Valid"), vec![cand(1, V_REJ, 390, &[], 1)], Some(1));
+            let mut r = with(
+                record("/rejected/", t, "Valid"),
+                vec![cand(1, V_REJ, 390, &[], 1)],
+                Some(1),
+            );
             r.review = ReviewStatus::Rejected;
             r
         },
         {
             let mut r = with(
                 record("/novalid/", t, "No valid suggestion"),
-                vec![cand(1, V_NOVALID_1, 575, &["length>60", "pixel_width>561"], 1), cand(2, V_NOVALID_2, 560, &["length>60"], 2)],
+                vec![
+                    cand(1, V_NOVALID_1, 575, &["length>60", "pixel_width>561"], 1),
+                    cand(2, V_NOVALID_2, 560, &["length>60"], 2),
+                ],
                 None,
             );
             r.rounds = 3;
@@ -157,10 +298,26 @@ pub fn records() -> Vec<ElementRecord> {
         record("/budget/", t, "Budget exceeded"),
         record("/refusal/", t, "Refusal"),
         record("/skipped/", t, "Skipped (no capable model)"),
-        with(record("/meta-only/", m, "Valid"), vec![cand(1, V_META_ONLY, 540, &[], 1)], Some(1)),
+        with(
+            record("/meta-only/", m, "Valid"),
+            vec![cand(1, V_META_ONLY, 540, &[], 1)],
+            Some(1),
+        ),
         accept(
-            with(record("/formula/", t, "Valid"), vec![cand(1, V_FORMULA, 420, &[], 1), cand(2, V_FORMULA_2, 380, &[], 1), cand(3, V_FORMULA_3, 400, &[], 1)], Some(1)),
-            ReviewStatus::Accepted, Origin::Ai, V_FORMULA, 420, &[],
+            with(
+                record("/formula/", t, "Valid"),
+                vec![
+                    cand(1, V_FORMULA, 420, &[], 1),
+                    cand(2, V_FORMULA_2, 380, &[], 1),
+                    cand(3, V_FORMULA_3, 400, &[], 1),
+                ],
+                Some(1),
+            ),
+            ReviewStatus::Accepted,
+            Origin::Ai,
+            V_FORMULA,
+            420,
+            &[],
         ),
     ]
 }
@@ -212,7 +369,8 @@ pub fn create(dir: &Path, name: &str, config: os_model::CrawlConfig) -> os_store
         config,
         created_at: created,
     };
-    let f = os_store::CrawlFile::create(&dir.join(name), &init, os_store::StorageProfile::Balanced).unwrap();
+    let f = os_store::CrawlFile::create(&dir.join(name), &init, os_store::StorageProfile::Balanced)
+        .unwrap();
     seed(f.conn());
     f.set_meta("state", "Completed").unwrap();
     f
@@ -221,8 +379,39 @@ pub fn create(dir: &Path, name: &str, config: os_model::CrawlConfig) -> os_store
 /// Erwartete Zeilen je Filter des Tabs „AI Suggestions“ (Pfade). `Open` nur mit den eindeutigen Fällen (siehe Bericht).
 pub fn expected_filters() -> BTreeMap<&'static str, Vec<&'static str>> {
     BTreeMap::from([
-        ("All", vec!["/valid-open/", "/accepted/", "/edited/", "/rejected/", "/novalid/", "/pending/", "/error/", "/budget/", "/refusal/", "/skipped/", "/meta-only/", "/formula/"]),
-        ("Titles", vec!["/valid-open/", "/accepted/", "/edited/", "/rejected/", "/novalid/", "/pending/", "/error/", "/budget/", "/refusal/", "/skipped/", "/formula/"]),
+        (
+            "All",
+            vec![
+                "/valid-open/",
+                "/accepted/",
+                "/edited/",
+                "/rejected/",
+                "/novalid/",
+                "/pending/",
+                "/error/",
+                "/budget/",
+                "/refusal/",
+                "/skipped/",
+                "/meta-only/",
+                "/formula/",
+            ],
+        ),
+        (
+            "Titles",
+            vec![
+                "/valid-open/",
+                "/accepted/",
+                "/edited/",
+                "/rejected/",
+                "/novalid/",
+                "/pending/",
+                "/error/",
+                "/budget/",
+                "/refusal/",
+                "/skipped/",
+                "/formula/",
+            ],
+        ),
         ("Meta Descriptions", vec!["/valid-open/", "/meta-only/"]),
         ("H1", vec![]),
         ("Alt Text", vec![]),

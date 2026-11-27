@@ -6,6 +6,7 @@
 //! KI-Tabs erscheinen erst mit dem Meilenstein und nur mit Schalter). Der Bauer behebt die Mail-Zusammenfassung in einem
 //! Folge-Commit; bis dahin ist dieser Test erwartbar rot (Bericht `docs/plan/M4-reports/v01-tests.md`).
 // acceptance: independent
+#![allow(clippy::disallowed_types, clippy::disallowed_methods)]
 
 #[path = "../../../tests/fixtures/ai/v01-acceptance/states.rs"]
 mod states;
@@ -40,9 +41,15 @@ fn mail_summary_and_comparison_show_no_ai_suggestions_with_switch_off() {
     let data = os_analyze::mail_completion(&current, Some(&previous), true, false).unwrap();
     let mut listed = names(&data["changes"]);
     listed.extend(names(&data["issues"]));
-    let hits: Vec<&String> = listed.iter().filter(|n| n.starts_with("AI Suggestions")).collect();
+    let hits: Vec<&String> = listed
+        .iter()
+        .filter(|n| n.starts_with("AI Suggestions"))
+        .collect();
     assert!(hits.is_empty(), "Mail-Zusammenfassung/Vergleich: {hits:?}");
     let completion: os_sched::mail::Completion = serde_json::from_value(data).unwrap();
     let text = completion.render().0;
-    assert!(!text.contains("AI Suggestions"), "gerenderte Mail nennt AI Suggestions");
+    assert!(
+        !text.contains("AI Suggestions"),
+        "gerenderte Mail nennt AI Suggestions"
+    );
 }

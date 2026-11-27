@@ -21,6 +21,7 @@ const TAB = "AI Suggestions";
 const ID = { validOpen: 1, accepted: 2, edited: 3, rejected: 4, novalid: 5, pending: 6, formula: 13, serp: 14, serpReal: 15 };
 const V_OPEN_1 = "Startseite für Wanderausrüstung und Zubehör";
 const V_OPEN_2 = "Wanderausrüstung online kaufen – Startseite";
+const REGION_CSS = "aside.os-ai-sugg";
 
 async function invoke<T = unknown>(page: Page, cmd: string, args?: unknown): Promise<T> {
   return page.evaluate(async ({ cmd, args }) => {
@@ -33,13 +34,15 @@ async function invoke<T = unknown>(page: Page, cmd: string, args?: unknown): Pro
 async function invokeError(page: Page, cmd: string, args?: unknown): Promise<{ code?: string; messageKey?: string } | null> {
   return page.evaluate(async ({ cmd, args }) => {
     const path = "/src/ipc/client.ts";
+    const errorsPath = "/src/ipc/errors.ts";
     const { client } = await import(/* @vite-ignore */ path);
+    const { toCmdError } = await import(/* @vite-ignore */ errorsPath);
     try {
       await client.invoke(cmd, args);
       return null;
     } catch (e) {
-      const err = e as { code?: string; messageKey?: string; error?: { code?: string; messageKey?: string } };
-      return { code: err.code ?? err.error?.code, messageKey: err.messageKey ?? err.error?.messageKey };
+      const err = toCmdError(e) as { code: string; messageKey: string };
+      return { code: err.code, messageKey: err.messageKey };
     }
   }, { cmd, args });
 }
@@ -63,7 +66,9 @@ function tablist(page: Page): Locator {
   return page.getByRole("tablist", { name: /^(Data tabs|Daten-Tabs)$/ });
 }
 
-async function selectTab(page: Page, name: string) {
+/** Wählt den Tab `id` (Anzeigename `label`, in Deutsch lokalisiert). */
+async function selectTab(page: Page, id: string, label = id) {
+  const name = label;
   const tab = tablist(page).getByRole("tab", { name, exact: true });
   await expect.poll(async () => {
     if (await tab.count()) return true;
@@ -71,7 +76,7 @@ async function selectTab(page: Page, name: string) {
       const path = "/src/state/tabs.ts";
       const { groupOf } = await import(/* @vite-ignore */ path);
       return groupOf(name) as string;
-    }, name);
+    }, id);
     await page.locator(`.u34-nav [data-group="${group}"] .u34-nav-button`).click();
     return (await tab.count()) > 0;
   }, { timeout: 15_000 }).toBe(true);
@@ -79,12 +84,26 @@ async function selectTab(page: Page, name: string) {
   await expect(tab).toHaveAttribute("aria-selected", "true");
 }
 
+/**
+ * Setzt die Auswahl (Fokus = erste ID) über die Auswahl der Detailansicht; die Tabelle kann sie beim Nachladen noch einmal
+ * zurücksetzen, deshalb wird gesetzt, bis die Detailansicht bzw. der Prüfbereich die Fokus-URL zeigt.
+ */
 async function select(page: Page, urlIds: number[], topTab = TAB) {
-  await page.evaluate(async ({ urlIds, topTab }) => {
+  const set = () => page.evaluate(async ({ urlIds, topTab }) => {
     const path = "/src/features/detail/frame/selection.ts";
-    const { setDetailSelection } = await import(/* @vite-ignore */ path);
-    setDetailSelection({ urlIds, focus: urlIds[0], topTab });
+    const { setDetailSelection, useDetailSelection } = await import(/* @vite-ignore */ path);
+    const current = useDetailSelection.getState().selection as { urlIds: number[]; focus?: number };
+    if (current.focus !== urlIds[0] || current.urlIds.join(",") !== urlIds.join(",")) setDetailSelection({ urlIds, focus: urlIds[0], topTab });
   }, { urlIds, topTab });
+  const shown = topTab === TAB
+    ? page.locator(`${REGION_CSS} .os-ai-sugg-body[data-url-id="${urlIds[0]}"]`)
+    : page.getByRole("region", { name: "Details" }).getByRole("status").filter({ hasText: /Select a row|Wählen Sie/ });
+  await expect.poll(async () => {
+    await set();
+    return topTab === TAB ? (await shown.count()) > 0 : (await shown.count()) === 0;
+  }, { timeout: 15_000, intervals: [250, 500, 1000] }).toBe(true);
+  // Kurz nachprüfen: Auswahl bleibt stehen.
+  await set();
 }
 
 function region(page: Page, name = /^(Review AI suggestions|KI-Vorschläge prüfen)$/): Locator {
@@ -102,7 +121,6 @@ async function axeSerious(page: Page, include: string) {
   return result.violations.filter((v) => v.impact === "critical" || v.impact === "serious").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
 }
 
-const REGION_CSS = "aside.os-ai-sugg";
 
 test.describe("Englisch", () => {
   // spec: UI-004 [M4]
@@ -259,7 +277,7 @@ test.describe("Deutsch", () => {
   test("Prüfbereich auf Deutsch, ohne critical/serious-Befunde", async ({ page, app }) => {
     await openFixture(page, app);
     await preview(page, true);
-    await selectTab(page, TAB);
+    await selectTab(page, TAB, "KI-Vorschläge");
     await select(page, [ID.validOpen]);
     const r = region(page, /^KI-Vorschläge prüfen$/);
     await expect(r).toBeVisible();
