@@ -42,6 +42,14 @@ pub fn offered(preview: os_ai::PreviewSwitch) -> Vec<Box<dyn Tool>> {
     all()
         .into_iter()
         .filter(|t| preview.is_on() || !AI_TOOLS.contains(&t.name()))
+        .map(|t| -> Box<dyn Tool> {
+            // M4-V01: der Katalog ohne Schalter ohne KI-Tabs und ihre Exporte/Reports.
+            if !preview.is_on() && t.name() == "list_catalog" {
+                Box::new(list_catalog::ListCatalogWithoutAi)
+            } else {
+                t
+            }
+        })
         .collect()
 }
 
@@ -249,5 +257,50 @@ mod m4_tests {
                 );
             }
         }
+    }
+
+    // spec: AI-070 [M4]
+    // spec: AI-076 [M4]
+    // Plan M4 E1 (E-2 b, M4-V01): Schalter aus → `list_catalog` ohne KI-Tabs/-Exporte/-Reports; Schalter an → vorhanden.
+    #[test]
+    fn catalog_lists_ai_tabs_and_exports_only_with_the_preview_switch_on() {
+        let ctx = ToolContext::new(std::path::PathBuf::from("unused-catalog-fixture"));
+        let list = |preview, kind: &str| -> Vec<String> {
+            let tool = super::offered(preview)
+                .into_iter()
+                .find(|t| t.name() == "list_catalog")
+                .unwrap();
+            let out = tool.call(&ctx, json!({"kind":kind,"limit":500})).unwrap();
+            assert!(out.next_cursor.is_none());
+            out.untrusted.as_ref().unwrap()["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i.get("name").unwrap_or(i).as_str().unwrap().to_string())
+                .collect()
+        };
+        let ai = |names: &[String]| {
+            names
+                .iter()
+                .filter(|n| {
+                    let tab = n.split_once(':').map_or(n.as_str(), |(t, _)| t);
+                    os_analyze::compare::is_ai_task_tab(tab)
+                })
+                .count()
+        };
+        for kind in ["tabs", "bulk_exports", "reports"] {
+            let (off, on) = (
+                list(PreviewSwitch::OFF, kind),
+                list(PreviewSwitch::ON, kind),
+            );
+            assert_eq!(ai(&off), 0, "{kind}: {off:?}");
+            assert!(ai(&on) > 0, "{kind}");
+            assert_eq!(off.len(), on.len() - ai(&on), "{kind}");
+        }
+        let tabs = list(PreviewSwitch::ON, "tabs");
+        assert!(tabs.iter().any(|t| t == "AI Suggestions"));
+        assert!(list(PreviewSwitch::ON, "bulk_exports")
+            .iter()
+            .any(|n| n == "AI Suggestions:Accepted Suggestions"));
     }
 }
