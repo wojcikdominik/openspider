@@ -119,13 +119,14 @@ pub fn init(app: &App) {
             // session is active (`delivers_ticks`); control commands send their own acknowledgement, and
             // while they hold the mutation lock `poll` returns at once.
             let due = app.tick_due();
-            let ended = match poll_aligned(&app, due, false, false).await {
-                Ok(ended) => ended,
+            let finished = match poll_aligned(&app, due, false, false).await {
+                Ok(finished) => finished,
                 Err(e) => {
                     tracing::warn!(error = ?e, "Session poll failed");
-                    false
+                    Vec::new()
                 }
             };
+            let ended = !finished.is_empty();
             if ended {
                 // The final rows of an ended crawl follow its end status promptly (≥ 100 ms, PERF-004).
                 app.expedite_tick();
@@ -155,12 +156,13 @@ pub fn init(app: &App) {
                         }
                         let rest = until.saturating_duration_since(tokio::time::Instant::now());
                         crate::views::settle(&app, rest.min(TICK_SETTLE_ENDED)).await;
-                        // The analysis changed the final data version after its count: count it before the end status
-                        // goes out (UI-018), within the same deadline; a longer count is joined by the UI's reload.
+                        // The analysis changed the final data version after its count: count it for the crawls that
+                        // ended in this poll before the end status goes out (UI-018), within the same deadline; a longer
+                        // count is joined by the UI's reload.
                         let rest = until.saturating_duration_since(tokio::time::Instant::now());
                         let _ = tokio::time::timeout(
                             rest,
-                            crate::commands::sidebar::counts::count_final(&app),
+                            crate::commands::sidebar::counts::count_final(&app, &finished),
                         )
                         .await;
                     }
@@ -210,21 +212,26 @@ pub async fn poll(app: &App) -> Result<(), CmdError> {
 
 /// Poll after the automatic crawl analysis of an ended crawl (B4-LAGFIX3): the rows of every crawl that no longer runs
 /// are published at once, like the final rows of the crawl end.
-async fn poll_final(app: &App) -> Result<bool, CmdError> {
+async fn poll_final(app: &App) -> Result<Vec<CrawlKey>, CmdError> {
     poll_aligned(app, true, true, false).await
 }
 
-/// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`). `Ok(true)`:
-/// a crawl ended in this poll and its final rows were published. `last`: also publish the rows of crawls that no
+/// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`). `Ok(keys)`:
+/// the crawls that ended in this poll (their final rows were published). `last`: also publish the rows of crawls that no
 /// longer run at once (see [`poll_final`]). `wait`: wait for the session lock instead of skipping this poll while it is
 /// held (only the explicit [`poll`]).
-async fn poll_aligned(app: &App, due: bool, last: bool, wait: bool) -> Result<bool, CmdError> {
+async fn poll_aligned(
+    app: &App,
+    due: bool,
+    last: bool,
+    wait: bool,
+) -> Result<Vec<CrawlKey>, CmdError> {
     let service = app.ext::<SessionService>();
     let _guard = if wait {
         service.mutation.lock().await
     } else {
         let Ok(guard) = service.mutation.try_lock() else {
-            return Ok(false);
+            return Ok(Vec::new());
         };
         guard
     };
@@ -235,7 +242,7 @@ async fn poll_aligned(app: &App, due: bool, last: bool, wait: bool) -> Result<bo
         .unwrap_or_else(|p| p.into_inner()) = Some(cancel.clone());
     let result = crate::runtime::with_cancel(cancel, async {
         let mut seen = std::collections::HashSet::new();
-        let mut ended = false;
+        let mut ended = Vec::new();
         for s in app.sessions().all() {
             if !seen.insert(s.key.clone()) {
                 continue;
@@ -252,7 +259,9 @@ async fn poll_aligned(app: &App, due: bool, last: bool, wait: bool) -> Result<bo
             }
             let last = last && s.state != CrawlState::Running;
             feed::refresh_aligned(app, &s, due || finished, finished || last).await?;
-            ended |= finished;
+            if finished {
+                ended.push(s.key.clone());
+            }
         }
         Ok(ended)
     })
