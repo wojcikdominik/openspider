@@ -482,6 +482,7 @@ fn plan_cmd<'a>(app: &'a App, ctx: CallCtx, args: Value, run: bool) -> BoxFuture
     Box::pin(async move {
         preview_required(app)?;
         let s = session(app, &ctx)?;
+        settled(app, &s.key).await;
         let args: PlanArgs = if args.is_null() {
             PlanArgs::default()
         } else {
@@ -626,6 +627,7 @@ fn suggest_detail<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, 
     Box::pin(async move {
         preview_required(app)?;
         let s = session(app, &ctx)?;
+        settled(app, &s.key).await;
         let a: DetailArgs = parse_args(args)?;
         let cfg = s.config.clone();
         app.read_pool()
@@ -682,6 +684,7 @@ fn suggest_review<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, 
     Box::pin(async move {
         preview_required(app)?;
         let s = session(app, &ctx)?;
+        settled(app, &s.key).await;
         if !s.writable {
             return Err(CmdError::new(ErrorCode::Permission, "err-db-read-only"));
         }
@@ -802,35 +805,101 @@ fn suggest_recheck<'a>(app: &'a App, ctx: CallCtx, _args: Value) -> BoxFuture<'a
     Box::pin(async move {
         preview_required(app)?;
         let s = session(app, &ctx)?;
+        settled(app, &s.key).await;
         if !s.writable {
             return Err(CmdError::new(ErrorCode::Permission, "err-db-read-only"));
         }
-        let cfg = s.config.clone();
-        let ctx_cfg = cfg.clone();
-        let context = app
-            .read_pool()
-            .run_snapshot(s.key.clone(), move |file, _| {
-                Ok(context_from(store::site_data(
-                    file,
-                    ctx_cfg.extraction.store_html,
-                )?))
-            })
-            .await?;
-        app.write_queue()
-            .submit(s.key.clone(), move |conn| {
-                let mut updated = 0usize;
-                for element in Element::ALL {
-                    let records = store::load_all(conn, element.id())?;
-                    updated += records.len();
-                    let check = checker(element, &cfg, &context.index);
-                    let rechecked =
-                        sg::revalidate(records, &check, &context.languages(), &context.index);
-                    store::save_all(conn, &rechecked)?;
-                }
-                Ok(json!({ "updated": updated }))
-            })
-            .await
+        let updated = recheck(app, s.key.clone(), s.config.clone()).await?;
+        Ok(json!({ "updated": updated }))
     })
+}
+
+/// Neuprüfung aller Einträge einer Crawl-Datei mit den Grenzwerten aus `cfg`, ohne Request (AI-075).
+async fn recheck(
+    app: &App,
+    key: crate::pool::CrawlKey,
+    cfg: std::sync::Arc<CrawlConfig>,
+) -> Result<usize, CmdError> {
+    let ctx_cfg = cfg.clone();
+    let context = app
+        .read_pool()
+        .run_snapshot(key.clone(), move |file, _| {
+            Ok(context_from(store::site_data(
+                file,
+                ctx_cfg.extraction.store_html,
+            )?))
+        })
+        .await?;
+    app.write_queue()
+        .submit(key, move |conn| {
+            let mut updated = 0usize;
+            for element in Element::ALL {
+                let records = store::load_all(conn, element.id())?;
+                updated += records.len();
+                let check = checker(element, &cfg, &context.index);
+                let rechecked =
+                    sg::revalidate(records, &check, &context.languages(), &context.index);
+                store::save_all(conn, &rechecked)?;
+            }
+            Ok(updated)
+        })
+        .await
+}
+
+/// Laufende Neuprüfungen nach einer Grenzwertänderung je Crawl (`true` = fertig).
+#[derive(Default)]
+struct PendingRechecks(
+    std::sync::Mutex<
+        std::collections::HashMap<crate::pool::CrawlKey, tokio::sync::watch::Receiver<bool>>,
+    >,
+);
+
+/// Wartet auf eine laufende Neuprüfung des Crawls, damit Lesen und Prüfen den neuen Stand sehen.
+async fn settled(app: &App, key: &crate::pool::CrawlKey) {
+    let pending = app
+        .ext::<PendingRechecks>()
+        .0
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(key)
+        .cloned();
+    if let Some(mut done) = pending {
+        let _ = done.wait_for(|d| *d).await;
+    }
+}
+
+/// AI-075: Ändert eine Crawl-Konfiguration eine Längen- oder Pixelgrenze der Vorschläge (`config.set` u. a.), werden
+/// die vorhandenen Kandidaten ohne Nutzeraktion und ohne Request neu geprüft. Nur mit Schalter „KI (Vorschau)“.
+pub fn on_config_changed(
+    app: &App,
+    key: &crate::pool::CrawlKey,
+    old: &std::sync::Arc<CrawlConfig>,
+    new: &std::sync::Arc<CrawlConfig>,
+) {
+    if !ai_preview::switch(app).is_on()
+        || Element::ALL
+            .iter()
+            .all(|e| ElementLimits::from_config(*e, old) == ElementLimits::from_config(*e, new))
+    {
+        return;
+    }
+    let (done, wait) = tokio::sync::watch::channel(false);
+    app.ext::<PendingRechecks>()
+        .0
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(key.clone(), wait);
+    let (app, key, cfg) = (app.clone(), key.clone(), new.clone());
+    let handle = app.handle();
+    handle.spawn(async move {
+        if let Err(error) = recheck(&app, key, cfg).await {
+            tracing::warn!(
+                ?error,
+                "Neuprüfung der Vorschläge nach Grenzwertänderung fehlgeschlagen"
+            );
+        }
+        let _ = done.send(true);
+    });
 }
 
 #[derive(Debug, Clone, Deserialize)]

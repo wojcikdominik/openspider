@@ -748,6 +748,54 @@ mod tests {
         assert_eq!(after, requests_before);
     }
 
+    async fn set_title_max(app: &App, max: u32) {
+        let mut dto = call(app, "config.get", Value::Null).await.unwrap();
+        dto["config"]["title"]["max_chars"] = json!(max);
+        call(app, "config.set", dto).await.unwrap();
+    }
+
+    // spec: AI-075 [M4]
+    // Grenzwertänderung über die Crawl-Konfiguration (`config.set`, Title max. 40 Zeichen): die Kandidaten werden ohne
+    // Nutzeraktion und ohne Request neu geprüft (kein `ai.suggestRecheck`); mit Schalter aus geschieht nichts.
+    #[tokio::test]
+    async fn changing_a_limit_in_the_crawl_config_rechecks_without_a_call() {
+        let (dir, file) = built().await;
+        let app = app_for(file, dir.path());
+        let requests = |app: &App| -> i64 {
+            let s = app.sessions().current(&WindowId("main".into())).unwrap();
+            let f = CrawlFile::open(&s.path, os_store::OpenMode::ReadOnly).unwrap();
+            f.conn()
+                .query_row("SELECT count(*) FROM ai_requests", [], |r| r.get(0))
+                .unwrap()
+        };
+        let before = requests(&app);
+        let status = |d: &Value| d["elements"][0]["status"].as_str().unwrap().to_string();
+        let detail = |app: &App| {
+            let app = app.clone();
+            async move {
+                call(&app, "ai.suggestDetail", json!({"urlId": 3}))
+                    .await
+                    .unwrap()
+            }
+        };
+        // Schalter aus: keine Neuprüfung (die Einträge bleiben unverändert).
+        set_title_max(&app, 40).await;
+        preview(&app, true).await;
+        assert_eq!(status(&detail(&app).await), "Valid");
+        set_title_max(&app, 60).await;
+        // Schalter an: `config.set` allein genügt.
+        set_title_max(&app, 40).await;
+        let d = detail(&app).await;
+        assert_eq!(status(&d), "No valid suggestion", "{d}");
+        assert!(d["elements"][0]["violations"][0]
+            .as_str()
+            .unwrap()
+            .starts_with("length>40"));
+        set_title_max(&app, 60).await;
+        assert_eq!(status(&detail(&app).await), "Valid");
+        assert_eq!(requests(&app), before, "keine Requests");
+    }
+
     // spec: AI-070 [M4]
     // spec: AI-012 [M4]
     // Fokus-Begriffe aus `Address,Keyword`; Voranschlag je Element (Zahlen für den Dialog von M4-U01); `ai.suggestRun`
