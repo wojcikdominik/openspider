@@ -23,11 +23,11 @@ die Umsetzung; **entschieden, Nachtrag fehlt** = der Orchestrator hat am 27.11.2
 
 | Kennung | Thema | Status | Paket | blockiert D05 |
 |---|---|---|---|---|
-| K4-26 | Quelle von `html_lang` und `structured_data_types` nach dem Crawl | offen | D05 | **ja** |
-| K4-27 | Ort der erteilten Kostenbestätigung über einen Neustart | offen | D05 | **ja** |
-| K4-28 | D05 bricht `acceptance_f02_ai_ipc.rs` (Datei nicht in `owns`) | offen (Plan) | D05, N01 | **ja** |
+| K4-26 | Quelle von `html_lang` und `structured_data_types` nach dem Crawl | **entschieden 27.11.: (a)** | D05 | nein mehr (war ja) |
+| K4-27 | Ort der erteilten Kostenbestätigung über einen Neustart | **entschieden 27.11.: (a)** | D05 | nein mehr (war ja) |
+| K4-28 | D05 bricht `acceptance_f02_ai_ipc.rs` (Datei nicht in `owns`) | **entschieden 27.11.: (a)** | D05 | nein mehr (war ja) |
 | K4-29 | Kontingentsperre je KI-Lauf: Adapter-Instanzen | geklärt (Spec) | D05 | nein (Auflage E8) |
-| K4-30 | Platzhalter für 1.1-Kriterien, die auf Welle-6-Pakete warten | offen (Plan) | D03, D02, Planer | nein |
+| K4-30 | Platzhalter für 1.1-Kriterien, die auf Welle-6-Pakete warten | **entschieden 27.11.: (a)** | D03, D02, Planer | nein |
 | K4-31 | Bedeutung des Filters `Open` (AI Suggestions) | offen | N01 (C2) | nein |
 | K4-32 | Kennzeichen „vorläufig“ nach Stoppen und anderen Laufenden | offen | N01 (C2) | nein |
 | K4-33 | Umfang des Nachlaufs (Stufe 2): Lauf oder ganze Datei | offen | N01 (C2) | nein |
@@ -39,9 +39,9 @@ die Umsetzung; **entschieden, Nachtrag fehlt** = der Orchestrator hat am 27.11.2
 | K4-39 | Prüfbereich der Vorschläge als eigene React-Wurzel (Tabellenbereich) | offen | N01 | nein |
 | K4-40 | Exportnamen „AI Suggestions: Accepted/All“ kollidieren mit Tab-Exporten | offen | Spec | nein |
 | K4-41 | Pfad der Golden-Dateien von KI-Paketen | offen | N01, D02, D03 | nein |
-| K4-42 | Formelschutz der Vorschlagsexporte immer an | entschieden, Nachtrag fehlt | Spec | nein |
-| K4-43 | AI-075: wie zählen Cache-Treffer der Reparaturrunden | entschieden, Nachtrag fehlt | Spec | nein |
-| K4-44 | Format von `duplicate_of:` (volle Adresse) | entschieden, Nachtrag fehlt | Spec | nein |
+| K4-42 | Formelschutz der Vorschlagsexporte immer an | entschieden, Nachtrag eingetragen 27.11. | Spec | nein |
+| K4-43 | AI-075: wie zählen Cache-Treffer der Reparaturrunden | entschieden, Nachtrag eingetragen 27.11. | Spec | nein |
+| K4-44 | Format von `duplicate_of:` (volle Adresse) | entschieden, Nachtrag eingetragen 27.11. | Spec | nein |
 | K4-45 | AI-030: sind `scope` und `thresholds` optional | offen | D03, D04 | nein |
 | K4-46 | Teilbudgets je Aufgabentyp (AI-013) ohne Oberfläche | offen | N01 | nein |
 | K4-47 | Antwortschema der Vorschläge liegt im Code statt unter `resources/ai/schemas/` | geklärt (Spec) | N01 | nein (Auflage B13) |
@@ -52,8 +52,13 @@ die Umsetzung; **entschieden, Nachtrag fehlt** = der Orchestrator hat am 27.11.2
 | K4-52 | „Übernehmen“ eines ungültigen Kandidaten | offen (gering) | – | nein |
 | K4-53 | Sammelbestätigung kleiner Bauauslegungen (V01 1, 2, 5, 6; U01 Fragen 4, 5) | offen (gering) | Spec | nein |
 
-Zahl: 28 Fragen – 19 offen (davon 2 Planfragen: K4-28, K4-30), 6 aus der Spec geklärt, 3 entschieden ohne Spec-Nachtrag.
-D05 blockieren K4-26, K4-27, K4-28.
+Zahl (Erststand): 28 Fragen – 19 offen (davon 2 Planfragen: K4-28, K4-30), 6 aus der Spec geklärt, 3 entschieden ohne
+Spec-Nachtrag. D05 blockierten K4-26, K4-27, K4-28.
+
+**Stand nach den Entscheidungen des Orchestrators vom 27.11.2026:** K4-26, K4-27, K4-28 und K4-30 entschieden (je
+Möglichkeit a, eingetragen in 08 AI-032/AI-020, `M4-packages.json`, `M4.md` Abschnitt 7); Nachträge zu K4-42, K4-43,
+K4-44 in 08 AI-075/AI-076 geschrieben. Offen bleiben 15 Fragen (K4-31 … K4-35, K4-38 … K4-41, K4-45, K4-46, K4-50 …
+K4-53); keine davon blockiert D05.
 
 ---
 
@@ -81,6 +86,11 @@ D05 blockieren K4-26, K4-27, K4-28.
 - **Empfehlung:** (a). Kleinster Eingriff, bleibt in D05, erfüllt K4-24 („gleiche Eingabe in Pause und nach Neustart“).
   Den Satz in AI-032 entsprechend berichtigen (Planer, nach Entscheidung).
 - **Paket:** D05 (Spec-Nachtrag: Planer). **Blockiert D05:** ja (Kriterium b, Tabellenaufbau in `0006`).
+- **Entscheidung (Orchestrator, 27.11.2026): (a).** Präzisierung: `structured_data_types` nur bei eingeschalteter
+  Extraktion; sonst NULL (unterscheidbar von leerer Liste) und `Skipped (input unavailable)`. Standardwert nachgesehen:
+  JSON-LD, Microdata und RDFa sind aus (Spec 01 CRAWL-065 „OS-Default: aus“, 03 TECH-180/181/182 „Standard aus“; Code
+  `StructuredDataConfig::default` in `crates/os-model/src/config/v2.rs:817-826` ebenso). Eingetragen: 08 AI-032
+  (berichtigt), D05-Kriterium (k).
 
 ### K4-27 Wo liegt die erteilte Kostenbestätigung eines Laufs über einen Neustart?
 - **Fundstelle:** `d01-tests.md` B3-1, `d01.md` Auslegung 16; 08 AI-020, Nachtrag K4-13, „Kostenbestätigung beim
@@ -101,6 +111,8 @@ D05 blockieren K4-26, K4-27, K4-28.
 - **Empfehlung:** (a), mit „Fortsetzen = dieselbe `ai_runs`-Zeile; ein neuer Lauf („KI-Analyse starten“) = neue Zeile“.
   Klar und für alle drei Einstiege gleich.
 - **Paket:** D05. **Blockiert D05:** ja (`owns`).
+- **Entscheidung (Orchestrator, 27.11.2026): (a).** Eingetragen: 08 AI-020 (Nachtrag 27.11.2026), D05-`owns` und
+  Kriterium (l).
 
 ### K4-28 `ai.decisionsRun` bricht `acceptance_f02_ai_ipc.rs`; die Datei liegt nicht in D05-`owns`
 - **Fundstelle:** `v01.md`, „Benötigte Änderungen“ 1; `u01.md`, Fremdänderung `acceptance_f02_ai_ipc.rs`;
@@ -116,6 +128,8 @@ D05 blockieren K4-26, K4-27, K4-28.
   - (c) D05 lässt den Test rot und meldet; N01 korrigiert. Folge: Gate von D05 nicht grün.
 - **Empfehlung:** (a). Einmalige Änderung, beseitigt die Konfliktquelle für D02, C02 und alle Folgepakete.
 - **Paket:** D05 (sonst N01). **Blockiert D05:** ja (`owns`).
+- **Entscheidung (Orchestrator, 27.11.2026): (a).** Eingetragen: D05-`owns` und Kriterium (m); Auflage N01 C7 damit
+  erledigt.
 
 ---
 
@@ -144,6 +158,7 @@ D05 blockieren K4-26, K4-27, K4-28.
   - (c) Q11 führt sie als bekannte Lücke; Abdeckung der 1.1-IDs dann unvollständig.
 - **Empfehlung:** (a). Kein neues Paket, das wartende Paket kennt den Test, Q11 misst vollständig.
 - **Paket:** Planer (`M4-packages.json`: D02, D03, S02), N01 (Gründe umsetzen). **Blockiert D05:** nein.
+- **Entscheidung (Orchestrator, 27.11.2026): (a).** Eingetragen: `owns` von D02, D03, S02; N01 Auflage B14.
 
 ---
 
@@ -313,7 +328,7 @@ D05 blockieren K4-26, K4-27, K4-28.
   ändern.
 - **Paket:** N01 (Auflage B17, Entscheidung offen), Planer (`owns` D02/D03, E9). **Blockiert D05:** nein.
 
-### K4-42 Formelschutz der Vorschlagsexporte — entschieden, Nachtrag fehlt
+### K4-42 Formelschutz der Vorschlagsexporte — entschieden, Nachtrag eingetragen (08 AI-076, 27.11.2026)
 - **Fundstelle:** `v01-tests.md` B1-2, B2-4 und „Entscheidungen 27.11.2026“ („B2-4 entfällt: Der CSV-Formelschutz ist
   für beide Vorschlags-Exporte immer an“); 08 AI-076 („CSV-Injection-Schutz nach OUT-016“); 06 OUT-016 (Option, P2,
   Standard aus), OUT-003 (in XLSX nie als Formel, Wert als Text).
@@ -322,7 +337,7 @@ D05 blockieren K4-26, K4-27, K4-28.
 - **Vorschlag Nachtrag AI-076:** „Der Schutz nach OUT-016 ist für beide Exporte immer an, unabhängig von der Option
   (KI-Text ist nicht vertrauenswürdig); in XLSX gilt OUT-003 (Textzelle ohne `'`).“ **Paket:** Spec (Planer). **D05:** nein.
 
-### K4-43 AI-075: wie zählen Cache-Treffer der Reparaturrunden — entschieden, Nachtrag fehlt
+### K4-43 AI-075: wie zählen Cache-Treffer der Reparaturrunden — entschieden, Nachtrag eingetragen (08 AI-075, 27.11.2026)
 - **Fundstelle:** `v01-tests.md` B2-1 und „Entscheidungen 27.11.2026“; `v01.md` Auslegung 7; 08 AI-075 („nach 1 + 2
   Requests“), AI-015 („Gleiche Eingabe … erzeugt keinen neuen Request“), AI-014 (Cache-Treffer = Zeile mit `Cache Hit`).
 - **Entschieden:** Gezählt werden HTTP-Requests. Ist eine Reparaturrunde identisch mit der vorigen, ist sie ein
@@ -330,7 +345,7 @@ D05 blockieren K4-26, K4-27, K4-28.
 - **Vorschlag Nachtrag AI-075:** zweites Kriterium ergänzen um „liefert der Mock in jeder Runde dieselben Kandidaten, ist
   die dritte Runde ein Cache-Treffer (2 HTTP-Requests, 3 Protokollzeilen)“. **Paket:** Spec. **D05:** nein.
 
-### K4-44 Format von `duplicate_of:` — entschieden, Nachtrag fehlt
+### K4-44 Format von `duplicate_of:` — entschieden, Nachtrag eingetragen (08 AI-075, 27.11.2026)
 - **Fundstelle:** `v01-tests.md` B2-3 und „Entscheidungen 27.11.2026“; 08 AI-075 (Beispiel `duplicate_of:/b/`), AI-071
   (`duplicate_candidate:http://ai.test:8080/a/`).
 - **Entschieden:** `duplicate_of` nennt die volle Adresse wie `duplicate_candidate`. **Vorschlag:** Beispiel in AI-075 auf
@@ -424,9 +439,9 @@ D05 blockieren K4-26, K4-27, K4-28.
 
 ## E Hinweise zur Planpflege (keine Fragen)
 
-- `M4.md` Abschnitt 7, Zeile K4-24, nennt die Speichergrenze 20.000 Zeichen noch „Vorschlag des Planers, zu bestätigen“;
+- Erledigt 27.11.2026: `M4.md` Abschnitt 7, Zeile K4-24, nannte die Speichergrenze 20.000 Zeichen noch „Vorschlag des Planers, zu bestätigen“;
   08 AI-032 trägt sie seit `cb882d40` als „bestätigt, Orchestrator 26.11.2026“. Zeile nachziehen.
-- `n01-auflagen.md`, Kopf: „K11 in Nacharbeit, V01 im Bau“ ist überholt (beide abgenommen, auf `int/w5d`).
+- Erledigt 27.11.2026: Kopf von `n01-auflagen.md` auf „K11, U01, D01, V01 abgenommen, in `int/w5d`“.
 - Platzhalter mit Gründen auf bereits gebaute Pakete (`wartet auf M4-D01/U01/K11` in `pending_m4_k0*.rs`,
   `pending_m4_v01.rs`, `e2e/ai-suggestions/suggestions.spec.ts:206`) hängen tatsächlich an D05 bzw. N01 C2; Gründe in
   N01 berichtigen (Auflage B14) bzw. mit C2 auflösen (Auflage C8).
