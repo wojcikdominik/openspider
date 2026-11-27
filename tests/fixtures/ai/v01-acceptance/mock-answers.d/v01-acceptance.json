@@ -1,0 +1,19 @@
+{
+  "v01acc-valid": {
+    "default": {
+      "candidates": [
+        "Wanderschuhe für Damen im großen Test",
+        "Leichte Wanderschuhe für Damen im Vergleich",
+        "Wanderschuhe Damen: Modelle und Kaufberatung"
+      ]
+    }
+  },
+  "v01acc-invalid": {
+    "default": {
+      "candidates": [
+        "Wanderschuhe für Damen und Herren im großen Test mit Kaufberatung 2026",
+        "Leichte Wanderschuhe für Damen und Herren im Vergleich mit Testsieger 2026"
+      ]
+    }
+  }
+}
