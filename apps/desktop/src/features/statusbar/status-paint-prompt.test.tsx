@@ -1,5 +1,6 @@
-// UI-018 (Endstatus ohne Zusatzverzögerung) und CRAWL-130 (höchstens vier Anstriche je Sekunde): Die Statusleiste zeichnet
-// eine Änderung nach einer Ruhephase sofort; nur Änderungen innerhalb von 250 ms nach dem letzten Anstrich warten den Rest ab.
+// UI-018 (Endstatus ohne Zusatzverzögerung) und UI-013 (Anzeige höchstens viermal je Sekunde; die allgemeine Obergrenze von
+// 10/s aus CRAWL-130/PERF-004 bleibt darunter): Die Statusleiste zeichnet eine Änderung nach einer Ruhephase sofort; nur
+// Änderungen innerhalb von 250 ms nach dem letzten Anstrich warten den Rest ab.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { Statusbar } from "./Statusbar";
@@ -14,22 +15,24 @@ const apply = (seq: number, patch: Partial<NonNullable<typeof tick.crawl>>) =>
   act(() => { useSession.getState().applyTick({ ...tick, seq, crawl: { ...tick.crawl!, ...patch } }); });
 
 // spec: UI-018
-// spec: CRAWL-130
-it("paints a status change after a quiet phase at once, e.g. the end status", () => {
+// spec: UI-013
+it("paints a status change after a quiet phase at once (next task), e.g. the end status", () => {
   act(() => { useSession.getState().applyTick({ ...tick, seq: 1 }); });
   render(<Statusbar />);
   act(() => { vi.advanceTimersByTime(1_000); });
   apply(2, { phase: "completed", percent: 100 });
+  act(() => { vi.advanceTimersByTime(0); });
   expect(screen.getByTestId("crawl-phase")).toHaveTextContent("Completed");
 });
 
 // spec: UI-018
-// spec: CRAWL-130
+// spec: UI-013
 it("a change within 250 ms of the last paint waits only for the rest of the gap, and the gap's changes share one paint", () => {
   act(() => { useSession.getState().applyTick({ ...tick, seq: 1 }); });
   render(<Statusbar />);
   act(() => { vi.advanceTimersByTime(1_000); });
   apply(2, { crawled: 10 });
+  act(() => { vi.advanceTimersByTime(0); });
   expect(screen.getByText(/Done 10 of/)).toBeVisible();
   act(() => { vi.advanceTimersByTime(100); });
   apply(3, { crawled: 20 });
@@ -41,7 +44,7 @@ it("a change within 250 ms of the last paint waits only for the rest of the gap,
   expect(screen.getByText(/Done 30 of/)).toBeVisible();
 });
 
-// spec: CRAWL-130
+// spec: UI-013
 it("still paints at most four times per second under a stream of ticks", () => {
   render(<Statusbar />);
   const painted = new Set<string>();

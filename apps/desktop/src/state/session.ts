@@ -55,7 +55,7 @@ let heldAnalysis: AnalysisStatus | null = null;
  * UI-018 (fix/overview-end-latency): notices that arrive while the end status is held (the end tick carries
  * „analysis-completed“ of the automatic crawl analysis). Their analysis result belongs to the held end and applies with
  * it; applied early it was a status-bar change of its own, and the end status then waited for the next paint slot
- * (at most four paints/s), up to 250 ms. The notices themselves reach their other consumers at once.
+ * (at most four paints/s, UI-013), up to 250 ms. The notices themselves reach their other consumers at once.
  */
 let heldNotices: Notice[] = [];
 /** Each held end gets its own release; a release of an earlier end (another crawl) must not apply a later one. */
