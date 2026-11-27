@@ -246,7 +246,8 @@ struct Inner {
     quit_hook: Mutex<Option<Arc<dyn QuitHook>>>,
     asset_resolver: Mutex<Option<Arc<dyn AssetResolver>>>,
     extensions: Mutex<HashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
-    sessions: SessionRegistry,
+    /// Geteilt, damit Hintergrundarbeit (Aufbewahrung) die offenen Sitzungen ohne starke `App` liest (OUT-229).
+    sessions: Arc<SessionRegistry>,
     crawl_events: CrawlEventBus,
     window_closed: Mutex<Vec<WindowClosedListener>>,
     window_host: Mutex<Option<Arc<dyn WindowHost>>>,
@@ -319,7 +320,7 @@ impl App {
             quit_hook: Mutex::new(None),
             asset_resolver: Mutex::new(None),
             extensions: Mutex::new(HashMap::new()),
-            sessions: SessionRegistry::default(),
+            sessions: Arc::new(SessionRegistry::default()),
             crawl_events: CrawlEventBus::default(),
             window_closed: Mutex::new(Vec::new()),
             window_host: Mutex::new(None),
@@ -347,6 +348,10 @@ impl App {
     /// Sitzungen je Fenster.
     pub fn sessions(&self) -> &SessionRegistry {
         &self.0.sessions
+    }
+    /// Sitzungen ohne die `App` (Hintergrundarbeit, die sie nicht am Leben halten soll).
+    pub(crate) fn sessions_shared(&self) -> Arc<SessionRegistry> {
+        Arc::clone(&self.0.sessions)
     }
     /// Ereignisse des Crawl-Lebenszyklus.
     pub fn crawl_events(&self) -> &CrawlEventBus {
@@ -819,6 +824,10 @@ impl App {
 #[derive(Clone)]
 pub struct WeakApp(std::sync::Weak<Inner>);
 impl WeakApp {
+    /// Lebt die `App` noch? Ohne Hochstufen: hält sie auch nicht für einen Augenblick fest.
+    pub(crate) fn is_alive(&self) -> bool {
+        self.0.strong_count() > 0
+    }
     pub fn upgrade(&self) -> Option<App> {
         self.0.upgrade().map(App)
     }
