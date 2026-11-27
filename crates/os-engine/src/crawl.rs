@@ -722,6 +722,7 @@ pub(crate) fn make_shared<F: Fetch>(mut init: SharedInit<F>) -> (Arc<Shared<F>>,
         start_url: init.start_encoded,
         cfg: init.cfg,
         primed_origins: init.primed_origins,
+        ai: Default::default(),
     });
     sh.host_pacer.configure(&sh.cfg);
     (sh, control)
@@ -833,6 +834,8 @@ pub(crate) fn launch<F: Fetch>(setup: Setup<F>) -> CrawlHandle {
         hook: deps.on_finished.clone(),
         seeds,
         clock: deps.clock.clone(),
+        ai_queue: deps.ai_queue.clone(),
+        owner_kind: deps.owner_kind,
     };
     // Spawn only a pointer: the runner future is too large to be copied through Tokio's spawn frames.
     let task = tokio::spawn(crate::heap(|| run(parts)));
@@ -857,6 +860,9 @@ struct RunParts<F: Fetch> {
     hook: Option<FinishedHook>,
     seeds: Vec<SitemapSeed>,
     clock: Arc<dyn Clock>,
+    /// KI-Warteschlange (M4-D05).
+    ai_queue: Option<Arc<dyn os_model::ai::hook::AiQueue>>,
+    owner_kind: &'static str,
 }
 
 /// Wie der Lauf endete.
@@ -917,6 +923,8 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         hook,
         seeds,
         clock,
+        ai_queue,
+        owner_kind,
     } = parts;
     let ctl = Arc::clone(&sh.ctl);
 
@@ -932,6 +940,13 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     // INTEG-015/017: sitemap seeds are known; workers still use the regular frontier/robots gate.
     let api_run =
         crate::heap(|| initialize_apis(&file, api_ctx, clock.clone(), &writer, &sh)).await?;
+
+    // M4-D05 (08 AI-020 [M4], AI-039, E-6 a): Sitzung der KI-Warteschlange dieses Laufs, analog zu den API-Quellen.
+    let ai_session = crate::ai_queue::begin(ai_queue.as_ref(), &file, &sh.cfg, owner_kind);
+    if let Some(session) = &ai_session {
+        let _ = sh.ai.set(session.clone());
+    }
+    let ai_end = crate::ai_queue::EndGuard::new(ai_session);
 
     let mut set: JoinSet<()> = JoinSet::new();
     let mut progress_tick = interval(PROGRESS_INTERVAL);
@@ -1201,6 +1216,9 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         end_reason: reason,
         crawled,
     };
+    // M4-D05: Pause/Stopp → kein neuer KI-Request; Ende ohne Stoppen → KI-Warteschlange bis leer, erst danach
+    // `on_finished` (08 AI-020, Nachtrag K4-13).
+    crate::heap(|| ai_end.finish(state, reason)).await;
     if state == CrawlState::Completed {
         if let Some(api_run) = api_run {
             let path = summary.file.clone();

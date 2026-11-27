@@ -36,6 +36,10 @@ pub struct EngineDeps {
     /// Optional renderer override. In JavaScript mode, None launches Chromium lazily;
     /// text mode never calls a renderer.
     pub renderer: Option<Arc<dyn crate::render_glue::Renderer>>,
+    /// KI-Warteschlange während des Crawls (08 AI-020 [M4], AI-039, E-6 a; Klärung K4-25 Variante A, M4-D05).
+    /// `None` = Verhalten von 1.0 (Schalter „KI (Vorschau)“ aus, Tests): keine Seitenfelder, kein KI-Request,
+    /// keine gespeicherten KI-Eingaben.
+    pub ai_queue: Option<Arc<dyn os_model::ai::hook::AiQueue>>,
 }
 
 /// Zusammenfassung eines beendeten Crawls.

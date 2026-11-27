@@ -1,0 +1,40 @@
+# M4-D05: kleine Fixture-Site für die KI-Warteschlange während des Crawls (08 AI-032, AI-039).
+# G = /, /fields, /p1, /p2, /gone (404), /moved (301); interne HTML-Seiten mit 200: /, /fields, /p1, /p2.
+# /fields entspricht tests/fixtures/ai/site/fields.html (Feldmarker MARK-*), mit Navigation; hreflang verweist auf /fields selbst.
+
+[[route]]
+path = "/"
+status = 200
+content_type = "text/html; charset=utf-8"
+body = "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>Wanderladen</title><meta name=\"description\" content=\"Ausrüstung für unterwegs.\"></head><body><nav><a href=\"/\">Start</a> <a href=\"/fields\">Felder</a> <a href=\"/p1\">Produkt 1</a> <a href=\"/p2\">Produkt 2</a> <a href=\"/gone\">Archiv</a> <a href=\"/moved\">Alt</a></nav><main><h1>Wanderladen</h1><h2>Neu</h2><p>Willkommen im Wanderladen. MOCK-ID:run-home</p><img src=\"/img/a.png\" alt=\"Rucksack\"></main></body></html>\n"
+
+[[route]]
+path = "/fields"
+status = 200
+content_type = "text/html; charset=utf-8"
+body = "<!doctype html><html lang=\"MARK-LANG\"><head><meta charset=\"utf-8\"><title>Wanderschuhe MARK-TITLE</title><meta name=\"description\" content=\"Leichte Schuhe MARK-META\"><link rel=\"alternate\" hreflang=\"MARK-HREFLANG\" href=\"/fields\"><script type=\"application/ld+json\">[{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"Wanderschuh\"},{\"@context\":\"https://schema.org\",\"@type\":\"MARK-SD\"}]</script></head><body><nav><a href=\"/\">Start</a> <a href=\"/fields\">Felder</a> <a href=\"/p1\">Produkt 1</a> <a href=\"/p2\">Produkt 2</a> <a href=\"/gone\">Archiv</a> <a href=\"/moved\">Alt</a></nav><header><h1>Wanderschuhe MARK-H1</h1><h2>Pflege MARK-H2</h2><h2>Größen MARK-H2</h2></header><figure><img src=\"data:image/png;base64,TUFSSy1JTUFHRQ==\" alt=\"Schuh MARK-ALT\"><figcaption>Bildunterschrift MARK-CONTEXT</figcaption></figure><main><p>Unsere Wanderschuhe sind leicht. MARK-TEXT</p><p>MOCK-ID:fields</p></main></body></html>\n"
+
+[[route]]
+path = "/p1"
+status = 200
+content_type = "text/html; charset=utf-8"
+body = "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>Wanderrucksack 1</title><meta name=\"description\" content=\"Robuster Rucksack.\"></head><body><nav><a href=\"/\">Start</a> <a href=\"/fields\">Felder</a> <a href=\"/p1\">Produkt 1</a> <a href=\"/p2\">Produkt 2</a> <a href=\"/gone\">Archiv</a> <a href=\"/moved\">Alt</a></nav><main><h1>Wanderrucksack 1</h1><h2>Material</h2><h2>Pflege</h2><p>Robuster Rucksack mit 30 Liter Volumen. MOCK-ID:product-1</p></main></body></html>\n"
+
+[[route]]
+path = "/p2"
+status = 200
+content_type = "text/html; charset=utf-8"
+body = "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>Wanderrucksack 2</title><meta name=\"description\" content=\"Leichter Rucksack.\"></head><body><nav><a href=\"/\">Start</a> <a href=\"/fields\">Felder</a> <a href=\"/p1\">Produkt 1</a> <a href=\"/p2\">Produkt 2</a> <a href=\"/gone\">Archiv</a> <a href=\"/moved\">Alt</a></nav><main><h1>Wanderrucksack 2</h1><p>Leichter Rucksack mit 20 Liter Volumen. MOCK-ID:product-2</p></main></body></html>\n"
+
+[[route]]
+path = "/gone"
+status = 404
+content_type = "text/html; charset=utf-8"
+body = "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>Nicht gefunden</title><meta name=\"description\" content=\"Seite fehlt.\"></head><body><nav><a href=\"/\">Start</a> <a href=\"/fields\">Felder</a> <a href=\"/p1\">Produkt 1</a> <a href=\"/p2\">Produkt 2</a> <a href=\"/gone\">Archiv</a> <a href=\"/moved\">Alt</a></nav><main><h1>Nicht gefunden</h1><p>MOCK-ID:error</p></main></body></html>\n"
+
+[[route]]
+path = "/moved"
+status = 301
+content_type = "text/html; charset=utf-8"
+body = "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>Weiterleitung</title><meta name=\"description\" content=\"Weiter.\"></head><body><nav><a href=\"/\">Start</a> <a href=\"/fields\">Felder</a> <a href=\"/p1\">Produkt 1</a> <a href=\"/p2\">Produkt 2</a> <a href=\"/gone\">Archiv</a> <a href=\"/moved\">Alt</a></nav><main><p>MOCK-ID:redirect</p></main></body></html>\n"
+location = "/"

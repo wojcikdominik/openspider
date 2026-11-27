@@ -402,8 +402,11 @@ pub async fn resume_crawl<F: Fetch>(
     fetcher: Arc<F>,
     file: PathBuf,
     config: Option<CrawlConfig>,
-    deps: EngineDeps,
+    mut deps: EngineDeps,
 ) -> Result<CrawlHandle, EngineError> {
+    // M4-D05 (08 AI-020 [M4], Nachtrag K4-13): Fortsetzen setzt die KI-Warteschlange mit fort – dieselbe Laufzeile,
+    // offene Einträge der bereits gecrawlten URLs.
+    deps.ai_queue = deps.ai_queue.take().map(crate::ai_queue::resuming);
     let prepared = {
         let (path, deps) = (file.clone(), deps.clone());
         tokio::task::spawn_blocking(move || prepare(&path, config, &deps))

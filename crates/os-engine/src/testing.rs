@@ -66,6 +66,7 @@ pub fn test_deps() -> EngineDeps {
         on_finished: None,
         owner_kind: "cli",
         renderer: None,
+        ai_queue: None,
     }
 }
 
