@@ -221,7 +221,16 @@ jobs:
         # Erst nach belegter Laufzeit < 15 min auf allen Zielplattformen auf 15 zurücksetzen. Einschließlich Doctests.
         timeout-minutes: 50
         # --no-fail-fast: Ein roter Test verdeckt sonst alle Testbinaries dahinter (10.11.: Windows).
-        run: cargo test --workspace --locked --no-fail-fast
+        # 27.11.2026: Unter Windows liegt die reine Testausführung der ganzen Suite bei 44–50 min (26.11.: 2 900 s Summe der
+        # Testprogramme) und lief zweimal in die Grenze, ohne dass ein Test hing. Die Grenze bleibt; die Windows-Tests sind
+        # stattdessen auf zwei Jobs verteilt: hier alle Crates außer den vier unten, im Job `ci-tests-b` os-analyze, os-app,
+        # os-export und os-ai (zusammen rund 43 % der Laufzeit). macOS läuft weiter in einem Stück.
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cargo test --workspace --locked --no-fail-fast --exclude os-analyze --exclude os-app --exclude os-export --exclude os-ai
+          else
+            cargo test --workspace --locked --no-fail-fast
+          fi
 
       - name: "Plattenplatz: Tiefststand bis nach den Rust-Tests (macOS, Diagnose)"
         if: ${{ always() && runner.os == 'macOS' }}
@@ -330,6 +339,31 @@ jobs:
           name: loadtest-small-${{ matrix.name }}
           path: target/loadtest/
           if-no-files-found: warn
+
+  # Zweiter Teil der Rust-Tests unter Windows (27.11.2026, s. Schritt "Rust tests" im Job `ci`): os-analyze, os-app, os-export,
+  # os-ai. Gleiche Grenze von 50 min für die reine Testausführung; Kompilieren in einem eigenen Schritt.
+  ci-tests-b:
+    name: ci-tests-b (windows-x64)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.99.1"
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: tests-b
+      - name: Rust tests (build)
+        run: cargo test --locked --no-run -p os-analyze -p os-app -p os-export -p os-ai
+      - name: Rust tests
+        timeout-minutes: 50
+        run: cargo test --locked --no-fail-fast -p os-analyze -p os-app -p os-export -p os-ai
 
   # Crawl-Datei zwischen den Plattformen (A6, OUT-230), Teil 2: alle Plattformen laden die Dateien der anderen, exportieren
   # erneut und vergleichen byte-gleich. Kompiliert nicht: die CLI kommt als Artefakt `cli-bin-<name>` aus dem Job `ci`.
