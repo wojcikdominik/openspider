@@ -119,3 +119,57 @@ Bestehende Nachbartests (Lauf 1): `n31_retention_lane` 1/1, `cmd_crawls_manageme
 Der frühe Ausstieg bei „Nie“ nimmt aber ein beobachtbares Verhalten aus CRAWL-124 weg, und zwar bei der Standardrichtlinie. B2 ist ein kleines Restfenster des ursprünglichen Fehlers. Es kann im selben Zug geschlossen oder als Auflage verfolgt werden.
 
 Falls die Absturzrate in der CI drängt: Ein Merge mit B1 als sofortiger Folgeauflage ist vertretbar. Dafür muss der rote B1-Test bis zur Korrektur stehen bleiben.
+
+## Zweite Durchsicht 27.11.2026
+
+Gelesen wurde `git diff 78c42aea..74a6094d`, nur der Produktcode, nicht der Test des Bauers. Es gab keinen eigenen Lauf auf dem Mini. Der neue Test `acceptance_maintenance_teardown_stale.rs` ist geschrieben, aber noch nicht gelaufen (Lauf durch den Koordinator).
+
+**1. B1 (CRAWL-124) – in Ordnung.**
+- Der frühe Ausstieg greift nur noch bei „Nie“, ohne Höchstzahl und mit Speicherort gleich Stammordner (`crawls.rs:686`). Jede Runde mit abweichendem Ort vermerkt ihn per `add_location`.
+- Eine Runde läuft bei jeder Speicherortänderung (`on_settings_changed`, mit dem Stand zum Zeitpunkt der Änderung, Z. 758) und bei jedem Start.
+- Die abgefragten Fälle:
+  - **A → Stammordner:** A kam beim Setzen ins Register, der Stammordner wird immer gelistet.
+  - **A → B, beide abseits:** Beide kommen beim Setzen ins Register. Weil die Runde den Stand der Änderung festhält, gilt das auch bei schnellem Wechsel A → B.
+- Ein früher aktiver Ort fehlt nur, wenn seine Runde nie zu Ende lief: Fehler beim Öffnen von Register/Index, oder die App endet, bevor die gestartete Runde das Gate bekommt. Das war auf main genauso (B3).
+- Schreibweisen, die nur textlich vom Stammordner abweichen, laufen durch eine Runde. Das ist unschädlich, denn `Manager::list` fasst nach Kennung zusammen.
+
+**2. B2 – Abbau weitgehend in Ordnung, neuer Befund B1-neu (veraltete Richtlinie).**
+- Die Runde stuft die `App` nicht mehr hoch. Sie arbeitet über `RetentionInputs` mit Gate, Sitzungen (`Arc`), Uhr, Wurzel und `MaintenanceLane`; `is_alive` prüft über `strong_count`.
+- Nach dem Abbau nimmt die Spur nichts mehr an, weil der Sender herausgenommen ist. Ein Auftrag, der vor `closed` eingereiht wurde, wird verworfen oder beigetreten. Der Abbau durch den Besitzer ist also aus Sicht der Aufbewahrung immer der letzte.
+- **B3 (Rest):** Die Takt-Schleifen in `session` (100 ms), `mcp` (100 ms), `segment` (250 ms) und `update/install` (500 ms) stufen ab dem zweiten Tick weiterhin kurz hoch. Fällt der Abbau durch den Besitzer in dieses Fenster von Mikrosekunden, läuft der eigentliche Abbau einschließlich des Wartens auf die Wartungsspur in jenem Worker. In dieser Zeit kann eine kurz vorher gestartete Runde (nach einer Einstellungsänderung) noch einreihen. Das Fenster ist sehr klein und ohne Zusammentreffen mit einer Runde folgenlos.
+- **Geöffnete Crawls nicht veraltet:** `open` wird nach Gate und Register aus der lebenden `SessionRegistry` gelesen (Z. 702–707, geteilter `Arc`), wie vorher. Die Lücke zwischen dem Lesen von `open` und `retain_with` war schon auf main da und ist nicht größer geworden. Nach dem Abbau kann niemand mehr öffnen.
+- **Stündliche Runde nicht veraltet:** Sie liest `retention_settings`, das `on_settings_changed` bei jeder Änderung synchron mit dem aktuellen Stand füllt. Alle Wege, die Aufbewahrung oder Speicher ändern, laufen über `services::settings_changed` (`apply_settings_patch`, `reload_settings`). Die direkten `apply_patch`-Aufrufe in `update.rs` betreffen nur `updates.*`.
+- **B1-neu – veraltete Richtlinie nach Einstellungsänderung, Datenverlust:**
+  - Die Runde nach einer Einstellungsänderung hält jetzt den Stand vom Zeitpunkt der Änderung fest (`RetentionInputs::of(app, Some(current))`, Z. 758) und löscht nach ihm, auch wenn sie erst später an das Gate kommt.
+  - Auf main und `78c42aea` las die Runde die Einstellungen erst nach dem Gate, also die gerade geltenden.
+  - Ablauf: Das Gate ist belegt, etwa durch eine laufende Runde mit vielen Crawls oder einen langen Verwaltungsauftrag (Verschieben/Duplizieren/Import). Der Nutzer stellt „1 Woche“ ein und nimmt es gleich auf „1 Jahr“ oder „Nie“ zurück. Die erste Runde löscht danach trotzdem alle Crawls über 7 Tage.
+  - Das widerspricht OUT-229, denn gelöscht wird nach der eingestellten Dauer, und die gilt nicht mehr. Es ist nicht rückgängig zu machen und schlimmer als der ursprüngliche Testabsturz.
+  - Test: `acceptance_maintenance_teardown_stale` · `a_round_after_a_settings_change_deletes_by_the_policy_in_force_when_it_runs`, erwartet rot auf `74a6094d`. Ein Haltepunkt im Tracing hält die Startrunde („1 Jahr“) an; währenddessen setzt der Test „1 Woche“ und danach wieder „1 Jahr“. Ein 8 Tage alter Crawl muss bleiben. Es gibt eine Gnadenfrist von 3 s, nur damit eine spät startende Runde auffällt; eine richtige Umsetzung ist deterministisch grün.
+  - Vorschlag: Den festgehaltenen Stand nur für den zu vermerkenden Speicherort verwenden (Ort der Änderung und aktueller Ort). Löschen sollte die Runde nach `retention_settings`, gelesen nach dem Gate.
+- **B3:** Die stündliche Aufgabe hält `Arc<ManagementState>` dauerhaft (Z. 728). Dadurch läuft `ManagementState::drop` mit `abort` (Z. 44–55) erst, wenn die Aufgabe nach dem nächsten `sleep(3600)` `!is_alive` sieht. Nach dem Abbau einer `App` in einem fremden Laufzeitsystem bleiben Aufgabe, `ManagementState` und `SessionRegistry` (mit `CrawlHandle`s) bis zu 1 h im Speicher.
+  - Das ist harmlos für Dateien: `CrawlHandle` hat kein `Drop`, die Engine läuft so oder so weiter, und die Spur ist geschlossen.
+  - Es ist aber ein begrenztes Leck. Abhilfe: `select!` aus Schlaf und Abbruchsignal oder eine schwache Referenz auf den Zustand.
+
+**3. Liste ohne Register (`os-store/src/registry.rs:113–124`) – in Ordnung.**
+- Je Kennung zählt die erste Datei nach Pfad (`candidate_files` sortiert). Das ist für einen Ordner dieselbe Wahl wie `Manager::list` (Pfade sortiert, `seen` nach Kennung). Mit Register wird über alle Orte gemeinsam sortiert.
+- Sichtbar ändert sich nur `--list-crawls` in einem Ordner ohne Register mit zwei Dateien gleicher Kennung: Vorher erschienen beide, jetzt die erste.
+- Das deckt sich mit OUT-185 („Listet alle Crawls der Crawl-Verwaltung“), denn die Verwaltung zeigt je Kennung einen Crawl.
+- MCP fasste in `discover` schon vorher nach Kennung zusammen (`os-mcp/src/tools/common.rs`).
+- `--load-crawl <datei|id>` geht über Pfad bzw. `registry::find` und ist nicht betroffen. Eine Spec-Zeile, die beide Dateien gleicher Kennung verlangt, habe ich nicht gefunden.
+- Hinweis (B3): Welche der beiden Dateien gewinnt, hängt vom Dateinamen ab, nicht vom Alter. Das gilt mit wie ohne Register.
+
+**4. Erster Tick – in Ordnung, keine sichtbare Verzögerung.**
+- Die Schleifen tun beim ersten Tick nur etwas, wenn es schon etwas gibt:
+  - `session/mod.rs`: aktive Sitzung;
+  - `commands/segment.rs`: beschreibbare Sitzungen;
+  - `update/install.rs`: vorgemerkte Installation (`Pending`, erst nach einer Nutzeraktion).
+- Direkt beim Start ist nichts davon da. Die Verschiebung beträgt einmalig höchstens eine Periode (100/250/500 ms) und fällt in eine Zeit ohne Inhalt.
+- Statusleiste und Ticks während eines Crawls sind unverändert, ebenso der Update-Check beim Start (`commands/update.rs:on_startup`, eigener Spawn, nicht verschoben).
+- `mcp/mod.rs`: Bei Autostart oder fehlerhaften Einstellungen wird wie vorher sofort hochgestuft, Autostart und Hinweis kommen ohne Verzögerung. Ohne Autostart gab es nichts zu tun.
+
+**Empfehlung zweite Durchsicht: erst nachbessern (B1-neu).**
+- Die Teardown-Korrektur selbst ist jetzt schlüssig.
+- CRAWL-124 ist erfüllt.
+- Die Zusammenfassung ohne Register ist spec-konform.
+- Das Festhalten der Richtlinie zum Zeitpunkt der Änderung kann aber Crawls nach einer zurückgenommenen Einstellung unwiederbringlich löschen. Das ist eine Regression gegenüber main.
+- Die Korrektur ist klein: Nach dem Gate die aktuelle Richtlinie lesen, den festgehaltenen Stand nur für den Speicherort nutzen. Danach den Lauf von `acceptance_maintenance_teardown_stale` und meinen übrigen 12 Abnahmetests prüfen.
