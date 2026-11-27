@@ -51,13 +51,20 @@ let heldEnd: CrawlStatus | null = null;
  * counts of the last running tick, which then changed once the end status was released. Both apply together.
  */
 let heldAnalysis: AnalysisStatus | null = null;
+/**
+ * UI-018 (fix/overview-end-latency): notices that arrive while the end status is held (the end tick carries
+ * „analysis-completed“ of the automatic crawl analysis). Their analysis result belongs to the held end and applies with
+ * it; applied early it was a status-bar change of its own, and the end status then waited for the next paint slot
+ * (at most four paints/s, UI-013), up to 250 ms. The notices themselves reach their other consumers at once.
+ */
+let heldNotices: Notice[] = [];
 /** Each held end gets its own release; a release of an earlier end (another crawl) must not apply a later one. */
 let endRelease = 0;
 export function registerEndBarrier(refresh: () => Promise<unknown>): () => void {
   endBarriers.add(refresh);
   return () => { endBarriers.delete(refresh); };
 }
-async function releaseEnd(apply: (crawl: CrawlStatus, analysis: AnalysisStatus | null) => void) {
+async function releaseEnd(apply: (crawl: CrawlStatus, analysis: AnalysisStatus | null, notices: Notice[]) => void) {
   const release = ++endRelease;
   await Promise.race([Promise.allSettled([...endBarriers].map(refresh => refresh())), new Promise(resolve => setTimeout(resolve, END_GATE_MS))]);
   // Shared-count views publish their answer in the next task (query notifications); the status follows after them.
@@ -65,8 +72,9 @@ async function releaseEnd(apply: (crawl: CrawlStatus, analysis: AnalysisStatus |
   if (release !== endRelease) return;
   const crawl = heldEnd;
   const analysis = heldAnalysis;
-  heldEnd = null; heldAnalysis = null;
-  if (crawl) apply(crawl, analysis);
+  const notices = heldNotices;
+  heldEnd = null; heldAnalysis = null; heldNotices = [];
+  if (crawl) apply(crawl, analysis, notices);
 }
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -94,12 +102,14 @@ export const useSession = create<SessionState>((set, get) => ({
       heldEnd = tick.crawl;
       heldAnalysis = tick.analysis ?? heldAnalysis;
       tick = { ...tick, crawl: null, analysis: null };
-      if (start) queueMicrotask(() => void releaseEnd((crawl, analysis) => {
+      if (start) queueMicrotask(() => void releaseEnd((crawl, analysis, notices) => {
         if (get().crawl?.crawlId === crawl.crawlId) set(s => ({ crawl, throttled: Object.keys(s.throttled).length ? {} : s.throttled,
-          ...(analysis ? { analysis, analysisStarting: false } : {}) }));
+          ...(analysis ? { analysis, analysisStarting: false } : {}), analysisResult: reduceAnalysisResult(s.analysisResult, notices) }));
       }));
-    } else if (tick.crawl) { heldEnd = null; heldAnalysis = null; }
+    } else if (tick.crawl) { heldEnd = null; heldAnalysis = null; heldNotices = []; }
     else if (heldEnd && tick.analysis) { heldAnalysis = tick.analysis; tick = { ...tick, analysis: null }; }
+    const holdResult = heldEnd !== null;
+    if (holdResult) heldNotices = [...heldNotices, ...tick.notices];
     set((s) => {
       let views = s.views;
       for (const v of tick.views) {
@@ -118,7 +128,7 @@ export const useSession = create<SessionState>((set, get) => ({
         crawl: tick.crawl ?? s.crawl,
         analysis: tick.analysis ?? (tick.crawl && tick.crawl.crawlId !== s.crawl?.crawlId ? null : s.analysis),
         analysisStarting: tick.analysis || tick.crawl && tick.crawl.crawlId !== s.crawl?.crawlId ? false : s.analysisStarting,
-        analysisResult: reduceAnalysisResult(tick.crawl && tick.crawl.crawlId !== s.crawl?.crawlId ? null : s.analysisResult, tick.notices),
+        analysisResult: holdResult ? s.analysisResult : reduceAnalysisResult(tick.crawl && tick.crawl.crawlId !== s.crawl?.crawlId ? null : s.analysisResult, tick.notices),
         mcp: tick.mcp ?? s.mcp,
         countsVersion: tick.countsVersion,
         issuesVersion: tick.issuesVersion,

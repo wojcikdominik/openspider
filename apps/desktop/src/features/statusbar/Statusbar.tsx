@@ -9,18 +9,32 @@ import { useHeader } from "../header/model";
 import { useComparison } from "../compare/model";
 import "./statusbar.css";
 
-/** Latest snapshot, at most four paints/s. Notices are handled immediately by their own subscriber. */
+/** Shortest gap between two status paints (at most four paints/s, UI-013). */
+const STATUS_PAINT_MS = 250;
+
+/**
+ * Latest snapshot, at most four paints/s (UI-013). Notices are handled immediately by their own subscriber.
+ * UI-018: a change after a quiet phase is painted at once, in the next task (e.g. the released end status
+ * „Completed“); only a change within 250 ms of the last paint waits for the rest of that gap, and all changes of the gap
+ * share one paint.
+ */
 export function useStatusSnapshot(): SessionState {
   const [snapshot, setSnapshot] = useState(useSession.getState);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let painted = Date.now();
+    const paint = () => { timer = undefined; painted = Date.now(); setSnapshot(useSession.getState()); };
     const off = useSession.subscribe((next, before) => {
       if (next.crawl === before.crawl && next.mcp === before.mcp && next.throttled === before.throttled &&
         next.crawlDelays === before.crawlDelays && next.openingCrawl === before.openingCrawl && next.openError === before.openError &&
         next.analysis === before.analysis && next.analysisStarting === before.analysisStarting && next.analysisResult === before.analysisResult) return;
-      timer ??= setTimeout(() => { timer = undefined; setSnapshot(useSession.getState()); }, 250);
+      if (timer !== undefined) return;
+      const since = Date.now() - painted;
+      // After a quiet phase in the next task (the tick's own render stays free of status paints, UI-143); a clock set
+      // back counts as a quiet phase: never wait longer than one gap.
+      timer = setTimeout(paint, since < 0 ? 0 : Math.max(0, STATUS_PAINT_MS - since));
     });
-    setSnapshot(useSession.getState());
+    paint();
     return () => { off(); clearTimeout(timer); };
   }, []);
   return snapshot;
