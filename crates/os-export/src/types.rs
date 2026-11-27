@@ -89,6 +89,10 @@ pub trait TableWriter {
     fn row(&mut self, kinds: &[ColumnKind], values: &[Value]) -> Result<(), ExportError>;
     /// Schließt die Datei ab.
     fn finish(self: Box<Self>) -> Result<ExportFileInfo, ExportError>;
+    /// Zielformat, falls bekannt: Exporte, die nur im CSV maskieren (OUT-016, OUT-003), fragen es ab (M4-V01).
+    fn format(&self) -> Option<Format> {
+        None
+    }
 }
 
 /// Art des Detail-Exports.
