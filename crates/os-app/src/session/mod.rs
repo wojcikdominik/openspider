@@ -119,7 +119,7 @@ pub fn init(app: &App) {
             // session is active (`delivers_ticks`); control commands send their own acknowledgement, and
             // while they hold the mutation lock `poll` returns at once.
             let due = app.tick_due();
-            let ended = match poll_aligned(&app, due, false).await {
+            let ended = match poll_aligned(&app, due, false, false).await {
                 Ok(ended) => ended,
                 Err(e) => {
                     tracing::warn!(error = ?e, "Session poll failed");
@@ -190,23 +190,35 @@ pub fn state(app: &App, key: &CrawlKey, state: CrawlState) {
     crate::commands::sidebar::counts::observe_state(app, key, state);
 }
 
+/// One explicit poll of all sessions (UI-018). Waits for a running poll (the background loop of [`init`] or a control
+/// command holding the session lock) and reads afterwards, so the state of the files at the time of the call is
+/// published when it returns. Only tests call it; the background loop keeps skipping a busy lock (it may miss one tick).
+/// Must not be called while the caller holds the session lock (the lock is not reentrant).
 pub async fn poll(app: &App) -> Result<(), CmdError> {
-    poll_aligned(app, app.tick_due(), false).await.map(|_| ())
+    poll_aligned(app, app.tick_due(), false, true)
+        .await
+        .map(|_| ())
 }
 
 /// Poll after the automatic crawl analysis of an ended crawl (B4-LAGFIX3): the rows of every crawl that no longer runs
 /// are published at once, like the final rows of the crawl end.
 async fn poll_final(app: &App) -> Result<bool, CmdError> {
-    poll_aligned(app, true, true).await
+    poll_aligned(app, true, true, false).await
 }
 
 /// One poll of all sessions; `due`: this poll belongs to a due tick (see `feed::refresh_aligned`). `Ok(true)`:
 /// a crawl ended in this poll and its final rows were published. `last`: also publish the rows of crawls that no
-/// longer run at once (see [`poll_final`]).
-async fn poll_aligned(app: &App, due: bool, last: bool) -> Result<bool, CmdError> {
+/// longer run at once (see [`poll_final`]). `wait`: wait for the session lock instead of skipping this poll while it is
+/// held (only the explicit [`poll`]).
+async fn poll_aligned(app: &App, due: bool, last: bool, wait: bool) -> Result<bool, CmdError> {
     let service = app.ext::<SessionService>();
-    let Ok(_guard) = service.mutation.try_lock() else {
-        return Ok(false);
+    let _guard = if wait {
+        service.mutation.lock().await
+    } else {
+        let Ok(guard) = service.mutation.try_lock() else {
+            return Ok(false);
+        };
+        guard
     };
     let cancel = os_model::CancelToken::new();
     *service
@@ -329,5 +341,66 @@ pub fn activate(app: &App) {
         .swap(true, std::sync::atomic::Ordering::SeqCst)
     {
         app.set_tick_policy(Arc::new(crate::events::coalescer::Coalescer::default()));
+    }
+}
+
+#[cfg(test)]
+mod poll_tests {
+    use super::*;
+
+    // A poll that finds the session lock held waits for it and then publishes the state current at that time; it does
+    // not return early with nothing published (CI windows-x64, `session_feed.rs:205`).
+    // spec: UI-018
+    #[tokio::test]
+    async fn an_explicit_poll_waits_for_the_session_lock_and_then_publishes_the_new_state() {
+        let mut cfg = os_model::CrawlConfig::default();
+        cfg.analysis.auto_at_end = false;
+        let fx = os_engine::testing::crawl_fixture("ui/fx-ui-dirs", cfg).await;
+        let home = tempfile::tempdir().unwrap();
+        let app = App::new(crate::AppConfig::new(home.path())).unwrap();
+        let ctx = crate::CallCtx::for_window("main");
+        app.dispatch(
+            ctx.clone(),
+            "crawl.open",
+            serde_json::json!({"kind":"path","path":fx.file.path()}),
+        )
+        .await
+        .unwrap();
+        poll(&app).await.unwrap();
+        let first = app.assemble_tick().and_then(|t| t.crawl).expect("status");
+        assert_eq!(first.phase, CrawlPhase::Completed);
+        let key = current(&app, &ctx.window).unwrap().key;
+
+        // The lock is held (as by the background loop or a control command) while the file changes.
+        let held = app
+            .ext::<SessionService>()
+            .mutation
+            .clone()
+            .lock_owned()
+            .await;
+        app.write_queue()
+            .submit_file(&key, |f| {
+                f.set_meta("state", "Paused")
+                    .map_err(|e| crate::runtime::error::store_error(&e))
+            })
+            .await
+            .unwrap();
+        let waiting = {
+            let app = app.clone();
+            tokio::spawn(async move { poll(&app).await })
+        };
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(!waiting.is_finished(), "poll waits for the lock");
+        assert!(
+            app.assemble_tick().and_then(|t| t.crawl).is_none(),
+            "nothing is published while the lock is held"
+        );
+        drop(held);
+        waiting.await.unwrap().unwrap();
+        let after = app
+            .assemble_tick()
+            .and_then(|t| t.crawl)
+            .expect("published");
+        assert_eq!(after.phase, CrawlPhase::Paused);
     }
 }
