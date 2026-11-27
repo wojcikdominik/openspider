@@ -9,13 +9,14 @@ import { useHeader } from "../header/model";
 import { useComparison } from "../compare/model";
 import "./statusbar.css";
 
-/** Shortest gap between two status paints (at most four paints/s). */
+/** Shortest gap between two status paints (at most four paints/s, UI-013). */
 const STATUS_PAINT_MS = 250;
 
 /**
- * Latest snapshot, at most four paints/s. Notices are handled immediately by their own subscriber.
- * UI-018: a change after a quiet phase is painted at once (e.g. the released end status „Completed“); only a change
- * within 250 ms of the last paint waits for the rest of that gap, and all changes of the gap share one paint.
+ * Latest snapshot, at most four paints/s (UI-013). Notices are handled immediately by their own subscriber.
+ * UI-018: a change after a quiet phase is painted at once, in the next task (e.g. the released end status
+ * „Completed“); only a change within 250 ms of the last paint waits for the rest of that gap, and all changes of the gap
+ * share one paint.
  */
 export function useStatusSnapshot(): SessionState {
   const [snapshot, setSnapshot] = useState(useSession.getState);
@@ -29,9 +30,9 @@ export function useStatusSnapshot(): SessionState {
         next.analysis === before.analysis && next.analysisStarting === before.analysisStarting && next.analysisResult === before.analysisResult) return;
       if (timer !== undefined) return;
       const since = Date.now() - painted;
-      // A clock set back counts as a quiet phase: never wait longer than one gap.
-      if (since >= STATUS_PAINT_MS || since < 0) paint();
-      else timer = setTimeout(paint, STATUS_PAINT_MS - since);
+      // After a quiet phase in the next task (the tick's own render stays free of status paints, UI-143); a clock set
+      // back counts as a quiet phase: never wait longer than one gap.
+      timer = setTimeout(paint, since < 0 ? 0 : Math.max(0, STATUS_PAINT_MS - since));
     });
     paint();
     return () => { off(); clearTimeout(timer); };
