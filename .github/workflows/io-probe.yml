@@ -1,0 +1,88 @@
+# Messlauf zur E/A-Störung auf macos-15 (arm64), nur von Hand.
+#
+# 27.11.2026: Im Job `ci (macos-arm64)` meldet der Kernel des Runners nach rund 75 Minuten `disk2s5: I/O error`
+# (IOStorageFamily); danach lesen Tests frisch kopierte Dateien als Nullen oder scheitern mit EIO, bei über 130 GB
+# freiem Platz im Gast. Dieser Lauf prüft eine Vermutung: Die Störung hängt an der Menge neu geschriebener Blöcke,
+# nicht am freien Platz. Er schreibt Dateien mit nicht komprimierbarem Inhalt, löscht sie wieder (der freie Platz
+# bleibt hoch) und sieht nach jeder Runde im Kernel-Log nach. Er baut und testet nichts aus dem Repository.
+name: io-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit_gib:
+        description: "Höchstens so viele GiB schreiben"
+        default: "240"
+      cleanup:
+        description: "Vorher wie im Job ci aufräumen (Xcode-Versionen, Simulatoren, Werkzeuge)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: io-probe (macos-15)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Ausgangslage
+        run: |
+          sw_vers
+          df -k /System/Volumes/Data | tail -n 1
+          diskutil info / 2> /dev/null | grep -E "File System Personality|Solid State|Virtual|Media Name|Protocol|Device / Media Name" || true
+          system_profiler SPHardwareDataType 2> /dev/null | grep -E "Model|Chip|Memory" || true
+
+      - name: Aufräumen wie im Job ci
+        if: ${{ inputs.cleanup }}
+        run: |
+          selected_real="$(realpath "$(xcode-select -p)/../..")"
+          for app in /Applications/Xcode*.app; do
+            [ -L "$app" ] && continue
+            [ "$(realpath "$app")" = "$selected_real" ] && continue
+            sudo rm -rf "$app"
+          done
+          sudo rm -rf "$HOME/Library/Android"
+          sudo xcrun simctl runtime delete all > /dev/null 2>&1 || true
+          for dir in "$HOME/.dotnet" "$HOME/hostedtoolcache/CodeQL" "$HOME/hostedtoolcache/go" \
+                     "$HOME/hostedtoolcache/PyPy" "$HOME/hostedtoolcache/Ruby"; do
+            [ -e "$dir" ] && sudo rm -rf "$dir"
+          done
+          sleep 30
+          df -k /System/Volumes/Data | tail -n 1
+
+      - name: Schreiben, prüfen, löschen
+        env:
+          LIMIT_GIB: ${{ inputs.limit_gib }}
+        run: |
+          set -u
+          d="$RUNNER_TEMP/io-probe"; mkdir -p "$d"
+          # 1 GiB nicht komprimierbarer Inhalt als Vorlage; jede Runde hängt sie achtmal an eine neue Datei (kein Klon).
+          openssl enc -aes-256-ctr -pass pass:probe -nosalt < /dev/zero 2> /dev/null | head -c 1073741824 > "$d/vorlage" || true
+          [ "$(wc -c < "$d/vorlage" | tr -d ' ')" = 1073741824 ] || { echo "Vorlage unvollständig"; exit 1; }
+          want="$(shasum -a 256 "$d/vorlage" | cut -d " " -f 1)"
+          errors() { sudo log show --last "$1" --style compact --predicate 'process == "kernel"' 2> /dev/null | grep -c "I/O error" || true; }
+          written=0; round=0; status=ok
+          while [ "$written" -lt "$LIMIT_GIB" ]; do
+            round=$((round + 1)); f="$d/runde-$round"
+            for i in 1 2 3 4 5 6 7 8; do cat "$d/vorlage" >> "$f" || { status="Schreibfehler"; break; }; done
+            [ "$status" = ok ] || break
+            python3 -c "import os,sys; fd=os.open(sys.argv[1], os.O_RDONLY); os.fsync(fd); os.close(fd)" "$f" || { status="fsync-Fehler"; break; }
+            written=$((written + 8))
+            # Letztes GiB der Datei zurücklesen und mit der Vorlage vergleichen.
+            got="$(tail -c 1073741824 "$f" | shasum -a 256 | cut -d " " -f 1)"
+            n="$(errors 2m)"
+            printf "%s Runde %s geschrieben %s GiB frei %s KiB Kernel-E/A-Fehler(2 min) %s Inhalt %s\n" \
+              "$(date -u +%H:%M:%S)" "$round" "$written" "$(df -k /System/Volumes/Data | tail -n 1 | tr -s " " | cut -d " " -f 4)" \
+              "$n" "$([ "$got" = "$want" ] && echo gleich || echo ABWEICHEND)"
+            [ "$got" = "$want" ] || { status="Inhalt abweichend"; break; }
+            [ "$n" = 0 ] || { status="Kernel meldet E/A-Fehler"; break; }
+            rm -f "$f"
+          done
+          echo "Ergebnis: $status nach $written GiB"
+          echo "--- Kernel (letzte 30 min, gefiltert, erste und letzte Zeilen) ---"
+          sudo log show --last 30m --style compact --predicate 'process == "kernel"' 2> /dev/null \
+            | grep -iE "apfs|i/o error|disk[0-9]+.*(error|timeout)|nvme|virtio|EIO|corrupt" > "$d/kernel.txt" || true
+          wc -l < "$d/kernel.txt"; head -n 20 "$d/kernel.txt"; echo "..."; tail -n 10 "$d/kernel.txt"
+          [ "$status" = ok ]

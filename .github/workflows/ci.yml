@@ -260,8 +260,13 @@ jobs:
           mount | grep -E " / | /System/Volumes/Data " || true
           diskutil info / 2> /dev/null | grep -E "File System Personality|Solid State|Virtual|Media Name|Protocol" || true
           echo "--- Kernel/APFS (letzte 40 min, gefiltert) ---"
-          sudo log show --last 40m --style compact --predicate 'process == "kernel"' 2> /dev/null \
-            | grep -iE "apfs|i/o error|disk[0-9]+.*(error|timeout)|nvme|virtio|EIO|fsync|corrupt" | tail -n 120 || true
+          # 27.11.2026: Der erste Fund waren 119 Zeilen `disk2s5: I/O error` aus den letzten Sekunden; wann die Störung
+          # begann, schnitt `tail` ab. Deshalb Zählung je Minute über 90 Minuten sowie die ersten und letzten Zeilen.
+          sudo log show --last 90m --style compact --predicate 'process == "kernel"' 2> /dev/null \
+            | grep -iE "apfs|i/o error|disk[0-9]+.*(error|timeout)|nvme|virtio|EIO|fsync|corrupt" > "$RUNNER_TEMP/kernel-io.txt" || true
+          echo "Zeilen: $(wc -l < "$RUNNER_TEMP/kernel-io.txt" | tr -d ' ')"
+          echo "E/A-Fehler je Minute:"; grep "I/O error" "$RUNNER_TEMP/kernel-io.txt" | cut -c 1-16 | sort | uniq -c || true
+          head -n 30 "$RUNNER_TEMP/kernel-io.txt"; echo "..."; tail -n 30 "$RUNNER_TEMP/kernel-io.txt"
           echo "--- Ende ---"
 
       - name: Tauri build check (debug, no bundle)
