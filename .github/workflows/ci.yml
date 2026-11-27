@@ -217,6 +217,7 @@ jobs:
       # Zuwachs (grüner Lauf 136 GiB frei, roter Lauf 130 GiB), also an der Kante. Unter macOS werden die Tests deshalb in
       # zwei Teilen gebaut und ausgeführt; dazwischen werden die Testprogramme des ersten Teils gelöscht (os-app allein
       # stellt mit 148 Testprogrammen zu je rund 285 MiB etwa die Hälfte). Bibliotheken bleiben, es wird nichts doppelt gebaut.
+      # Wirkung im ersten Lauf (5b9a4e74): Tiefststand 170 GiB frei in beiden Teilen statt 136 GiB (Zuwachs rund 41 statt 82 GiB).
       - name: Rust tests (build)
         if: ${{ !cancelled() }}
         run: |
@@ -231,8 +232,9 @@ jobs:
         # A1-Ziel bleibt < 15 min je Plattform; Limit vorübergehend 50 min (K2-64, 19.10.: Welle-1-Suite ~14,6 min auf macOS),
         # K2-64-Restarbeiten, Besitzer und fehlende Plattformnachweise: docs/plan/M2-reports/n01.md.
         # Erst nach belegter Laufzeit < 15 min auf allen Zielplattformen auf 15 zurücksetzen. Einschließlich Doctests.
-        # macOS: zwei Teile mit je 25 min (zusammen unverändert 50 min; 27.11.: ganze Suite 29,5 min in einem Stück).
-        timeout-minutes: ${{ runner.os == 'macOS' && 25 || 50 }}
+        # macOS: zwei Teile mit 10 und 40 min (zusammen unverändert 50 min). Erster Lauf mit der Aufteilung (27.11., 5b9a4e74):
+        # os-app 6 min; der Rest lief bei 25 min ohne roten Test in die damalige Grenze von 25 min (os-mcp noch offen).
+        timeout-minutes: ${{ runner.os == 'macOS' && 10 || 50 }}
         # --no-fail-fast: Ein roter Test verdeckt sonst alle Testbinaries dahinter (10.11.: Windows).
         # 27.11.2026: Unter Windows liegt die reine Testausführung der ganzen Suite bei 44–50 min (26.11.: 2 900 s Summe der
         # Testprogramme) und lief zweimal in die Grenze, ohne dass ein Test hing. Die Grenze bleibt; die Windows-Tests sind
@@ -262,7 +264,7 @@ jobs:
 
       - name: "Rust tests, Teil 2 (macOS)"
         if: ${{ !cancelled() && runner.os == 'macOS' }}
-        timeout-minutes: 25
+        timeout-minutes: 40
         run: cargo test --workspace --locked --no-fail-fast --exclude os-app
 
       - name: "Plattenplatz: Tiefststand bis nach den Rust-Tests (macOS, Diagnose)"
