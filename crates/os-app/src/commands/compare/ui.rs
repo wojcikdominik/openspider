@@ -21,8 +21,11 @@ fn filter_json(f: &FilterComparison) -> Json {
 
 /// Explicit opt-in keeps ordinary single-crawl sidebar consumers unchanged.
 pub(crate) async fn overview(app: &App, ctx: CallCtx) -> Result<Json, CmdError> {
+    let preview = super::super::ai_preview::switch(app);
     with_active(app, &ctx.window, move |a| {
-        let rows = a.comparison.overview(&ctx.cancel).map_err(compare_error)?;
+        let mut rows = a.comparison.overview(&ctx.cancel).map_err(compare_error)?;
+        // Plan M4 E1 (E-2 b, M4-V01): ohne Schalter „KI (Vorschau)“ keine KI-Tabs.
+        rows.retain(|r| super::super::ai_preview::shows_name(preview, &r.tab));
         let mut overview:Vec<_>=rows.iter().map(filter_json).collect();
         let config = a.change_config();
         for element in std::iter::once("All").chain(change::ELEMENTS.iter()

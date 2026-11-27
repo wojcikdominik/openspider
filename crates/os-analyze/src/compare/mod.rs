@@ -43,6 +43,19 @@ use crate::search::FilterSource;
 /// Tab der Change Detection: gehört M2-C02 und wird von der Klassifikation nicht erfasst.
 pub const CHANGE_DETECTION_TAB: &str = "Change Detection";
 
+/// Ist `tab` ein Tab mit Ergebnissen von KI-Aufgaben (`AI`, `AI Decisions`, `AI Suggestions`, `AI Search`)? Ohne
+/// aktive KI erscheinen diese Tabs in keiner Zusammenfassung über die Tab-Registry (Plan M4 E1, E-2 b; M4-V01).
+pub fn is_ai_task_tab(tab: &str) -> bool {
+    use crate::tabs::{ai, ai_decisions, ai_search, ai_suggestions};
+    [
+        ai::tab().id,
+        ai_decisions::tab().id,
+        ai_suggestions::tab().id,
+        ai_search::tab().id,
+    ]
+    .contains(&tab)
+}
+
 /// Fehler des Vergleichs.
 #[derive(Debug, thiserror::Error)]
 pub enum CompareError {
@@ -480,11 +493,15 @@ impl Comparison {
         &mut self,
         cancel: &CancelToken,
     ) -> Result<Vec<FilterComparison>, CompareError> {
+        // Plan M4 E1 (E-2 b): Tabs aus KI-Aufgaben nur, wenn KI im Crawl aktiv ist (Laufkopie bei Schalter „KI (Vorschau)“
+        // aus: `ai.enabled = false`); M4-V01.
+        let ai = self.current().config.ai.enabled;
         let tabs: Vec<(String, Vec<String>)> = self
             .current()
             .tabs()
             .iter()
             .filter(|t| !t.is_stub() && t.id != CHANGE_DETECTION_TAB)
+            .filter(|t| ai || !is_ai_task_tab(t.id))
             .map(|t| {
                 (
                     t.id.to_string(),
