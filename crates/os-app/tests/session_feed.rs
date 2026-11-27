@@ -162,9 +162,7 @@ async fn live_foreign_crawl_is_read_only_and_uses_persisted_progress() {
     assert!(!summary.owner.controllable);
     assert_eq!(summary.owner.kind, OwnerKind::Mcp);
     assert!(summary.owner.live);
-    os_app::session::poll(&app).await.unwrap();
-    let tick = app.assemble_tick().unwrap();
-    let s = tick.crawl.unwrap();
+    let s = next_crawl(&app).await;
     assert_eq!(s.crawled, 12);
     assert_eq!(s.avg_rate, 1.25);
     assert_eq!(s.memory_used_bytes, Some(800));
@@ -200,11 +198,27 @@ async fn live_foreign_crawl_is_read_only_and_uses_persisted_progress() {
         .unwrap_err();
     assert_eq!(write.code, os_app::ErrorCode::NoCrawl);
     clock.advance(Duration::from_secs(11));
-    os_app::session::poll(&app).await.unwrap();
-    assert_eq!(
-        app.assemble_tick().unwrap().crawl.unwrap().phase,
-        CrawlPhase::Incomplete
-    );
+    // The first status published after the clock advanced is the stale one; no tick may still report it running.
+    assert_eq!(next_crawl(&app).await.phase, CrawlPhase::Incomplete);
+}
+
+/// The next crawl status the session publishes. Besides this test's `poll`, the session's background loop
+/// (`session::init`, every 100 ms of real time once a session is active) polls as well. Both take the session lock
+/// with `try_lock`: while the loop holds it, `session::poll` returns at once without reading, and if the loop read the
+/// file before the test changed the clock, it has nothing new to publish, so a single `poll` + `assemble_tick` can find
+/// no crawl part (CI windows-x64, 26.11. and 27.11.2026). Poll until a status is published, bounded.
+async fn next_crawl(app: &os_app::App) -> CrawlStatus {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            os_app::session::poll(app).await.unwrap();
+            if let Some(crawl) = app.assemble_tick().and_then(|t| t.crawl) {
+                return crawl;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("no crawl status published within 10 s")
 }
 
 // spec: UI-018
