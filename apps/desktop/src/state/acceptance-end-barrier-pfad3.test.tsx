@@ -1,8 +1,7 @@
-// Unabhängige Abnahme fix/overview-stale, zweite Durchsicht (27.11.2026): Pfad 3 der Endschranke (ein in diesem Fenster
-// gestarteter Crawl, dessen erster Status schon das Ende ist; state/session.ts `runHere`, `pendingCrawlId`, `viewCrawlId`).
-// UI-018 / „exakt, sobald Completed“ (b4-lagfix2.md, Nachtrag 09.11.2026): Die angezeigten Zahlen sind die des angezeigten
-// Crawls. Eine Wartezeit darf die Overview nicht mit Zahlen eines anderen Crawls füllen als dem, den Kopf, Statusleiste und
-// Tabelle zeigen. Eine Markierung „hier gestartet“ darf nicht über den Lauf hinaus liegen bleiben.
+// Unabhängige Abnahme fix/overview-stale, zweite Durchsicht (27.11.2026): Crawl, den das Fenster zum ersten Mal schon im
+// Endzustand sieht (sehr kurzer Crawl; Crawl aus anderem Fenster, über MCP oder CLI).
+// UI-018, Klarstellung 26.11.2026 (main fda6f861): Der Endstatus erscheint sofort; Übersicht und Issues laden ohne
+// Nutzeraktion nach und zeigen bis dahin keine Werte – nie Werte eines anderen Crawls oder eines früheren Stands.
 // Zeit nur über Fake-Timer, Antworten über gesteuerte Promises. Geschrieben, nicht gelaufen (Lauf durch den Orchestrator).
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +16,7 @@ import baseTick from "../ipc/__fixtures__/Tick.json";
 import fixture from "../../e2e/sidebar/sidebar-dto.json";
 import { SidebarFrame } from "../features/sidebar/frame/SidebarFrame";
 import { useSidebarNavigation } from "../features/sidebar/frame/state";
-import { registerEndBarrier, runHere, useSession } from "./session";
+import { registerEndBarrier, useSession } from "./session";
 
 const overviewWith = (crawled: number): OverviewDto => {
   const base = fixture.overview as unknown as OverviewDto;
@@ -51,7 +50,7 @@ beforeEach(async () => {
   core.handlers.set("sidebar.issues", () => fixture.issues);
   core.handlers.set("analysis.status", () => fixture.analysis);
   setClient(createClient(core.transport()));
-  useSession.setState({ seq: -1, crawl: null, pendingCrawlId: null, analysis: null, countsVersion: 0, issuesVersion: 0, sidebarVersion: 0, views: {}, ops: {}, notices: [], throttled: {} });
+  useSession.setState({ seq: -1, crawl: null, analysis: null, countsVersion: 0, issuesVersion: 0, sidebarVersion: 0, views: {}, ops: {}, notices: [], throttled: {} });
   useSidebarNavigation.setState({ scope: {}, target: null });
 });
 afterEach(async () => {
@@ -63,56 +62,51 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-describe("acceptance (second review): Pfad 3 of the end barrier", () => {
+describe("acceptance (second review): a crawl first seen in its end state", () => {
   // spec: UI-018
   // spec: UI-061
   // acceptance: independent
-  it("P3-1 while the window still shows the previous crawl, the Overview shows the previous crawl's numbers, not the new crawl's", async () => {
+  it("P3-1 crawl A shown, the first status of crawl B is its end: never A's numbers under B or B's numbers under A, then B's final state without user action", async () => {
     // The previous crawl A is finished and shown.
     await applyTick(status("completed", "crawl-a"), 1);
     render(<Providers><Shown /><SidebarFrame /></Providers>);
     await settle(20);
     expect(shownCrawl()).toBe("crawl-a");
     expect(sidebarCrawled()).toBe("5");
-    // This window starts crawl B; it is so short that its first status is already its end.
-    await act(async () => { await runHere(async () => { coreCrawl = "crawl-b"; return { crawlId: "crawl-b" }; }, r => r.crawlId); });
-    await applyTick(status("completed", "crawl-b"), 2);
-    // Every step: the numbers on screen belong to the crawl the window names (header, status bar, table follow `crawl`).
+    // Crawl B (very short, or started elsewhere) is the core's crawl now; the window's first status of it is its end.
+    coreCrawl = "crawl-b";
+    // Every step: the numbers on screen are those of the crawl the window names, or none at all.
     const consistent = () => {
       const crawl = shownCrawl();
       const value = sidebarCrawled();
       if (crawl === "crawl-a") expect(value === null || value === "5", `crawl-a shown with Overview ${value}`).toBe(true);
       if (crawl === "crawl-b") expect(value === null || value === "12", `crawl-b shown with Overview ${value}`).toBe(true);
     };
-    const start = Date.now();
+    await applyTick(status("completed", "crawl-b"), 2);
     consistent();
-    for (let i = 0; i < 5_000 && !(shownCrawl() === "crawl-b" && shownPhase() === "completed") && Date.now() - start < 3_500; i++) {
+    // The end status appears at once (nothing was seen running that could be held).
+    await settle(0);
+    consistent();
+    expect(shownCrawl()).toBe("crawl-b");
+    expect(shownPhase()).toBe("completed");
+    const start = Date.now();
+    for (let i = 0; i < 5_000 && sidebarCrawled() !== "12" && Date.now() - start < 5_000; i++) {
       await act(async () => { await vi.advanceTimersToNextTimerAsync(); });
       consistent();
     }
-    expect(shownCrawl()).toBe("crawl-b");
-    expect(shownPhase()).toBe("completed");
     expect(sidebarCrawled()).toBe("12");
+    expect(shownPhase()).toBe("completed");
   });
 
   // spec: UI-018
   // acceptance: independent
-  it("P3-2 a start marker whose crawl never sent a status does not change how that crawl is opened later", async () => {
-    let finish!: () => void;
-    offs.push(registerEndBarrier(() => new Promise<void>(resolve => { finish = resolve; })));
+  it("P3-2 no hold without a running status seen: a crawl first seen at its end shows its end status with that tick", async () => {
+    offs.push(registerEndBarrier(() => new Promise<void>(() => undefined)));
     await applyTick(status("running", "crawl-a"), 1);
-    // Started here, but before any status of it arrives the window turns to another crawl (second start, open, project).
-    await act(async () => { await runHere(async () => ({ crawlId: "crawl-x" }), r => r.crawlId); });
-    await applyTick(status("running", "crawl-y"), 2);
-    await applyTick(status("completed", "crawl-y"), 3);
-    await settle(0);
-    finish();
-    await settle(10);
-    expect(shownCrawl() ?? useSession.getState().crawl?.crawlId).toBe("crawl-y");
-    // Much later crawl X (finished) is opened: like any opened finished crawl its status applies with its tick.
-    await settle(60_000);
-    await applyTick(status("completed", "crawl-x"), 4);
+    await applyTick(status("completed", "crawl-x"), 2);
     expect(useSession.getState().crawl).toMatchObject({ crawlId: "crawl-x", phase: "completed" });
-    expect(useSession.getState().pendingCrawlId).toBeNull();
+    // A later end tick of the same, already ended crawl is not held either.
+    await applyTick(status("completed", "crawl-x"), 3);
+    expect(useSession.getState().crawl).toMatchObject({ crawlId: "crawl-x", phase: "completed" });
   });
 });
