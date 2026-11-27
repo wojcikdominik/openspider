@@ -14,8 +14,6 @@ pub const ALL_TABLES: &[&str] = &[
     "ai_batches",
     "ai_cache",
     "ai_embeddings",
-    // M4-D05 (08 AI-032, Nachträge K4-24/K4-26): gespeicherte KI-Eingaben.
-    "ai_inputs",
     "ai_link_suggestions",
     "ai_prompt_results",
     "ai_queries",
@@ -51,6 +49,8 @@ pub const ALL_TABLES: &[&str] = &[
     "list_input",
     "minhash",
     "near_duplicates",
+    // M4-D05 (08 AI-032, Nachträge K4-24/K4-26): gespeicherte KI-Eingaben.
+    "page_ai_inputs",
     "page_html",
     "pagination",
     "queue",

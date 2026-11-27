@@ -110,7 +110,7 @@ pub fn write(conn: &Connection, url_id: i64, inputs: &StoredInputs) -> Result<us
         .as_ref()
         .map(|t| serde_json::to_string(t).unwrap_or_else(|_| "[]".into()));
     conn.prepare_cached(
-        "INSERT INTO ai_inputs (url_id, compression, body, html_lang, structured_data_types) \
+        "INSERT INTO page_ai_inputs (url_id, compression, body, html_lang, structured_data_types) \
          VALUES (?1, 'zstd', ?2, ?3, ?4) ON CONFLICT(url_id) DO UPDATE SET compression = excluded.compression, \
          body = excluded.body, html_lang = excluded.html_lang, structured_data_types = excluded.structured_data_types",
     )?
@@ -136,7 +136,7 @@ pub fn write_all(conn: &Connection, rows: &[(i64, StoredInputs)]) -> Result<usiz
 pub fn read(conn: &Connection, url_id: i64) -> Result<Option<StoredInputs>, StoreError> {
     let row: Option<(Vec<u8>, Option<String>, Option<String>)> = conn
         .prepare_cached(
-            "SELECT body, html_lang, structured_data_types FROM ai_inputs WHERE url_id = ?1",
+            "SELECT body, html_lang, structured_data_types FROM page_ai_inputs WHERE url_id = ?1",
         )?
         .query_row([url_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
         .optional()?;
@@ -147,7 +147,7 @@ pub fn read(conn: &Connection, url_id: i64) -> Result<Option<StoredInputs>, Stor
 /// Liest alle gespeicherten KI-Eingaben (Schlüssel `url_id`).
 pub fn read_all(conn: &Connection) -> Result<BTreeMap<i64, StoredInputs>, StoreError> {
     let mut stmt = conn.prepare(
-        "SELECT url_id, body, html_lang, structured_data_types FROM ai_inputs ORDER BY url_id",
+        "SELECT url_id, body, html_lang, structured_data_types FROM page_ai_inputs ORDER BY url_id",
     )?;
     let rows = stmt
         .query_map([], |r| {
@@ -180,7 +180,7 @@ pub fn size(conn: &Connection) -> Result<InputsSize, StoreError> {
     Ok(conn.query_row(
         "SELECT COUNT(*), COALESCE(SUM(length(body)), 0), \
          COALESCE(SUM(length(COALESCE(html_lang, '')) + length(COALESCE(structured_data_types, ''))), 0) \
-         FROM ai_inputs",
+         FROM page_ai_inputs",
         [],
         |r| {
             Ok(InputsSize {
@@ -243,7 +243,7 @@ mod tests {
         );
         let raw: Option<String> = db
             .query_row(
-                "SELECT structured_data_types FROM ai_inputs WHERE url_id = 1",
+                "SELECT structured_data_types FROM page_ai_inputs WHERE url_id = 1",
                 [],
                 |r| r.get(0),
             )
@@ -251,7 +251,7 @@ mod tests {
         assert!(raw.is_none());
         let compression: String = db
             .query_row(
-                "SELECT compression FROM ai_inputs WHERE url_id = 1",
+                "SELECT compression FROM page_ai_inputs WHERE url_id = 1",
                 [],
                 |r| r.get(0),
             )

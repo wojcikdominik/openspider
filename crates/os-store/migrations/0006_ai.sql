@@ -3,11 +3,10 @@ CREATE TABLE ai_runs (
  id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, ended_at TEXT,
  budget_at_start_microusd INTEGER CHECK(budget_at_start_microusd >= 0),
  spent_microusd INTEGER NOT NULL DEFAULT 0 CHECK(spent_microusd >= 0),
- config_json TEXT NOT NULL CHECK(json_valid(config_json)),
- -- AI-020 (Nachtrag 27.11.2026, K4-27): Zeitpunkt der erteilten Kostenbestätigung (AI-012); leer = nicht bestätigt bzw.
- -- keine Bestätigung nötig. Fortsetzen setzt dieselbe Zeile fort und übernimmt sie.
- confirmed_at TEXT
+ config_json TEXT NOT NULL CHECK(json_valid(config_json)), confirmed_at TEXT
 );
+-- ai_runs.confirmed_at (AI-020, Nachtrag 27.11.2026, K4-27): Zeitpunkt der erteilten Kostenbestätigung (AI-012); leer =
+-- nicht bestätigt bzw. keine Bestätigung nötig. Fortsetzen setzt dieselbe Zeile fort und übernimmt sie.
 -- (area, task): ('','') crawl; ('ai','') area; ('ai',task) task.
 -- Limits only. Actual consumption is derived from per-area logs, not duplicated here.
 CREATE TABLE api_budget (
@@ -129,10 +128,5 @@ CREATE TABLE ai_embeddings (
 -- mit Status 200. `body` = zstd (wie page_html) eines JSON-Objekts mit dem Text des Inhaltsbereichs (höchstens 20.000
 -- Zeichen), allen H2 in Dokumentreihenfolge und dem Bildkontext je Bild; `html_lang` = Rohwert von <html lang> (ohne lang
 -- xml:lang); `structured_data_types` = JSON-Liste der Typen, NULL = Extraktion strukturierter Daten war aus.
-CREATE TABLE ai_inputs (
- url_id INTEGER PRIMARY KEY REFERENCES urls(id) ON DELETE CASCADE,
- compression TEXT NOT NULL DEFAULT 'zstd' CHECK(compression IN ('zstd')),
- body BLOB NOT NULL,
- html_lang TEXT,
- structured_data_types TEXT CHECK(structured_data_types IS NULL OR json_valid(structured_data_types))
-);
+CREATE TABLE page_ai_inputs (url_id INTEGER PRIMARY KEY, compression TEXT NOT NULL DEFAULT 'zstd', body BLOB NOT NULL,
+ html_lang TEXT, structured_data_types TEXT);

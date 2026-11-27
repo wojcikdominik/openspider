@@ -80,7 +80,7 @@ fn stored_inputs_roundtrip_with_limit_and_null_types() {
     let (compression, sd): (String, Option<String>) = file
         .conn()
         .query_row(
-            "SELECT compression, structured_data_types FROM ai_inputs WHERE url_id = 1",
+            "SELECT compression, structured_data_types FROM page_ai_inputs WHERE url_id = 1",
             [],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
@@ -133,7 +133,7 @@ fn schema_v6_archive_and_migrated_v5_have_the_new_table_and_column() {
         let tables: i64 = file
             .conn()
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ai_inputs'",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'page_ai_inputs'",
                 [],
                 |r| r.get(0),
             )
