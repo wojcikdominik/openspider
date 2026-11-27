@@ -180,7 +180,7 @@ A1, A2 und A4 bleiben Befunde.
 |---|---|---|
 | `app::c_crawl_end_without_stop_drains_the_queue` | geändert | neues Kriterium: bei gehaltenem Request gespeichert `Completed` (Endgrund `limit_reached`), Sitzung meldet `Completed`, Statusabfrage (`session::poll`) ≤ 500 ms, Crawl-Analyse nicht begonnen; nach Freigabe Mock-Log = Einträge im Geltungsbereich, danach `analysis_state = completed` |
 | `app::c_pending_confirmation_does_not_hold_the_crawl_end` | neu | Schwelle 1 µUSD: Crawl `Completed` und Analyse fertig trotz 22 × `Pending (confirmation)`, 0 Requests; danach „KI-Analyse starten“ → 22 Requests |
-| `app::c_start_during_the_own_running_crawl_is_refused` | neu | `ai.decisionsRun` (bestätigt und unbestätigt) bei laufendem eigenem Crawl → Fehler (Code nicht festgelegt), kein Request, keine neue Laufzeile, Zustand `Running`; mit automatischer Ausführung aus und an |
+| `app::c_start_during_the_own_running_crawl_is_refused` | neu | bei laufendem eigenem Crawl: (a) automatische Ausführung aus → Fehler, kein Request, keine Laufzeile; (b) an, nichts wartet auf Bestätigung → Fehler, keine Laufzeile; (c) an, Einträge `Pending (confirmation)` → `ai.decisionsRun` mit Bestätigung angenommen, Einträge gehen hinaus, `confirmed_at` in der Laufzeile des Crawls, keine zweite Zeile. Zustand bleibt `Running`; Fehlercode nicht festgelegt |
 | `app::k_html_lang_and_hreflang_self_after_the_crawl_match_the_crawl` | Ausgabe ergänzt (A4) | `D05-HREFLANG-AUSGELIEFERT`: tatsächlich ausgelieferter `<link rel="alternate" …>` von `/french` neben der Seiten-URL (zeigt, ob `{{PORT}}` ersetzt ankommt); Erwartung unverändert |
 | `cli::c_cli_sigint_and_resume` | an das Kriterium angeglichen (A2 bleibt) | SIGINT, sobald 2 Requests beantwortet sind und Request 3 unterwegs ist (1 s Antwortzeit, Crawl 6 URL/s): 3 Protokollzeilen, 3 × `Success`, übrige gecrawlte Seiten aus S je `Pending`; nach `--resume` 22 × `Success`, genau 22 Requests, keine URL doppelt. Die Zahl der gecrawlten S-Seiten beim SIGINT wird ausgegeben (`D05-SIGINT`), die „8“ des Kriteriums ist Szenario, keine Bedingung |
 | `cli::c_cli_sigint_while_only_the_ai_queue_runs` | neu (F1) | Crawl `Completed` (10 URLs), 2 s Antwortzeit, ein Request unterwegs → Exit 130, Zustand bleibt `Completed`, laufender Request übernommen, offene `Pending`, keine Exporte, 3 s später kein weiterer Request |
@@ -189,13 +189,9 @@ A1, A2 und A4 bleiben Befunde.
 Offen bzw. neu:
 - **„Der Export enthält die KI-Ergebnisse“** ist nicht prüfbar: Der Export „AI Decisions:All Answers“ ist bis M4-D02 ein Stub
   (`crates/os-export/src/catalog/bulk_ai_decisions.rs`). Ersatzweise: Export erst nach der letzten KI-Antwort, alle Einträge fertig.
-- **F3 – Bestätigung während des laufenden Crawls:** `app::c_resume_shows_no_estimate_dialog_and_keeps_the_run_row` erteilt die
-  Kostenbestätigung für die wartenden Einträge der automatischen Ausführung bisher mit `ai.decisionsRun` (`confirmed: true`)
-  während des laufenden Crawls. Nach dem Nachtrag („Start während des eigenen laufenden Crawls … mit einem Fehler abgewiesen“)
-  ist dieser Weg verboten; der Nachtrag nennt für die Bestätigung „in der App über den Kostenvoranschlag“, aber keine
-  Schnittstelle, über die der Kern sie während des Crawls erhält. Bis das geklärt ist, wird dieser Test rot, sobald der Bauer die
-  Abweisung umsetzt – kein Produktfehler. Frage an den Orchestrator: Über welchen Command bestätigt die App den
-  Kostenvoranschlag der automatischen Ausführung während des Crawls (und schreibt `confirmed_at`)? Der Test bleibt bis dahin
-  unverändert.
+- **F3 – entschieden (Orchestrator, 28.11.2026, AI-020 Nachtrag, letzter Punkt):** Wartet der KI-Teil des laufenden Crawls auf die
+  Kostenbestätigung, ist `ai.decisionsRun` mit Bestätigung die Antwort auf den Kostenvoranschlag (angenommen, `confirmed_at` in
+  der Laufzeile dieses Crawls, keine neue Zeile). `c_resume_shows_no_estimate_dialog_and_keeps_the_run_row` bleibt unverändert
+  richtig; `c_start_during_the_own_running_crawl_is_refused` prüft die Ausnahme als Fall (c).
 - In `c_start_during_the_own_running_crawl_is_refused` kann die Engine selbst während des Tests eine Laufzeile für die automatische
   Ausführung anlegen; gezählt wird nur die Differenz um den abgewiesenen Aufruf herum (kurzes Fenster, Risiko gering).

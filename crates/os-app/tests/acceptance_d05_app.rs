@@ -1075,43 +1075,105 @@ async fn c_pending_confirmation_does_not_hold_the_crawl_end() {
     assert_eq!(count_status(&path, "d05-wait", "Success"), 22);
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RunningCase {
+    /// Automatische Ausführung aus.
+    AutoOff,
+    /// Automatische Ausführung an, Schwelle nicht erreicht (nichts wartet auf Bestätigung).
+    AutoOnNothingWaiting,
+    /// Automatische Ausführung an, Einträge `Pending (confirmation)`.
+    AutoOnWaitingForConfirmation,
+}
+
 // spec: AI-020 [M4]
+// spec: AI-012 [M4]
 // spec: AI-039 [M4]
 // acceptance: independent
-// AI-020 Nachtrag 28.11.2026, „Start während des eigenen laufenden Crawls“: `ai.decisionsRun` wird bei laufendem Crawl
-// desselben Prozesses mit einem Fehler abgewiesen (Zustand unverändert, kein Request, keine Laufzeile) – unabhängig von
-// der automatischen Ausführung; kein Start wird gemeldet. Mit automatischer Ausführung an hält die Schwelle 1 µUSD deren
-// Einträge zurück, damit „kein Request“ dem Start zugerechnet werden kann. Der Fehlercode ist nicht festgelegt.
+// AI-020 Nachtrag 28.11.2026, „Start während des eigenen laufenden Crawls“ (präzisiert): `ai.decisionsRun` wird bei
+// laufendem Crawl desselben Prozesses mit einem Fehler abgewiesen (Zustand unverändert, kein Request, keine Laufzeile) –
+// (a) bei automatischer Ausführung aus, (b) bei automatischer Ausführung an, wenn nichts auf die Kostenbestätigung wartet.
+// Einzige Ausnahme: Wartet der KI-Teil auf die Bestätigung (Einträge `Pending (confirmation)`), ist `ai.decisionsRun` mit
+// Bestätigung die Antwort auf den Kostenvoranschlag – angenommen, `confirmed_at` in der Laufzeile dieses Crawls, keine
+// zweite Laufzeile. Der Fehlercode ist nicht festgelegt.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn c_start_during_the_own_running_crawl_is_refused() {
     let _s = serial().await;
     let site = ai_site().await;
-    for auto in [false, true] {
+    for case in [
+        RunningCase::AutoOff,
+        RunningCase::AutoOnNothingWaiting,
+        RunningCase::AutoOnWaitingForConfirmation,
+    ] {
         let mock = Mock::start().await;
+        let threshold = match case {
+            RunningCase::AutoOnNothingWaiting => 1_000_000,
+            _ => 1,
+        };
         let h = home(
             &mock,
             Opts {
-                threshold: 1,
+                threshold,
                 ..Opts::default()
             },
         );
         let mut cfg = profile(&site, &[question("d05-busy", &["url", "title"])]);
-        cfg.ai.auto_run.0 = auto;
+        cfg.ai.auto_run.0 = !matches!(case, RunningCase::AutoOff);
         slow(&mut cfg);
         h.profile(&cfg);
         start_crawl(&h.app, START).await;
         let path = crawl_path(&h.app);
         wait_until("einige URLs", Duration::from_secs(60), || q_i64(&path, CRAWLED) >= 4).await;
-        let runs = q_i64(&path, "SELECT COUNT(*) FROM ai_runs");
-        for confirmed in [true, false] {
-            let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": confirmed })).await;
-            assert!(r.is_err(), "auto {auto}, confirmed {confirmed}: Fehler statt Start ({r:?})");
+        if matches!(case, RunningCase::AutoOnWaitingForConfirmation) {
+            wait_until("Einträge warten auf Bestätigung", Duration::from_secs(60), || {
+                count_status(&path, "d05-busy", "Pending (confirmation)") >= 1
+            })
+            .await;
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        assert_eq!(mock.provider_requests(), 0, "auto {auto}: kein Request");
-        assert_eq!(q_i64(&path, "SELECT COUNT(*) FROM ai_runs"), runs, "auto {auto}: keine Laufzeile");
+        if matches!(case, RunningCase::AutoOnNothingWaiting) {
+            wait_until("automatische Ausführung sendet", Duration::from_secs(60), || {
+                count_status(&path, "d05-busy", "Success") >= 1
+            })
+            .await;
+        }
+        let runs = q_i64(&path, "SELECT COUNT(*) FROM ai_runs");
+        let before = mock.provider_requests();
+        match case {
+            RunningCase::AutoOff | RunningCase::AutoOnNothingWaiting => {
+                for confirmed in [true, false] {
+                    let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": confirmed })).await;
+                    assert!(r.is_err(), "{case:?}, confirmed {confirmed}: Fehler statt Start ({r:?})");
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if matches!(case, RunningCase::AutoOff) {
+                    assert_eq!(mock.provider_requests(), 0, "{case:?}: kein Request");
+                } else {
+                    // Die automatische Ausführung sendet weiter; der abgewiesene Auftrag startet keinen eigenen Lauf.
+                    assert!(mock.provider_requests() >= before, "{case:?}");
+                }
+                assert_eq!(q_i64(&path, "SELECT COUNT(*) FROM ai_runs"), runs, "{case:?}: keine Laufzeile");
+            }
+            RunningCase::AutoOnWaitingForConfirmation => {
+                assert_eq!(before, 0, "{case:?}: vor der Bestätigung kein Request");
+                let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": true })).await;
+                assert!(r.is_ok(), "{case:?}: Antwort auf den Kostenvoranschlag angenommen ({r:?})");
+                wait_until("Einträge gehen nach der Bestätigung hinaus", Duration::from_secs(60), || {
+                    count_status(&path, "d05-busy", "Success") >= 1
+                })
+                .await;
+                assert_eq!(
+                    q_i64(&path, "SELECT COUNT(*) FROM ai_runs"),
+                    runs,
+                    "{case:?}: keine zweite Laufzeile"
+                );
+                assert_eq!(
+                    q_i64(&path, "SELECT COUNT(*) FROM ai_runs WHERE confirmed_at IS NOT NULL"),
+                    1,
+                    "{case:?}: confirmed_at in der Laufzeile dieses Crawls"
+                );
+            }
+        }
         let _ = os_app::session::poll(&h.app).await;
-        assert_eq!(state(&h.app), Some(CrawlState::Running), "auto {auto}: Zustand unverändert");
+        assert_eq!(state(&h.app), Some(CrawlState::Running), "{case:?}: Zustand unverändert");
         call(&h.app, "crawl.stop", Value::Null).await;
     }
 }
