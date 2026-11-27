@@ -403,6 +403,9 @@ pub fn change_all_v2_fields(c: &mut CrawlConfig) {
     c.ai.suggestions.meta = true;
     c.ai.suggestions.h1 = true;
     c.ai.suggestions.alt = true;
+    // M4-D05 (AI-039, AI-032): additive Optionen mit Standard „an“.
+    c.ai.auto_run = os_model::config::DefaultOn(false);
+    c.ai.store_inputs = os_model::config::DefaultOn(false);
     let style = StyleRules {
         brand: "Fixture".into(),
         separator: " | ".into(),
