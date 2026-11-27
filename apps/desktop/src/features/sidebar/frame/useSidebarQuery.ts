@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { sidebar } from "../../../ipc/sidebar";
 import { analysis } from "../../../ipc/analysis";
 import type { IssuesArgs } from "../../../ipc/gen/IssuesArgs";
-import { registerEndBarrier, useSession, viewCrawlId, type SessionState } from "../../../state/session";
+import { registerEndBarrier, useSession, type SessionState } from "../../../state/session";
 import { useSidebarNavigation } from "./state";
 
 type Revision = (s: SessionState) => string;
@@ -129,7 +129,7 @@ const issuesRevision: Revision = s => `${s.issuesVersion}:${s.countsVersion}`;
 /** Keep the last successful snapshot while serial, bundled refreshes catch up. */
 export function useOverview() {
   const scope = useSidebarNavigation(s => s.scope);
-  const crawl = useSession(viewCrawlId);
+  const crawl = useSession(s => s.crawl?.crawlId);
   const revision = useSession(overviewRevision);
   const { started, mark } = useStartedRevision(overviewRevision);
   const query = useQuery({ queryKey: ["sidebar", "overview", crawl, scope], queryFn: ({ signal }) => { mark(); return sidebar.overview(scope, signal); }, enabled: !!crawl, gcTime: 0 });
@@ -144,7 +144,7 @@ export function useOverview() {
  * `useOverview`. A new data version keeps the last list visible instead of returning to "Loading…".
  */
 export function useIssues(args: IssuesArgs) {
-  const crawl = useSession(viewCrawlId);
+  const crawl = useSession(s => s.crawl?.crawlId);
   const revision = useSession(issuesRevision);
   const { started, mark } = useStartedRevision(issuesRevision);
   const query = useQuery({ queryKey: ["sidebar", "issues", crawl, args], queryFn: ({ signal }) => { mark(); return sidebar.issues(args, signal); }, enabled: !!crawl, gcTime: 0 });

@@ -9,7 +9,7 @@ import type { CrawlModeDto } from "../../ipc/gen/CrawlModeDto";
 import type { StartRequest } from "../../ipc/gen/StartRequest";
 import { updateUiState } from "../../state/uistate";
 import { uistate } from "../../ipc/uistate";
-import { useSession, runHere, resumeHere } from "../../state/session";
+import { useSession } from "../../state/session";
 import { useAction } from "../../ui/actions";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog, DialogFooter } from "../../ui/primitives/Dialog";
@@ -127,8 +127,7 @@ export function Header() {
           setGuardRequest(request);
           return;
         }
-        // UI-018: this window started the run; its end waits for the reloaded views even without a running status (runHere).
-        await runHere(() => crawl.start(request), ref => ref.crawlId);
+        await crawl.start(request);
         started = true;
       } catch (e) {
         reportError(e, request.source.kind === "spider" ? { startUrl: request.source.url } : {});
@@ -175,7 +174,7 @@ export function Header() {
   const pauseResume = () => {
     if (!allowed || (!running && !resumable)) return false;
     if (running) setPending("pause");
-    void perform(() => running ? crawl.pause() : resumeHere(() => crawl.resume()));
+    void perform(() => running ? crawl.pause() : crawl.resume());
   };
   const stop = () => {
     if (!allowed || (!running && !resumable)) return false;

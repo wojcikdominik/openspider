@@ -12,7 +12,7 @@ import type { CrawlListing } from "../../ipc/gen/CrawlListing";
 import type { ProjectInfo } from "../../ipc/gen/ProjectInfo";
 import type { OpHandle } from "../../ipc/gen/OpHandle";
 import type { OpenCrawlArgs } from "../../ipc/gen/OpenCrawlArgs";
-import { resumeHere, useSession } from "../../state/session";
+import { useSession } from "../../state/session";
 import { useAction } from "../../ui/actions";
 import { registerMenuContributions } from "../../ui/menu/registry";
 import type { MenuEntry } from "../../ui/primitives/Menu";
@@ -186,7 +186,7 @@ export function CrawlsHost({ desktop = nativeCrawlDesktop }: { desktop?: CrawlDe
     try {
       const summary = await crawl.open(args);
       void updateRecent(entries => [{ path: summary.file, crawlId: summary.crawlId }, ...entries.filter(entry => entry.path !== summary.file)]).catch(() => undefined);
-      if (resume) await resumeHere(() => crawl.resume());
+      if (resume) await crawl.resume();
       useCrawlsDialog.setState({ open: false });
     } catch (e) {
       const err = toCmdError(e);
