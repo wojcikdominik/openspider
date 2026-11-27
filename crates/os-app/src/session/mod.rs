@@ -155,6 +155,14 @@ pub fn init(app: &App) {
                         }
                         let rest = until.saturating_duration_since(tokio::time::Instant::now());
                         crate::views::settle(&app, rest.min(TICK_SETTLE_ENDED)).await;
+                        // The analysis changed the final data version after its count: count it before the end status
+                        // goes out (UI-018), within the same deadline; a longer count is joined by the UI's reload.
+                        let rest = until.saturating_duration_since(tokio::time::Instant::now());
+                        let _ = tokio::time::timeout(
+                            rest,
+                            crate::commands::sidebar::counts::count_final(&app),
+                        )
+                        .await;
                     }
                 }
                 app.flush_tick();
