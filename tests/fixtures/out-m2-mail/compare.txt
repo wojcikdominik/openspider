@@ -73,16 +73,6 @@ URL / All | 10 | 11 | +1 | 10.00%
 Unique External Outlinks | 0 | 1 | +1 |
 Validation / All | 11 | 12 | +1 | 9.09%
 Word Count | 0 | 1 | +1 |
-AI Suggestions / Accepted | 0 | 0 | +0 |
-AI Suggestions / All | 0 | 0 | +0 |
-AI Suggestions / Alt Text | 0 | 0 | +0 |
-AI Suggestions / Errors | 0 | 0 | +0 |
-AI Suggestions / H1 | 0 | 0 | +0 |
-AI Suggestions / Meta Descriptions | 0 | 0 | +0 |
-AI Suggestions / No Valid Suggestion | 0 | 0 | +0 |
-AI Suggestions / Open | 0 | 0 | +0 |
-AI Suggestions / Rejected | 0 | 0 | +0 |
-AI Suggestions / Titles | 0 | 0 | +0 |
 Canonical | 0 | 0 | +0 |
 Canonicals / Canonical Is Relative | 0 | 0 | +0 |
 Canonicals / Canonicalised | 0 | 0 | +0 |
