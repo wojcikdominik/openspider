@@ -64,6 +64,15 @@ impl EndGuard {
         self.0.is_some()
     }
 
+    /// Wartet, bis die gespeicherten KI-Eingaben aller übergebenen Seiten in der Crawl-Datei stehen (08 AI-032 Punkt 1:
+    /// „während des Crawls“); nur lokale Schreibarbeit, nie KI-Requests. Aufruf nach dem letzten Worker, vor dem
+    /// Schreiben des Endzustands.
+    pub(crate) async fn inputs_stored(&self) {
+        if let Some(session) = &self.0 {
+            session.inputs_stored().await;
+        }
+    }
+
     /// Meldet das Ende des Crawl-Laufs und wartet, bis die Warteschlange es umgesetzt hat: Pause bzw. Stopp → laufende
     /// Requests sind übernommen, kein neuer gesendet; Ende ohne Stoppen → die Warteschlange ist leer. Wird in dieser
     /// Phase pausiert bzw. gestoppt (SIGINT der CLI, Pause bzw. Stopp der App), geht ab dann kein Request mehr hinaus,
