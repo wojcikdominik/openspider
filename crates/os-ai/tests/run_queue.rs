@@ -327,3 +327,85 @@ async fn confirmation_during_the_crawl_and_resume_without_a_new_estimate() {
     assert_eq!(c.get("Pending (confirmation)"), None);
     assert_eq!(decisions_posts(&mock), 22);
 }
+
+/// Eine Sitzung, deren KI-Teil auf einen gehaltenen Request wartet (Pause, Request noch nicht übernommen), und eine
+/// zweite Sitzung derselben Datei nur zum Speichern (wie nach dem Fortsetzen: ihr KI-Teil wartet, bis die erste ihren
+/// Request übernommen hat). Rückgabe: Ende der ersten Sitzung und die zweite Sitzung, die alle Seiten erhalten hat.
+async fn second_session_behind_a_held_request(
+    mock: &Mock,
+    path: &std::path::Path,
+    pages: &[PageAiFields],
+) -> (
+    os_model::ai::hook::AiQueueDone,
+    Arc<dyn os_model::ai::hook::AiQueueSession>,
+) {
+    let cfg = config(&[question_json("page-type")], 5_000_000);
+    let q = queue(env(mock, &["openai"], NO_CONFIRMATION));
+    let first = q.begin(start(path, &cfg, false, None)).unwrap();
+    mock.hold("openai", 1).await;
+    // Seiten aus der Datei (`Stored`): Die erste Sitzung sendet, legt aber keine Eingaben ab.
+    for p in pages {
+        first.page(p.clone());
+    }
+    mock.until("gehalten", |_| mock.held(DECISIONS) >= 1).await;
+    let paused = first.end(AiQueueEnd::Paused);
+    assert_eq!(stored_inputs(path), 0, "noch keine gespeicherten Eingaben");
+    let mut store_only = cfg.clone();
+    store_only.ai.auto_run = os_model::config::DefaultOn(false);
+    let second = q.begin(start(path, &store_only, false, None)).unwrap();
+    for p in parsed(pages.to_vec()) {
+        second.page(p);
+    }
+    (paused, second)
+}
+
+// spec: AI-032 [M4]
+// spec: AI-020 [M4]
+// Nacharbeit D05 (Windows-CI, Eingaben der letzten Seiten fehlten bei „Fertig“): Das Ablegen der gespeicherten
+// KI-Eingaben („während des Crawls“) hängt nicht am KI-Teil der Warteschlange. Wartet dieser auf einen gehaltenen Request
+// einer früheren Sitzung derselben Datei, stehen die Eingaben der übergebenen Seiten trotzdem nach kurzer Zeit in der Datei.
+#[tokio::test]
+async fn inputs_are_stored_while_the_ki_part_waits_for_an_earlier_session() {
+    let mock = Mock::start().await;
+    let dir = tmp("d05-q-inputs-busy");
+    let pages = site_pages("site");
+    let path = crawl_file(&dir.0, &pages);
+    let (paused, second) = second_session_behind_a_held_request(&mock, &path, &pages).await;
+    let mut stored = 0;
+    for _ in 0..300 {
+        stored = stored_inputs(&path);
+        if stored == 23 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    mock.release("openai", 1).await;
+    paused.await;
+    second.end(AiQueueEnd::Drain).await;
+    assert_eq!(
+        stored, 23,
+        "Eingaben der 23 HTML-200-Seiten, während der Request der früheren Sitzung noch gehalten ist"
+    );
+    assert_eq!(stored_inputs(&path), 23);
+}
+
+// spec: AI-032 [M4]
+// spec: AI-020 [M4]
+// `inputs_stored` (die Engine ruft es vor dem Schreiben des Endzustands): fertig, sobald die Eingaben aller übergebenen
+// Seiten in der Datei stehen – ohne auf KI-Requests zu warten (hier: ein gehaltener Request einer früheren Sitzung).
+#[tokio::test]
+async fn inputs_stored_waits_only_for_the_local_writes() {
+    let mock = Mock::start().await;
+    let dir = tmp("d05-q-inputs-barrier");
+    let pages = site_pages("site");
+    let path = crawl_file(&dir.0, &pages);
+    let (paused, second) = second_session_behind_a_held_request(&mock, &path, &pages).await;
+    let written = tokio::time::timeout(Duration::from_secs(3), second.inputs_stored()).await;
+    let stored = stored_inputs(&path);
+    assert_eq!(mock.held(DECISIONS), 1, "Request noch gehalten");
+    mock.release("openai", 1).await;
+    paused.await;
+    second.end(AiQueueEnd::Drain).await;
+    assert!(written.is_ok(), "wartet nicht auf den gehaltenen Request");
+    assert_eq!(stored, 23, "danach stehen alle Eingaben in der Datei");
+}

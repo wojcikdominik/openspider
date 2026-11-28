@@ -392,3 +392,69 @@ async fn pause_while_only_the_queue_runs_keeps_completed() {
         Some("Completed")
     );
 }
+
+/// Warteschlange, deren gespeicherte KI-Eingaben langsam geschrieben werden (wie auf einem langsamen Rechner).
+#[derive(Default)]
+struct SlowInputs {
+    file: Mutex<Option<std::path::PathBuf>>,
+    /// Zustand der Crawl-Datei, als die Eingaben fertig geschrieben waren.
+    state_when_stored: Mutex<Option<String>>,
+}
+
+struct SlowQueue(Arc<SlowInputs>);
+struct SlowSession(Arc<SlowInputs>);
+
+impl AiQueue for SlowQueue {
+    fn begin(&self, start: AiQueueStart) -> Option<Arc<dyn AiQueueSession>> {
+        *self.0.file.lock().unwrap() = Some(start.crawl_file);
+        Some(Arc::new(SlowSession(self.0.clone())))
+    }
+}
+
+impl AiQueueSession for SlowSession {
+    fn page(&self, _page: PageAiFields) {}
+    fn end(&self, _end: AiQueueEnd) -> AiQueueDone {
+        Box::pin(async {})
+    }
+    fn inputs_stored(&self) -> AiQueueDone {
+        let rec = self.0.clone();
+        Box::pin(async move {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let path = rec.file.lock().unwrap().clone().unwrap();
+            let file = os_store::CrawlFile::open(&path, os_store::OpenMode::ReadOnly).unwrap();
+            *rec.state_when_stored.lock().unwrap() =
+                Some(file.get_meta("state").unwrap().unwrap_or_default());
+        })
+    }
+}
+
+// spec: AI-032 [M4]
+// spec: AI-020 [M4]
+// Nacharbeit D05 (Windows-CI): Die gespeicherten KI-Eingaben gehören zu „während des Crawls“. Die Engine wartet nach der
+// letzten Seite, bis die Warteschlange sie geschrieben hat, und schreibt und meldet erst danach den Endzustand – auch wenn
+// das Schreiben langsam ist. Die KI-Requests (Ende ohne Stoppen) laufen weiterhin erst danach.
+#[tokio::test]
+async fn end_state_is_written_only_after_the_inputs_are_stored() {
+    let dir = support::slow_site_dir(0);
+    let site = support::start_site(dir.path()).await;
+    let work = tempfile::tempdir().unwrap();
+    let path = work.path().join("crawl.ospider");
+    let rec = Arc::new(SlowInputs::default());
+    let mut deps = test_deps();
+    deps.ai_queue = Some(Arc::new(SlowQueue(rec.clone())));
+    let mut cfg = support::config_for(&site, 2);
+    cfg.limits.max_urls = 5;
+    let handle = support::start(cfg, &path, deps).await;
+    let summary = tokio::time::timeout(Duration::from_secs(30), handle.ended())
+        .await
+        .unwrap()
+        .expect("Phase „nur noch KI-Warteschlange“");
+    assert_eq!(summary.state, CrawlState::Completed);
+    let seen = rec.state_when_stored.lock().unwrap().clone();
+    assert_eq!(
+        seen.as_deref(),
+        Some("Running"),
+        "Eingaben geschrieben, bevor der Endzustand in der Datei steht und gemeldet wird"
+    );
+    support::run_to_end(handle).await;
+}
