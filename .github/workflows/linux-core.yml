@@ -51,7 +51,9 @@ jobs:
   linux-core:
     name: linux-core (ubuntu-latest)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 28.11.2026: 60 → 90. Auf main (f93ec58d) brauchte der Job 54 min, mit den D05-Tests endeten die Rust-Tests grün
+    # nach 54 min und der Release-Bau lief in die Grenze. Die Grenze fängt hängende Läufe ab, sie ist kein Laufzeitbudget.
+    timeout-minutes: 90
     defaults:
       run:
         shell: bash
