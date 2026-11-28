@@ -91,3 +91,8 @@ ai-budget-ai-total = Teilbudget „KI gesamt“ (USD, leer = keines)
 ai-budget-ai-total-hint = Begrenzt nur die KI-Aufgaben innerhalb des Crawl-Budgets.
 ai-budget-warning = Warnschwelle (% des Crawl-Budgets)
 ai-budget-warning-invalid = Bitte eine ganze Zahl von 0 bis 100 eingeben.
+
+## Option „KI-Eingaben speichern“ (AI-032, M4-D05)
+ai-store-inputs-title = KI-Eingaben
+ai-store-inputs-label = KI-Eingaben speichern
+ai-store-inputs-hint = Speichert während des Crawls je HTML-Seite mit Status 200 den Text des Inhaltsbereichs, alle H2-Überschriften, die Bildkontexte, die Sprachangabe und die Typen strukturierter Daten in der Crawl-Datei. Ein späterer KI-Lauf sendet dann denselben Text, ohne Seiten neu abzurufen.

@@ -73,6 +73,11 @@
           },
           "type": "array"
         },
+        "auto_run": {
+          "$ref": "#/$defs/DefaultOn",
+          "default": true,
+          "description": "Automatische Ausführung der aktiven Fragen während des Crawls (08 AI-039, Nutzerentscheidung E-6 a; M4-D05):\nStandard an – wirkt, sobald Fragen aktiv sind; aus = erst „KI-Analyse starten“."
+        },
         "budget": {
           "$ref": "#/$defs/BudgetLimits",
           "default": {
@@ -101,6 +106,11 @@
           "description": "Definitions remain JSON documents (AI-030); validation belongs to M4-D01.",
           "items": true,
           "type": "array"
+        },
+        "store_inputs": {
+          "$ref": "#/$defs/DefaultOn",
+          "default": true,
+          "description": "Option „KI-Eingaben speichern“ (08 AI-032, Nachtrag K4-24; M4-D05): Standard an, wirkt nur mit Schalter\n„KI (Vorschau)“; die Engine legt dann je interner HTML-Seite mit Status 200 die aufbereiteten Eingaben ab."
         },
         "suggestions": {
           "$ref": "#/$defs/SuggestionConfig",
@@ -971,6 +981,10 @@
         "custom"
       ],
       "type": "string"
+    },
+    "DefaultOn": {
+      "description": "Wahrheitswert mit Standard „an“ (für additive Profiloptionen, deren Standard nicht `false` ist; M4-D05).",
+      "type": "boolean"
     },
     "DriveConfig": {
       "description": "Google Drive für den Sheets-Export (M2-X03).",
@@ -3831,6 +3845,7 @@
       "$ref": "#/$defs/AiConfig",
       "default": {
         "active_questions": [],
+        "auto_run": true,
         "budget": {
           "areas": {},
           "crawl": 5000000,
@@ -3842,6 +3857,7 @@
         "policy": "unrestricted",
         "prompts": [],
         "questions": [],
+        "store_inputs": true,
         "suggestions": {
           "alt": false,
           "h1": false,

@@ -340,6 +340,9 @@ pub fn close(app: &App, window: &WindowId, cleared: bool) {
             },
         );
         if !app.sessions().all().iter().any(|other| other.key == s.key) {
+            // M4-D05 (08 AI-020, Nachtrag K4-13): Schließen der Crawl-Datei bricht laufende KI-Requests ab (nicht
+            // abwarten; Einträge `Pending`, keine Protokollzeile, Reservierung verfällt).
+            os_ai::run::controls().abort(&s.path);
             app.unregister_crawl(&s.key);
             app.ext::<SessionService>()
                 .feeds

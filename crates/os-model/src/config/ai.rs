@@ -16,6 +16,30 @@ pub struct AiConfig {
     pub suggestions: SuggestionConfig,
     pub policy: AiPolicy,
     pub budget: BudgetLimits,
+    /// Automatische Ausführung der aktiven Fragen während des Crawls (08 AI-039, Nutzerentscheidung E-6 a; M4-D05):
+    /// Standard an – wirkt, sobald Fragen aktiv sind; aus = erst „KI-Analyse starten“.
+    pub auto_run: DefaultOn,
+    /// Option „KI-Eingaben speichern“ (08 AI-032, Nachtrag K4-24; M4-D05): Standard an, wirkt nur mit Schalter
+    /// „KI (Vorschau)“; die Engine legt dann je interner HTML-Seite mit Status 200 die aufbereiteten Eingaben ab.
+    pub store_inputs: DefaultOn,
+}
+
+/// Wahrheitswert mit Standard „an“ (für additive Profiloptionen, deren Standard nicht `false` ist; M4-D05).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct DefaultOn(pub bool);
+
+impl Default for DefaultOn {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
+impl DefaultOn {
+    /// Der Wert.
+    pub fn get(self) -> bool {
+        self.0
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ModelChoice {

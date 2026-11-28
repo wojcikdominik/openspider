@@ -281,6 +281,7 @@ fn set<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, CmdResult> 
                 app.config().clock.clone(),
                 steps.clone(),
             );
+            let budget_path = session.path.clone();
             let written = app
                 .write_queue()
                 .submit_file(&session.key, move |file| {
@@ -358,6 +359,29 @@ fn set<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, CmdResult> 
                     threads(old.speed.threads);
                 }
                 return Err(error);
+            }
+            // M4-D05 (AI-013; U01, „Benötigte Änderungen“ 4): `ai.budget` gilt für die geöffnete Crawl-Datei –
+            // gespeichert in `api_budget`, wirksam im gemeinsamen Ledger eines laufenden KI-Laufs; eine Erhöhung hebt
+            // eine Sperre nach einer Überschreitung auf.
+            if old.ai.budget != cfg.ai.budget {
+                let limits = cfg.ai.budget.clone();
+                // Ohne laufenden Lauf: Ledger mit den bisherigen Grenzen (Datei, sonst altes Profil), damit eine Erhöhung als
+                // solche erkannt wird.
+                let previous = old.ai.budget.clone();
+                app.write_queue()
+                    .submit_file(&session.key, move |file| {
+                        let conn = file.conn();
+                        let ledger = match os_ai::run::controls().active_ledger(&budget_path) {
+                            Some(ledger) => ledger,
+                            None => Arc::new(
+                                os_store::ai::budget::open_ledger(conn, previous, &[])
+                                    .map_err(|e| store_error(&e))?,
+                            ),
+                        };
+                        os_store::ai::budget::raise_limits(conn, &ledger, limits)
+                            .map_err(|e| store_error(&e))
+                    })
+                    .await?;
             }
             app.sessions().update_config(&session.key, cfg.clone());
             app.crawl_events().emit(

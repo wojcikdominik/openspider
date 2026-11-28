@@ -98,6 +98,8 @@ fn perform<'a>(app: &'a App, ctx: CallCtx, args: serde_json::Value) -> BoxFuture
                     on_finished: None,
                     owner_kind: "app",
                     renderer: None,
+                    // M4-D05: KI-Warteschlange (ohne Schalter „KI (Vorschau)“ keine).
+                    ai_queue: super::ai_run::app_queue(app),
                 };
                 // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Schritte.
                 let run = super::ai_preview::restricted_override(

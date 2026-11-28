@@ -9,6 +9,8 @@ questions = []
 active_questions = []
 prompts = []
 policy = "unrestricted"
+auto_run = true
+store_inputs = true
 
 [ai.tasks]
 

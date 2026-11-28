@@ -12,6 +12,8 @@ pub mod ai_consent;
 pub mod ai_cost;
 /// Schalter „KI (Vorschau)“ in der Service-Schicht (M4-F02).
 pub mod ai_preview;
+/// KI-Lauf der Decision-Fragen: `ai.decisionsRun`, KI-Warteschlange der App, Schätzer (M4-D05).
+pub mod ai_run;
 /// KI-Einstellungen: Modellwahl je Aufgabe, Richtlinie, Budget (M4-U01).
 pub mod ai_settings;
 /// Optimierungsvorschläge (M4-V01, AI-070 ff.).

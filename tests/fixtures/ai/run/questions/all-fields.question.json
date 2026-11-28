@@ -1,0 +1,20 @@
+{
+  "id": "all-fields",
+  "version": "1.0.0",
+  "name": "All Fields",
+  "type": "predicate",
+  "instructions": "Decide whether the page describes outdoor footwear, using every field given.",
+  "subject": "page",
+  "inputs": [
+    "url",
+    "title",
+    "meta_description",
+    "h1",
+    "h2",
+    { "field": "page_text", "max_chars": 20000 },
+    "word_count",
+    "html_lang",
+    "hreflang_self",
+    "structured_data_types"
+  ]
+}

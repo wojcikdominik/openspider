@@ -1,0 +1,9 @@
+{
+  "id": "structured-types",
+  "version": "1.0.0",
+  "name": "Structured Types",
+  "type": "predicate",
+  "instructions": "Decide whether the declared structured data types fit the page title.",
+  "subject": "page",
+  "inputs": ["title", "structured_data_types"]
+}

@@ -8,6 +8,8 @@
 //! Ab M2 (M2-F02): Rendering-Hook ([`Renderer`], `EngineDeps.renderer`, `render_glue`), [`add_urls`] und `memory`
 //! (Ressourcenschutz, CRAWL-129) als Stubs der Pakete E02/E05.
 
+pub mod ai_input;
+pub mod ai_queue;
 pub mod config_check;
 pub mod crawl;
 pub mod decide;

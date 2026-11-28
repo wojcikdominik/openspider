@@ -36,6 +36,8 @@ pub fn deps(app: &App) -> EngineDeps {
         on_finished: None,
         owner_kind: "app",
         renderer: None,
+        // M4-D05 (08 AI-020 [M4], AI-039, E-6 a): KI-Warteschlange; ohne Schalter „KI (Vorschau)“ keine.
+        ai_queue: crate::commands::ai_run::app_queue(app),
     }
     .with_form_profile_dir(app.config().paths.settings.join("auth"))
 }
@@ -106,10 +108,17 @@ pub async fn replace_allowed(app: &App, ctx: &CallCtx) -> Result<(), CmdError> {
         .ext::<SessionService>()
         .quitting
         .load(std::sync::atomic::Ordering::SeqCst)
-        || app.ops().running() > 0
+        || app
+            .ops()
+            .active_statuses()
+            .iter()
+            .any(|op| op.label_key != crate::commands::ai_run::OP_LABEL)
     {
         return Err(super::busy());
     }
+    // M4-D05 (08 AI-020 [M4], Nachtrag K4-13): Ein laufender KI-Lauf sperrt das Schließen bzw. Ersetzen der Crawl-Datei
+    // nicht; `close` bricht seine laufenden Requests ab (Einträge `Pending`, keine Protokollzeile, Reservierung
+    // verfällt). Andere Operationen behalten ihre Sperre.
     if let Some(s) = app.sessions().current(&ctx.window) {
         // Foreign sessions can be detached, but an owned engine must first stop.
         if s.engine
@@ -415,6 +424,10 @@ pub async fn resume(app: &App, ctx: CallCtx) -> Result<(), CmdError> {
         None => fetcher(app, &cfg)?,
     };
     let path = s.path.clone();
+    // M4-D05 (08 AI-020, Nachtrag K4-13): Ein KI-Lauf aus der Pause („KI-Analyse starten“) sendet ab jetzt nichts Neues;
+    // seine offenen Einträge übernimmt die fortgesetzte KI-Warteschlange der Engine (dieselbe Laufzeile, kein neuer
+    // Voranschlag), nachdem er seine laufenden Requests übernommen hat.
+    os_ai::run::controls().pause(&path);
     let deps = deps(app);
     // Plan M4 E1 (E-2 b, M4-F02): ohne Schalter „KI (Vorschau)“ keine KI-Schritte in der Fortsetzung.
     let run = crate::commands::ai_preview::restricted_override(
@@ -468,6 +481,13 @@ pub async fn pause_or_stop(app: &App, ctx: CallCtx, stop: bool) -> Result<(), Cm
             false
         }
     });
+    // M4-D05 (08 AI-020, Nachtrag K4-13): Pause bzw. Stopp gelten auch für einen KI-Lauf auf dieser Crawl-Datei – kein
+    // neuer Request, laufende werden übernommen.
+    if stop {
+        os_ai::run::controls().stop(&requested.path);
+    } else {
+        os_ai::run::controls().pause(&requested.path);
+    }
     super::interrupt_poll(app);
     let service = app.ext::<SessionService>();
     let _guard = service.mutation.lock().await;
@@ -529,7 +549,13 @@ pub async fn settle(app: &App, s: &SessionInfo, action: Option<bool>) -> Result<
         }
     }
     let watch = h.watch();
-    let result = h.wait().await.map_err(engine_error);
+    // M4-D05 (08 AI-020 [M4], Nachtrag 28.11.2026): Mit dem Ende der Abrufe steht der Endzustand in der Datei; die
+    // KI-Warteschlange kann danach noch laufen. Die Sitzung meldet den Endzustand sofort (die Statusabfrage wartet nie
+    // auf die Warteschlange); die Folgeschritte (automatische Crawl-Analyse) warten im Hintergrund auf das Ende.
+    let (result, draining) = match h.ended().await {
+        Some(summary) if !h.is_finished() => (Ok(summary), Some(h)),
+        _ => (h.wait().await.map_err(engine_error), None),
+    };
     let mut p = watch.borrow().clone();
     let state = result.as_ref().map_or(CrawlState::Failed, |r| r.state);
     super::state(app, &s.key, state);
@@ -580,16 +606,47 @@ pub async fn settle(app: &App, s: &SessionInfo, action: Option<bool>) -> Result<
         _ => CrawlEvent::Completed(s.key.clone()),
     };
     app.crawl_events().emit(app, event);
-    if summary.state == CrawlState::Completed
-        && s.config.analysis.auto_at_end
-        && !app
-            .ext::<SessionService>()
-            .quitting
-            .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        super::analysis::start_operation(app, s.clone(), None, true)?;
+    let analyse = summary.state == CrawlState::Completed && s.config.analysis.auto_at_end;
+    match draining {
+        // CRAWL-141: die Analyse beginnt erst mit leerer KI-Warteschlange.
+        Some(h) => {
+            let app = app.clone();
+            let s = s.clone();
+            app.handle().spawn(async move {
+                if let Err(error) = h.wait().await {
+                    tracing::warn!(?error, "KI-Warteschlange nach dem Crawl-Ende");
+                }
+                if analyse {
+                    start_auto_analysis(&app, &s);
+                }
+            });
+        }
+        None if analyse && !quitting(app) => {
+            super::analysis::start_operation(app, s.clone(), None, true)?;
+        }
+        None => {}
     }
     Ok(())
+}
+
+fn quitting(app: &App) -> bool {
+    app.ext::<SessionService>()
+        .quitting
+        .load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Automatische Crawl-Analyse nach dem Leerlaufen der KI-Warteschlange – nur, wenn die Crawl-Datei noch geöffnet ist und
+/// die App sich nicht beendet (Schließen bzw. Beenden brechen die Warteschlange ab, 08 AI-020).
+fn start_auto_analysis(app: &App, s: &SessionInfo) {
+    if quitting(app) || !app.sessions().all().iter().any(|o| o.key == s.key) {
+        return;
+    }
+    if let Err(error) = super::analysis::start_operation(app, s.clone(), None, true) {
+        tracing::warn!(
+            ?error,
+            "Crawl-Analyse nach dem Leerlaufen der KI-Warteschlange"
+        );
+    }
 }
 
 /// UI-019: Ein Lauf endet nur dann regulär als „Fehlgeschlagen“, wenn die Start-URL nicht erreichbar war (CRAWL-128). Der Dialog

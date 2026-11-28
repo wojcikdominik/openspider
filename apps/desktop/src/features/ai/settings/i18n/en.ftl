@@ -91,3 +91,8 @@ ai-budget-ai-total = Sub-budget "AI total" (USD, empty = none)
 ai-budget-ai-total-hint = Limits only the AI tasks within the crawl budget.
 ai-budget-warning = Warning threshold (% of the crawl budget)
 ai-budget-warning-invalid = Please enter a whole number from 0 to 100.
+
+## Option "Store AI inputs" (AI-032, M4-D05)
+ai-store-inputs-title = AI inputs
+ai-store-inputs-label = Store AI inputs
+ai-store-inputs-hint = During the crawl, stores the content area text, all H2 headings, image contexts, the declared language and the structured data types of every HTML page with status 200 in the crawl file. A later AI run then sends the same text without fetching pages again.

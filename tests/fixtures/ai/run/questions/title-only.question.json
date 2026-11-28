@@ -1,0 +1,9 @@
+{
+  "id": "title-only",
+  "version": "1.0.0",
+  "name": "Title Only",
+  "type": "predicate",
+  "instructions": "Decide whether the title names a product.",
+  "subject": "page",
+  "inputs": ["url", "title"]
+}

@@ -111,6 +111,9 @@ pub(crate) struct Shared<F: Fetch> {
     /// Origins, deren robots.txt aus der Crawl-Datei übernommen wurde (Fortsetzen): kein erneuter Abruf, kein
     /// neues Schreiben (P19).
     pub primed_origins: std::collections::HashSet<String>,
+    /// Sitzung der KI-Warteschlange dieses Laufs (M4-D05; leer ohne `EngineDeps::ai_queue`): erhält je interner
+    /// Seiten-URL die Eingabefelder nach AI-032.
+    pub ai: std::sync::OnceLock<Arc<dyn os_model::ai::hook::AiQueueSession>>,
 }
 
 impl<F: Fetch> Shared<F> {
@@ -301,6 +304,18 @@ async fn run_item<F: Fetch>(sh: &Arc<Shared<F>>, item: &QueueItem) -> Result<(),
     let t = std::time::Instant::now();
     let mut analysis = crate::heap(|| analyze(sh, item, &url, &result)).await;
     diag::add(&diag::STATS.analyze_ns, t);
+    // M4-D05: Eingabefelder nach AI-032 für die KI-Warteschlange, solange die Antwort noch vorliegt.
+    let ai_page = sh.ai.get().and_then(|_| {
+        crate::ai_queue::page_fields(
+            cfg,
+            &sh.pcfg,
+            item,
+            &url,
+            &result,
+            analysis.parsed.as_ref(),
+            analysis.facts.content_class,
+        )
+    });
     if let RobotsDecision::ReportOnly {
         would_block,
         matched_line,
@@ -328,8 +343,12 @@ async fn run_item<F: Fetch>(sh: &Arc<Shared<F>>, item: &QueueItem) -> Result<(),
     let batch = crate::heap(|| assemble(sh, item, analysis)).await?;
     parse_stage.resize(crate::writer_thread::estimate_bytes(&batch));
     diag::add(&diag::STATS.assemble_ns, t);
+    let ai_page = ai_page.map(|p| crate::ai_queue::with_batch(p, &batch));
     let t = std::time::Instant::now();
     crate::heap(|| sh.writer.send_admitted(batch, fetched_charge)).await?;
+    if let (Some(session), Some(page)) = (sh.ai.get(), ai_page) {
+        session.page(page);
+    }
     drop(parse_stage);
     diag::add_max(&diag::STATS.send_ns, &diag::STATS.send_max_ns, t);
     sh.progress

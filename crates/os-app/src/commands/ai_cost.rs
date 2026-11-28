@@ -58,7 +58,23 @@ pub fn snapshot_without_crawl(limits: BudgetLimits) -> BudgetSnapshot {
 /// Ledger-Stand des Fensters: geöffnete Crawl-Datei über `open_ledger` (Fallback-Grenzen = `ai.budget` des Crawls),
 /// sonst die Grenzen der Fensterkonfiguration ohne Verbrauch.
 pub async fn window_snapshot(app: &App, ctx: &CallCtx) -> Result<BudgetSnapshot, CmdError> {
+    // M4-D05: Schätzer und Feldmengen der Decision-Fragen sind angemeldet, bevor der Voranschlag sie sammelt.
+    super::ai_run::ensure_registered(app);
     match app.sessions().current(&ctx.window) {
+        // M4-D05 (Befund B3-2 der Abnahme U01): Läuft ein KI-Lauf auf der Datei, ist sein Ledger die Quelle – mit den
+        // offenen Reservierungen seiner laufenden Requests (eine gemeinsame Quelle für Lauf und Anzeige, AI-013).
+        Some(session)
+            if os_ai::run::controls()
+                .active_ledger(&session.path)
+                .is_some() =>
+        {
+            let ledger = os_ai::run::controls()
+                .active_ledger(&session.path)
+                .ok_or_else(|| internal("ai ledger", "KI-Lauf beendet"))?;
+            ledger
+                .snapshot()
+                .map_err(|e| internal("ai ledger", e.to_string()))
+        }
         Some(session) => {
             let fallback = session.config.ai.budget.clone();
             app.read_pool()

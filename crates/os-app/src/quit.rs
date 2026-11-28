@@ -140,6 +140,9 @@ pub async fn confirm(app: &App, accepted: bool) -> Result<(), CmdError> {
     let started = std::time::Instant::now();
     close_cache(app);
     let result = async {
+        // M4-D05 (08 AI-020, Nachtrag K4-13; CRAWL-126): laufende KI-Requests abbrechen, nicht abwarten – die Einträge
+        // bleiben `Pending`, ohne Protokollzeile; ihre Reservierung verfällt.
+        os_ai::run::controls().abort_all();
         let active = app.ops().active_statuses();
         app.ops().cancel_all();
         // Do not exit while an exporter/analysis is still writing. Fail safely if it

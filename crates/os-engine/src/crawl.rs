@@ -61,6 +61,8 @@ pub struct CrawlHandle {
     control: Arc<Control>,
     writer: crate::writer_thread::WeakWriterSender,
     task: JoinHandle<Result<CrawlSummary, EngineError>>,
+    /// Zusammenfassung, sobald der Endzustand gemeldet ist und nur noch die KI-Warteschlange läuft (M4-D05).
+    ended: watch::Receiver<Option<CrawlSummary>>,
 }
 
 impl CrawlHandle {
@@ -150,6 +152,32 @@ impl CrawlHandle {
             .threads
             .store(n.clamp(1, MAX_THREADS), Ordering::SeqCst);
         self.control.notify.notify_one();
+    }
+
+    /// Zusammenfassung, sobald der Endzustand dauerhaft geschrieben und gemeldet ist und der Lauf nur noch auf die
+    /// KI-Warteschlange wartet (08 AI-020 [M4], Nachtrag 28.11.2026: die Statusabfrage wartet nie auf die
+    /// Warteschlange; Folgeschritte wie Abschluss-Hook bzw. Crawl-Analyse erst nach `wait()`). `None`, wenn der Lauf
+    /// ohne diese Phase endet (ohne KI-Warteschlange, bei einem Fehler): dann ist `wait()` gleich fertig.
+    pub fn ended(&self) -> impl std::future::Future<Output = Option<CrawlSummary>> + Send + use<> {
+        let mut rx = self.ended.clone();
+        async move {
+            match rx.wait_for(Option::is_some).await {
+                Ok(summary) => (*summary).clone(),
+                Err(_) => None,
+            }
+        }
+    }
+
+    /// Pausiert den Crawl ohne geborgten Handle (z. B. während `wait()`); wirkt wie [`pause`](Self::pause), auch in
+    /// der Phase, in der nur noch die KI-Warteschlange läuft (08 AI-020 [M4], Nachtrag 28.11.2026: SIGINT der CLI).
+    pub fn pauser(&self) -> impl Fn() + Send + Sync + 'static {
+        let control = Arc::clone(&self.control);
+        let waits = Arc::clone(&self.network_waits);
+        move || {
+            control.stop.store(STOP_PAUSE, Ordering::SeqCst);
+            waits.cancel();
+            control.notify.notify_one();
+        }
     }
 
     /// Wartet auf das Ende und liefert die Zusammenfassung.
@@ -722,6 +750,7 @@ pub(crate) fn make_shared<F: Fetch>(mut init: SharedInit<F>) -> (Arc<Shared<F>>,
         start_url: init.start_encoded,
         cfg: init.cfg,
         primed_origins: init.primed_origins,
+        ai: Default::default(),
     });
     sh.host_pacer.configure(&sh.cfg);
     (sh, control)
@@ -823,6 +852,7 @@ pub(crate) fn launch<F: Fetch>(setup: Setup<F>) -> CrawlHandle {
     let network_notices = sh.host_pacer.notices();
     let network_waits = sh.host_pacer.cancellation();
     let counted = writer.sender().downgrade();
+    let (ended_tx, ended) = watch::channel(None);
     let parts = RunParts {
         sh,
         writer,
@@ -833,6 +863,9 @@ pub(crate) fn launch<F: Fetch>(setup: Setup<F>) -> CrawlHandle {
         hook: deps.on_finished.clone(),
         seeds,
         clock: deps.clock.clone(),
+        ai_queue: deps.ai_queue.clone(),
+        owner_kind: deps.owner_kind,
+        ended: ended_tx,
     };
     // Spawn only a pointer: the runner future is too large to be copied through Tokio's spawn frames.
     let task = tokio::spawn(crate::heap(|| run(parts)));
@@ -844,6 +877,7 @@ pub(crate) fn launch<F: Fetch>(setup: Setup<F>) -> CrawlHandle {
         control,
         writer: counted,
         task,
+        ended,
     }
 }
 
@@ -857,6 +891,11 @@ struct RunParts<F: Fetch> {
     hook: Option<FinishedHook>,
     seeds: Vec<SitemapSeed>,
     clock: Arc<dyn Clock>,
+    /// KI-Warteschlange (M4-D05).
+    ai_queue: Option<Arc<dyn os_model::ai::hook::AiQueue>>,
+    owner_kind: &'static str,
+    /// Frühe Zusammenfassung für [`CrawlHandle::ended`].
+    ended: watch::Sender<Option<CrawlSummary>>,
 }
 
 /// Wie der Lauf endete.
@@ -917,6 +956,9 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
         hook,
         seeds,
         clock,
+        ai_queue,
+        owner_kind,
+        ended,
     } = parts;
     let ctl = Arc::clone(&sh.ctl);
 
@@ -932,6 +974,13 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     // INTEG-015/017: sitemap seeds are known; workers still use the regular frontier/robots gate.
     let api_run =
         crate::heap(|| initialize_apis(&file, api_ctx, clock.clone(), &writer, &sh)).await?;
+
+    // M4-D05 (08 AI-020 [M4], AI-039, E-6 a): Sitzung der KI-Warteschlange dieses Laufs, analog zu den API-Quellen.
+    let ai_session = crate::ai_queue::begin(ai_queue.as_ref(), &file, &sh.cfg, owner_kind);
+    if let Some(session) = &ai_session {
+        let _ = sh.ai.set(session.clone());
+    }
+    let ai_end = crate::ai_queue::EndGuard::new(ai_session);
 
     let mut set: JoinSet<()> = JoinSet::new();
     let mut progress_tick = interval(PROGRESS_INTERVAL);
@@ -1215,6 +1264,14 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
             .map_err(|e| EngineError::Join(e.to_string()))??;
         }
     }
+    // M4-D05 (08 AI-020 [M4], Nachträge K4-13 und 28.11.2026): Der Endzustand steht in der Datei und ist gemeldet;
+    // `ended()` liefert ihn jetzt, ohne auf die KI-Warteschlange zu warten. Pause/Stopp → kein neuer KI-Request,
+    // laufende werden übernommen; Ende ohne Stoppen → KI-Warteschlange bis leer (Pause bzw. Stopp in dieser Phase wie
+    // oben), erst danach `on_finished` und `wait()`.
+    if ai_end.active() {
+        let _ = ended.send(Some(summary.clone()));
+    }
+    crate::heap(|| ai_end.finish(state, reason, &ctl)).await;
     // CRAWL-141: Hook nach regulärem Ende, Limit oder Stopp – nach dem Checkpoint, vor der Auflösung von
     // `wait()`; nie bei Pause oder Fehler. Die nicht erreichbare Start-URL endet regulär (OUT-182) und liefert Exporte.
     if state == CrawlState::Completed || start_unreachable {

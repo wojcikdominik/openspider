@@ -1,0 +1,9 @@
+{
+  "id": "text-only",
+  "version": "1.0.0",
+  "name": "Text Only",
+  "type": "predicate",
+  "instructions": "Decide whether the visible text of the page is a placeholder.",
+  "subject": "page",
+  "inputs": [{ "field": "page_text", "max_chars": 2000 }]
+}
