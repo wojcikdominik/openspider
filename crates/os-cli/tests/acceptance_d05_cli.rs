@@ -260,6 +260,27 @@ fn ro(path: &Path) -> CrawlFile {
     CrawlFile::open(path, OpenMode::ReadOnly).unwrap()
 }
 
+/// Lesbar geöffnet, sobald die CLI die Datei angelegt und migriert hat (`None` davor, z. B. `MigrationRequired`
+/// während des Anlegens; Runde 2: Rennen im Testaufbau).
+fn try_ro(path: &Path) -> Option<CrawlFile> {
+    CrawlFile::open(path, OpenMode::ReadOnly).ok()
+}
+
+fn try_meta(path: &Path, key: &str) -> Option<String> {
+    try_ro(path)?.get_meta(key).ok().flatten()
+}
+
+fn try_success(path: &Path) -> Option<u64> {
+    let f = try_ro(path)?;
+    f.conn()
+        .query_row(
+            "SELECT COUNT(*) FROM ai_answers WHERE question_id = ?1 AND status = 'Success'",
+            [QUESTION],
+            |r| r.get::<_, u64>(0),
+        )
+        .ok()
+}
+
 fn statuses(path: &Path) -> BTreeMap<String, u64> {
     let f = ro(path);
     let mut stmt = f
@@ -338,16 +359,21 @@ async fn c_cli_sigint_and_resume() {
     let success = |env: &Env| -> u64 {
         env.crawl_files()
             .first()
-            .map(|p| statuses(p).get("Success").copied().unwrap_or(0))
+            .and_then(|p| try_success(p))
             .unwrap_or(0)
     };
-    wait_until("2 beantwortet, Request 3 unterwegs", Duration::from_secs(60), || {
-        mock.decisions().len() == 3 && success(&env) == 2
-    })
+    wait_until(
+        "2 beantwortet, Request 3 unterwegs",
+        Duration::from_secs(60),
+        || mock.decisions().len() == 3 && success(&env) == 2,
+    )
     .await;
     let (path, id) = only_file(&env);
     let crawled_s = in_scope(&path).len();
-    assert!(crawled_s >= 3, "Vorbedingung: Seiten aus S gecrawlt ({crawled_s})");
+    assert!(
+        crawled_s >= 3,
+        "Vorbedingung: Seiten aus S gecrawlt ({crawled_s})"
+    );
     eprintln!("D05-SIGINT: {crawled_s} Seiten aus S beim SIGINT gecrawlt");
     signal(&child, libc::SIGINT);
     let out = finish(child).await;
@@ -370,7 +396,10 @@ async fn c_cli_sigint_and_resume() {
         ));
     }
     if mock.decisions().len() != 3 {
-        findings.push(format!("{} Requests bis zum Ende (erwartet 3)", mock.decisions().len()));
+        findings.push(format!(
+            "{} Requests bis zum Ende (erwartet 3)",
+            mock.decisions().len()
+        ));
     }
 
     mock.scenario("ok", 1_000).await;
@@ -411,35 +440,58 @@ async fn c_cli_sigint_while_only_the_ai_queue_runs() {
     });
     mock.scenario("delay=2", 1_000).await;
     let child = spawn_crawl_with_export(&env);
-    wait_until("Crawl `Completed`, KI-Warteschlange läuft", Duration::from_secs(60), || {
-        env.crawl_files().first().is_some_and(|p| {
-            meta(p, "state").as_deref() == Some("Completed")
-                && !mock.decisions().is_empty()
-                && statuses(p).get("Success").copied().unwrap_or(0) as usize + 1 == mock.decisions().len()
-        })
-    })
+    wait_until(
+        "Crawl `Completed`, KI-Warteschlange läuft",
+        Duration::from_secs(60),
+        || {
+            env.crawl_files().first().is_some_and(|p| {
+                try_meta(p, "state").as_deref() == Some("Completed")
+                    && !mock.decisions().is_empty()
+                    && try_success(p).is_some_and(|n| n as usize + 1 == mock.decisions().len())
+            })
+        },
+    )
     .await;
     let (path, _) = only_file(&env);
     let sent_at_sigint = mock.decisions().len();
     signal(&child, libc::SIGINT);
     let out = finish(child).await;
     assert_eq!(out.code, 130, "{}", out.dump());
-    assert_eq!(meta(&path, "state").as_deref(), Some("Completed"), "Zustand bleibt `Completed`");
+    assert_eq!(
+        meta(&path, "state").as_deref(),
+        Some("Completed"),
+        "Zustand bleibt `Completed`"
+    );
     let st = statuses(&path);
     let ok = st.get("Success").copied().unwrap_or(0);
     let pending = st.get("Pending").copied().unwrap_or(0);
     let scope = in_scope(&path).len() as u64;
-    assert_eq!(ok as usize, sent_at_sigint, "laufender Request übernommen: {st:?}");
+    assert_eq!(
+        ok as usize, sent_at_sigint,
+        "laufender Request übernommen: {st:?}"
+    );
     assert_eq!(
         count_rows(&path, "SELECT COUNT(*) FROM ai_requests") as usize,
         sent_at_sigint,
         "Protokollzeilen = gesendete Requests"
     );
     assert!(pending >= 1, "offene Einträge bleiben `Pending`: {st:?}");
-    assert_eq!(ok + pending, scope, "jede gecrawlte Seite aus S hat einen Eintrag: {st:?}");
-    assert!(exported(&env).is_empty(), "keine Exporte nach dem ersten SIGINT: {:?}", exported(&env));
+    assert_eq!(
+        ok + pending,
+        scope,
+        "jede gecrawlte Seite aus S hat einen Eintrag: {st:?}"
+    );
+    assert!(
+        exported(&env).is_empty(),
+        "keine Exporte nach dem ersten SIGINT: {:?}",
+        exported(&env)
+    );
     tokio::time::sleep(Duration::from_secs(3)).await;
-    assert_eq!(mock.decisions().len(), sent_at_sigint, "kein weiterer Request");
+    assert_eq!(
+        mock.decisions().len(),
+        sent_at_sigint,
+        "kein weiterer Request"
+    );
 }
 
 // spec: AI-020 [M4]
@@ -470,16 +522,32 @@ async fn c_cli_export_waits_for_the_empty_queue() {
             last = now;
             stable_since = Instant::now();
         }
-        if mock.decisions().iter().any(|r| r.held) && stable_since.elapsed() > Duration::from_millis(1_500) {
+        if mock.decisions().iter().any(|r| r.held)
+            && stable_since.elapsed() > Duration::from_millis(1_500)
+        {
             break;
         }
-        assert!(start.elapsed() < Duration::from_secs(60), "Crawl ruft weiter ab");
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "Crawl ruft weiter ab"
+        );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     let (path, _) = only_file(&env);
-    assert_eq!(meta(&path, "state").as_deref(), Some("Completed"), "gespeicherter Endzustand");
-    assert!(child.try_wait().unwrap().is_none(), "der Prozess endet erst mit leerer Warteschlange");
-    assert!(exported(&env).is_empty(), "noch kein Export: {:?}", exported(&env));
+    assert_eq!(
+        meta(&path, "state").as_deref(),
+        Some("Completed"),
+        "gespeicherter Endzustand"
+    );
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "der Prozess endet erst mit leerer Warteschlange"
+    );
+    assert!(
+        exported(&env).is_empty(),
+        "noch kein Export: {:?}",
+        exported(&env)
+    );
 
     let start = Instant::now();
     let status = loop {
@@ -495,9 +563,18 @@ async fn c_cli_export_waits_for_the_empty_queue() {
     assert!(!files.is_empty(), "Export geschrieben");
     let scope = in_scope(&path).len() as u64;
     let st = statuses(&path);
-    assert_eq!(st.get("Success").copied(), Some(scope), "alle Einträge fertig: {st:?}");
+    assert_eq!(
+        st.get("Success").copied(),
+        Some(scope),
+        "alle Einträge fertig: {st:?}"
+    );
     assert_eq!(mock.decisions().len() as u64, scope);
-    let last_answer = mock.decisions().iter().map(|r| r.timestamp_ms).max().unwrap_or(0);
+    let last_answer = mock
+        .decisions()
+        .iter()
+        .map(|r| r.timestamp_ms)
+        .max()
+        .unwrap_or(0);
     for f in &files {
         let modified = std::fs::metadata(f)
             .unwrap()
@@ -506,7 +583,11 @@ async fn c_cli_export_waits_for_the_empty_queue() {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        assert!(modified >= last_answer, "{} nach dem letzten KI-Request geschrieben", f.display());
+        assert!(
+            modified >= last_answer,
+            "{} nach dem letzten KI-Request geschrieben",
+            f.display()
+        );
     }
 }
 

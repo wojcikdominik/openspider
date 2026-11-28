@@ -502,6 +502,46 @@ pub async fn ai_site() -> TestSite {
     .expect("Fixture-Site startet")
 }
 
+/// Fixture-Site wie [`ai_site`], aber mit einem echten Port in allen `{{PORT}}`-Platzhaltern der Routen: os-testsite
+/// ersetzt Platzhalter nur in statischen Dateien, nicht im `body` einer Route in `scenario.toml` (`respond.rs`). Der Ordner
+/// wird nach `dir` kopiert, der Port vorher gewählt und in die Kopie eingesetzt; sonst unverändert.
+pub async fn ai_site_with_port(dir: &Path) -> TestSite {
+    fn copy(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let e = e.unwrap();
+            let target = to.join(e.file_name());
+            if e.file_type().unwrap().is_dir() {
+                copy(&e.path(), &target);
+            } else {
+                std::fs::copy(e.path(), &target).unwrap();
+            }
+        }
+    }
+    let source = repo_file("tests/fixtures/ai/site");
+    copy(&source, dir);
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let scenario = std::fs::read_to_string(source.join("scenario.toml")).unwrap();
+    std::fs::write(
+        dir.join("scenario.toml"),
+        scenario.replace("{{PORT}}", &port.to_string()),
+    )
+    .unwrap();
+    TestSite::start_dir_with(
+        dir,
+        SiteOptions {
+            port,
+            log_requests: true,
+        },
+    )
+    .await
+    .expect("Fixture-Site mit Port startet")
+}
+
 /// Site mit Startseite und `tests/fixtures/ai/site/fields.html` unter `/fields` (das selbstreferenzierende hreflang der
 /// Fixture zeigt auf `/fields`). Der Inhalt wird unverändert aus der Fixture übernommen.
 pub async fn fields_site(dir: &Path) -> TestSite {

@@ -624,8 +624,10 @@ async fn k_structured_data_types_are_null_without_extraction() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn k_html_lang_and_hreflang_self_after_the_crawl_match_the_crawl() {
     let _s = serial().await;
-    let site = ai_site().await;
-    // Die Fixture verweist mit Port (`http://ai.test:{{PORT}}/french`, Host `ai.test:8080` in 08 Konventionen).
+    // Die Fixture verweist mit Port (`http://ai.test:{{PORT}}/french`, Host `ai.test:8080` in 08 Konventionen). Runde 2:
+    // os-testsite ersetzt `{{PORT}}` im `body` einer Route nicht; die Kopie der Fixture trägt den echten Port.
+    let site_dir = tempfile::tempdir().unwrap();
+    let site = ai_site_with_port(site_dir.path()).await;
     let start = format!("http://ai.test:{}/", site.port());
     let q = question("d05-lang", &["url", "html_lang", "hreflang_self"]);
 
@@ -977,7 +979,10 @@ async fn c_crawl_end_without_stop_drains_the_queue() {
         if mock.held() >= 1 && stable_since.elapsed() > Duration::from_millis(1_500) {
             break;
         }
-        assert!(start.elapsed() < Duration::from_secs(60), "Crawl ruft weiter ab");
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "Crawl ruft weiter ab"
+        );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     // Phase „nur noch KI-Warteschlange“: 1 s beobachten, ohne freizugeben.
@@ -990,10 +995,17 @@ async fn c_crawl_end_without_stop_drains_the_queue() {
             "gespeicherter Endzustand mit dem Ende der Abrufe"
         );
         assert_eq!(meta(&path, "end_reason").as_deref(), Some("limit_reached"));
-        assert!(!analysis_started(&path), "Crawl-Analyse wartet auf die leere Warteschlange");
+        assert!(
+            !analysis_started(&path),
+            "Crawl-Analyse wartet auf die leere Warteschlange"
+        );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    assert_eq!(state(&h.app), Some(CrawlState::Completed), "Sitzung meldet den Endzustand");
+    assert_eq!(
+        state(&h.app),
+        Some(CrawlState::Completed),
+        "Sitzung meldet den Endzustand"
+    );
     let open_before = q_i64(
         &path,
         "SELECT COUNT(*) FROM ai_answers WHERE question_id = 'd05-drain' AND status = 'Pending'",
@@ -1020,16 +1032,22 @@ async fn c_crawl_end_without_stop_drains_the_queue() {
             count_status(&path, "d05-drain", "Success")
         );
     }
-    wait_until("Crawl-Analyse nach leerer Warteschlange", Duration::from_secs(60), || {
-        meta(&path, "analysis_state").as_deref() == Some("completed")
-    })
+    wait_until(
+        "Crawl-Analyse nach leerer Warteschlange",
+        Duration::from_secs(60),
+        || meta(&path, "analysis_state").as_deref() == Some("completed"),
+    )
     .await;
     eprintln!("D05-DRAIN: längste Statusabfrage {slowest:?}");
     assert!(
         slowest <= Duration::from_millis(500),
         "Statusabfrage antwortet ohne Wartezeit (längste {slowest:?})"
     );
-    assert_eq!(mock.decisions().len(), in_scope, "Mock-Log = Einträge im Geltungsbereich der 10 URLs");
+    assert_eq!(
+        mock.decisions().len(),
+        in_scope,
+        "Mock-Log = Einträge im Geltungsbereich der 10 URLs"
+    );
     assert_eq!(count_status(&path, "d05-drain", "Pending"), 0);
     assert_no_duplicate_urls(&mock);
 }
@@ -1059,9 +1077,11 @@ async fn c_pending_confirmation_does_not_hold_the_crawl_end() {
     h.profile(&cfg);
     crawl_to_end(&h.app, START).await;
     let path = crawl_path(&h.app);
-    wait_until("Crawl-Analyse läuft trotz wartender Einträge", Duration::from_secs(60), || {
-        meta(&path, "analysis_state").as_deref() == Some("completed")
-    })
+    wait_until(
+        "Crawl-Analyse läuft trotz wartender Einträge",
+        Duration::from_secs(60),
+        || meta(&path, "analysis_state").as_deref() == Some("completed"),
+    )
     .await;
     assert_eq!(mock.provider_requests(), 0, "ohne Bestätigung kein Request");
     assert_eq!(
@@ -1070,7 +1090,9 @@ async fn c_pending_confirmation_does_not_hold_the_crawl_end() {
         "{:?}",
         statuses(&path, "d05-wait")
     );
-    run_ai(&h.app, true).await.expect("KI-Analyse starten mit Bestätigung");
+    run_ai(&h.app, true)
+        .await
+        .expect("KI-Analyse starten mit Bestätigung");
     assert_eq!(mock.decisions().len(), 22);
     assert_eq!(count_status(&path, "d05-wait", "Success"), 22);
 }
@@ -1122,17 +1144,24 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
         h.profile(&cfg);
         start_crawl(&h.app, START).await;
         let path = crawl_path(&h.app);
-        wait_until("einige URLs", Duration::from_secs(60), || q_i64(&path, CRAWLED) >= 4).await;
+        wait_until("einige URLs", Duration::from_secs(60), || {
+            q_i64(&path, CRAWLED) >= 4
+        })
+        .await;
         if matches!(case, RunningCase::AutoOnWaitingForConfirmation) {
-            wait_until("Einträge warten auf Bestätigung", Duration::from_secs(60), || {
-                count_status(&path, "d05-busy", "Pending (confirmation)") >= 1
-            })
+            wait_until(
+                "Einträge warten auf Bestätigung",
+                Duration::from_secs(60),
+                || count_status(&path, "d05-busy", "Pending (confirmation)") >= 1,
+            )
             .await;
         }
         if matches!(case, RunningCase::AutoOnNothingWaiting) {
-            wait_until("automatische Ausführung sendet", Duration::from_secs(60), || {
-                count_status(&path, "d05-busy", "Success") >= 1
-            })
+            wait_until(
+                "automatische Ausführung sendet",
+                Duration::from_secs(60),
+                || count_status(&path, "d05-busy", "Success") >= 1,
+            )
             .await;
         }
         let runs = q_i64(&path, "SELECT COUNT(*) FROM ai_runs");
@@ -1140,8 +1169,12 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
         match case {
             RunningCase::AutoOff | RunningCase::AutoOnNothingWaiting => {
                 for confirmed in [true, false] {
-                    let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": confirmed })).await;
-                    assert!(r.is_err(), "{case:?}, confirmed {confirmed}: Fehler statt Start ({r:?})");
+                    let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": confirmed }))
+                        .await;
+                    assert!(
+                        r.is_err(),
+                        "{case:?}, confirmed {confirmed}: Fehler statt Start ({r:?})"
+                    );
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 if matches!(case, RunningCase::AutoOff) {
@@ -1150,15 +1183,24 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
                     // Die automatische Ausführung sendet weiter; der abgewiesene Auftrag startet keinen eigenen Lauf.
                     assert!(mock.provider_requests() >= before, "{case:?}");
                 }
-                assert_eq!(q_i64(&path, "SELECT COUNT(*) FROM ai_runs"), runs, "{case:?}: keine Laufzeile");
+                assert_eq!(
+                    q_i64(&path, "SELECT COUNT(*) FROM ai_runs"),
+                    runs,
+                    "{case:?}: keine Laufzeile"
+                );
             }
             RunningCase::AutoOnWaitingForConfirmation => {
                 assert_eq!(before, 0, "{case:?}: vor der Bestätigung kein Request");
                 let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": true })).await;
-                assert!(r.is_ok(), "{case:?}: Antwort auf den Kostenvoranschlag angenommen ({r:?})");
-                wait_until("Einträge gehen nach der Bestätigung hinaus", Duration::from_secs(60), || {
-                    count_status(&path, "d05-busy", "Success") >= 1
-                })
+                assert!(
+                    r.is_ok(),
+                    "{case:?}: Antwort auf den Kostenvoranschlag angenommen ({r:?})"
+                );
+                wait_until(
+                    "Einträge gehen nach der Bestätigung hinaus",
+                    Duration::from_secs(60),
+                    || count_status(&path, "d05-busy", "Success") >= 1,
+                )
                 .await;
                 assert_eq!(
                     q_i64(&path, "SELECT COUNT(*) FROM ai_runs"),
@@ -1166,14 +1208,21 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
                     "{case:?}: keine zweite Laufzeile"
                 );
                 assert_eq!(
-                    q_i64(&path, "SELECT COUNT(*) FROM ai_runs WHERE confirmed_at IS NOT NULL"),
+                    q_i64(
+                        &path,
+                        "SELECT COUNT(*) FROM ai_runs WHERE confirmed_at IS NOT NULL"
+                    ),
                     1,
                     "{case:?}: confirmed_at in der Laufzeile dieses Crawls"
                 );
             }
         }
         let _ = os_app::session::poll(&h.app).await;
-        assert_eq!(state(&h.app), Some(CrawlState::Running), "{case:?}: Zustand unverändert");
+        assert_eq!(
+            state(&h.app),
+            Some(CrawlState::Running),
+            "{case:?}: Zustand unverändert"
+        );
         call(&h.app, "crawl.stop", Value::Null).await;
     }
 }
