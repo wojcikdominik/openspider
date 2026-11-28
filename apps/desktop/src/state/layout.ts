@@ -111,14 +111,23 @@ export function createLayoutStore(api: StateApi = uistate) {
         try {
           // The shared file may have changed since startup. Replace only our slices and
           // explicitly edited foreign keys; resetAll deliberately replaces everything.
-          const fresh = await api.load();
-          const sections = reset === undefined ? { ...object(fresh.state) } : {};
-          for (const key of new Set([...ownedSections, ...changed])) {
-            if (Object.hasOwn(local, key)) sections[key] = local[key]!;
-            else delete sections[key];
+          // UI-125/UI-004: the save carries the revision it read, so a slice another feature wrote between this read and
+          // the write (e.g. the tab bar's „Übersicht“) is not overwritten; on a conflict the merge is redone on the new file.
+          for (let attempt = 0; ; attempt++) {
+            const fresh = await api.load();
+            const sections = reset === undefined ? { ...object(fresh.state) } : {};
+            for (const key of new Set([...ownedSections, ...changed])) {
+              if (Object.hasOwn(local, key)) sections[key] = local[key]!;
+              else delete sections[key];
+            }
+            const snapshot: UiStateJson = { version: UI_STATE_VERSION, revision: fresh.revision ?? null, state: sections };
+            try {
+              await api.save(snapshot);
+              break;
+            } catch (e) {
+              if (toCmdError(e).code !== "Stale" || attempt >= 2) throw e;
+            }
           }
-          const snapshot: UiStateJson = { version: UI_STATE_VERSION, state: sections };
-          await api.save(snapshot);
           saved = writing;
           for (const [key, changedAt] of changedSections) {
             if (changedAt <= writing) changedSections.delete(key);
