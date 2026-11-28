@@ -195,3 +195,58 @@ Offen bzw. neu:
   richtig; `c_start_during_the_own_running_crawl_is_refused` prüft die Ausnahme als Fall (c).
 - In `c_start_during_the_own_running_crawl_is_refused` kann die Engine selbst während des Tests eine Laufzeile für die automatische
   Ausführung anlegen; gezählt wird nur die Differenz um den abgewiesenen Aufruf herum (kurzes Fenster, Risiko gering).
+
+## Runde 2 (28.11.2026)
+
+Stand: `ai/d05` = `6cec5e01` (enthält `main` `4710ec25` mit beiden Nachträgen zu AI-020) per `git merge ai/d05` in
+`ai/d05-tests` geholt. Lauf auf dem Mac mini unter `heavy.lock`, Bauordner des Bauers, `--locked`.
+
+### Ergebnis je Testprogramm
+
+| Testprogramm | Tests | Lauf 1 (`cargo test --no-fail-fast`) | Wiederholungen (2 und 3, einzeln) |
+|---|---|---|---|
+| `os-ai` `acceptance_d05_core` | 5 | 5 grün (2,2 s) | – |
+| `os-app` `acceptance_d05_quit` | 2 | 2 grün | `d_closing…` 2 × grün |
+| `os-cli` `acceptance_d05_cli` | 4 | 4 grün (29 s) | `c_cli_sigint_and_resume`, `c_cli_sigint_while_only_the_ai_queue_runs`, `c_cli_export_waits_for_the_empty_queue` je 2 × grün |
+| `os-app` `acceptance_d05_app` | 24 | 24 grün (62 s) | `c_crawl_end…`, `c_pending_confirmation…`, `c_start_during…`, `k_html_lang…`, `h_the_owner…`, `c_resume…`, `c_ai_run_during_a_paused_crawl`, `e_interrupted…` je 2 × grün |
+| vitest `acceptance-d05.test.tsx` | 6 | 6 grün | – |
+
+Kein Wackler in drei Durchläufen. `cargo fmt --all --check` grün; `cargo clippy --workspace --all-targets --locked -- -D warnings`
+grün (im ersten Durchlauf rot an `enum_variant_names` in meinem Test, Varianten umbenannt, danach grün; der umbenannte Test
+einzeln nachgelaufen, grün). Messwerte: längste Statusabfrage während der KI-Warteschlange 33 ms (Kriterium ≤ 500 ms).
+
+### Befunde aus Runde 1
+
+- **A1** (Schließen der Crawl-Datei während eines KI-Laufs abgelehnt): behoben – `quit::d_closing…` und Pfad „Closed“ in
+  `app::h_the_owner…` grün, je dreimal.
+- **A2** (CLI-SIGINT): behoben – `cli::c_cli_sigint_and_resume` nach dem Kriterium des Nachtrags (3 Protokollzeilen, 3 × `Success`,
+  übrige gecrawlte Seiten aus S `Pending`, nach `--resume` genau 22 Requests, keine URL doppelt) dreimal grün.
+- **A3**: durch den Nachtrag entschieden (kein Befund); der angepasste Test ist dreimal grün.
+- **A4** (`hreflang_self` für `/french`): **Testaufbau**, kein Produktfehler. Beleg: os-testsite ersetzt `{{PORT}}` nur in
+  statischen Dateien (`crates/os-testsite/src/respond.rs`, `read_in` → `replace(PORT_PLACEHOLDER, …)`); der `body` einer Route aus
+  `scenario.toml` wird unverändert ausgeliefert (`route.body` → `text.clone()`), und `/french` stammt in der Fixture-Site aus
+  einer Route. Nach dem Umbau zeigt `D05-HREFLANG-AUSGELIEFERT` den echten Selbstverweis
+  `href="http://ai.test:54459/french"` bei Seiten-URL `http://ai.test:54459/french`, die Tabelle `hreflang` die Zeile
+  `fr | http://ai.test:54459/french`, und `hreflang_self = fr` kommt während und nach dem Crawl gleich an. Erwartung unverändert.
+
+### Änderungen an meinen Tests
+
+- `acceptance_d05_support::ai_site_with_port` (neu) und `app::k_html_lang…`: Kopie von `tests/fixtures/ai/site/` in einen
+  Temp-Ordner, Port vorher gewählt und in `scenario.toml` eingesetzt, Site auf diesem Port gestartet – damit liefert die Seite
+  `/french` einen echten absoluten Selbstverweis mit Port (Grund: A4, Testaufbau). Erwartung unverändert.
+- `cli`: Wartebedingungen öffnen die Crawl-Datei mit `try_ro`/`try_meta`/`try_success` und wiederholen, solange sie nicht lesbar
+  ist (Rennen mit dem Anlegen/Migrieren durch die CLI, `MigrationRequired`); die Frist bleibt 60 s, die geprüften Kriterien
+  unverändert.
+- `app::c_start_during_the_own_running_crawl_is_refused`: Varianten der Fallaufzählung umbenannt (Clippy); Inhalt unverändert.
+- `cargo fmt` (rustfmt) auf meine Testdateien.
+- R3 (Szenario `401`): Kein Test von mir verlangt mehr ein Ende nach 60 s; der Fehlerpfad in `app::h_the_owner…` nutzt
+  `malformed-json` (endgültiger Fehler ohne Wiederholung). Die Beobachtung aus Runde 1 passt zu INTEG-005/AI-017 (401 nicht
+  wiederholt, Schutzschalter nach 10 endgültigen Fehlern hält die restlichen Einträge zurück) und ist kein Befund. Ein eigener Test
+  „genau 10 Requests, danach keiner, 10 × `Error: 401 …`, 12 × `Pending`“ wurde nicht geschrieben (AI-017 gehört nicht zu D05).
+
+### Ungeprüft
+
+- „Der Export enthält die KI-Ergebnisse“: KI-Exporte sind bis M4-D02 Stubs; geprüft ist, dass der Export erst nach der letzten
+  KI-Antwort entsteht und alle Einträge fertig sind.
+- Größe der gespeicherten Eingaben bei 10 000 Seiten (Q02), E2E `e2e/ai-run`, MCP-KI-Werkzeuge (C02), Atomarität mit
+  Fehlerinjektion – wie in Runde 1.

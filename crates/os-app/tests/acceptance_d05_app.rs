@@ -1100,11 +1100,11 @@ async fn c_pending_confirmation_does_not_hold_the_crawl_end() {
 #[derive(Debug, Clone, Copy)]
 enum RunningCase {
     /// Automatische Ausführung aus.
-    AutoOff,
+    Off,
     /// Automatische Ausführung an, Schwelle nicht erreicht (nichts wartet auf Bestätigung).
-    AutoOnNothingWaiting,
+    NothingWaiting,
     /// Automatische Ausführung an, Einträge `Pending (confirmation)`.
-    AutoOnWaitingForConfirmation,
+    WaitingForConfirmation,
 }
 
 // spec: AI-020 [M4]
@@ -1122,13 +1122,13 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
     let _s = serial().await;
     let site = ai_site().await;
     for case in [
-        RunningCase::AutoOff,
-        RunningCase::AutoOnNothingWaiting,
-        RunningCase::AutoOnWaitingForConfirmation,
+        RunningCase::Off,
+        RunningCase::NothingWaiting,
+        RunningCase::WaitingForConfirmation,
     ] {
         let mock = Mock::start().await;
         let threshold = match case {
-            RunningCase::AutoOnNothingWaiting => 1_000_000,
+            RunningCase::NothingWaiting => 1_000_000,
             _ => 1,
         };
         let h = home(
@@ -1139,7 +1139,7 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
             },
         );
         let mut cfg = profile(&site, &[question("d05-busy", &["url", "title"])]);
-        cfg.ai.auto_run.0 = !matches!(case, RunningCase::AutoOff);
+        cfg.ai.auto_run.0 = !matches!(case, RunningCase::Off);
         slow(&mut cfg);
         h.profile(&cfg);
         start_crawl(&h.app, START).await;
@@ -1148,7 +1148,7 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
             q_i64(&path, CRAWLED) >= 4
         })
         .await;
-        if matches!(case, RunningCase::AutoOnWaitingForConfirmation) {
+        if matches!(case, RunningCase::WaitingForConfirmation) {
             wait_until(
                 "Einträge warten auf Bestätigung",
                 Duration::from_secs(60),
@@ -1156,7 +1156,7 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
             )
             .await;
         }
-        if matches!(case, RunningCase::AutoOnNothingWaiting) {
+        if matches!(case, RunningCase::NothingWaiting) {
             wait_until(
                 "automatische Ausführung sendet",
                 Duration::from_secs(60),
@@ -1167,7 +1167,7 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
         let runs = q_i64(&path, "SELECT COUNT(*) FROM ai_runs");
         let before = mock.provider_requests();
         match case {
-            RunningCase::AutoOff | RunningCase::AutoOnNothingWaiting => {
+            RunningCase::Off | RunningCase::NothingWaiting => {
                 for confirmed in [true, false] {
                     let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": confirmed }))
                         .await;
@@ -1177,7 +1177,7 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
                     );
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                if matches!(case, RunningCase::AutoOff) {
+                if matches!(case, RunningCase::Off) {
                     assert_eq!(mock.provider_requests(), 0, "{case:?}: kein Request");
                 } else {
                     // Die automatische Ausführung sendet weiter; der abgewiesene Auftrag startet keinen eigenen Lauf.
@@ -1189,7 +1189,7 @@ async fn c_start_during_the_own_running_crawl_is_refused() {
                     "{case:?}: keine Laufzeile"
                 );
             }
-            RunningCase::AutoOnWaitingForConfirmation => {
+            RunningCase::WaitingForConfirmation => {
                 assert_eq!(before, 0, "{case:?}: vor der Bestätigung kein Request");
                 let r = try_call(&h.app, "ai.decisionsRun", json!({ "confirmed": true })).await;
                 assert!(
