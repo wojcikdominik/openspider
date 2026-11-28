@@ -51,6 +51,7 @@ die Umsetzung; **entschieden, Nachtrag fehlt** = der Orchestrator hat am 27.11.2
 | K4-51 | Antwort mit mehr als n Kandidaten | offen (gering) | – | nein |
 | K4-52 | „Übernehmen“ eines ungültigen Kandidaten | offen (gering) | – | nein |
 | K4-53 | Sammelbestätigung kleiner Bauauslegungen (V01 1, 2, 5, 6; U01 Fragen 4, 5) | offen (gering) | Spec | nein |
+| K4-54 | Ungültiger Schlüssel (HTTP 401) beendet den KI-Lauf nicht (nach der Abnahme D05, 28.11.2026) | offen | Spec, N01 (B20) | nein (nach D05) |
 
 Zahl (Erststand): 28 Fragen – 19 offen (davon 2 Planfragen: K4-28, K4-30), 6 aus der Spec geklärt, 3 entschieden ohne
 Spec-Nachtrag. D05 blockierten K4-26, K4-27, K4-28.
@@ -59,6 +60,9 @@ Spec-Nachtrag. D05 blockierten K4-26, K4-27, K4-28.
 Möglichkeit a, eingetragen in 08 AI-032/AI-020, `M4-packages.json`, `M4.md` Abschnitt 7); Nachträge zu K4-42, K4-43,
 K4-44 in 08 AI-075/AI-076 geschrieben. Offen bleiben 15 Fragen (K4-31 … K4-35, K4-38 … K4-41, K4-45, K4-46, K4-50 …
 K4-53); keine davon blockiert D05.
+
+**Ergänzt 28.11.2026 (Planer, nach der Abnahme von D05 auf `int/w5m`):** K4-54 (Abschnitt F) aus `d05.md` (Nacharbeit
+R3) und `d05-tests.md` (R3, Runde 2). Offen damit 16 Fragen.
 
 ---
 
@@ -445,3 +449,29 @@ K4-53); keine davon blockiert D05.
 - Platzhalter mit Gründen auf bereits gebaute Pakete (`wartet auf M4-D01/U01/K11` in `pending_m4_k0*.rs`,
   `pending_m4_v01.rs`, `e2e/ai-suggestions/suggestions.spec.ts:206`) hängen tatsächlich an D05 bzw. N01 C2; Gründe in
   N01 berichtigen (Auflage B14) bzw. mit C2 auflösen (Auflage C8).
+
+---
+
+## F Nach der Abnahme von D05 (28.11.2026)
+
+### K4-54 Ungültiger Schlüssel (HTTP 401) beendet den KI-Lauf nicht
+- **Fundstelle:** `d05-tests.md` R3 (Runde 1: ein Lauf mit Mock-Szenario `401` endete nicht in 60 s) und Runde 2
+  („passt zu INTEG-005/AI-017 … kein Befund“); `d05.md` Nacharbeit R3 mit Test `run_queue_lifecycle.rs`
+  `status_401_trips_the_breaker_after_ten_requests_without_retries`. Spec: 04 INTEG-005 („400/401/403/404 werden nicht
+  wiederholt“); 08 AI-017 (Schutzschalter: nach 10 endgültigen Fehlern 5 Minuten keine Requests an den Anbieter;
+  Ausnahmen nur Spend-Cap-429, endgültiges OpenRouter-402, OpenRouter-403 `refusal`, Ausgabegrenze); 08 AI-020
+  (Kontingentsperre: weitere Einträge des Anbieters im selben Lauf `Quota exceeded` ohne Request).
+- **Unklar:** Das Verhalten ist spec-gemäß, aber für den Nutzer ungünstig: Ein ungültiger Schlüssel gilt für jeden Eintrag
+  als eigener endgültiger Fehler. Bei 22 Einträgen und einer gleichzeitigen Anfrage: 10 Requests, 300 s Pause, 10 Requests,
+  300 s, 2 Requests – der Lauf endet nach gut 600 s mit 22 Requests, die alle mit derselben Ursache scheitern (`d05.md`,
+  R3).
+- **Möglichkeiten:**
+  - (a) Eine Kontoablehnung (401/403 des Anbieters, ohne den Refusal-Fall von AI-005) beendet wie die Kontingentsperre alle
+    offenen Einträge dieses Anbieters im selben KI-Lauf sofort (ohne Request, ohne Protokollzeile; Status
+    `Error: <HTTP-Code> <Meldung>` bzw. nach Festlegung); mitzuentscheiden ist, ob der Fall dann wie Spend-Cap-429 und
+    OpenRouter-402 („beenden bereits alle offenen Einträge“) nicht für den Schutzschalter zählt. Vorschlag des Orchestrators. Folge: Nachtrag in 08 AI-017/AI-020, Umsetzung N01
+    (Auflage B20), Anpassung des D05-Tests.
+  - (b) Wie die Spec belassen (Schutzschalter begrenzt die Zahl der Requests, der Lauf dauert entsprechend).
+- **Empfehlung:** keine eigene; die Entscheidung liegt beim Orchestrator. Bei (a) zu klären: ob 403 ohne `refusal` bei
+  allen Anbietern eine Kontoablehnung ist (Fehlerfälle je Anbieter in AI-002, AI-003, AI-005).
+- **Paket:** Spec (Planer nach Entscheidung), N01 (B20). **D05:** nein (gebaut und abgenommen).
