@@ -54,6 +54,28 @@ describe("versioned shell persistence", () => {
     off();
   });
   // spec: UI-125 [P1]
+  // spec: UI-004
+  it("does not overwrite a slice another feature saves between the fresh read and the write of a flush", async () => {
+    // Like the core (uistate.save): every save bumps the revision; a save with an older revision is rejected as Stale.
+    let disk: UiStateJson = { version: 2, revision: 1, state: { topTabs: { view: "tabs" } } };
+    let between: (() => void) | undefined;
+    const api = {
+      load: vi.fn(async () => { const copy = structuredClone(disk); const run = between; between = undefined; run?.(); return copy; }),
+      save: vi.fn(async (state: UiStateJson) => {
+        if (state.revision != null && state.revision !== disk.revision) throw { code: "Stale", messageKey: "err-uistate-conflict", args: {} };
+        disk = { ...structuredClone(state), revision: (disk.revision ?? 0) + 1 };
+        return disk;
+      }),
+    };
+    const store = createLayoutStore(api);
+    await store.getState().load(1440, 836);
+    store.getState().setLayout({ ...store.getState().layout, detail: { share: .5, visible: true, collapsed: false } });
+    // The tab bar saves „Übersicht“ after the flush has read the file and before it writes (crawl start, B2-6).
+    between = () => { disk = { ...disk, revision: (disk.revision ?? 0) + 1, state: { ...(disk.state as object), topTabs: { view: "overview" } } }; };
+    await store.getState().flush();
+    expect(disk.state).toMatchObject({ topTabs: { view: "overview" }, layout: store.getState().layout });
+  });
+  // spec: UI-125 [P1]
   it("merges fresh foreign slices after another feature writes between load and flush", async () => {
     const disk = memory();
     const store = createLayoutStore(disk.api);
