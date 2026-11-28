@@ -409,3 +409,58 @@ async fn inputs_stored_waits_only_for_the_local_writes() {
     assert!(written.is_ok(), "wartet nicht auf den gehaltenen Request");
     assert_eq!(stored, 23, "danach stehen alle Eingaben in der Datei");
 }
+
+/// Begleitdateien der Crawl-Datei, die SQLite nur anlegt, solange eine Verbindung offen ist (die letzte Verbindung
+/// entfernt sie beim Schließen).
+fn open_companions(path: &std::path::Path) -> Vec<std::path::PathBuf> {
+    ["-wal", "-shm"]
+        .iter()
+        .map(|suffix| {
+            let mut name = path.as_os_str().to_owned();
+            name.push(suffix);
+            std::path::PathBuf::from(name)
+        })
+        .filter(|p| p.exists())
+        .collect()
+}
+
+// spec: AI-032 [M4]
+// spec: AI-020 [M4]
+// Ist die Zukunft von `end` fertig, hat die Warteschlange keine Verbindung zur Crawl-Datei mehr offen – auch nicht für
+// die gespeicherten KI-Eingaben, obwohl die Sitzung selbst noch lebt (unter Windows ließe eine offene Verbindung Löschen
+// bzw. Umbenennen direkt danach scheitern). Danach ist `inputs_stored` sofort fertig.
+#[tokio::test]
+async fn end_closes_the_inputs_connection() {
+    let mock = Mock::start().await;
+    let dir = tmp("d05-q-inputs-close");
+    let pages = parsed(site_pages("site"));
+    let path = crawl_file(&dir.0, &pages);
+    assert!(
+        open_companions(&path).is_empty(),
+        "Ausgangslage ohne Verbindung"
+    );
+    let mut cfg = CrawlConfig::default();
+    cfg.ai.auto_run = os_model::config::DefaultOn(false);
+    let session = queue(env(&mock, &["openai"], NO_CONFIRMATION))
+        .begin(start(&path, &cfg, false, None))
+        .expect("Sitzung zum Speichern");
+    for p in &pages {
+        session.page(p.clone());
+    }
+    session.inputs_stored().await;
+    assert!(!open_companions(&path).is_empty(), "Sitzung verbunden");
+    session.end(AiQueueEnd::Drain).await;
+    assert_eq!(
+        open_companions(&path),
+        Vec::<std::path::PathBuf>::new(),
+        "nach `end` keine offene Verbindung der Warteschlange"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), session.inputs_stored())
+            .await
+            .is_ok(),
+        "nach dem Ende hängt keine Barriere"
+    );
+    assert_eq!(stored_inputs(&path), 23);
+    drop(session);
+}

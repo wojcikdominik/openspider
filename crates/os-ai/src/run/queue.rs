@@ -5,9 +5,9 @@
 //! zur Crawl-Datei:
 //! * **Gespeicherte KI-Eingaben:** Mit der Profil-Option „KI-Eingaben speichern“ (Standard an) schreibt die Sitzung je
 //!   interner HTML-Seite mit Status 200 die aufbereiteten Eingaben (`os_store::ai::inputs`) – auch ohne aktive Fragen.
-//!   Das erledigt ein eigener Schreiber (Thread und Verbindung), unabhängig von den KI-Requests und vom Lauf-Schloss der
-//!   Datei; [`AiQueueSession::inputs_stored`] wartet nur auf ihn. Die Engine ruft es vor dem Schreiben des Endzustands,
-//!   die Eingaben aller abgerufenen Seiten stehen also in der Datei, bevor Sitzung und Oberfläche das Ende melden.
+//!   Die Sitzung öffnet die Datei vor dem Lauf-Schloss ([`file_lock`]) und schreibt die Eingaben auch, während sie auf
+//!   das Schloss wartet; [`AiQueueSession::inputs_stored`] wird fertig, sobald alles vorher Übergebene geschrieben ist
+//!   (nur lokale Arbeit, nie ein KI-Request). Die Engine ruft es vor dem Schreiben des Endzustands.
 //! * **Automatische Ausführung:** Sind Fragen aktiv und ist die Option „automatische Ausführung“ an (Standard), laufen die
 //!   Fragen für jede gecrawlte Seite; Ergebnisse stehen während des Crawls in der Datei. Jeder Teil-Lauf ist ein
 //!   `DecisionRun` über die seit dem letzten Teil gekommenen Seiten (`Selection::Open`), mit dem Besitz als
@@ -99,6 +99,8 @@ enum Msg {
     End(AiQueueEnd),
     /// „Starten“ im Kostenvoranschlag während des Crawls (AI-012): die wartenden Einträge gehen hinaus.
     Confirm,
+    /// Antwortet, sobald die gespeicherten KI-Eingaben aller vorher übergebenen Seiten geschrieben sind.
+    Stored(tokio::sync::oneshot::Sender<()>),
 }
 
 /// Sitzung im Register: Kennung, Kanal und „wartet auf die Kostenbestätigung“.
@@ -130,84 +132,27 @@ pub fn confirm_running(path: &Path) -> bool {
         })
 }
 
-/// Auftrag an den Schreiber der gespeicherten KI-Eingaben.
-enum Stored {
-    Row(i64, StoredInputs),
-    /// Antwortet, sobald alle vorher übergebenen Einträge geschrieben sind.
-    Barrier(tokio::sync::oneshot::Sender<()>),
-}
-
-/// Schreiber der gespeicherten KI-Eingaben (08 AI-032 Punkt 1): eigener Thread mit eigener Verbindung zur Crawl-Datei,
-/// damit das Ablegen nie hinter KI-Requests, dem Vorbereiten eines Laufs oder dem Lauf-Schloss der Datei
-/// ([`file_lock`]) wartet. Schreibt je Durchgang alles Angekommene in einer Transaktion und endet, wenn die Sitzung
-/// freigegeben ist (vorher wird der Rest geschrieben).
-fn spawn_input_store(path: PathBuf) -> Option<mpsc::UnboundedSender<Stored>> {
-    let (tx, mut rx) = mpsc::unbounded_channel::<Stored>();
-    let spawned = std::thread::Builder::new()
-        .name("os-ai-inputs".into())
-        .spawn(move || {
-            let file = match CrawlFile::open(&path, OpenMode::ReadWrite) {
-                Ok(f) => Some(f),
-                Err(e) => {
-                    super::note(format!("KI-Eingaben: Crawl-Datei nicht geöffnet: {}", e));
-                    None
-                }
-            };
-            while let Some(first) = rx.blocking_recv() {
-                let mut rows = Vec::new();
-                let mut barriers = Vec::new();
-                let mut next = Some(first);
-                while let Some(msg) = next.take().or_else(|| rx.try_recv().ok()) {
-                    match msg {
-                        Stored::Row(id, inputs) => rows.push((id, inputs)),
-                        Stored::Barrier(reply) => barriers.push(reply),
-                    }
-                }
-                if let Some(file) = &file {
-                    if let Err(e) = inputs::write_all(file.conn(), &rows) {
-                        super::note(format!("KI-Eingaben nicht gespeichert: {}", e));
-                    }
-                }
-                for reply in barriers {
-                    let _ = reply.send(());
-                }
-            }
-        });
-    match spawned {
-        Ok(_) => Some(tx),
-        Err(e) => {
-            super::note(format!("Schreiber der KI-Eingaben nicht gestartet: {}", e));
-            None
-        }
-    }
-}
-
 struct Session {
     tx: mpsc::UnboundedSender<Msg>,
-    /// Schreiber der gespeicherten KI-Eingaben; `None` ohne die Option „KI-Eingaben speichern“.
-    inputs: Option<mpsc::UnboundedSender<Stored>>,
+    /// Option „KI-Eingaben speichern“.
+    store: bool,
     control: RunControl,
     done: watch::Receiver<bool>,
 }
 
 impl AiQueueSession for Session {
     fn page(&self, page: PageAiFields) {
-        if let Some(inputs) = &self.inputs {
-            if page.is_html_200() && page.source == InputSource::Parsed {
-                let _ = inputs.send(Stored::Row(page.url_id, stored_inputs(&page)));
-            }
-        }
         let _ = self.tx.send(Msg::Page(Box::new(page)));
     }
 
     fn inputs_stored(&self) -> AiQueueDone {
-        let Some(inputs) = &self.inputs else {
+        if !self.store {
             return Box::pin(std::future::ready(()));
-        };
+        }
         let (reply, written) = tokio::sync::oneshot::channel();
-        let sent = inputs.send(Stored::Barrier(reply)).is_ok();
+        let sent = self.tx.send(Msg::Stored(reply)).is_ok();
+        // Ist die Sitzung schon beendet (Kanal zu bzw. Antwort verworfen), gibt es nichts mehr abzuwarten.
         Box::pin(async move {
-            // Endet der Schreiber vorher (Datei nicht geöffnet, Thread beendet), gibt es nichts mehr abzuwarten.
             if sent {
                 let _ = written.await;
             }
@@ -224,12 +169,9 @@ impl AiQueueSession for Session {
         }
         let _ = self.tx.send(Msg::End(end));
         let mut done = self.done.clone();
-        let stored = self.inputs_stored();
-        // Fertig, wenn die Sitzung das Ende umgesetzt hat: gespeicherte KI-Eingaben geschrieben, laufende Requests
-        // übernommen (Pause, Stopp) bzw. abgebrochen, offene Einträge als `Pending` geschrieben, bei `Drain` die
-        // Warteschlange leer.
+        // Fertig, wenn die Sitzung das Ende umgesetzt hat: laufende Requests übernommen (Pause, Stopp) bzw.
+        // abgebrochen, offene Einträge als `Pending` geschrieben, bei `Drain` die Warteschlange leer.
         Box::pin(async move {
-            stored.await;
             let _ = done.wait_for(|d| *d).await;
         })
     }
@@ -261,11 +203,6 @@ impl AiQueue for DecisionQueue {
         } else {
             None
         };
-        let inputs = if store {
-            spawn_input_store(start.crawl_file.clone())
-        } else {
-            None
-        };
         let (tx, rx) = mpsc::unbounded_channel();
         let (done_tx, done) = watch::channel(false);
         let control = RunControl::new();
@@ -280,6 +217,7 @@ impl AiQueue for DecisionQueue {
             awaiting,
             env,
             questions,
+            store,
             start,
             control: control.clone(),
             id,
@@ -302,7 +240,7 @@ impl AiQueue for DecisionQueue {
         }
         Some(Arc::new(Session {
             tx,
-            inputs,
+            store,
             control,
             done,
         }))
@@ -314,6 +252,7 @@ struct Worker {
     /// Wartet auf die Kostenbestätigung (für [`confirm_running`]).
     awaiting: Arc<AtomicBool>,
     questions: Vec<ActiveQuestion>,
+    store: bool,
     start: AiQueueStart,
     control: RunControl,
     /// Kennung im Register der Sitzungen.
@@ -336,14 +275,20 @@ struct Inbox {
     pending: Vec<PageAiFields>,
     /// Seiten, deren Einträge auf die Kostenbestätigung warten (`Pending (confirmation)`).
     waiting: Vec<PageAiFields>,
+    to_store: Vec<(i64, StoredInputs)>,
+    /// Warten auf das Schreiben der gespeicherten KI-Eingaben ([`Msg::Stored`]).
+    stored: Vec<tokio::sync::oneshot::Sender<()>>,
     end: Option<AiQueueEnd>,
     confirm: bool,
 }
 
 impl Inbox {
-    fn take(&mut self, msg: Msg, ki: bool) {
+    fn take(&mut self, msg: Msg, store: bool, ki: bool) {
         match msg {
             Msg::Page(page) => {
+                if store && page.is_html_200() && page.source == InputSource::Parsed {
+                    self.to_store.push((page.url_id, stored_inputs(&page)));
+                }
                 if ki {
                     self.pending.push(*page);
                 }
@@ -355,6 +300,7 @@ impl Inbox {
                 }
             }
             Msg::Confirm => self.confirm = true,
+            Msg::Stored(reply) => self.stored.push(reply),
         }
     }
 }
@@ -363,9 +309,9 @@ impl Worker {
     async fn run(self, mut rx: mpsc::UnboundedReceiver<Msg>) {
         let path = self.start.crawl_file.clone();
         let _registered = super::controls().register(&path, self.control.clone());
-        let lock = file_lock(&path);
-        let _turn = lock.lock().await;
         let mut inbox = Inbox::default();
+        // Die Datei vor dem Lauf-Schloss öffnen: Das Schloss gilt nur dem Senden; die gespeicherten KI-Eingaben werden
+        // auch geschrieben, während eine frühere Sitzung bzw. ein KI-Lauf derselben Datei es noch hält.
         let file = match CrawlFile::open(&path, OpenMode::ReadWrite) {
             Ok(f) => f,
             Err(e) => {
@@ -382,6 +328,20 @@ impl Worker {
             }
         };
         let conn = file.conn();
+        let lock = file_lock(&path);
+        let _turn = {
+            let acquire = lock.lock();
+            tokio::pin!(acquire);
+            loop {
+                tokio::select! {
+                    turn = &mut acquire => break turn,
+                    Some(msg) = rx.recv() => {
+                        inbox.take(msg, self.store, self.env.is_some());
+                        self.flush(conn, &mut inbox);
+                    }
+                }
+            }
+        };
         let ki = self.env.is_some();
         let mut run = None;
         if let Some(env) = &self.env {
@@ -391,7 +351,11 @@ impl Worker {
             }
             if let (Some(_), Some(loader)) = (&run, &self.start.existing) {
                 match loader(&path, &self.start.config) {
-                    Ok(pages) => inbox.pending.extend(pages),
+                    Ok(pages) => {
+                        // Bereits gecrawlte Seiten vor denen, die während des Wartens auf das Schloss kamen.
+                        let later = std::mem::replace(&mut inbox.pending, pages);
+                        inbox.pending.extend(later);
+                    }
                     Err(e) => super::note(format!("Seiten zum Fortsetzen nicht gelesen: {}", e)),
                 }
             }
@@ -403,8 +367,9 @@ impl Worker {
         let mut completed = false;
         loop {
             while let Ok(msg) = rx.try_recv() {
-                inbox.take(msg, ki);
+                inbox.take(msg, self.store, ki);
             }
+            self.flush(conn, &mut inbox);
             if let (Some(env), Some(state), true) = (&self.env, run.as_mut(), inbox.confirm) {
                 inbox.confirm = false;
                 if let Err(e) = os_store::ai::answers::set_confirmed_at(
@@ -445,14 +410,15 @@ impl Worker {
                 None => {}
             }
             match rx.recv().await {
-                Some(msg) => inbox.take(msg, ki),
+                Some(msg) => inbox.take(msg, self.store, ki),
                 None => break,
             }
         }
         self.awaiting.store(false, Ordering::SeqCst);
         while let Ok(msg) = rx.try_recv() {
-            inbox.take(msg, ki);
+            inbox.take(msg, self.store, ki);
         }
+        self.flush(conn, &mut inbox);
         // „Ein offener Eintrag ist eine Zeile“ (08 AI-020, Nachtrag 28.11.2026): Seiten, die nach Pause, Stopp, Abbruch
         // bzw. SIGINT nicht mehr gesendet wurden, erhalten ihre Zeile (`Pending`, außerhalb des Geltungsbereichs
         // `Skipped (scope)`), ohne Request und ohne Reservierung – gemeinsam für App, CLI und MCP.
@@ -491,6 +457,18 @@ impl Worker {
             confirmed,
             awaiting_confirmation: false,
         })
+    }
+
+    fn flush(&self, conn: &os_store::ai::cache::Connection, inbox: &mut Inbox) {
+        if !inbox.to_store.is_empty() {
+            let rows = std::mem::take(&mut inbox.to_store);
+            if let Err(e) = inputs::write_all(conn, &rows) {
+                super::note(format!("KI-Eingaben nicht gespeichert: {}", e));
+            }
+        }
+        for reply in inbox.stored.drain(..) {
+            let _ = reply.send(());
+        }
     }
 
     /// Ein Teil-Lauf über `chunk`; nimmt währenddessen weitere Nachrichten an.
@@ -549,7 +527,10 @@ impl Worker {
         let result = loop {
             tokio::select! {
                 result = &mut fut => break result,
-                Some(msg) = rx.recv() => inbox.take(msg, ki),
+                Some(msg) = rx.recv() => {
+                    inbox.take(msg, self.store, ki);
+                    self.flush(conn, inbox);
+                }
             }
         };
         match result {
