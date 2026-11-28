@@ -42,10 +42,17 @@ async fn interrupted_crawl_is_rejected_by_the_command() {
     .await
     .unwrap_err();
     assert_eq!(err.message_key, "err-ai-run-interrupted");
+    // OUT-243 (Befund H4 der Abnahme M4-D05): `detail` ist die technische, englische Ursache, nicht der deutsche
+    // Meldungstext; die Oberfläche übersetzt über den Schlüssel.
     assert_eq!(
         err.detail.as_deref(),
-        Some("Crawl ist unterbrochen – zuerst fortsetzen oder stoppen")
+        Some(os_app::commands::ai_run::INTERRUPTED_DETAIL)
     );
+    assert!(!err
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("unterbrochen"));
     assert_eq!(
         err.args.get("en"),
         Some(&json!("Crawl was interrupted – resume or stop it first"))
@@ -248,4 +255,71 @@ async fn closing_the_crawl_file_aborts_a_held_request() {
     );
     assert_eq!(status.result.unwrap()["end"], "Aborted");
     assert_like_a_crash(&path);
+}
+
+// spec: AI-020 [M4]
+// spec: CRAWL-126 [M4]
+// Befund A1 der Abnahme M4-D05: Der Command `crawl.clear` (Schließen der Crawl-Datei des Fensters) wird während eines
+// KI-Laufs nicht mehr mit `busy` abgewiesen, sondern bricht den gehaltenen Request ab (im Zeitbudget von 3 s): Eintrag
+// `Pending`, keine Protokollzeile, Reservierung verfallen, `owner_pid` geleert; ein neuer Lauf sendet den Eintrag genau
+// einmal. Eine andere laufende Operation (nicht KI) behält ihre Sperre (`busy`).
+#[tokio::test]
+async fn crawl_clear_aborts_a_held_request_and_other_operations_keep_their_lock() {
+    let (_dir, mock, app, path) = setup(NO_CONFIRMATION).await;
+    let op = held_run(&app, &mock).await;
+    let started = Instant::now();
+    call(&app, "crawl.clear", Value::Null)
+        .await
+        .expect("Schließen während des KI-Laufs");
+    let status = wait_op(&app, &op).await;
+    assert!(
+        started.elapsed() <= Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(status.result.unwrap()["end"], "Aborted");
+    mock.until("Mock vermerkt den Abbruch", |m| {
+        m.log().iter().any(|r| r.held && r.aborted)
+    })
+    .await;
+    assert_like_a_crash(&path);
+    let owner = CrawlFile::open(&path, OpenMode::ReadOnly)
+        .unwrap()
+        .get_meta("owner_pid")
+        .unwrap()
+        .unwrap_or_default();
+    assert_eq!(owner, "", "Besitzerangaben geleert");
+    // Neu öffnen: nichts wird gesendet; ein neuer Lauf sendet jeden offenen Eintrag genau einmal.
+    open_in(&app, &path);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(mock.decisions(), 1, "beim Öffnen 0 Requests");
+    let op = call(
+        &app,
+        "ai.decisionsRun",
+        json!({"tasks": [], "confirmed": true}),
+    )
+    .await
+    .unwrap();
+    wait_op(&app, &op).await;
+    assert_eq!(mock.decisions(), 23, "1 abgebrochener + 22 neue Requests");
+    assert_eq!(logged(&path), 22);
+    assert_eq!(counts(&path).get("Success"), Some(&22));
+
+    // Andere Operationen (nicht KI) sperren das Schließen weiterhin.
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let blocker = app.ops().spawn("op-test-blocker", true, move |_, _| {
+        Box::pin(async move {
+            let _ = rx.await;
+            Ok(Value::Null)
+        })
+    });
+    let err = call(&app, "crawl.clear", Value::Null)
+        .await
+        .expect_err("andere Operation läuft");
+    assert_eq!(err.code, ErrorCode::Busy);
+    let _ = tx.send(());
+    app.ops().wait(&blocker.op_id).await;
+    call(&app, "crawl.clear", Value::Null)
+        .await
+        .expect("danach frei");
 }

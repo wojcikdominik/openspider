@@ -34,8 +34,15 @@ use crate::registry::{CmdResult, Handler};
 use crate::runtime::error::{internal, parse_args, store_error, to_json};
 use crate::{App, CallCtx};
 
+/// Bezeichnung der Operation eines KI-Laufs (`ai.decisionsRun`).
+pub const OP_LABEL: &str = "op-ai-decisions";
+
 /// Meldung (de) bei einem unterbrochenen Crawl.
 pub use os_ai::run::{INTERRUPTED_DE, INTERRUPTED_EN};
+
+/// Technische Ursache (`detail`, englisch, OUT-243) bei einem unterbrochenen Crawl.
+pub const INTERRUPTED_DETAIL: &str =
+    "crawl is interrupted (stored state Running with a stale heartbeat); resume or stop it first";
 
 /// Argumente von `ai.decisionsRun`: `AiRunArgs` (Vertrag aus dem Katalog) plus die erteilte Kostenbestätigung.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -188,14 +195,16 @@ fn estimate(
 /// Fehler des Laufrahmens als Command-Fehler.
 pub fn job_error(e: JobError) -> CmdError {
     match e {
+        // OUT-243: `detail` ist die technische, englische Ursache; die Meldung zeigt die Oberfläche über den Schlüssel
+        // (de/en). `args.en` bleibt für Aufrufer ohne Übersetzung.
         JobError::Interrupted => CmdError::new(ErrorCode::InvalidInput, "err-ai-run-interrupted")
-            .with_detail(INTERRUPTED_DE)
+            .with_detail(INTERRUPTED_DETAIL)
             .with_arg("en", INTERRUPTED_EN),
         JobError::Occupied { kind, pid } => CmdError::new(ErrorCode::Busy, "err-ai-run-foreign")
             .with_arg("kind", kind.clone())
             .with_arg("pid", pid.clone())
             .with_detail(format!(
-                "gestartet von {kind} (PID {pid}) – Steuerung nur dort"
+                "crawl is led by another process ({kind}, PID {pid}) with a current heartbeat"
             )),
         JobError::NoQuestions(errors) => {
             CmdError::new(ErrorCode::InvalidInput, "err-ai-run-no-questions")
@@ -255,8 +264,10 @@ fn decisions_run<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, C
             .as_ref()
             .is_some_and(|e| e.handle.lock().unwrap_or_else(|p| p.into_inner()).is_some());
         if engine_running || s.state == os_model::CrawlState::Running {
-            // Während des eigenen Crawls gilt die automatische Ausführung (AI-039); „Starten“ im Kostenvoranschlag gibt
-            // deren wartende Einträge frei (AI-012: „Crawl läuft; KI-Aufträge warten mit Pending (confirmation)“).
+            // 08 AI-020, Nachtrag 28.11.2026 („Start während des eigenen laufenden Crawls“): abgewiesen – kein Request,
+            // keine Laufzeile, Zustand unverändert. Einzige Ausnahme: Der KI-Teil dieses Crawls wartet auf die
+            // Kostenbestätigung (AI-012, Einträge `Pending (confirmation)`); dann ist der bestätigte Auftrag die Antwort
+            // auf den Voranschlag (`confirmed_at` in die Laufzeile dieses Crawls, die wartenden Einträge gehen hinaus).
             if args.confirmed && os_ai::run::confirm_running(&s.path) {
                 return Ok(json!({ "end": "Confirmed" }));
             }
@@ -274,7 +285,7 @@ fn decisions_run<'a>(app: &'a App, ctx: CallCtx, args: Value) -> BoxFuture<'a, C
         }
         let env = run_env(app, &cfg).map_err(|e| internal("ai run env", e))?;
         let path = s.path.clone();
-        let handle = app.ops().spawn("op-ai-decisions", true, move |token, _| {
+        let handle = app.ops().spawn(OP_LABEL, true, move |token, _| {
             Box::pin(async move {
                 let abort_path = path.clone();
                 let _cancel = token.on_cancel(move || os_ai::run::controls().abort(&abort_path));

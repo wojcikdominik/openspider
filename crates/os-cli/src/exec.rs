@@ -154,6 +154,16 @@ async fn run(plan: &Plan, rep: &Arc<Reporter>, signals: &Signals) -> Result<Outc
                     )
                     .with_crawl(&registry::path_for(&plan.paths.crawls, &id), None));
                 }
+                CrawlEnd::InterruptedCompleted { id } => {
+                    return Ok(Outcome::new(
+                        Exit::Interrupted,
+                        format!(
+                            "Unterbrochen – der Crawl ist abgeschlossen und gespeichert (ID {id}); keine Exporte. \
+                             Offene KI-Einträge bleiben „Pending“ und gehen mit einem neuen KI-Lauf hinaus"
+                        ),
+                    )
+                    .with_crawl(&registry::path_for(&plan.paths.crawls, &id), None));
+                }
             }
         }
     };
@@ -354,7 +364,13 @@ fn store_err(e: os_store::StoreError) -> CliError {
 
 enum CrawlEnd {
     Done(Crawled),
-    Interrupted { id: CrawlId },
+    Interrupted {
+        id: CrawlId,
+    },
+    /// Signal nach dem Ende der Abrufe: Crawl `Completed`, keine Exporte.
+    InterruptedCompleted {
+        id: CrawlId,
+    },
 }
 
 fn deps(id: Option<CrawlId>, hook: FinishedHook) -> EngineDeps {
@@ -559,7 +575,11 @@ async fn crawl_phase(
         _ => {}
     }
     if signals.is_interrupted() {
-        // Signal während der letzten Schritte: Analyse abgebrochen, keine Exporte.
+        // Signal während der letzten Schritte (KI-Warteschlange nach dem Ende der Abrufe, Analyse): keine Exporte. Der
+        // Crawl ist abgeschlossen; `--resume` ist nicht möglich (CRAWL-128, 08 AI-020 Nachtrag 28.11.2026).
+        if summary.state == CrawlState::Completed {
+            return Ok(CrawlEnd::InterruptedCompleted { id });
+        }
         return Ok(CrawlEnd::Interrupted { id });
     }
     if summary.end_reason == Some(os_model::EndReason::LimitReached) {
@@ -634,7 +654,25 @@ async fn monitor(
             .flatten(),
     );
     drop(error_reader);
-    handle.wait().await
+    // M4-D05 (08 AI-020 [M4], Nachtrag 28.11.2026): Nach dem Ende der Abrufe kann die KI-Warteschlange noch laufen
+    // (Crawl bereits `Completed`). Ein erstes Signal in dieser Phase: kein weiterer KI-Request, laufende werden
+    // abgewartet und übernommen, offene bleiben `Pending`; der Zustand bleibt `Completed`, Exporte entfallen (OUT-206).
+    let pause = handle.pauser();
+    let wait = handle.wait();
+    tokio::pin!(wait);
+    loop {
+        tokio::select! {
+            result = &mut wait => return result,
+            changed = first.changed(), if !paused_by_signal => {
+                if changed.is_ok() && *first.borrow() {
+                    pause();
+                    paused_by_signal = true;
+                } else if changed.is_err() {
+                    paused_by_signal = true;
+                }
+            }
+        }
+    }
 }
 
 /// Anzahl der URLs mit Fehlerstatus (0 oder ≥ 400) für `--json-progress`.

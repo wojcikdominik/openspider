@@ -16,6 +16,7 @@
 //!   aus der Crawl-Datei (Leser der Engine), gesendet werden genau die offenen Einträge.
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use os_model::ai::hook::{
@@ -97,7 +98,9 @@ enum Msg {
     Confirm,
 }
 
-type Senders = Mutex<HashMap<PathBuf, (u64, mpsc::UnboundedSender<Msg>)>>;
+/// Sitzung im Register: Kennung, Kanal und „wartet auf die Kostenbestätigung“.
+type Registered = (u64, mpsc::UnboundedSender<Msg>, Arc<AtomicBool>);
+type Senders = Mutex<HashMap<PathBuf, Registered>>;
 
 /// Sitzungen dieses Prozesses je Crawl-Datei (für die Kostenbestätigung während des Crawls).
 fn senders() -> &'static Senders {
@@ -111,13 +114,17 @@ fn canonical(path: &Path) -> PathBuf {
 
 /// Kostenbestätigung („Starten“, AI-012) für die laufende KI-Warteschlange des Crawls `path`: Die Laufzeile erhält
 /// `confirmed_at` (K4-27), die Einträge mit `Pending (confirmation)` und alle folgenden gehen ohne neuen Voranschlag
-/// hinaus. `false`, wenn auf der Datei keine Sitzung läuft.
+/// hinaus. Nur, wenn die Warteschlange gerade auf die Bestätigung wartet (08 AI-020, Nachtrag 28.11.2026, einzige
+/// Ausnahme von der Abweisung bei laufendem Crawl); sonst `false` – keine Sitzung, automatische Ausführung aus oder
+/// nichts wartet.
 pub fn confirm_running(path: &Path) -> bool {
     senders()
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .get(&canonical(path))
-        .is_some_and(|(_, tx)| tx.send(Msg::Confirm).is_ok())
+        .is_some_and(|(_, tx, awaiting)| {
+            awaiting.load(Ordering::SeqCst) && tx.send(Msg::Confirm).is_ok()
+        })
 }
 
 struct Session {
@@ -141,10 +148,10 @@ impl AiQueueSession for Session {
         }
         let _ = self.tx.send(Msg::End(end));
         let mut done = self.done.clone();
+        // Fertig, wenn die Sitzung das Ende umgesetzt hat: laufende Requests übernommen (Pause, Stopp) bzw.
+        // abgebrochen, offene Einträge als `Pending` geschrieben, bei `Drain` die Warteschlange leer.
         Box::pin(async move {
-            if end == AiQueueEnd::Drain {
-                let _ = done.wait_for(|d| *d).await;
-            }
+            let _ = done.wait_for(|d| *d).await;
         })
     }
 }
@@ -180,11 +187,13 @@ impl AiQueue for DecisionQueue {
         let control = RunControl::new();
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        senders()
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .insert(canonical(&start.crawl_file), (id, tx.clone()));
+        let awaiting = Arc::new(AtomicBool::new(false));
+        senders().lock().unwrap_or_else(|p| p.into_inner()).insert(
+            canonical(&start.crawl_file),
+            (id, tx.clone(), awaiting.clone()),
+        );
         let worker = Worker {
+            awaiting,
             env,
             questions,
             store,
@@ -214,6 +223,8 @@ impl AiQueue for DecisionQueue {
 
 struct Worker {
     env: Option<RunEnv>,
+    /// Wartet auf die Kostenbestätigung (für [`confirm_running`]).
+    awaiting: Arc<AtomicBool>,
     questions: Vec<ActiveQuestion>,
     store: bool,
     start: AiQueueStart,
@@ -226,7 +237,7 @@ impl Drop for Worker {
     fn drop(&mut self) {
         let mut senders = senders().lock().unwrap_or_else(|p| p.into_inner());
         let key = canonical(&self.start.crawl_file);
-        if senders.get(&key).is_some_and(|(id, _)| *id == self.id) {
+        if senders.get(&key).is_some_and(|(id, _, _)| *id == self.id) {
             senders.remove(&key);
         }
     }
@@ -303,6 +314,9 @@ impl Worker {
             }
         }
         let ki = ki && run.is_some();
+        // Adapter-Instanzen je KI-Lauf (E8): ein Satz für alle Teil-Läufe dieser Sitzung, damit eine Kontingentsperre
+        // für den ganzen Lauf gilt (AI-020, Nachtrag 26.11.2026).
+        let tools = self.env.as_ref().map(Tools::new);
         let mut completed = false;
         loop {
             while let Ok(msg) = rx.try_recv() {
@@ -320,18 +334,21 @@ impl Worker {
                 }
                 state.confirmed = true;
                 state.awaiting_confirmation = false;
+                self.awaiting.store(false, Ordering::SeqCst);
                 let waiting = std::mem::take(&mut inbox.waiting);
                 inbox.pending.extend(waiting);
             }
             let sending = self.control.state() == ControlState::Running;
             if let (Some(state), true, false) = (run.as_mut(), sending, inbox.pending.is_empty()) {
                 let env = self.env.as_ref().expect("KI-Umgebung");
+                let tools = tools.as_ref().expect("Werkzeuge des KI-Laufs");
                 let chunk = std::mem::take(&mut inbox.pending);
                 let end = self
-                    .dispatch(env, state, conn, &chunk, &mut rx, &mut inbox, ki)
+                    .dispatch(env, tools, state, conn, &chunk, &mut rx, &mut inbox, ki)
                     .await;
                 if end == Some(RunEnd::NeedsConfirmation) {
                     state.awaiting_confirmation = true;
+                    self.awaiting.store(true, Ordering::SeqCst);
                     inbox.waiting.extend(chunk);
                 }
                 continue;
@@ -350,7 +367,19 @@ impl Worker {
                 None => break,
             }
         }
+        self.awaiting.store(false, Ordering::SeqCst);
+        while let Ok(msg) = rx.try_recv() {
+            inbox.take(msg, self.store, ki);
+        }
         self.flush(conn, &mut inbox);
+        // „Ein offener Eintrag ist eine Zeile“ (08 AI-020, Nachtrag 28.11.2026): Seiten, die nach Pause, Stopp, Abbruch
+        // bzw. SIGINT nicht mehr gesendet wurden, erhalten ihre Zeile (`Pending`, außerhalb des Geltungsbereichs
+        // `Skipped (scope)`), ohne Request und ohne Reservierung – gemeinsam für App, CLI und MCP.
+        if run.is_some() && !inbox.pending.is_empty() {
+            if let Err(e) = items::mark_open(conn, &self.questions, &inbox.pending) {
+                super::note(format!("Offene KI-Einträge nicht geschrieben: {}", e));
+            }
+        }
         if let (Some(env), Some(state)) = (&self.env, &run) {
             let stopped = self.control.state() == ControlState::Stopped;
             if completed || stopped {
@@ -398,6 +427,7 @@ impl Worker {
     async fn dispatch(
         &self,
         env: &RunEnv,
+        tools: &Tools,
         state: &mut RunState,
         conn: &os_store::ai::cache::Connection,
         chunk: &[PageAiFields],
@@ -420,7 +450,6 @@ impl Worker {
         } else {
             Confirmation::AskAbove(env.threshold)
         };
-        let tools = Tools::new(env);
         // Während des eigenen Crawls schreibt allein die Engine die Besitzerangaben (08 AI-020, „Wer schreibt“); erst
         // nach ihrem Ende (Warteschlange läuft leer) trägt sich der KI-Lauf selbst ein.
         let owner = (inbox.end == Some(AiQueueEnd::Drain)).then(|| {
@@ -432,7 +461,7 @@ impl Worker {
         });
         let fut = job::run_chunk(
             env,
-            &tools,
+            tools,
             conn,
             &*state.ledger,
             state.run_id,
@@ -442,6 +471,8 @@ impl Worker {
             confirmation,
             self.control.clone(),
             owner,
+            // Kontingentsperre je KI-Lauf, über alle Seitenblöcke dieser Sitzung (AI-020, Nachtrag 26.11.2026).
+            true,
         );
         tokio::pin!(fut);
         let result = loop {

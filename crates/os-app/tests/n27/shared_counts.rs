@@ -437,3 +437,164 @@ async fn a_request_right_after_a_pause_shares_the_one_count_and_writes_nothing()
     );
     assert_eq!(service.last_seq(&key), Some(paused));
 }
+
+// spec: UI-018
+// spec: CRAWL-141
+#[tokio::test]
+async fn a_final_version_changed_after_the_end_count_is_counted_before_the_end_status() {
+    let (_dir, app, path) = fixture();
+    let session = opened(&app, &path).await;
+    let service = app.ext::<SharedCounts>();
+    let key = session.key.clone();
+    call(&app, "sidebar.countCancel", Value::Null).await;
+    // The crawl ends: leaving `Running` counts the final version at once.
+    let ended = new_version(&path);
+    app.sessions().update_state(&key, CrawlState::Running);
+    super::observe_state(&app, &key, CrawlState::Running);
+    crate::session::state(&app, &key, CrawlState::Completed);
+    tokio::time::timeout(Duration::from_secs(60), async {
+        while service.settling(&key) > 0 || service.flight(&key).is_some() {
+            match service.flight(&key) {
+                Some(flight) => flight.ended().await,
+                None => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("the count of the final version ends");
+    assert_eq!(service.last_seq(&key), Some(ended));
+    // The automatic analysis commits afterwards: a new final version, nobody has counted it yet.
+    let analysed = new_version(&path);
+    let (started, modes) = (service.started(), service.modes().len());
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        super::count_final(&app, std::slice::from_ref(&key)),
+    )
+    .await
+    .expect("the final count ends");
+    assert_eq!(
+        service.last_seq(&key),
+        Some(analysed),
+        "the analysed version is counted"
+    );
+    assert_eq!(service.started() - started, 1);
+    assert_eq!(
+        service.modes()[modes..],
+        [Mode::Settled],
+        "taken without writing"
+    );
+    app.write_queue()
+        .submit_file(&key, |_| Ok(()))
+        .await
+        .unwrap();
+    assert_eq!(
+        cached_at(&path, analysed),
+        0,
+        "no view_cache write right after the end"
+    );
+    // The UI's reload on the end status is answered from that count; an unchanged version is not counted again.
+    let counted = service.started();
+    let overview = call(&app, "sidebar.overview", json!({})).await;
+    assert!(overview.get("ageMs").is_none(), "exact after the end");
+    let counts = call(&app, "catalog.filterCounts", json!({})).await;
+    assert_eq!(counts["version"], json!(analysed));
+    super::count_final(&app, std::slice::from_ref(&key)).await;
+    assert_eq!(service.started(), counted, "no further count");
+}
+
+/// A second crawl file beside the fixture's, opened in window `second`.
+async fn second_crawl(dir: &std::path::Path, app: &App) -> (SessionInfo, std::path::PathBuf) {
+    let path = dir.join("n27-second.ospider");
+    let file = CrawlFile::create(
+        &path,
+        &CrawlInit {
+            crawl_id: "00000000-0000-0000-0000-000000000028".parse().unwrap(),
+            mode: CrawlMode::Spider,
+            start_url: Some("https://site.test/".into()),
+            list_source: None,
+            project: "n27".into(),
+            name: "n27-second".into(),
+            config: CrawlConfig::default(),
+            created_at: Timestamp::UNIX_EPOCH,
+        },
+        StorageProfile::Balanced,
+    )
+    .unwrap();
+    file.conn()
+        .execute_batch(include_str!(
+            "../../../../apps/desktop/src/ipc/__fixtures__/k06/fx-ui-basic/scenario.sql"
+        ))
+        .unwrap();
+    file.set_meta("state", "Completed").unwrap();
+    drop(file);
+    let ctx = CallCtx::for_window("second");
+    app.dispatch(
+        ctx.clone(),
+        "crawl.open",
+        json!({"kind":"path", "path":&path}),
+    )
+    .await
+    .unwrap();
+    (app.sessions().current(&ctx.window).unwrap(), path)
+}
+
+/// Waits until no count of `key` is pending or running.
+async fn counts_idle(service: &SharedCounts, key: &crate::pool::CrawlKey) {
+    tokio::time::timeout(Duration::from_secs(60), async {
+        while service.settling(key) > 0 || service.flight(key).is_some() {
+            match service.flight(key) {
+                Some(flight) => flight.ended().await,
+                None => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("the counts of the crawl end");
+}
+
+// spec: UI-018
+#[tokio::test]
+async fn the_final_count_of_an_ended_crawl_leaves_a_paused_crawl_of_another_window_alone() {
+    let (dir, app, path) = fixture();
+    let session = opened(&app, &path).await;
+    let (other, other_path) = second_crawl(dir.path(), &app).await;
+    let service = app.ext::<SharedCounts>();
+    let (key, other_key) = (session.key.clone(), other.key.clone());
+    assert_ne!(key, other_key);
+    call(&app, "sidebar.countCancel", Value::Null).await;
+    // The crawl of the second window was paused (its paused version is counted) and has written on since.
+    new_version(&other_path);
+    app.sessions().update_state(&other_key, CrawlState::Running);
+    super::observe_state(&app, &other_key, CrawlState::Running);
+    crate::session::state(&app, &other_key, CrawlState::Paused);
+    counts_idle(&service, &other_key).await;
+    let other_seq = service.last_seq(&other_key);
+    let changed = new_version(&other_path);
+    // The crawl of the main window ends, and its analysis changes the final version.
+    new_version(&path);
+    app.sessions().update_state(&key, CrawlState::Running);
+    super::observe_state(&app, &key, CrawlState::Running);
+    crate::session::state(&app, &key, CrawlState::Completed);
+    counts_idle(&service, &key).await;
+    let analysed = new_version(&path);
+    let started = service.started();
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        super::count_final(&app, std::slice::from_ref(&key)),
+    )
+    .await
+    .expect("the final count ends");
+    assert_eq!(service.last_seq(&key), Some(analysed));
+    assert_eq!(
+        service.started() - started,
+        1,
+        "only the ended crawl is counted"
+    );
+    assert_eq!(
+        service.last_seq(&other_key),
+        other_seq,
+        "the paused crawl is not counted"
+    );
+    assert_ne!(other_seq, Some(changed));
+    assert!(service.flight(&other_key).is_none());
+}

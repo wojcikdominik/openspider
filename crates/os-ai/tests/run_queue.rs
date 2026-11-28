@@ -163,8 +163,9 @@ async fn pause_and_resume_send_each_entry_once() {
     mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6)
         .await;
     let paused = session.end(AiQueueEnd::Paused);
-    paused.await;
+    // Nacharbeit 28.11.2026 (Befund A2): Die Pause ist erst umgesetzt, wenn der laufende Request übernommen ist.
     mock.release("openai", 1).await;
+    paused.await;
     // Die Sitzung übernimmt Request 6 und sendet danach nichts mehr.
     let runs_before = os_ai::run::controls().running(&path);
     for _ in 0..500 {
@@ -295,8 +296,10 @@ async fn confirmation_during_the_crawl_and_resume_without_a_new_estimate() {
     }
     mock.until("Request 6 gehalten", |_| mock.posts(DECISIONS).len() >= 6)
         .await;
-    session.end(AiQueueEnd::Paused).await;
+    let paused = session.end(AiQueueEnd::Paused);
+    // Nacharbeit 28.11.2026 (Befund A2): Die Pause ist erst umgesetzt, wenn der laufende Request übernommen ist.
     mock.release("openai", 1).await;
+    paused.await;
     for _ in 0..500 {
         if os_ai::run::controls().running(&path) == 0 {
             break;
