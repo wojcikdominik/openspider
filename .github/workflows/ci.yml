@@ -238,12 +238,12 @@ jobs:
         # --no-fail-fast: Ein roter Test verdeckt sonst alle Testbinaries dahinter (10.11.: Windows).
         # 27.11.2026: Unter Windows liegt die reine Testausführung der ganzen Suite bei 44–50 min (26.11.: 2 900 s Summe der
         # Testprogramme) und lief zweimal in die Grenze, ohne dass ein Test hing. Die Grenze bleibt; die Windows-Tests sind
-        # stattdessen auf zwei Jobs verteilt: hier alle Crates außer den vier unten, im Job `ci-tests-b` os-analyze, os-app,
-        # os-export und os-ai (zusammen rund 43 % der Laufzeit). macOS läuft im selben Job in zwei Teilen (Plattenplatz, siehe
+        # stattdessen auf zwei Jobs verteilt: hier alle Crates außer den vier unten, im Job `ci-tests-b` os-analyze, os-app
+        # und os-export (auf main zusätzlich os-ai; das Crate gibt es auf rel/1.0 nicht). macOS läuft im selben Job in zwei Teilen (Plattenplatz, siehe
         # oben): hier os-app, weiter unten der Rest.
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            cargo test --workspace --locked --no-fail-fast --exclude os-analyze --exclude os-app --exclude os-export --exclude os-ai
+            cargo test --workspace --locked --no-fail-fast --exclude os-analyze --exclude os-app --exclude os-export
           elif [ "$RUNNER_OS" = "macOS" ]; then
             cargo test --locked --no-fail-fast -p os-app
           else
@@ -396,8 +396,8 @@ jobs:
           path: target/loadtest/
           if-no-files-found: warn
 
-  # Zweiter Teil der Rust-Tests unter Windows (27.11.2026, s. Schritt "Rust tests" im Job `ci`): os-analyze, os-app, os-export,
-  # os-ai. Gleiche Grenze von 50 min für die reine Testausführung; Kompilieren in einem eigenen Schritt.
+  # Zweiter Teil der Rust-Tests unter Windows (27.11.2026, s. Schritt "Rust tests" im Job `ci`): os-analyze, os-app, os-export
+  # (ohne os-ai: das Crate gibt es auf rel/1.0 nicht). Gleiche Grenze von 50 min für die reine Testausführung; Kompilieren in einem eigenen Schritt.
   ci-tests-b:
     name: ci-tests-b (windows-x64)
     runs-on: windows-latest
@@ -416,10 +416,10 @@ jobs:
         with:
           key: tests-b
       - name: Rust tests (build)
-        run: cargo test --locked --no-run -p os-analyze -p os-app -p os-export -p os-ai
+        run: cargo test --locked --no-run -p os-analyze -p os-app -p os-export
       - name: Rust tests
         timeout-minutes: 50
-        run: cargo test --locked --no-fail-fast -p os-analyze -p os-app -p os-export -p os-ai
+        run: cargo test --locked --no-fail-fast -p os-analyze -p os-app -p os-export
 
   # Crawl-Datei zwischen den Plattformen (A6, OUT-230), Teil 2: alle Plattformen laden die Dateien der anderen, exportieren
   # erneut und vergleichen byte-gleich. Kompiliert nicht: die CLI kommt als Artefakt `cli-bin-<name>` aus dem Job `ci`.
