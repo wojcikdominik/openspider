@@ -135,6 +135,7 @@ fn empty_substring_is_a_catch_all_and_body_does_not_use_the_nearest_landmark() {
             position: "Content".into(),
             contains: vec![String::new()],
         }],
+        ..Default::default()
     };
     for link in extract(PAGE, rules.clone()) {
         assert_eq!(
@@ -150,7 +151,10 @@ fn empty_substring_is_a_catch_all_and_body_does_not_use_the_nearest_landmark() {
         link_position::classify(
             "/html/body/a",
             LinkPosition::Footer,
-            &LinkPositionsConfig { rules: vec![] }
+            &LinkPositionsConfig {
+                rules: vec![],
+                ..Default::default()
+            }
         ),
         LinkPosition::Content
     );
