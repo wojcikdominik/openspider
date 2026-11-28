@@ -147,4 +147,11 @@ pub trait AiQueueSession: Send + Sync {
     fn page(&self, page: PageAiFields);
     /// Ende des Crawl-Laufs; bei [`AiQueueEnd::Drain`] wird die Zukunft erst mit leerer Warteschlange fertig.
     fn end(&self, end: AiQueueEnd) -> AiQueueDone;
+    /// Fertig, sobald die gespeicherten KI-Eingaben (08 AI-032 Punkt 1) aller bisher übergebenen Seiten in der
+    /// Crawl-Datei stehen. Reine lokale Schreibarbeit: wartet nie auf KI-Requests. Die Engine ruft es nach der letzten
+    /// Seite und vor dem Schreiben des Endzustands – die Eingaben gehören zu „während des Crawls“, Sitzung und
+    /// Oberfläche melden den Endzustand erst danach (08 AI-020, Nachtrag 28.11.2026). Ohne Speicherung sofort fertig.
+    fn inputs_stored(&self) -> AiQueueDone {
+        Box::pin(std::future::ready(()))
+    }
 }

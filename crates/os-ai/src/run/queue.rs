@@ -5,6 +5,9 @@
 //! zur Crawl-Datei:
 //! * **Gespeicherte KI-Eingaben:** Mit der Profil-Option „KI-Eingaben speichern“ (Standard an) schreibt die Sitzung je
 //!   interner HTML-Seite mit Status 200 die aufbereiteten Eingaben (`os_store::ai::inputs`) – auch ohne aktive Fragen.
+//!   Die Sitzung öffnet die Datei vor dem Lauf-Schloss ([`file_lock`]) und schreibt die Eingaben auch, während sie auf
+//!   das Schloss wartet; [`AiQueueSession::inputs_stored`] wird fertig, sobald alles vorher Übergebene geschrieben ist
+//!   (nur lokale Arbeit, nie ein KI-Request). Die Engine ruft es vor dem Schreiben des Endzustands.
 //! * **Automatische Ausführung:** Sind Fragen aktiv und ist die Option „automatische Ausführung“ an (Standard), laufen die
 //!   Fragen für jede gecrawlte Seite; Ergebnisse stehen während des Crawls in der Datei. Jeder Teil-Lauf ist ein
 //!   `DecisionRun` über die seit dem letzten Teil gekommenen Seiten (`Selection::Open`), mit dem Besitz als
@@ -96,6 +99,8 @@ enum Msg {
     End(AiQueueEnd),
     /// „Starten“ im Kostenvoranschlag während des Crawls (AI-012): die wartenden Einträge gehen hinaus.
     Confirm,
+    /// Antwortet, sobald die gespeicherten KI-Eingaben aller vorher übergebenen Seiten geschrieben sind.
+    Stored(tokio::sync::oneshot::Sender<()>),
 }
 
 /// Sitzung im Register: Kennung, Kanal und „wartet auf die Kostenbestätigung“.
@@ -129,6 +134,8 @@ pub fn confirm_running(path: &Path) -> bool {
 
 struct Session {
     tx: mpsc::UnboundedSender<Msg>,
+    /// Option „KI-Eingaben speichern“.
+    store: bool,
     control: RunControl,
     done: watch::Receiver<bool>,
 }
@@ -136,6 +143,20 @@ struct Session {
 impl AiQueueSession for Session {
     fn page(&self, page: PageAiFields) {
         let _ = self.tx.send(Msg::Page(Box::new(page)));
+    }
+
+    fn inputs_stored(&self) -> AiQueueDone {
+        if !self.store {
+            return Box::pin(std::future::ready(()));
+        }
+        let (reply, written) = tokio::sync::oneshot::channel();
+        let sent = self.tx.send(Msg::Stored(reply)).is_ok();
+        // Ist die Sitzung schon beendet (Kanal zu bzw. Antwort verworfen), gibt es nichts mehr abzuwarten.
+        Box::pin(async move {
+            if sent {
+                let _ = written.await;
+            }
+        })
     }
 
     fn end(&self, end: AiQueueEnd) -> AiQueueDone {
@@ -217,7 +238,12 @@ impl AiQueue for DecisionQueue {
             super::note(format!("KI-Warteschlange nicht gestartet: {}", e));
             return None;
         }
-        Some(Arc::new(Session { tx, control, done }))
+        Some(Arc::new(Session {
+            tx,
+            store,
+            control,
+            done,
+        }))
     }
 }
 
@@ -250,6 +276,8 @@ struct Inbox {
     /// Seiten, deren Einträge auf die Kostenbestätigung warten (`Pending (confirmation)`).
     waiting: Vec<PageAiFields>,
     to_store: Vec<(i64, StoredInputs)>,
+    /// Warten auf das Schreiben der gespeicherten KI-Eingaben ([`Msg::Stored`]).
+    stored: Vec<tokio::sync::oneshot::Sender<()>>,
     end: Option<AiQueueEnd>,
     confirm: bool,
 }
@@ -272,6 +300,7 @@ impl Inbox {
                 }
             }
             Msg::Confirm => self.confirm = true,
+            Msg::Stored(reply) => self.stored.push(reply),
         }
     }
 }
@@ -280,9 +309,9 @@ impl Worker {
     async fn run(self, mut rx: mpsc::UnboundedReceiver<Msg>) {
         let path = self.start.crawl_file.clone();
         let _registered = super::controls().register(&path, self.control.clone());
-        let lock = file_lock(&path);
-        let _turn = lock.lock().await;
         let mut inbox = Inbox::default();
+        // Die Datei vor dem Lauf-Schloss öffnen: Das Schloss gilt nur dem Senden; die gespeicherten KI-Eingaben werden
+        // auch geschrieben, während eine frühere Sitzung bzw. ein KI-Lauf derselben Datei es noch hält.
         let file = match CrawlFile::open(&path, OpenMode::ReadWrite) {
             Ok(f) => f,
             Err(e) => {
@@ -299,6 +328,20 @@ impl Worker {
             }
         };
         let conn = file.conn();
+        let lock = file_lock(&path);
+        let _turn = {
+            let acquire = lock.lock();
+            tokio::pin!(acquire);
+            loop {
+                tokio::select! {
+                    turn = &mut acquire => break turn,
+                    Some(msg) = rx.recv() => {
+                        inbox.take(msg, self.store, self.env.is_some());
+                        self.flush(conn, &mut inbox);
+                    }
+                }
+            }
+        };
         let ki = self.env.is_some();
         let mut run = None;
         if let Some(env) = &self.env {
@@ -308,7 +351,11 @@ impl Worker {
             }
             if let (Some(_), Some(loader)) = (&run, &self.start.existing) {
                 match loader(&path, &self.start.config) {
-                    Ok(pages) => inbox.pending.extend(pages),
+                    Ok(pages) => {
+                        // Bereits gecrawlte Seiten vor denen, die während des Wartens auf das Schloss kamen.
+                        let later = std::mem::replace(&mut inbox.pending, pages);
+                        inbox.pending.extend(later);
+                    }
                     Err(e) => super::note(format!("Seiten zum Fortsetzen nicht gelesen: {}", e)),
                 }
             }
@@ -413,12 +460,14 @@ impl Worker {
     }
 
     fn flush(&self, conn: &os_store::ai::cache::Connection, inbox: &mut Inbox) {
-        if inbox.to_store.is_empty() {
-            return;
+        if !inbox.to_store.is_empty() {
+            let rows = std::mem::take(&mut inbox.to_store);
+            if let Err(e) = inputs::write_all(conn, &rows) {
+                super::note(format!("KI-Eingaben nicht gespeichert: {}", e));
+            }
         }
-        let rows = std::mem::take(&mut inbox.to_store);
-        if let Err(e) = inputs::write_all(conn, &rows) {
-            super::note(format!("KI-Eingaben nicht gespeichert: {}", e));
+        for reply in inbox.stored.drain(..) {
+            let _ = reply.send(());
         }
     }
 

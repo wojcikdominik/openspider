@@ -1127,6 +1127,10 @@ async fn run<F: Fetch>(parts: RunParts<F>) -> Result<CrawlSummary, EngineError> 
     // Die Hintergrundarbeit hält einen Verweis auf den gemeinsamen Zustand und damit den Writer offen: abwarten.
     while maint.join_next().await.is_some() {}
 
+    // M4-D05 (08 AI-032 Punkt 1, AI-020 Nachtrag 28.11.2026): Die gespeicherten KI-Eingaben aller abgerufenen Seiten
+    // stehen in der Datei, bevor der Endzustand geschrieben und gemeldet wird; die KI-Requests laufen danach weiter.
+    ai_end.inputs_stored().await;
+
     // CRAWL-128: Die Start-URL war nicht erreichbar, weiter wurde nichts abgerufen. OUT-182: Das bleibt ein gültiges Ergebnis
     // mit einer Zeile (kein Fehler des Laufs), der Crawl gilt aber als fehlgeschlagen.
     let only_one_page = sh
